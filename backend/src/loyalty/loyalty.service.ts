@@ -1,0 +1,185 @@
+import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  LoyaltyEvent,
+  LoyaltyEventType,
+  MembershipTier,
+  Order,
+  Prisma,
+} from '@prisma/client';
+
+import { PrismaService } from '../prisma/prisma.service';
+
+/**
+ * Loyalty configuration. Tweakable in one place — eventually moves to a
+ * `LoyaltyConfig` table when admin UI lands.
+ */
+const CONFIG = {
+  /** 1 point per N VND spent on the order subtotal. */
+  earnRatePerVnd: 10_000,
+  /** 1 point redeems for N VND off. */
+  redemptionValueVnd: 100,
+  tiers: {
+    silver: 0,
+    gold: 1_000,
+    platinum: 5_000,
+  },
+};
+
+@Injectable()
+export class LoyaltyService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Awards earn-points for a completed order. Idempotent — re-completing the
+   * same order won't double-award (we check for an existing EARN event).
+   */
+  async earnFor(order: Order): Promise<LoyaltyEvent | null> {
+    const existing = await this.prisma.loyaltyEvent.findFirst({
+      where: { orderId: order.id, type: 'EARN' },
+    });
+    if (existing) return existing;
+
+    const subtotal = Number(order.subtotal.toString());
+    const points = Math.floor(subtotal / CONFIG.earnRatePerVnd);
+    if (points <= 0) return null;
+
+    return this.recordEvent({
+      userId: order.customerId,
+      orderId: order.id,
+      type: 'EARN',
+      delta: points,
+      reason: `Earned on order ${order.code}`,
+    });
+  }
+
+  /**
+   * Records a redemption for `pointsToRedeem` against a freshly-placed order.
+   * Validates balance + non-negative subtotal. Returns the VND value redeemed.
+   */
+  async redeemForOrder(args: {
+    userId: string;
+    orderId: string;
+    orderCode: string;
+    pointsToRedeem: number;
+    subtotalVnd: number;
+  }): Promise<{ pointsUsed: number; vndDiscount: number }> {
+    if (args.pointsToRedeem <= 0) {
+      return { pointsUsed: 0, vndDiscount: 0 };
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: args.userId },
+      select: { pointsBalance: true },
+    });
+    if (args.pointsToRedeem > user.pointsBalance) {
+      throw new BadRequestException({
+        code: 'LOYALTY_INSUFFICIENT_POINTS',
+        message: `You only have ${user.pointsBalance} points.`,
+      });
+    }
+    // Cap at the subtotal — redemptions can never make subtotal negative.
+    const maxByValue = Math.floor(args.subtotalVnd / CONFIG.redemptionValueVnd);
+    const points = Math.min(args.pointsToRedeem, maxByValue);
+    if (points <= 0) {
+      return { pointsUsed: 0, vndDiscount: 0 };
+    }
+
+    await this.recordEvent({
+      userId: args.userId,
+      orderId: args.orderId,
+      type: 'REDEEM',
+      delta: -points,
+      reason: `Redeemed against order ${args.orderCode}`,
+    });
+
+    return { pointsUsed: points, vndDiscount: points * CONFIG.redemptionValueVnd };
+  }
+
+  /** Refunds the points if a paid order is cancelled after the redeem event. */
+  async refundRedemption(orderId: string): Promise<void> {
+    const redeem = await this.prisma.loyaltyEvent.findFirst({
+      where: { orderId, type: 'REDEEM' },
+    });
+    if (!redeem) return;
+    await this.recordEvent({
+      userId: redeem.userId,
+      orderId,
+      type: 'ADJUSTMENT',
+      delta: -redeem.delta, // delta was negative, so this restores the points
+      reason: 'Reversed redemption — order cancelled',
+    });
+  }
+
+  async getMyLoyalty(userId: string) {
+    const [user, recent] = await this.prisma.$transaction([
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: {
+          pointsBalance: true,
+          membershipTier: true,
+          birthday: true,
+        },
+      }),
+      this.prisma.loyaltyEvent.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+      }),
+    ]);
+    return {
+      tier: user.membershipTier,
+      balance: user.pointsBalance,
+      birthday: user.birthday?.toISOString() ?? null,
+      history: recent,
+      thresholds: CONFIG.tiers,
+      earnRatePerVnd: CONFIG.earnRatePerVnd,
+      redemptionValueVnd: CONFIG.redemptionValueVnd,
+    };
+  }
+
+  private async recordEvent(args: {
+    userId: string;
+    orderId?: string;
+    type: LoyaltyEventType;
+    delta: number;
+    reason: string;
+  }): Promise<LoyaltyEvent> {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUniqueOrThrow({
+        where: { id: args.userId },
+        select: { pointsBalance: true },
+      });
+      const balanceAfter = user.pointsBalance + args.delta;
+      const event = await tx.loyaltyEvent.create({
+        data: {
+          userId: args.userId,
+          orderId: args.orderId,
+          type: args.type,
+          delta: args.delta,
+          balanceAfter,
+          reason: args.reason,
+        },
+      });
+      await tx.user.update({
+        where: { id: args.userId },
+        data: {
+          pointsBalance: balanceAfter,
+          membershipTier: tierFor(balanceAfter),
+        },
+      });
+      return event;
+    });
+  }
+}
+
+function tierFor(balance: number): MembershipTier {
+  if (balance >= CONFIG.tiers.platinum) return 'PLATINUM';
+  if (balance >= CONFIG.tiers.gold) return 'GOLD';
+  return 'SILVER';
+}
+
+/** Re-export for tests / consumers. */
+export const LOYALTY_CONFIG = CONFIG;
+
+// Tiny no-op so unused-import linters don't complain — this file uses Prisma
+// types directly above.
+export type { Prisma };

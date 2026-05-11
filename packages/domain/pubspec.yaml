@@ -1,0 +1,17 @@
+name: banan_domain
+description: Pure-Dart domain layer — entities, value objects, repository interfaces, use cases.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  meta: ^1.15.0
+  equatable: ^2.0.5
+  banan_core:
+    path: ../core
+
+dev_dependencies:
+  test: ^1.25.0
+  very_good_analysis: ^6.0.0

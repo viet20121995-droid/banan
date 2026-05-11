@@ -1,0 +1,17 @@
+name: banan_core
+description: Core utilities — Result type, failures, env, logger, money VO. No Flutter UI.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  meta: ^1.15.0
+  collection: ^1.18.0
+  intl: ^0.20.0
+  logging: ^1.2.0
+
+dev_dependencies:
+  test: ^1.25.0
+  very_good_analysis: ^6.0.0

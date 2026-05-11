@@ -1,0 +1,30 @@
+/// Banan domain layer — pure-Dart entities, value objects, and repository
+/// interfaces. Implementations live in `banan_data`.
+library;
+
+export 'src/entities/address.dart';
+export 'src/entities/auth_session.dart';
+export 'src/entities/category.dart';
+export 'src/entities/collection.dart';
+export 'src/entities/coupon.dart';
+export 'src/entities/kitchen_status.dart';
+export 'src/entities/loyalty.dart';
+export 'src/entities/notification_entry.dart';
+export 'src/entities/order.dart';
+export 'src/entities/order_status.dart';
+export 'src/entities/payment.dart';
+export 'src/entities/product.dart';
+export 'src/entities/product_variant.dart';
+export 'src/entities/refund.dart';
+export 'src/entities/role.dart';
+export 'src/entities/thread.dart';
+export 'src/entities/user.dart';
+export 'src/repositories/auth_repository.dart';
+export 'src/repositories/catalog_repository.dart';
+export 'src/repositories/collections_repository.dart';
+export 'src/repositories/loyalty_repository.dart';
+export 'src/repositories/notifications_repository.dart';
+export 'src/repositories/order_repository.dart';
+export 'src/repositories/refund_repository.dart';
+export 'src/repositories/threads_repository.dart';
+export 'src/repositories/token_storage.dart';

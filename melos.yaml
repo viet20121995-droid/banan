@@ -1,0 +1,37 @@
+name: banan
+
+packages:
+  - apps/*
+  - packages/*
+
+command:
+  bootstrap:
+    runPubGetInParallel: true
+
+scripts:
+  analyze:
+    run: melos exec -c 1 -- "dart analyze ."
+    description: Static analysis across all packages.
+
+  format:
+    run: melos exec -c 1 -- "dart format ."
+    description: Format all Dart code.
+
+  test:
+    run: melos exec -c 1 --dir-exists=test -- "flutter test"
+    description: Run unit tests in every package that has a test/ folder.
+
+  gen:
+    run: melos exec -c 1 --depends-on=build_runner -- "dart run build_runner build --delete-conflicting-outputs"
+    description: Run code generation (freezed, json_serializable, riverpod_generator) where applicable.
+
+  clean:deep:
+    run: melos exec -c 4 -- "flutter clean"
+    description: Flutter clean every package.
+
+  customer:run:
+    run: melos exec --scope=banan_customer -- "flutter run"
+  merchant:run:
+    run: melos exec --scope=banan_merchant -- "flutter run -d chrome"
+  kitchen:run:
+    run: melos exec --scope=banan_kitchen -- "flutter run -d chrome"

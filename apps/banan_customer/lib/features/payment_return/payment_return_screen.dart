@@ -1,0 +1,70 @@
+import 'package:banan_design_system/banan_design_system.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+/// Lands here after Stripe / VNPay / MoMo redirects the customer back to
+/// the app. Server-side IPN/webhook is the source of truth for payment
+/// status — this page just bridges the redirect tab back into the app.
+class PaymentReturnScreen extends ConsumerStatefulWidget {
+  const PaymentReturnScreen({
+    required this.provider,
+    required this.params,
+    super.key,
+  });
+
+  final String provider;
+  final Map<String, String> params;
+
+  @override
+  ConsumerState<PaymentReturnScreen> createState() =>
+      _PaymentReturnScreenState();
+}
+
+class _PaymentReturnScreenState extends ConsumerState<PaymentReturnScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Tiny delay so the user sees the page briefly.
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      if (!mounted) return;
+      final orderId = widget.params['order_id'] ??
+          widget.params['orderId'] ??
+          widget.params['order'];
+      if (orderId != null && orderId.isNotEmpty) {
+        context.go('/orders/$orderId');
+      } else {
+        context.go('/orders');
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = widget.params['status'] ?? 'completed';
+    final ok = status == 'success' || status == 'completed';
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              ok ? Icons.check_circle_outline : Icons.error_outline,
+              size: 56,
+              color:
+                  ok ? BananColors.success : Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: BananSpacing.md),
+            Text(
+              ok ? 'Payment confirmed' : 'Payment incomplete',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            const Text('Taking you to your order…'),
+          ],
+        ),
+      ),
+    );
+  }
+}

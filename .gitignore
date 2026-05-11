@@ -1,0 +1,50 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+**/*.g.dart
+**/*.freezed.dart
+**/*.gr.dart
+ios/Pods/
+ios/.symlinks/
+android/.gradle/
+android/local.properties
+**/GeneratedPluginRegistrant.*
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Node / NestJS
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.local
+.env.*.local
+
+# Prisma
+backend/prisma/migrations/dev.db*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Melos
+.melos_tool/
+pubspec_overrides.yaml
+
+# Local tools and uploads (project-relative)
+.tools/
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/secrets/
+
+# Fly.io
+.fly/

@@ -1,0 +1,29 @@
+# Build artifacts and dependencies — Docker rebuilds these inside.
+node_modules
+dist
+coverage
+
+# Local secrets and state.
+.env
+.env.*.local
+secrets/
+
+# Local uploads — production uses S3/R2.
+uploads/*
+!uploads/.gitkeep
+
+# VCS and IDE.
+.git
+.gitignore
+.vscode
+.idea
+
+# Tests and docs (not needed at runtime).
+test
+*.md
+docs
+
+# OS junk.
+.DS_Store
+Thumbs.db
+*.log

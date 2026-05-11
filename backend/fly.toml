@@ -1,0 +1,38 @@
+# Fly.io deployment config for the Banan API.
+# Created by `fly launch`; tuned for the free-tier small footprint.
+#
+# Region: `sin` (Singapore) — lowest latency to Vietnam, the primary market.
+# Postgres + Redis are attached via `fly postgres create` / `fly redis create`
+# and inject DATABASE_URL / REDIS_URL automatically.
+
+app = "banan-api"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  # CORS_ORIGINS, JWT_*, STRIPE_*, etc. are set via `fly secrets set`.
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  # Health probe — NestJS /api/v1/health returns 200 once Prisma is connected.
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/v1/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

@@ -1,0 +1,31 @@
+name: banan_data
+description: Data layer — Dio HTTP client, WebSocket client, DTOs, mappers, repository implementations, DI.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  dio: ^5.4.3
+  socket_io_client: ^2.0.3+1
+  flutter_secure_storage: ^9.2.2
+  hive_ce: ^2.0.0
+  hive_ce_flutter: ^2.0.0
+  rxdart: ^0.27.7
+  banan_core:
+    path: ../core
+  banan_domain:
+    path: ../domain
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.4
+  very_good_analysis: ^6.0.0
+
+flutter:

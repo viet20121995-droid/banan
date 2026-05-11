@@ -1,0 +1,572 @@
+// Banan — patisserie ordering platform
+// Prisma schema. Run `pnpm prisma migrate dev` to apply changes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identity
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  CUSTOMER
+  MERCHANT_OWNER
+  MERCHANT_STAFF
+  KITCHEN_MANAGER
+  KITCHEN_STAFF
+  ADMIN
+}
+
+enum MembershipTier {
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+model User {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  phone          String?        @unique
+  passwordHash   String
+  fullName       String
+  avatarUrl      String?
+  role           Role           @default(CUSTOMER)
+  // Loyalty (denormalized current balance; LoyaltyEvent is the source of truth)
+  membershipTier MembershipTier @default(SILVER)
+  pointsBalance  Int            @default(0)
+  birthday       DateTime?      @db.Date
+
+  // Staff linkage — null for customers.
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id])
+  kitchenId String?
+  kitchen   Kitchen? @relation(fields: [kitchenId], references: [id])
+
+  addresses          Address[]
+  paymentMethods     PaymentMethod[]
+  orders             Order[]            @relation("CustomerOrders")
+  loyaltyEvents      LoyaltyEvent[]
+  notifications      Notification[]
+  refreshTokens      RefreshToken[]
+  couponRedemptions  CouponRedemption[]
+  authoredThreads    Thread[]           @relation("ThreadAuthor")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([storeId])
+  @@index([kitchenId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // sha256 of opaque refresh token
+  deviceId  String?
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Org units
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Store {
+  id               String   @id @default(uuid())
+  name             String
+  slug             String   @unique
+  address          String
+  lat              Float?
+  lng              Float?
+  phone            String
+  // JSON of weekly opening hours { mon: [["09:00","21:00"]], ... }
+  openingHours     Json
+  defaultKitchenId String?
+  defaultKitchen   Kitchen? @relation(fields: [defaultKitchenId], references: [id])
+
+  users       User[]
+  products    Product[]
+  orders      Order[]
+  collections Collection[]
+  threads     Thread[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Kitchen {
+  id              String @id @default(uuid())
+  name            String
+  address         String
+  // Soft cap — used by capacity planner.
+  capacityPerHour Int    @default(40)
+
+  users             User[]
+  storesAsDefault   Store[]
+  productionBatches ProductionBatch[]
+  orders            Order[]           @relation("KitchenOrders")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Catalog
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  imageUrl  String?
+  sortOrder Int       @default(0)
+  products  Product[]
+}
+
+model Product {
+  id                 String           @id @default(uuid())
+  storeId            String
+  store              Store            @relation(fields: [storeId], references: [id])
+  categoryId         String
+  category           Category         @relation(fields: [categoryId], references: [id])
+  name               String
+  slug               String
+  description        String           @db.Text
+  basePrice          Decimal          @db.Decimal(12, 2)
+  // Cover image is images[0]; gallery is images[1..].
+  images             String[]
+  // Free-form merchant-set badges shown on the customer card.
+  // Examples: "Vegan", "Gluten-free", "Bestseller", "New".
+  tags               String[]         @default([])
+  preparationMinutes Int              @default(60)
+  isAvailable        Boolean          @default(true)
+  isSeasonal         Boolean          @default(false)
+  seasonStart        DateTime?
+  seasonEnd          DateTime?
+  variants           ProductVariant[]
+  orderItems         OrderItem[]
+  collectionItems    CollectionItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, slug])
+  @@index([categoryId, isAvailable])
+}
+
+enum StockMode {
+  UNLIMITED
+  LIMITED
+}
+
+model ProductVariant {
+  id          String      @id @default(uuid())
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // Size + flavor are required, even if "Default" — keeps the order item shape uniform.
+  size        String
+  flavor      String
+  priceDelta  Decimal     @db.Decimal(12, 2) @default(0)
+  stockMode   StockMode   @default(UNLIMITED)
+  stockQty    Int?
+  isAvailable Boolean     @default(true)
+  orderItems  OrderItem[]
+
+  @@unique([productId, size, flavor])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Merchant-curated content: collections (group menus) + threads (homepage news)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Collection {
+  id             String           @id @default(uuid())
+  storeId        String
+  store          Store            @relation(fields: [storeId], references: [id])
+  name           String
+  slug           String
+  description    String?
+  imageUrl       String?
+  // Pinned collections are surfaced on the customer home page.
+  isPinnedToHome Boolean          @default(false)
+  sortOrder      Int              @default(0)
+  isActive       Boolean          @default(true)
+  items          CollectionItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, slug])
+  @@index([storeId, isPinnedToHome])
+}
+
+model CollectionItem {
+  id           String     @id @default(uuid())
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sortOrder    Int        @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([collectionId, productId])
+}
+
+/// Homepage feed entries — announcements, seasonal highlights, news.
+/// `publishedAt = null` means draft.
+model Thread {
+  id          String    @id @default(uuid())
+  storeId     String
+  store       Store     @relation(fields: [storeId], references: [id])
+  authorId    String
+  author      User      @relation("ThreadAuthor", fields: [authorId], references: [id])
+  title       String
+  body        String    @db.Text
+  imageUrl    String?
+  publishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, publishedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Customer assets
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Address {
+  id         String  @id @default(uuid())
+  userId     String
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String  // "Home", "Office"
+  recipient  String
+  phone      String
+  line1      String
+  line2      String?
+  city       String
+  district   String?
+  postalCode String?
+  lat        Float?
+  lng        Float?
+  isDefault  Boolean @default(false)
+  orders     Order[]
+
+  @@index([userId])
+}
+
+enum PaymentProvider {
+  STRIPE
+  VNPAY
+  MOMO
+  CASH
+}
+
+model PaymentMethod {
+  id        String          @id @default(uuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  PaymentProvider
+  // Stripe pm_..., VNPay token, MoMo userId. Never raw card data.
+  token     String
+  brand     String?
+  last4     String?
+  expMonth  Int?
+  expYear   Int?
+  isDefault Boolean         @default(false)
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orders
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum FulfillmentType {
+  PICKUP
+  DELIVERY
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  IN_PREPARATION
+  SENT_TO_KITCHEN
+  READY_FOR_PICKUP
+  DELIVERING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum KitchenStatus {
+  PREPARING
+  BAKING
+  COOLING
+  DECORATING
+  PACKED
+  READY_DISPATCH
+}
+
+model Order {
+  id              String          @id @default(uuid())
+  // Human-readable code like BAN-2026-000123. Generated by service.
+  code            String          @unique
+  customerId      String
+  customer        User            @relation("CustomerOrders", fields: [customerId], references: [id])
+  storeId         String
+  store           Store           @relation(fields: [storeId], references: [id])
+  kitchenId       String?
+  kitchen         Kitchen?        @relation("KitchenOrders", fields: [kitchenId], references: [id])
+  fulfillmentType FulfillmentType
+  scheduledFor    DateTime?
+  addressId       String?
+  address         Address?        @relation(fields: [addressId], references: [id])
+  status          OrderStatus     @default(PENDING)
+  kitchenStatus   KitchenStatus?
+
+  // Money — all in minor units of order currency (default VND has none, so plain integer-ish decimals).
+  currency       String  @default("VND")
+  subtotal       Decimal @db.Decimal(12, 2)
+  deliveryFee    Decimal @db.Decimal(12, 2) @default(0)
+  pointsRedeemed Int     @default(0)
+  pointsDiscount Decimal @db.Decimal(12, 2) @default(0)
+  couponId       String?
+  coupon         Coupon? @relation(fields: [couponId], references: [id])
+  couponDiscount Decimal @db.Decimal(12, 2) @default(0)
+  total          Decimal @db.Decimal(12, 2)
+
+  customMessage String?
+  notes         String?
+
+  items             OrderItem[]
+  payments          Payment[]
+  refunds           Refund[]
+  statusEvents      OrderStatusEvent[]
+  couponRedemptions CouponRedemption[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, createdAt])
+  @@index([storeId, status])
+  @@index([kitchenId, kitchenStatus])
+  @@index([scheduledFor])
+}
+
+model OrderItem {
+  id            String          @id @default(uuid())
+  orderId       String
+  order         Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product         @relation(fields: [productId], references: [id])
+  variantId     String?
+  variant       ProductVariant? @relation(fields: [variantId], references: [id])
+  // Snapshot at purchase time; do NOT recompute from product later.
+  productName   String
+  variantLabel  String?
+  quantity      Int
+  unitPrice     Decimal         @db.Decimal(12, 2)
+  customMessage String?
+  lineTotal     Decimal         @db.Decimal(12, 2)
+}
+
+model OrderStatusEvent {
+  id         String   @id @default(uuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus String?
+  toStatus   String
+  actorId    String?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payments & refunds
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PaymentStatus {
+  INITIATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  VOIDED
+  REFUNDED
+}
+
+model Payment {
+  id          String          @id @default(uuid())
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id])
+  provider    PaymentProvider
+  // Stripe payment_intent.id, VNPay vnp_TxnRef, MoMo requestId.
+  providerRef String
+  amount      Decimal         @db.Decimal(12, 2)
+  currency    String          @default("VND")
+  status      PaymentStatus
+  // Verbatim webhook payload for audit & retry decisions.
+  rawPayload  Json?
+  refunds     Refund[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerRef])
+  @@index([orderId])
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+model Refund {
+  id            String       @id @default(uuid())
+  orderId       String
+  order         Order        @relation(fields: [orderId], references: [id])
+  paymentId     String?
+  payment       Payment?     @relation(fields: [paymentId], references: [id])
+  amount        Decimal      @db.Decimal(12, 2)
+  reason        String
+  status        RefundStatus @default(REQUESTED)
+  requestedById String
+  approvedById  String?
+  // Filled after provider confirmation.
+  providerRef   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Loyalty
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum LoyaltyEventType {
+  EARN
+  REDEEM
+  EXPIRE
+  BIRTHDAY
+  ADJUSTMENT
+}
+
+model LoyaltyEvent {
+  id           String           @id @default(uuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id])
+  orderId      String?
+  type         LoyaltyEventType
+  delta        Int
+  balanceAfter Int
+  reason       String?
+  expiresAt    DateTime?
+  createdAt    DateTime         @default(now())
+
+  @@index([userId, createdAt])
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+  FREE_DELIVERY
+}
+
+model Coupon {
+  id             String     @id @default(uuid())
+  code           String     @unique
+  type           CouponType
+  value          Decimal    @db.Decimal(12, 2)
+  minSubtotal    Decimal?   @db.Decimal(12, 2)
+  startsAt       DateTime
+  endsAt         DateTime
+  maxRedemptions Int?
+  redemptions    Int        @default(0)
+  perUserLimit   Int        @default(1)
+  isActive       Boolean    @default(true)
+
+  redemptionLog CouponRedemption[]
+  orders        Order[]
+}
+
+model CouponRedemption {
+  id        String   @id @default(uuid())
+  couponId  String
+  coupon    Coupon   @relation(fields: [couponId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([couponId, userId, orderId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Kitchen production
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum BatchStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model ProductionBatch {
+  id           String      @id @default(uuid())
+  kitchenId    String
+  kitchen      Kitchen     @relation(fields: [kitchenId], references: [id])
+  productId    String
+  variantId    String?
+  plannedQty   Int
+  actualQty    Int         @default(0)
+  scheduledFor DateTime
+  status       BatchStatus @default(PLANNED)
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kitchenId, scheduledFor])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notifications
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}

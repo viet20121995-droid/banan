@@ -1,0 +1,29 @@
+name: banan_features_shared
+description: Cross-app feature widgets — auth (login/register), profile, notifications.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  go_router: ^14.2.0
+  banan_core:
+    path: ../core
+  banan_design_system:
+    path: ../design_system
+  banan_domain:
+    path: ../domain
+  banan_data:
+    path: ../data
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  very_good_analysis: ^6.0.0
+
+flutter:
