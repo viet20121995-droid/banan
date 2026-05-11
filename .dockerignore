@@ -1,0 +1,36 @@
+# Root-level dockerignore — applies to Flutter app images that COPY the
+# whole monorepo for path-dep resolution.
+
+# Dependencies & build outputs
+**/node_modules
+**/dist
+**/coverage
+**/.dart_tool
+**/build
+**/.pub-cache
+
+# Backend uploads (huge, not needed by Flutter builds)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Secrets & env
+**/.env
+**/.env.*.local
+**/secrets
+
+# VCS / IDE / OS
+.git
+.gitignore
+.idea
+.vscode
+.tools
+.fly
+.DS_Store
+Thumbs.db
+
+# Docs (not needed by builds)
+**/*.md
+docs
+
+# Test outputs
+**/test/**/*.snap
