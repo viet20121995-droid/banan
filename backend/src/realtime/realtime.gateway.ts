@@ -49,11 +49,17 @@ export class RealtimeGateway implements OnGatewayConnection {
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
+    // Every client — guest or authed — joins the `public` room so it receives
+    // catalog/config broadcasts (realtime menu sync). This lets a browsing
+    // guest see a merchant's product / price / popup change without refresh.
+    await client.join('public');
+
     const raw =
       (client.handshake.auth as { token?: string } | undefined)?.token ??
       (client.handshake.query?.token as string | undefined);
+    // Anonymous (guest) connection — public room only, no user/role rooms.
     if (!raw) {
-      client.disconnect();
+      this.logger.debug(`socket ${client.id} connected anonymously (public)`);
       return;
     }
 
@@ -63,6 +69,7 @@ export class RealtimeGateway implements OnGatewayConnection {
         secret: this.config.get<string>('JWT_ACCESS_SECRET'),
       });
     } catch {
+      // A *bad* token is suspicious — drop it (a genuine guest sends none).
       client.disconnect();
       return;
     }

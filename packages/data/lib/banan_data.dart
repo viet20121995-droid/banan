@@ -2,19 +2,37 @@
 /// implementations. Auth surface lands in M1; richer endpoints follow.
 library;
 
+export 'src/api/addresses_api.dart';
+export 'src/api/admin_api.dart';
 export 'src/api/analytics_api.dart';
 export 'src/api/auth_api.dart' show kSkipAuthRefresh;
+export 'src/api/banners_api.dart';
+export 'src/api/bundles_api.dart';
 export 'src/api/catalog_api.dart';
 export 'src/api/collections_api.dart';
+export 'src/api/contact_api.dart';
+export 'src/api/customers_api.dart';
+export 'src/api/devices_api.dart';
 export 'src/api/dio_client.dart';
+export 'src/api/display_config_api.dart';
+export 'src/api/gift_cards_api.dart';
 export 'src/api/errors.dart';
 export 'src/api/health_api.dart';
 export 'src/api/loyalty_api.dart';
+export 'src/api/marketing_api.dart';
+export 'src/api/merchant_coupons_api.dart';
+export 'src/api/merchant_tools_api.dart';
+export 'src/api/newsletter_api.dart';
 export 'src/api/notifications_api.dart';
 export 'src/api/orders_api.dart';
 export 'src/api/providers.dart';
 export 'src/api/refunds_api.dart';
+export 'src/api/reports_api.dart';
+export 'src/api/reviews_api.dart';
+export 'src/api/site_content_api.dart';
+export 'src/api/stores_api.dart';
 export 'src/api/threads_api.dart';
+export 'src/api/wishlist_api.dart';
 export 'src/local/catalog_cache_init.dart';
 export 'src/local/json_cache.dart';
 export 'src/local/secure_token_storage.dart';

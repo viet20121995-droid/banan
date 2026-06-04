@@ -32,17 +32,23 @@ export class KitchenController {
 
   /**
    * Kanban list of orders routed to this kitchen and not yet dispatched.
-   * Optional `?kitchenStatus=BAKING` filter for column-specific polling.
+   * Optional `?kitchenStatus=PREPARING` filter for column-specific polling.
+   * Pass `?includeDoneToday=1` to also surface today's dispatched orders
+   * so the kanban can show a "Completed" column.
    */
   @Get()
   list(
     @CurrentUser() user: AuthPrincipal,
     @Query('kitchenStatus') kitchenStatus?: KitchenStatus,
+    @Query('includeDoneToday') includeDoneToday?: string,
   ) {
     if (!user.kitchenId && user.role !== Role.ADMIN) {
       throw new BadRequestException({ code: 'NO_KITCHEN_ASSIGNED' });
     }
-    return this.orders.listForKitchen(user.kitchenId!, { status: kitchenStatus });
+    return this.orders.listForKitchen(user.kitchenId!, {
+      status: kitchenStatus,
+      includeDoneToday: includeDoneToday === '1' || includeDoneToday === 'true',
+    });
   }
 
   @Get(':id')

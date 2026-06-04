@@ -5,27 +5,55 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../local/json_cache.dart';
 import '../local/secure_token_storage.dart';
+import '../repositories/addresses_repository_impl.dart';
+import '../repositories/admin_repository_impl.dart';
 import '../repositories/auth_repository_impl.dart';
+import '../repositories/banners_repository_impl.dart';
 import '../repositories/catalog_repository_impl.dart';
 import '../repositories/collections_repository_impl.dart';
+import '../repositories/customers_repository_impl.dart';
 import '../repositories/loyalty_repository_impl.dart';
+import '../repositories/merchant_coupons_repository_impl.dart';
 import '../repositories/notifications_repository_impl.dart';
 import '../repositories/order_repository_impl.dart';
 import '../repositories/refund_repository_impl.dart';
+import '../repositories/store_settings_repository_impl.dart';
+import '../repositories/stores_repository_impl.dart';
 import '../repositories/threads_repository_impl.dart';
 import '../ws/socket_client.dart';
+import 'addresses_api.dart';
+import 'admin_api.dart';
 import 'analytics_api.dart';
 import 'auth_api.dart';
+import 'banners_api.dart';
+import 'bundles_api.dart';
 import 'catalog_api.dart';
 import 'collections_api.dart';
+import 'contact_api.dart';
+import 'customers_api.dart';
+import 'devices_api.dart';
 import 'dio_client.dart';
+import 'display_config_api.dart';
+import 'geo_api.dart';
+import 'gift_cards_api.dart';
 import 'health_api.dart';
 import 'interceptors/auth_interceptor.dart';
 import 'loyalty_api.dart';
+import 'marketing_api.dart';
+import 'merchant_coupons_api.dart';
+import 'merchant_tools_api.dart';
+import 'newsletter_api.dart';
 import 'notifications_api.dart';
 import 'orders_api.dart';
+import 'promo_popup_api.dart';
 import 'refunds_api.dart';
+import 'reports_api.dart';
+import 'reviews_api.dart';
+import 'site_content_api.dart';
+import 'store_settings_api.dart';
+import 'stores_api.dart';
 import 'threads_api.dart';
+import 'wishlist_api.dart';
 
 /// Singleton Dio instance shared across the app — wired with the auth
 /// interceptor so every repository call inherits "attach token + refresh on 401".
@@ -81,6 +109,131 @@ final Provider<HealthApi> healthApiProvider = Provider<HealthApi>(
   (ref) => HealthApi(ref.watch(dioProvider)),
 );
 
+/// Geo / ward catalog + delivery-fee quote API. Public endpoints.
+final Provider<GeoApi> geoApiProvider = Provider<GeoApi>(
+  (ref) => GeoApi(ref.watch(dioProvider)),
+);
+
+/// Product reviews API — public read, customer create/delete, merchant moderate.
+final Provider<ReviewsApi> reviewsApiProvider = Provider<ReviewsApi>(
+  (ref) => ReviewsApi(ref.watch(dioProvider)),
+);
+
+/// Merchant + admin reports API — KPIs, best-sellers, XLSX export.
+final Provider<ReportsApi> reportsApiProvider = Provider<ReportsApi>(
+  (ref) => ReportsApi(ref.watch(dioProvider)),
+);
+
+/// Chain-wide customer display preferences (stock badge on/off, …).
+final Provider<DisplayConfigApi> displayConfigApiProvider =
+    Provider<DisplayConfigApi>(
+  (ref) => DisplayConfigApi(ref.watch(dioProvider)),
+);
+
+/// Newsletter subscribe (public) + merchant subscriber CRUD.
+final Provider<NewsletterApi> newsletterApiProvider = Provider<NewsletterApi>(
+  (ref) => NewsletterApi(ref.watch(dioProvider)),
+);
+
+/// Public customer-support contact form.
+final Provider<ContactApi> contactApiProvider = Provider<ContactApi>(
+  (ref) => ContactApi(ref.watch(dioProvider)),
+);
+
+/// Gift cards — public validate + admin issue/list/deactivate.
+final Provider<GiftCardsApi> giftCardsApiProvider = Provider<GiftCardsApi>(
+  (ref) => GiftCardsApi(ref.watch(dioProvider)),
+);
+
+/// Admin-controlled marketing programs (referral, gift card, subscription,
+/// catering, rewards) — public read for gating + admin write.
+final Provider<MarketingApi> marketingApiProvider = Provider<MarketingApi>(
+  (ref) => MarketingApi(ref.watch(dioProvider)),
+);
+
+/// Reactive marketing config — customer surfaces gate on this. Falls back to
+/// "all disabled" so a fetch failure simply hides every program.
+final FutureProvider<MarketingConfig> marketingConfigProvider =
+    FutureProvider<MarketingConfig>((ref) async {
+  final res = await ref.watch(marketingApiProvider).get();
+  return res.when(
+    success: (c) => c,
+    failure: (_) => MarketingConfig.empty,
+  );
+});
+
+/// Push device-token registration (FCM web/mobile).
+final Provider<DevicesApi> devicesApiProvider = Provider<DevicesApi>(
+  (ref) => DevicesApi(ref.watch(dioProvider)),
+);
+
+/// Merchant bulk ops (CSV import, bulk price) + campaign broadcast.
+final Provider<MerchantToolsApi> merchantToolsApiProvider =
+    Provider<MerchantToolsApi>(
+  (ref) => MerchantToolsApi(ref.watch(dioProvider)),
+);
+
+/// Editable static page content (FAQ, About) — public read + merchant edit.
+final Provider<SiteContentApi> siteContentApiProvider =
+    Provider<SiteContentApi>(
+  (ref) => SiteContentApi(ref.watch(dioProvider)),
+);
+
+/// Customer-facing FAQ content (falls back to backend defaults).
+final FutureProvider<SiteContent> faqContentProvider =
+    FutureProvider<SiteContent>((ref) async {
+  final res = await ref.watch(siteContentApiProvider).get('faq');
+  return res.when(
+    success: (c) => c,
+    failure: (_) => const SiteContent(key: 'faq', data: {}, isDefault: true),
+  );
+});
+
+/// Customer-facing About content (falls back to backend defaults).
+final FutureProvider<SiteContent> aboutContentProvider =
+    FutureProvider<SiteContent>((ref) async {
+  final res = await ref.watch(siteContentApiProvider).get('about');
+  return res.when(
+    success: (c) => c,
+    failure: (_) => const SiteContent(key: 'about', data: {}, isDefault: true),
+  );
+});
+
+/// Bundles / combos — public read-only catalog.
+final Provider<BundlesApi> bundlesApiProvider = Provider<BundlesApi>(
+  (ref) => BundlesApi(ref.watch(dioProvider)),
+);
+
+/// Reactive snapshot of the display config — every widget that gates UI
+/// on a preference (e.g. stock badges) watches this. Refetches when the
+/// merchant toggles a value (provider invalidated by the admin screen).
+final FutureProvider<DisplayConfig> displayConfigProvider =
+    FutureProvider<DisplayConfig>((ref) async {
+  final api = ref.watch(displayConfigApiProvider);
+  final res = await api.get();
+  return res.when(
+    success: (c) => c,
+    failure: (_) => const DisplayConfig(showStockToCustomers: false),
+  );
+});
+
+/// Customer wishlist API.
+final Provider<WishlistApi> wishlistApiProvider = Provider<WishlistApi>(
+  (ref) => WishlistApi(ref.watch(dioProvider)),
+);
+
+/// HCMC ward catalog — cached for the session. Customer's address form
+/// reads from this for the ward dropdown.
+final FutureProvider<List<HcmWard>> hcmWardsProvider =
+    FutureProvider<List<HcmWard>>((ref) async {
+  final api = ref.watch(geoApiProvider);
+  final res = await api.hcmWards();
+  return res.when(
+    success: (list) => list,
+    failure: (f) => throw Exception(f.message ?? f.code),
+  );
+});
+
 /// Optional read-through cache for catalog responses. Only set on the
 /// customer app where we want offline browsing — staff apps leave it null.
 /// Override this provider with a `JsonCache` backed by an open Hive box.
@@ -128,11 +281,14 @@ final Provider<OrderRepository> orderRepositoryProvider =
 /// the fresh token via the interceptor's session emission).
 final Provider<SocketClient?> socketClientProvider = Provider<SocketClient?>(
   (ref) {
+    // Connect for everyone — guests included — so realtime catalog sync
+    // reaches browsers that haven't logged in. The token (when present) also
+    // joins the user's order/store/kitchen rooms; rebuilt on login/logout so
+    // the connection swaps between anonymous ↔ authed.
     final session = ref.watch(authSessionProvider).valueOrNull;
-    if (session == null) return null;
     final client = SocketClient.connect(
       url: Env.wsUrl,
-      accessToken: session.accessToken,
+      accessToken: session?.accessToken,
     );
     ref.onDispose(client.dispose);
     return client;
@@ -212,6 +368,28 @@ final Provider<CollectionsRepository> collectionsRepositoryProvider =
   (ref) => CollectionsRepositoryImpl(ref.watch(collectionsApiProvider)),
 );
 
+/// Public store directory — customer-facing locations list + pickup picker.
+final Provider<StoresApi> storesApiProvider = Provider<StoresApi>(
+  (ref) => StoresApi(ref.watch(dioProvider)),
+);
+
+final Provider<StoresRepository> storesRepositoryProvider =
+    Provider<StoresRepository>(
+  (ref) => StoresRepositoryImpl(ref.watch(storesApiProvider)),
+);
+
+/// Merchant-only — settings panel + blackout date manager.
+final Provider<StoreSettingsApi> storeSettingsApiProvider =
+    Provider<StoreSettingsApi>(
+  (ref) => StoreSettingsApi(ref.watch(dioProvider)),
+);
+
+final Provider<StoreSettingsRepository> storeSettingsRepositoryProvider =
+    Provider<StoreSettingsRepository>(
+  (ref) =>
+      StoreSettingsRepositoryImpl(ref.watch(storeSettingsApiProvider)),
+);
+
 /// Threads — merchant CRUD + customer home reads.
 final Provider<ThreadsApi> threadsApiProvider = Provider<ThreadsApi>(
   (ref) => ThreadsApi(ref.watch(dioProvider)),
@@ -220,4 +398,61 @@ final Provider<ThreadsApi> threadsApiProvider = Provider<ThreadsApi>(
 final Provider<ThreadsRepository> threadsRepositoryProvider =
     Provider<ThreadsRepository>(
   (ref) => ThreadsRepositoryImpl(ref.watch(threadsApiProvider)),
+);
+
+/// Saved addresses — the signed-in customer's address book.
+final Provider<AddressesApi> addressesApiProvider = Provider<AddressesApi>(
+  (ref) => AddressesApi(ref.watch(dioProvider)),
+);
+
+final Provider<AddressesRepository> addressesRepositoryProvider =
+    Provider<AddressesRepository>(
+  (ref) => AddressesRepositoryImpl(ref.watch(addressesApiProvider)),
+);
+
+/// Merchant customer directory — list/search + detail card.
+final Provider<CustomersApi> customersApiProvider = Provider<CustomersApi>(
+  (ref) => CustomersApi(ref.watch(dioProvider)),
+);
+
+final Provider<CustomersRepository> customersRepositoryProvider =
+    Provider<CustomersRepository>(
+  (ref) => CustomersRepositoryImpl(ref.watch(customersApiProvider)),
+);
+
+/// Admin console — provision sub-accounts (merchant / kitchen / customer).
+final Provider<AdminApi> adminApiProvider = Provider<AdminApi>(
+  (ref) => AdminApi(ref.watch(dioProvider)),
+);
+
+final Provider<AdminRepository> adminRepositoryProvider =
+    Provider<AdminRepository>(
+  (ref) => AdminRepositoryImpl(ref.watch(adminApiProvider)),
+);
+
+/// Admin-tunable customer-facing promotional popup.
+final Provider<PromoPopupApi> promoPopupApiProvider = Provider<PromoPopupApi>(
+  (ref) => PromoPopupApi(ref.watch(dioProvider)),
+);
+
+/// Home hero banners — public read + merchant CRUD.
+final Provider<BannersApi> bannersApiProvider = Provider<BannersApi>(
+  (ref) => BannersApi(ref.watch(dioProvider)),
+);
+
+final Provider<BannersRepository> bannersRepositoryProvider =
+    Provider<BannersRepository>(
+  (ref) => BannersRepositoryImpl(ref.watch(bannersApiProvider)),
+);
+
+/// Merchant promo-code manager — shared / single-use coupon CRUD.
+final Provider<MerchantCouponsApi> merchantCouponsApiProvider =
+    Provider<MerchantCouponsApi>(
+  (ref) => MerchantCouponsApi(ref.watch(dioProvider)),
+);
+
+final Provider<MerchantCouponsRepository> merchantCouponsRepositoryProvider =
+    Provider<MerchantCouponsRepository>(
+  (ref) =>
+      MerchantCouponsRepositoryImpl(ref.watch(merchantCouponsApiProvider)),
 );

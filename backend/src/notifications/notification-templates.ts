@@ -7,37 +7,34 @@ export interface NotificationTemplate {
 }
 
 const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
-  PENDING: 'Order placed',
-  ACCEPTED: 'Order accepted',
-  IN_PREPARATION: 'Being prepared',
-  SENT_TO_KITCHEN: 'Sent to central kitchen',
-  READY_FOR_PICKUP: 'Ready for pickup',
-  DELIVERING: 'Out for delivery',
-  COMPLETED: 'Order completed',
-  CANCELLED: 'Order cancelled',
-  REFUNDED: 'Order refunded',
+  PENDING: 'Đã đặt hàng',
+  ACCEPTED: 'Đã nhận đơn',
+  IN_PREPARATION: 'Đang chuẩn bị',
+  SENT_TO_KITCHEN: 'Đã chuyển bếp trung tâm',
+  READY_FOR_PICKUP: 'Sẵn sàng để lấy',
+  DELIVERING: 'Đang giao hàng',
+  COMPLETED: 'Hoàn tất đơn hàng',
+  CANCELLED: 'Đơn đã huỷ',
+  REFUNDED: 'Đơn đã hoàn tiền',
 };
 
 const ORDER_STATUS_BODY: Record<OrderStatus, (code: string) => string> = {
-  PENDING: (c) => `Order ${c} placed.`,
-  ACCEPTED: (c) => `Your order ${c} has been accepted.`,
-  IN_PREPARATION: (c) => `We're preparing your order ${c}.`,
+  PENDING: (c) => `Đã tạo đơn ${c}.`,
+  ACCEPTED: (c) => `Đơn ${c} của bạn đã được tiếp nhận.`,
+  IN_PREPARATION: (c) => `Chúng tôi đang chuẩn bị đơn ${c}.`,
   SENT_TO_KITCHEN: (c) =>
-    `Order ${c} is being crafted at our central kitchen.`,
-  READY_FOR_PICKUP: (c) => `Order ${c} is ready for pickup!`,
-  DELIVERING: (c) => `Order ${c} is on the way!`,
-  COMPLETED: (c) => `Thanks for your order ${c}. Enjoy!`,
-  CANCELLED: (c) => `Order ${c} was cancelled.`,
-  REFUNDED: (c) => `Order ${c} has been refunded.`,
+    `Đơn ${c} đang được làm tại bếp trung tâm.`,
+  READY_FOR_PICKUP: (c) => `Đơn ${c} đã sẵn sàng để lấy!`,
+  DELIVERING: (c) => `Đơn ${c} đang trên đường giao!`,
+  COMPLETED: (c) => `Cảm ơn bạn đã đặt đơn ${c}. Chúc ngon miệng!`,
+  CANCELLED: (c) => `Đơn ${c} đã bị huỷ.`,
+  REFUNDED: (c) => `Đơn ${c} đã được hoàn tiền.`,
 };
 
 const KITCHEN_STATUS_LABEL: Record<KitchenStatus, string> = {
-  PREPARING: 'Kitchen preparing',
-  BAKING: 'Kitchen baking',
-  COOLING: 'Cooling',
-  DECORATING: 'Decorating',
-  PACKED: 'Packed',
-  READY_DISPATCH: 'Ready to dispatch',
+  PENDING_ACK: 'Chờ bếp tiếp nhận',
+  PREPARING: 'Bếp đang làm',
+  READY_DISPATCH: 'Sẵn sàng giao đi',
 };
 
 export function orderStatusNotification(
@@ -58,7 +55,7 @@ export function kitchenStatusNotification(
   return {
     type: 'order.kitchen_status_changed',
     title: KITCHEN_STATUS_LABEL[status],
-    body: `Order ${code} is now ${KITCHEN_STATUS_LABEL[status].toLowerCase()}.`,
+    body: `Đơn ${code} hiện ${KITCHEN_STATUS_LABEL[status].toLowerCase()}.`,
   };
 }
 
@@ -67,16 +64,16 @@ export function refundUpdatedNotification(
   status: 'APPROVED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED',
 ): NotificationTemplate {
   const titles: Record<string, string> = {
-    APPROVED: 'Refund approved',
-    PROCESSING: 'Refund processing',
-    COMPLETED: 'Refund completed',
-    REJECTED: 'Refund rejected',
+    APPROVED: 'Đã duyệt hoàn tiền',
+    PROCESSING: 'Đang xử lý hoàn tiền',
+    COMPLETED: 'Hoàn tiền hoàn tất',
+    REJECTED: 'Từ chối hoàn tiền',
   };
   const bodies: Record<string, string> = {
-    APPROVED: `Your refund for ${code} has been approved.`,
-    PROCESSING: `Your refund for ${code} is being processed.`,
-    COMPLETED: `Your refund for ${code} is complete.`,
-    REJECTED: `Your refund request for ${code} was declined.`,
+    APPROVED: `Yêu cầu hoàn tiền cho đơn ${code} đã được duyệt.`,
+    PROCESSING: `Yêu cầu hoàn tiền cho đơn ${code} đang được xử lý.`,
+    COMPLETED: `Hoàn tiền cho đơn ${code} đã hoàn tất.`,
+    REJECTED: `Yêu cầu hoàn tiền cho đơn ${code} đã bị từ chối.`,
   };
   return { type: 'refund.updated', title: titles[status], body: bodies[status] };
 }

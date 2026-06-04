@@ -15,8 +15,11 @@ class CoverImagePicker extends ConsumerStatefulWidget {
   const CoverImagePicker({
     required this.url,
     required this.onChanged,
-    this.label = 'Cover image',
-    this.helperText = 'Optional — shown on the customer site.',
+    this.label = 'Ảnh bìa',
+    this.helperText = 'Tuỳ chọn — hiển thị trên trang khách hàng.',
+    this.recommendedSize = '1200×800px (tỉ lệ 3:2)',
+    this.recommendedFileSizeMb = 8,
+    this.hardMaxFileSizeMb = 20,
     super.key,
   });
 
@@ -31,6 +34,19 @@ class CoverImagePicker extends ConsumerStatefulWidget {
   final String label;
   final String helperText;
 
+  /// Free-form text shown in the guidance line — caller picks the right
+  /// value for the context (banner: 1600×600, popup: 1200×900, etc.).
+  final String recommendedSize;
+
+  /// "Comfortable" file-size ceiling — above this we show a non-blocking
+  /// warning ("vượt mức khuyến nghị") so the merchant knows the file may
+  /// slow down the customer site. Uploads still proceed.
+  final int recommendedFileSizeMb;
+
+  /// Hard server limit (matches backend Multer config). Files above this
+  /// are rejected by the server with `LIMIT_FILE_SIZE`.
+  final int hardMaxFileSizeMb;
+
   @override
   ConsumerState<CoverImagePicker> createState() => _CoverImagePickerState();
 }
@@ -38,6 +54,11 @@ class CoverImagePicker extends ConsumerStatefulWidget {
 class _CoverImagePickerState extends ConsumerState<CoverImagePicker> {
   bool _uploading = false;
   String? _error;
+  // Last picked file's reported size in bytes — surfaced as a hint so the
+  // merchant can spot oversized assets before they try a save that will
+  // be slow on a poor connection.
+  int? _lastFileSize;
+  String? _lastFilename;
 
   Future<void> _pick() async {
     final picked = await FilePicker.platform.pickFiles(
@@ -49,6 +70,8 @@ class _CoverImagePickerState extends ConsumerState<CoverImagePicker> {
     setState(() {
       _uploading = true;
       _error = null;
+      _lastFileSize = file.size;
+      _lastFilename = file.name;
     });
     final repo = ref.read(catalogRepositoryProvider);
     final res = await repo.uploadImage(
@@ -61,7 +84,7 @@ class _CoverImagePickerState extends ConsumerState<CoverImagePicker> {
     res.when(
       success: (uploaded) => widget.onChanged(uploaded.url),
       failure: (f) => setState(
-        () => _error = 'Upload failed: ${authFailureMessage(f)}',
+        () => _error = 'Tải ảnh thất bại: ${authFailureMessage(f)}',
       ),
     );
   }
@@ -91,6 +114,19 @@ class _CoverImagePickerState extends ConsumerState<CoverImagePicker> {
         Text(widget.label, style: theme.textTheme.labelLarge),
         const SizedBox(height: BananSpacing.xs),
         Text(widget.helperText, style: theme.textTheme.bodySmall),
+        const SizedBox(height: 2),
+        // Standardized image guidance — same shape across every picker so
+        // merchants learn the format once. Two-tier sizing: a soft
+        // recommendation (warning shown above) and a hard server limit.
+        Text(
+          'Khuyến nghị: ${widget.recommendedSize}  ·  '
+          '≤ ${widget.recommendedFileSizeMb} MB '
+          '(server chấp nhận tối đa ${widget.hardMaxFileSizeMb} MB)  ·  '
+          'JPG / PNG / WebP / AVIF',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
         const SizedBox(height: BananSpacing.sm),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,7 +177,7 @@ class _CoverImagePickerState extends ConsumerState<CoverImagePicker> {
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.upload_outlined),
-                        label: Text(hasImage ? 'Replace' : 'Upload from device'),
+                        label: Text(hasImage ? 'Thay ảnh' : 'Tải lên từ máy'),
                       ),
                       if (hasImage) ...[
                         const SizedBox(width: BananSpacing.sm),
@@ -149,11 +185,20 @@ class _CoverImagePickerState extends ConsumerState<CoverImagePicker> {
                           onPressed:
                               _uploading ? null : () => widget.onChanged(null),
                           icon: const Icon(Icons.close),
-                          label: const Text('Remove'),
+                          label: const Text('Xoá'),
                         ),
                       ],
                     ],
                   ),
+                  if (_lastFileSize != null && _lastFilename != null) ...[
+                    const SizedBox(height: BananSpacing.xs),
+                    _FileMeta(
+                      filename: _lastFilename!,
+                      sizeBytes: _lastFileSize!,
+                      recommendedMb: widget.recommendedFileSizeMb,
+                      hardMaxMb: widget.hardMaxFileSizeMb,
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: BananSpacing.xs),
                     Text(
@@ -167,6 +212,76 @@ class _CoverImagePickerState extends ConsumerState<CoverImagePicker> {
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Inline filename + size summary shown after a file is picked. Three
+/// states by file size relative to the two-tier limits:
+///   - ≤ recommended  → quiet green check
+///   - > recommended but ≤ hard max → amber warning (still uploads OK)
+///   - > hard max → red error (server will reject)
+class _FileMeta extends StatelessWidget {
+  const _FileMeta({
+    required this.filename,
+    required this.sizeBytes,
+    required this.recommendedMb,
+    required this.hardMaxMb,
+  });
+
+  final String filename;
+  final int sizeBytes;
+  final int recommendedMb;
+  final int hardMaxMb;
+
+  String _human(int bytes) {
+    const kb = 1024;
+    const mb = 1024 * 1024;
+    if (bytes < kb) return '$bytes B';
+    if (bytes < mb) return '${(bytes / kb).toStringAsFixed(0)} KB';
+    return '${(bytes / mb).toStringAsFixed(1)} MB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final overHard = sizeBytes > hardMaxMb * 1024 * 1024;
+    final overSoft = sizeBytes > recommendedMb * 1024 * 1024;
+
+    final (icon, color, note) = overHard
+        ? (
+            Icons.error_outline_rounded,
+            theme.colorScheme.error,
+            '  · vượt giới hạn server (${hardMaxMb} MB) — sẽ bị từ chối',
+          )
+        : overSoft
+            ? (
+                Icons.warning_amber_rounded,
+                Colors.orange.shade700,
+                '  · vượt mức khuyến nghị (${recommendedMb} MB) — vẫn tải lên được',
+              )
+            : (
+                Icons.check_circle_outline,
+                theme.colorScheme.outline,
+                '',
+              );
+
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            '$filename  ·  ${_human(sizeBytes)}$note',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight:
+                  (overHard || overSoft) ? FontWeight.w600 : null,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

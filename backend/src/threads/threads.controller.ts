@@ -27,15 +27,17 @@ import { ThreadsService } from './threads.service';
 export class ThreadsController {
   constructor(private readonly threads: ThreadsService) {}
 
-  /** Public feed — published only, newest first. */
+  /** Public feed — published only, newest first. Optional `hashtag` filter. */
   @Public()
   @Get()
   list(
     @Query('storeId') storeId?: string,
     @Query('limit') limit?: string,
+    @Query('hashtag') hashtag?: string,
   ) {
     return this.threads.listPublished({
       storeId,
+      hashtag,
       limit: Number(limit) || 10,
     });
   }
@@ -44,6 +46,14 @@ export class ThreadsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.threads.findOne(id, null);
+  }
+
+  /** Public — fire-and-forget impression tracking from the customer feed. */
+  @Public()
+  @Post(':id/view')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async trackView(@Param('id') id: string) {
+    await this.threads.incrementView(id);
   }
 }
 

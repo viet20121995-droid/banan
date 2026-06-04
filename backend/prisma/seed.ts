@@ -22,25 +22,131 @@ async function main() {
     update: {},
   });
 
-  const store = await prisma.store.upsert({
+  // Shared hours across all branches: Mon-Thu 10am-9:30pm, Fri-Sun 10am-10pm.
+  const branchHours = {
+    mon: [['10:00', '21:30']],
+    tue: [['10:00', '21:30']],
+    wed: [['10:00', '21:30']],
+    thu: [['10:00', '21:30']],
+    fri: [['10:00', '22:00']],
+    sat: [['10:00', '22:00']],
+    sun: [['10:00', '22:00']],
+  };
+
+  // Migrate the original single-branch "banan-saigon" row (if it exists)
+  // to be the new Lê Thánh Tôn branch. Keeps existing products attached so
+  // the customer menu doesn't suddenly empty out after this seed runs.
+  const legacy = await prisma.store.findUnique({
     where: { slug: 'banan-saigon' },
-    create: {
-      name: 'Banan Saigon',
-      slug: 'banan-saigon',
-      address: '88 Dong Khoi, District 1, HCMC',
-      phone: '+84 28 1234 5678',
-      defaultKitchenId: kitchen.id,
-      openingHours: {
-        mon: [['09:00', '21:00']],
-        tue: [['09:00', '21:00']],
-        wed: [['09:00', '21:00']],
-        thu: [['09:00', '21:00']],
-        fri: [['09:00', '22:00']],
-        sat: [['09:00', '22:00']],
-        sun: [['09:00', '21:00']],
+  });
+  if (legacy) {
+    await prisma.store.update({
+      where: { slug: 'banan-saigon' },
+      data: {
+        slug: 'banan-le-thanh-ton',
+        name: 'Banan – Lê Thánh Tôn',
+        address: '15B8 Lê Thánh Tôn, Bến Nghé Ward, HCMC',
+        phone: '+84867540939',
+        openingHours: branchHours,
       },
+    });
+  }
+
+  // Branch 1 is the "catalog owner" — products and delivery orders default
+  // to this store. Pickup orders can be routed to any of the 4 branches.
+  // Coordinates are approximate but accurate enough for the 3km delivery
+  // radius check (each ward centroid is also approximate).
+  const store = await prisma.store.upsert({
+    where: { slug: 'banan-le-thanh-ton' },
+    create: {
+      name: 'Banan – Lê Thánh Tôn',
+      slug: 'banan-le-thanh-ton',
+      address: '15B8 Lê Thánh Tôn, Bến Nghé Ward, HCMC',
+      phone: '+84867540939',
+      lat: 10.7780,
+      lng: 106.7030,
+      wardCode: 'sai-gon',
+      defaultKitchenId: kitchen.id,
+      openingHours: branchHours,
     },
-    update: {},
+    update: {
+      name: 'Banan – Lê Thánh Tôn',
+      address: '15B8 Lê Thánh Tôn, Bến Nghé Ward, HCMC',
+      phone: '+84867540939',
+      lat: 10.7780,
+      lng: 106.7030,
+      wardCode: 'sai-gon',
+      openingHours: branchHours,
+    },
+  });
+
+  const branch2 = await prisma.store.upsert({
+    where: { slug: 'banan-su-van-hanh' },
+    create: {
+      name: 'Banan – Sư Vạn Hạnh',
+      slug: 'banan-su-van-hanh',
+      address: '425A Sư Vạn Hạnh, Hòa Hưng Ward, HCMC',
+      phone: '+84387835035',
+      lat: 10.7793,
+      lng: 106.6678,
+      wardCode: 'hoa-hung',
+      defaultKitchenId: kitchen.id,
+      openingHours: branchHours,
+    },
+    update: {
+      address: '425A Sư Vạn Hạnh, Hòa Hưng Ward, HCMC',
+      phone: '+84387835035',
+      lat: 10.7793,
+      lng: 106.6678,
+      wardCode: 'hoa-hung',
+      openingHours: branchHours,
+    },
+  });
+
+  const branch3 = await prisma.store.upsert({
+    where: { slug: 'banan-ngo-quang-huy' },
+    create: {
+      name: 'Banan – Ngô Quang Huy',
+      slug: 'banan-ngo-quang-huy',
+      address: '34 Ngô Quang Huy, An Khánh Ward, HCMC',
+      phone: '+84868897131',
+      lat: 10.7800,
+      lng: 106.7330,
+      wardCode: 'an-khanh',
+      defaultKitchenId: kitchen.id,
+      openingHours: branchHours,
+    },
+    update: {
+      address: '34 Ngô Quang Huy, An Khánh Ward, HCMC',
+      phone: '+84868897131',
+      lat: 10.7800,
+      lng: 106.7330,
+      wardCode: 'an-khanh',
+      openingHours: branchHours,
+    },
+  });
+
+  const branch4 = await prisma.store.upsert({
+    where: { slug: 'banan-truong-sa' },
+    create: {
+      name: 'Banan – Trường Sa',
+      slug: 'banan-truong-sa',
+      address: '360 Trường Sa, Cầu Kiệu Ward, HCMC',
+      phone: '+84379555934',
+      lat: 10.7900,
+      lng: 106.6840,
+      wardCode: 'cau-kieu',
+      defaultKitchenId: kitchen.id,
+      openingHours: branchHours,
+    },
+    update: {
+      address: '360 Trường Sa, Cầu Kiệu Ward, HCMC',
+      phone: '+84379555934',
+      lat: 10.7900,
+      lng: 106.6840,
+      wardCode: 'cau-kieu',
+      openingHours: branchHours,
+    },
   });
 
   const admin = await prisma.user.upsert({
@@ -54,17 +160,36 @@ async function main() {
     update: {},
   });
 
+  // Merchant accounts — one per branch so each store sees its own pickup queue.
   await prisma.user.upsert({
     where: { email: 'merchant@banan.local' },
     create: {
       email: 'merchant@banan.local',
       passwordHash,
-      fullName: 'Saigon Manager',
+      fullName: 'Lê Thánh Tôn Manager',
       role: 'MERCHANT_OWNER',
       storeId: store.id,
     },
-    update: { storeId: store.id },
+    update: { storeId: store.id, fullName: 'Lê Thánh Tôn Manager' },
   });
+
+  for (const branch of [
+    { email: 'merchant-suvanhanh@banan.local', store: branch2, name: 'Sư Vạn Hạnh Manager' },
+    { email: 'merchant-ngoquanghuy@banan.local', store: branch3, name: 'Ngô Quang Huy Manager' },
+    { email: 'merchant-truongsa@banan.local', store: branch4, name: 'Trường Sa Manager' },
+  ]) {
+    await prisma.user.upsert({
+      where: { email: branch.email },
+      create: {
+        email: branch.email,
+        passwordHash,
+        fullName: branch.name,
+        role: 'MERCHANT_OWNER',
+        storeId: branch.store.id,
+      },
+      update: { storeId: branch.store.id, fullName: branch.name },
+    });
+  }
 
   await prisma.user.upsert({
     where: { email: 'kitchen@banan.local' },

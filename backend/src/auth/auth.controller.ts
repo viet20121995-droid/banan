@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { User } from '@prisma/client';
@@ -8,6 +16,7 @@ import { Public } from './decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AuthService } from './auth.service';
 import type { AuthPrincipal } from './types/jwt-payload';
 
@@ -54,6 +63,16 @@ export class AuthController {
   @Get('me')
   async me(@CurrentUser() principal: AuthPrincipal) {
     const user = await this.auth.me(principal.sub);
+    return { user: AuthController.toUserView(user) };
+  }
+
+  @ApiBearerAuth()
+  @Patch('me')
+  async updateProfile(
+    @CurrentUser() principal: AuthPrincipal,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    const user = await this.auth.updateProfile(principal.sub, dto);
     return { user: AuthController.toUserView(user) };
   }
 

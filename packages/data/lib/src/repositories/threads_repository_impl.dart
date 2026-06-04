@@ -10,11 +10,19 @@ class ThreadsRepositoryImpl implements domain.ThreadsRepository {
   @override
   Future<Result<List<domain.Thread>, AppFailure>> published({
     String? storeId,
+    String? hashtag,
     int limit = 10,
   }) async {
-    final res = await _api.published(storeId: storeId, limit: limit);
+    final res = await _api.published(
+      storeId: storeId,
+      hashtag: hashtag,
+      limit: limit,
+    );
     return res.map((list) => list.map((d) => d.toDomain()).toList());
   }
+
+  @override
+  Future<void> trackView(String id) => _api.trackView(id);
 
   @override
   Future<Result<List<domain.Thread>, AppFailure>> storeThreads() async {

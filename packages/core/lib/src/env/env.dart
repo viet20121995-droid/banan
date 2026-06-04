@@ -17,6 +17,13 @@ class Env {
     defaultValue: 'http://localhost:3000',
   );
 
+  /// Public customer-facing app URL — used by merchant / kitchen apps to
+  /// build shareable tracking links (`<customerAppUrl>/orders/<id>`).
+  static const String customerAppUrl = String.fromEnvironment(
+    'BANAN_CUSTOMER_APP_URL',
+    defaultValue: 'http://localhost:8081',
+  );
+
   static const String environment = String.fromEnvironment(
     'BANAN_ENV',
     defaultValue: 'dev',

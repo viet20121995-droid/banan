@@ -27,15 +27,15 @@ enum RefundStatus {
   String get label {
     switch (this) {
       case RefundStatus.requested:
-        return 'Refund requested';
+        return 'Đã gửi yêu cầu';
       case RefundStatus.approved:
-        return 'Refund approved';
+        return 'Đã duyệt';
       case RefundStatus.processing:
-        return 'Refund processing';
+        return 'Đang xử lý';
       case RefundStatus.completed:
-        return 'Refunded';
+        return 'Đã hoàn tiền';
       case RefundStatus.rejected:
-        return 'Refund rejected';
+        return 'Bị từ chối';
     }
   }
 

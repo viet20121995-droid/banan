@@ -20,6 +20,9 @@ class ProductDraft {
     this.isSeasonal,
     this.seasonStart,
     this.seasonEnd,
+    this.leadTimeHours,
+    this.availableDaysOfWeek = const [],
+    this.dailyMaxQuantity,
   });
 
   String categoryId;
@@ -36,6 +39,15 @@ class ProductDraft {
   bool? isSeasonal;
   DateTime? seasonStart;
   DateTime? seasonEnd;
+
+  /// Optional per-product overrides for the store's order rules.
+  ///   leadTimeHours       — advance notice (h); null = use store default.
+  ///   availableDaysOfWeek — days the product is sold (0=Sun..6=Sat).
+  ///                          Empty = every day.
+  ///   dailyMaxQuantity    — hard daily order cap; null = unlimited.
+  int? leadTimeHours;
+  List<int> availableDaysOfWeek;
+  int? dailyMaxQuantity;
 }
 
 class VariantDraft {
@@ -83,6 +95,14 @@ abstract class CatalogRepository {
 
   Future<Result<Product, AppFailure>> product(String id);
 
+  /// "Khách cũng mua" — products that historically appeared in the same
+  /// basket as [productId]. Falls back to same-category siblings if the
+  /// product is too new to have co-occurrence data.
+  Future<Result<List<Product>, AppFailure>> recommendations(
+    String productId, {
+    int limit,
+  });
+
   /// Merchant view — includes unavailable products. Scoped to caller's store.
   Future<Result<ProductPage, AppFailure>> merchantProducts({
     String? q,
@@ -92,7 +112,13 @@ abstract class CatalogRepository {
 
   Future<Result<Product, AppFailure>> createProduct(ProductDraft draft);
   Future<Result<Product, AppFailure>> updateProduct(String id, ProductDraft draft);
-  Future<Result<void, AppFailure>> deleteProduct(String id);
+
+  /// Removes the product. Returns `(deleted, archived)` so the UI can
+  /// surface the correct outcome — hard delete vs archive-because-of-orders.
+  Future<Result<DeleteProductResult, AppFailure>> deleteProduct(String id);
+
+  /// Brings an archived product back to the menu.
+  Future<Result<Product, AppFailure>> restoreProduct(String id);
 
   /// Toggle a product's customer-facing visibility without re-sending the
   /// full draft. Useful for the eye-icon toggle in the merchant menu list.
@@ -106,4 +132,12 @@ abstract class CatalogRepository {
     required String filename,
     required String mimeType,
   });
+}
+
+/// Outcome of `deleteProduct` — distinguishes a real DB delete from an
+/// archive (set `isAvailable=false`) when past orders block hard delete.
+class DeleteProductResult {
+  const DeleteProductResult({required this.deleted, required this.archived});
+  final bool deleted;
+  final bool archived;
 }

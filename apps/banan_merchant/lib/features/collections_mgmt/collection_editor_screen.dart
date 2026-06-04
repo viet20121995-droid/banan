@@ -133,11 +133,11 @@ class _CollectionEditorScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit collection' : 'New collection'),
+        title: Text(widget.isEditing ? 'Sửa bộ sưu tập' : 'Tạo bộ sưu tập'),
         actions: [
           TextButton(
             onPressed: _saving ? null : () => context.pop(),
-            child: const Text('Cancel'),
+            child: const Text('Huỷ'),
           ),
           const SizedBox(width: BananSpacing.sm),
           FilledButton.icon(
@@ -149,7 +149,7 @@ class _CollectionEditorScreenState
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.check),
-            label: const Text('Save'),
+            label: const Text('Lưu'),
           ),
           const SizedBox(width: BananSpacing.md),
         ],
@@ -180,13 +180,14 @@ class _CollectionEditorScreenState
                         child: Text(_error!),
                       ),
                     _Section(
-                      title: 'Basics',
+                      title: 'Thông tin chung',
                       children: [
                         TextFormField(
                           controller: _name,
-                          decoration: const InputDecoration(labelText: 'Name'),
+                          maxLength: 120,
+                          decoration: const InputDecoration(labelText: 'Tên'),
                           validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Required'
+                              ? 'Bắt buộc'
                               : null,
                           onChanged: (v) {
                             if (_slug.text.isEmpty) {
@@ -197,43 +198,46 @@ class _CollectionEditorScreenState
                         const SizedBox(height: BananSpacing.md),
                         TextFormField(
                           controller: _slug,
+                          maxLength: 160,
                           decoration: const InputDecoration(
-                            labelText: 'URL slug',
-                            helperText: 'lowercase, dashes, unique per store',
+                            labelText: 'Slug URL',
+                            helperText: 'chữ thường, dấu gạch, duy nhất theo cửa hàng',
                           ),
                           validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Required'
+                              ? 'Bắt buộc'
                               : null,
                         ),
                         const SizedBox(height: BananSpacing.md),
                         TextFormField(
                           controller: _description,
                           maxLines: 2,
+                          maxLength: 400,
                           decoration: const InputDecoration(
-                            labelText: 'Description (optional)',
+                            labelText: 'Mô tả (tuỳ chọn)',
                             helperText:
-                                'Shown under the title on the customer home',
+                                'Hiển thị dưới tiêu đề ở trang chủ khách hàng',
                           ),
                         ),
                         const SizedBox(height: BananSpacing.lg),
                         CoverImagePicker(
                           url: _coverUrl,
+                          helperText:
+                              'Ảnh banner carousel trên trang chủ khách hàng.',
+                          recommendedSize: '1600×900px (tỉ lệ 16:9)',
                           onChanged: (url) =>
                               setState(() => _coverUrl = url),
-                          helperText:
-                              'Shown as the carousel banner on the customer home.',
                         ),
                       ],
                     ),
                     _Section(
-                      title: 'Visibility',
+                      title: 'Hiển thị',
                       children: [
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('Pin to customer home'),
+                          title: const Text('Ghim lên trang chủ'),
                           subtitle: const Text(
-                            'Pinned collections show as horizontal '
-                            'carousels on the menu screen.',
+                            'Bộ sưu tập được ghim sẽ hiện dạng carousel '
+                            'ngang trên màn hình thực đơn.',
                           ),
                           value: _isPinnedToHome,
                           onChanged: (v) =>
@@ -241,10 +245,10 @@ class _CollectionEditorScreenState
                         ),
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('Active'),
+                          title: const Text('Đang bật'),
                           subtitle: const Text(
-                            'Inactive collections are hidden from customers '
-                            'but kept here for re-use later.',
+                            'Bộ sưu tập tạm ẩn sẽ không hiện với khách '
+                            'nhưng vẫn lưu để tái sử dụng.',
                           ),
                           value: _isActive,
                           onChanged: (v) => setState(() => _isActive = v),
@@ -253,7 +257,7 @@ class _CollectionEditorScreenState
                         Row(
                           children: [
                             const SizedBox(width: BananSpacing.xs),
-                            const Text('Sort order'),
+                            const Text('Thứ tự hiển thị'),
                             const SizedBox(width: BananSpacing.md),
                             SizedBox(
                               width: 80,
@@ -333,15 +337,15 @@ class _ProductsPicker extends ConsumerWidget {
     final theme = Theme.of(context);
 
     return _Section(
-      title: 'Products in this collection',
+      title: 'Sản phẩm trong bộ sưu tập',
       children: [
         if (state.loading && state.products.isEmpty)
           const Center(child: CircularProgressIndicator())
         else if (state.products.isEmpty)
-          const Text("You haven't created any products yet.")
+          const Text('Bạn chưa tạo sản phẩm nào.')
         else ...[
           Text(
-            '${selectedIds.length} selected · tap to toggle, drag the handles to reorder.',
+            'Đã chọn ${selectedIds.length} · chạm để bật/tắt, kéo tay cầm để sắp xếp.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: BananSpacing.md),
@@ -366,7 +370,7 @@ class _ProductsPicker extends ConsumerWidget {
                         id: id,
                         storeId: '',
                         categoryId: '',
-                        name: '(deleted product)',
+                        name: '(sản phẩm đã xoá)',
                         slug: '',
                         description: '',
                         basePrice: 0,
@@ -382,7 +386,7 @@ class _ProductsPicker extends ConsumerWidget {
             ),
             const Divider(height: BananSpacing.xl),
           ],
-          Text('Available products', style: theme.textTheme.titleSmall),
+          Text('Sản phẩm khả dụng', style: theme.textTheme.titleSmall),
           const SizedBox(height: BananSpacing.sm),
           Wrap(
             spacing: BananSpacing.sm,
@@ -447,7 +451,7 @@ class _SelectedRow extends StatelessWidget {
                 children: [
                   Text(product.name, style: theme.textTheme.titleSmall),
                   Text(
-                    'from ${fmt.format(product.minPrice)}',
+                    'từ ${fmt.format(product.minPrice)}',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -455,7 +459,7 @@ class _SelectedRow extends StatelessWidget {
             ),
             IconButton(
               icon: const Icon(Icons.close),
-              tooltip: 'Remove',
+              tooltip: 'Xoá',
               onPressed: onRemove,
             ),
           ],

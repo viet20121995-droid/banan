@@ -10,12 +10,23 @@ class ThreadsApi {
 
   Future<Result<List<ThreadDto>, AppFailure>> published({
     String? storeId,
+    String? hashtag,
     int limit = 10,
   }) =>
       _list('/threads', {
         if (storeId != null) 'storeId': storeId,
+        if (hashtag != null && hashtag.isNotEmpty) 'hashtag': hashtag,
         'limit': limit,
       });
+
+  /// Best-effort impression ping. Swallows all errors.
+  Future<void> trackView(String id) async {
+    try {
+      await _dio.post<void>('/threads/$id/view');
+    } catch (_) {
+      // analytics is non-critical
+    }
+  }
 
   Future<Result<List<ThreadDto>, AppFailure>> store() =>
       _list('/merchant/threads', const {});

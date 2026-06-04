@@ -12,14 +12,15 @@ class KitchenHomeScreen extends ConsumerWidget {
     final session = ref.watch(authSessionProvider).valueOrNull;
     final theme = Theme.of(context);
     final user = session?.user;
+    final s = ref.watch(stringsProvider);
 
     return AppScaffold(
       appBar: AppBar(
-        title: const Text('Banan · Kitchen'),
+        title: Text(s.kitchenBrand),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
+            tooltip: s.signOut,
             onPressed: () =>
                 ref.read(authControllerProvider.notifier).logout(),
           ),

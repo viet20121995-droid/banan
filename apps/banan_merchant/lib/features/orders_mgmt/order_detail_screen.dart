@@ -1,11 +1,14 @@
+import 'package:banan_core/banan_core.dart';
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/print_ticket.dart';
 import 'order_status_visuals.dart';
 import 'orders_screen.dart';
 
@@ -36,7 +39,7 @@ class MerchantOrderDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final orderAsync = ref.watch(_orderProvider(orderId));
     return Scaffold(
-      appBar: AppBar(title: const Text('Order')),
+      appBar: AppBar(title: const Text('Đơn hàng')),
       body: orderAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorState(
@@ -122,9 +125,25 @@ class _Body extends ConsumerWidget {
                 ),
                 const SizedBox(height: BananSpacing.sm),
                 Text(
-                  '${order.fulfillmentType == FulfillmentType.delivery ? 'Delivery' : 'Pickup'} · '
-                  'Placed ${DateFormat.yMMMd().add_jm().format(order.createdAt.toLocal())}',
+                  '${order.fulfillmentType == FulfillmentType.delivery ? 'Giao hàng' : 'Tự đến lấy'} · '
+                  'Đặt lúc ${DateFormat.yMMMd().add_jm().format(order.createdAt.toLocal())}',
                   style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: BananSpacing.sm),
+                Wrap(
+                  spacing: BananSpacing.sm,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => printReceipt(order),
+                      icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                      label: const Text('In phiếu'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => printKitchenTicket(order),
+                      icon: const Icon(Icons.soup_kitchen_outlined, size: 18),
+                      label: const Text('Phiếu bếp'),
+                    ),
+                  ],
                 ),
                 if (order.address != null) ...[
                   const SizedBox(height: BananSpacing.md),
@@ -154,12 +173,16 @@ class _Body extends ConsumerWidget {
                 ],
                 if (order.notes != null && order.notes!.isNotEmpty) ...[
                   const SizedBox(height: BananSpacing.md),
-                  Text('Customer notes',
+                  Text('Ghi chú của khách',
                       style: theme.textTheme.titleSmall,),
                   Text(order.notes!, style: theme.textTheme.bodyMedium),
                 ],
+                if (order.requestVatInvoice) ...[
+                  const SizedBox(height: BananSpacing.lg),
+                  _VatInvoiceBlock(order: order),
+                ],
                 const SizedBox(height: BananSpacing.xl),
-                Text('Items', style: theme.textTheme.titleLarge),
+                Text('Món trong đơn', style: theme.textTheme.titleLarge),
                 const SizedBox(height: BananSpacing.sm),
                 for (final item in order.items)
                   Padding(
@@ -187,6 +210,11 @@ class _Body extends ConsumerWidget {
                                     fontStyle: FontStyle.italic,
                                   ),
                                 ),
+                              if (item.personalization != null &&
+                                  item.personalization!.isNotEmpty)
+                                _MerchantPersonalizationBlock(
+                                  payload: item.personalization!,
+                                ),
                             ],
                           ),
                         ),
@@ -195,14 +223,14 @@ class _Body extends ConsumerWidget {
                     ),
                   ),
                 const Divider(height: BananSpacing.xl),
-                _Line(label: 'Subtotal', value: fmt.format(order.subtotal)),
+                _Line(label: 'Tạm tính', value: fmt.format(order.subtotal)),
                 _Line(
-                  label: 'Delivery fee',
+                  label: 'Phí giao hàng',
                   value: fmt.format(order.deliveryFee),
                 ),
                 const SizedBox(height: BananSpacing.xs),
                 _Line(
-                  label: 'Total',
+                  label: 'Tổng cộng',
                   value: fmt.format(order.total),
                   bold: true,
                 ),
@@ -242,17 +270,24 @@ class _Body extends ConsumerWidget {
     switch (order.status) {
       case OrderStatus.pending:
         return [
-          btn('Accept', Icons.check, OrderStatus.accepted),
-          btn('Reject', Icons.close, OrderStatus.cancelled, primary: false),
+          btn('Nhận đơn', Icons.check, OrderStatus.accepted),
+          btn('Từ chối', Icons.close, OrderStatus.cancelled, primary: false),
         ];
       case OrderStatus.accepted:
+        // Merchant decides where the order is made: in-house counter prep,
+        // or routed to the central kitchen with its own kanban workflow.
         return [
           btn(
-            'Start preparing',
-            Icons.kitchen_outlined,
+            'Làm tại quầy',
+            Icons.storefront_outlined,
             OrderStatus.inPreparation,
           ),
-          btn('Cancel', Icons.cancel_outlined, OrderStatus.cancelled,
+          FilledButton.tonalIcon(
+            onPressed: () => _transferToKitchen(context, ref),
+            icon: const Icon(Icons.factory_outlined),
+            label: const Text('Gửi tới bếp'),
+          ),
+          btn('Huỷ', Icons.cancel_outlined, OrderStatus.cancelled,
               primary: false,),
         ];
       case OrderStatus.inPreparation:
@@ -260,35 +295,63 @@ class _Body extends ConsumerWidget {
             ? OrderStatus.delivering
             : OrderStatus.readyForPickup;
         final readyLabel = order.fulfillmentType == FulfillmentType.delivery
-            ? 'Out for delivery'
-            : 'Ready for pickup';
+            ? 'Đang giao'
+            : 'Sẵn sàng lấy';
         return [
           btn(readyLabel, Icons.local_shipping_outlined, readyTo),
           OutlinedButton.icon(
             onPressed: () => _transferToKitchen(context, ref),
             icon: const Icon(Icons.factory_outlined),
-            label: const Text('Transfer to kitchen'),
+            label: const Text('Chuyển sang bếp'),
           ),
-          btn('Cancel', Icons.cancel_outlined, OrderStatus.cancelled,
+          btn('Huỷ', Icons.cancel_outlined, OrderStatus.cancelled,
               primary: false,),
         ];
       case OrderStatus.sentToKitchen:
         // Kitchen owns the order — only cancel is available to the merchant
         // until the kitchen dispatches it back.
         return [
-          btn('Cancel', Icons.cancel_outlined, OrderStatus.cancelled,
+          btn('Huỷ', Icons.cancel_outlined, OrderStatus.cancelled,
               primary: false,),
         ];
       case OrderStatus.readyForPickup:
+        return [
+          btn('Đã giao cho khách', Icons.task_alt, OrderStatus.completed),
+          _CopyTrackingLinkButton(orderId: order.id),
+        ];
       case OrderStatus.delivering:
         return [
-          btn('Mark completed', Icons.task_alt, OrderStatus.completed),
+          btn('Đã giao xong', Icons.task_alt, OrderStatus.completed),
+          _CopyTrackingLinkButton(orderId: order.id),
         ];
       case OrderStatus.completed:
       case OrderStatus.cancelled:
       case OrderStatus.refunded:
         return const [];
     }
+  }
+}
+
+/// Copies the customer-facing tracking URL (e.g. for the merchant to text
+/// the customer or paste into a chat) to the clipboard.
+class _CopyTrackingLinkButton extends StatelessWidget {
+  const _CopyTrackingLinkButton({required this.orderId});
+  final String orderId;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = '${Env.customerAppUrl}/orders/$orderId';
+    return OutlinedButton.icon(
+      onPressed: () async {
+        await Clipboard.setData(ClipboardData(text: url));
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã sao chép link theo dõi: $url')),
+        );
+      },
+      icon: const Icon(Icons.link_outlined),
+      label: const Text('Sao chép link theo dõi'),
+    );
   }
 }
 
@@ -308,6 +371,175 @@ class _Line extends StatelessWidget {
         Expanded(child: Text(label, style: style)),
         Text(value, style: style),
       ],
+    );
+  }
+}
+
+/// Merchant-side VAT invoice block — purely informational. Surfaces the
+/// company-invoice info the customer entered at checkout so the merchant
+/// can issue the invoice on their external tax platform. The app does NOT
+/// track issuance status — once info is captured, merchant handles the
+/// rest outside the app.
+class _VatInvoiceBlock extends StatelessWidget {
+  const _VatInvoiceBlock({required this.order});
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(BananSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.receipt_long_outlined, size: 18),
+              const SizedBox(width: BananSpacing.xs),
+              Text('Yêu cầu xuất hoá đơn VAT',
+                  style: theme.textTheme.titleSmall),
+            ],
+          ),
+          const SizedBox(height: BananSpacing.xs),
+          if (order.invoiceCompanyName != null)
+            Text(order.invoiceCompanyName!,
+                style: theme.textTheme.bodyLarge),
+          if (order.invoiceTaxId != null)
+            Text('MST: ${order.invoiceTaxId}',
+                style: theme.textTheme.bodySmall),
+          if (order.invoiceAddress != null)
+            Text(order.invoiceAddress!,
+                style: theme.textTheme.bodySmall),
+          if (order.invoiceEmail != null)
+            Text(order.invoiceEmail!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                )),
+        ],
+      ),
+    );
+  }
+}
+
+/// Renders the cake-wizard payload as kitchen instructions on the
+/// merchant order row. Same payload shape as the customer view, but
+/// laid out for production read-back (bold "Chữ trên bánh", explicit
+/// candle count, link to reference image, free-text note).
+class _MerchantPersonalizationBlock extends StatelessWidget {
+  const _MerchantPersonalizationBlock({required this.payload});
+  final Map<String, dynamic> payload;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final text = payload['textOnCake'] as String?;
+    final candles = (payload['candleCount'] as num?)?.toInt();
+    final note = payload['note'] as String?;
+    final flavors = payload['flavors'] as Map<String, dynamic>?;
+    final flavorLine = (flavors != null && flavors.isNotEmpty)
+        ? flavors.entries
+            .map((e) => '${(e.value as num).toInt()}× ${e.key}')
+            .join(', ')
+        : null;
+    return Container(
+      margin: const EdgeInsets.only(top: BananSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+        horizontal: BananSpacing.sm,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: BananColors.primary.withValues(alpha: 0.06),
+        border: Border.all(
+          color: BananColors.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.cake_outlined,
+                  size: 14, color: BananColors.primary),
+              const SizedBox(width: 4),
+              Text(
+                'Cá nhân hoá — hướng dẫn bếp',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: BananColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          if (text != null && text.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    const TextSpan(
+                      text: 'Chữ trên bánh: ',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    TextSpan(text: '"$text"'),
+                  ],
+                ),
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          if (candles != null)
+            Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(
+                    text: 'Số nến: ',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  TextSpan(text: '$candles'),
+                ],
+              ),
+              style: theme.textTheme.bodySmall,
+            ),
+          if (flavorLine != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    const TextSpan(
+                      text: 'Vị macaron: ',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    TextSpan(text: flavorLine),
+                  ],
+                ),
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          if (note != null && note.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    const TextSpan(
+                      text: 'Ghi chú: ',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    TextSpan(text: note),
+                  ],
+                ),
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

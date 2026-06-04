@@ -70,7 +70,10 @@ class BananTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: scaffoldBackground,
+      // Transparent so the app-root washi/seigaiha background shows through
+      // on every screen (the page colour is painted by the root background
+      // widget in each app's MaterialApp builder).
+      scaffoldBackgroundColor: Colors.transparent,
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: scaffoldBackground,

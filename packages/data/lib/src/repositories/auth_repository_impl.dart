@@ -61,12 +61,14 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
     required String fullName,
     String? phone,
+    DateTime? birthday,
   }) async {
     final res = await _api.register(
       email: email,
       password: password,
       fullName: fullName,
       phone: phone,
+      birthday: birthday,
     );
     return _completeAuth(res);
   }
@@ -87,6 +89,36 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<Result<User, AppFailure>> me() async {
     final res = await _api.me();
     return res.map((dto) => dto.toDomain());
+  }
+
+  @override
+  Future<Result<User, AppFailure>> updateProfile({
+    String? fullName,
+    String? phone,
+    DateTime? birthday,
+    bool clearBirthday = false,
+    String? avatarUrl,
+  }) async {
+    final res = await _api.updateProfile(
+      fullName: fullName,
+      phone: phone,
+      birthday: birthday,
+      clearBirthday: clearBirthday,
+      avatarUrl: avatarUrl,
+    );
+    return res.when(
+      success: (dto) {
+        final user = dto.toDomain();
+        // Keep tokens; swap the cached user so the app bar / greeting
+        // refresh immediately.
+        final current = _session;
+        if (current != null) {
+          _emit(current.copyWith(user: user));
+        }
+        return Result<User, AppFailure>.success(user);
+      },
+      failure: Result<User, AppFailure>.failure,
+    );
   }
 
   @override
@@ -155,5 +187,17 @@ class AuthRepositoryImpl implements AuthRepository {
   void _emit(AuthSession? session) {
     _session = session;
     _sessionController.add(session);
+  }
+
+  @override
+  Future<AuthSession> adoptSession(AuthSession session) async {
+    await _storage.write(
+      StoredTokens(
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      ),
+    );
+    _emit(session);
+    return session;
   }
 }

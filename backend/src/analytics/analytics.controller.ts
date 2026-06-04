@@ -24,7 +24,7 @@ export class MerchantAnalyticsController {
       throw new BadRequestException({ code: 'NO_STORE_ASSIGNED' });
     }
     const range = this.analytics.parseRange(rangeRaw);
-    return this.analytics.merchantSummary(user.storeId!, range);
+    return this.analytics.merchantSummary(user.storeId ?? null, range);
   }
 }
 

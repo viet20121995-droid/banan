@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../shared/shell/merchant_shell.dart';
+
 @immutable
 class CollectionsState {
   const CollectionsState({
@@ -75,32 +77,13 @@ class CollectionsListScreen extends ConsumerWidget {
     final state = ref.watch(collectionsControllerProvider);
     final controller = ref.read(collectionsControllerProvider.notifier);
 
-    return AppScaffold(
-      appBar: AppBar(
-        title: const Text('Collections'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.receipt_long_outlined),
-            tooltip: 'Orders',
-            onPressed: () => context.go('/'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.menu_book_outlined),
-            tooltip: 'Menu',
-            onPressed: () => context.go('/menu'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
-          ),
-        ],
-      ),
+    return MerchantShell(
+      title: 'Bộ sưu tập',
+      onRefresh: controller.refresh,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/collections/new'),
         icon: const Icon(Icons.add),
-        label: const Text('New collection'),
+        label: const Text('Tạo bộ sưu tập'),
       ),
       body: _Body(state: state, controller: controller),
     );
@@ -126,10 +109,10 @@ class _Body extends StatelessWidget {
     }
     if (state.items.isEmpty) {
       return const EmptyState(
-        title: 'No collections yet',
+        title: 'Chưa có bộ sưu tập',
         message:
-            'Group products into "Today\'s specials", "Birthday picks", '
-            'or any theme — pinned collections show up on the customer home.',
+            'Nhóm sản phẩm theo chủ đề ("Đặc sắc hôm nay", "Sinh nhật"…) — '
+            'các bộ ghim sẽ hiển thị ở trang chủ khách hàng.',
         icon: Icons.collections_bookmark_outlined,
       );
     }
@@ -159,30 +142,37 @@ class _Body extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Delete "${collection.name}"?'),
+        title: Text('Xoá "${collection.name}"?'),
         content: const Text(
-          'The collection is removed from the customer home page. '
-          'The products inside it are not affected.',
+          'Bộ sưu tập sẽ bị gỡ khỏi trang chủ khách hàng. '
+          'Sản phẩm bên trong không bị ảnh hưởng.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Huỷ'),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: const Text('Xoá'),
           ),
         ],
       ),
     );
     if (confirm ?? false) {
       final ok = await controller.delete(collection.id);
-      if (!ok && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not delete — try again.')),
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              ok
+                  ? 'Đã xoá bộ sưu tập "${collection.name}".'
+                  : 'Không xoá được — thử lại.',
+            ),
+          ),
         );
-      }
     }
   }
 }
@@ -259,7 +249,7 @@ class _Row extends StatelessWidget {
                         const Padding(
                           padding: EdgeInsets.only(left: BananSpacing.sm),
                           child: Chip(
-                            label: Text('Inactive'),
+                            label: Text('Đã ẩn'),
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
@@ -267,8 +257,7 @@ class _Row extends StatelessWidget {
                   ),
                   const SizedBox(height: BananSpacing.xs),
                   Text(
-                    '${collection.items.length} '
-                    'product${collection.items.length == 1 ? "" : "s"}'
+                    '${collection.items.length} sản phẩm'
                     '${collection.description != null && collection.description!.isNotEmpty ? "  ·  ${collection.description}" : ""}',
                     style: theme.textTheme.bodySmall,
                     maxLines: 1,
@@ -279,7 +268,7 @@ class _Row extends StatelessWidget {
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete',
+              tooltip: 'Xoá',
               onPressed: onDelete,
             ),
             const Icon(Icons.chevron_right),

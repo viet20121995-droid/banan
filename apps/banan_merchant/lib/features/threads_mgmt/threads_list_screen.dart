@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/shell/merchant_shell.dart';
+
 @immutable
 class ThreadsState {
   const ThreadsState({
@@ -76,32 +78,13 @@ class ThreadsListScreen extends ConsumerWidget {
     final state = ref.watch(threadsControllerProvider);
     final controller = ref.read(threadsControllerProvider.notifier);
 
-    return AppScaffold(
-      appBar: AppBar(
-        title: const Text('Threads'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.receipt_long_outlined),
-            tooltip: 'Orders',
-            onPressed: () => context.go('/'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.menu_book_outlined),
-            tooltip: 'Menu',
-            onPressed: () => context.go('/menu'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
-          ),
-        ],
-      ),
+    return MerchantShell(
+      title: 'Bài đăng',
+      onRefresh: controller.refresh,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/threads/new'),
         icon: const Icon(Icons.edit_note),
-        label: const Text('New thread'),
+        label: const Text('Bài đăng mới'),
       ),
       body: _Body(state: state, controller: controller),
     );
@@ -126,10 +109,10 @@ class _Body extends StatelessWidget {
     }
     if (state.items.isEmpty) {
       return const EmptyState(
-        title: 'No threads yet',
+        title: 'Chưa có bài đăng',
         message:
-            'Threads are short posts that show up on the customer home — '
-            'use them for new arrivals, seasonal news, or behind-the-scenes.',
+            'Bài đăng là những mẩu tin ngắn hiển thị trên trang chủ của khách — '
+            'dùng cho hàng mới, tin theo mùa hoặc hậu trường.',
         icon: Icons.forum_outlined,
       );
     }
@@ -159,16 +142,16 @@ class _Body extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Delete "${thread.title}"?'),
-        content: const Text('This thread will be removed for all customers.'),
+        title: Text('Xoá "${thread.title}"?'),
+        content: const Text('Bài đăng sẽ bị gỡ khỏi mọi khách hàng.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Huỷ'),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: const Text('Xoá'),
           ),
         ],
       ),
@@ -177,7 +160,7 @@ class _Body extends StatelessWidget {
       final ok = await controller.delete(thread.id);
       if (!ok && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not delete — try again.')),
+          const SnackBar(content: Text('Không xoá được — thử lại.')),
         );
       }
     }
@@ -246,7 +229,7 @@ class _Row extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(left: BananSpacing.sm),
                         child: StatusBadge(
-                          label: thread.isPublished ? 'Published' : 'Draft',
+                          label: thread.isPublished ? 'Đã đăng' : 'Bản nháp',
                           intent: thread.isPublished
                               ? StatusIntent.success
                               : StatusIntent.neutral,
@@ -265,8 +248,8 @@ class _Row extends StatelessWidget {
                   const SizedBox(height: BananSpacing.xs),
                   Text(
                     thread.publishedAt != null
-                        ? 'Published ${fmt.format(thread.publishedAt!.toLocal())}'
-                        : 'Updated ${fmt.format(thread.updatedAt.toLocal())}',
+                        ? 'Đăng lúc ${fmt.format(thread.publishedAt!.toLocal())}'
+                        : 'Cập nhật ${fmt.format(thread.updatedAt.toLocal())}',
                     style: theme.textTheme.labelSmall,
                   ),
                 ],
@@ -274,7 +257,7 @@ class _Row extends StatelessWidget {
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete',
+              tooltip: 'Xoá',
               onPressed: onDelete,
             ),
             const Icon(Icons.chevron_right),

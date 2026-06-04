@@ -1,12 +1,12 @@
 {
-    "name": "banan_kitchen",
-    "short_name": "banan_kitchen",
+    "name": "Banan Kitchen",
+    "short_name": "Banan Kitchen",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#FCF6E2",
+    "theme_color": "#1E6A35",
+    "description": "Banan central kitchen — production board, batches, dispatch.",
+    "orientation": "landscape-primary",
     "prefer_related_applications": false,
     "icons": [
         {

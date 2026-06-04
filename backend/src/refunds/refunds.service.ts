@@ -83,11 +83,15 @@ export class RefundsService {
     return refund;
   }
 
-  async listForStore(storeId: string, opts: { status?: RefundStatus; page?: number; perPage?: number }) {
+  async listForStore(
+    storeId: string | null,
+    opts: { status?: RefundStatus; page?: number; perPage?: number },
+  ) {
     const page = opts.page ?? 1;
     const perPage = opts.perPage ?? 30;
+    // Admin (no storeId) sees refunds across every store.
     const where: Prisma.RefundWhereInput = {
-      order: { storeId },
+      ...(storeId != null && { order: { storeId } }),
       ...(opts.status && { status: opts.status }),
     };
     const [items, total] = await this.prisma.$transaction([

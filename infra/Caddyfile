@@ -1,0 +1,38 @@
+# Banan all-in-one on one server (BizFly). Caddy auto-provisions Let's Encrypt
+# certs for all 4 hostnames and:
+#   - proxies the API to the backend container
+#   - serves the 3 Flutter web builds as static SPAs
+#
+# Set BASE_DOMAIN in infra/.env.prod (e.g. banan.com). DNS: point @, www,
+# api, merchant, kitchen A-records at this server's public IP.
+
+# ── API ───────────────────────────────────────────────────────────────────────
+api.{$BASE_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy backend:3000
+}
+
+# ── Customer web (root + www) ─────────────────────────────────────────────────
+{$BASE_DOMAIN}, www.{$BASE_DOMAIN} {
+	encode gzip zstd
+	root * /srv/customer
+	# SPA fallback — deep links (/faq, /product/..) served by index.html.
+	try_files {path} /index.html
+	file_server
+}
+
+# ── Merchant web ──────────────────────────────────────────────────────────────
+merchant.{$BASE_DOMAIN} {
+	encode gzip zstd
+	root * /srv/merchant
+	try_files {path} /index.html
+	file_server
+}
+
+# ── Kitchen web ───────────────────────────────────────────────────────────────
+kitchen.{$BASE_DOMAIN} {
+	encode gzip zstd
+	root * /srv/kitchen
+	try_files {path} /index.html
+	file_server
+}

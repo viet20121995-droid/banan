@@ -1,16 +1,24 @@
 import 'package:banan_core/banan_core.dart';
 import 'package:dio/dio.dart';
 
+import '../dtos/auth_response_dto.dart';
 import '../dtos/order_dto.dart';
 import '../dtos/payment_dto.dart';
 import 'errors.dart';
 
 /// Result of POST /orders — server returns the order plus provider-specific
 /// payment instructions (CASH `payAtPickup`, Stripe `redirectUrl`, ...).
+/// `guestSession` is present only when the backend auto-created a guest user
+/// during this checkout and wants the client to store the tokens.
 class PlaceOrderApiResult {
-  const PlaceOrderApiResult({required this.order, required this.payment});
+  const PlaceOrderApiResult({
+    required this.order,
+    required this.payment,
+    this.guestSession,
+  });
   final OrderDto order;
   final PaymentInstructionsDto payment;
+  final AuthResponseDto? guestSession;
 }
 
 class OrdersApi {
@@ -32,10 +40,13 @@ class OrdersApi {
       if (orderJson == null || paymentJson == null) {
         return Result.failure(mapHttpStatusToFailure(res));
       }
+      final guestJson = data['guestSession'] as Map<String, dynamic>?;
       return Result.success(
         PlaceOrderApiResult(
           order: OrderDto.fromJson(orderJson),
           payment: PaymentInstructionsDto.fromJson(paymentJson),
+          guestSession:
+              guestJson == null ? null : AuthResponseDto.fromJson(guestJson),
         ),
       );
     } on DioException catch (e) {
@@ -100,14 +111,41 @@ class OrdersApi {
         if (note != null && note.isNotEmpty) 'note': note,
       });
 
+  /// Merchant marks the VAT invoice as issued for [id]. Optionally attaches
+  /// a public URL to the hoá đơn PDF hosted on the merchant's invoice
+  /// provider — surfaced on the customer order detail.
+  Future<Result<OrderDto, AppFailure>> issueInvoice(
+    String id, {
+    String? invoiceFileUrl,
+  }) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/merchant/orders/$id/invoice',
+        data: {
+          if (invoiceFileUrl != null && invoiceFileUrl.isNotEmpty)
+            'invoiceFileUrl': invoiceFileUrl,
+        },
+      );
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      if (data == null) return Result.failure(mapHttpStatusToFailure(res));
+      return Result.success(OrderDto.fromJson(data));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
   Future<Result<List<OrderDto>, AppFailure>> kitchenQueue({
     String? kitchenStatus,
+    bool includeDoneToday = false,
   }) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(
         '/kitchen/orders',
         queryParameters: {
           if (kitchenStatus != null) 'kitchenStatus': kitchenStatus,
+          if (includeDoneToday) 'includeDoneToday': '1',
         },
       );
       final raw = res.data?['data'] as List? ?? const [];

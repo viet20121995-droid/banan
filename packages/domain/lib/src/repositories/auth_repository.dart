@@ -22,6 +22,7 @@ abstract class AuthRepository {
     required String password,
     required String fullName,
     String? phone,
+    DateTime? birthday,
   });
 
   Future<Result<AuthSession, AppFailure>> login({
@@ -31,9 +32,26 @@ abstract class AuthRepository {
 
   Future<Result<User, AppFailure>> me();
 
+  /// Self-service profile update for the signed-in user. Only non-null
+  /// fields are sent. Pass [clearBirthday] to remove an existing birthday.
+  /// On success the cached session is updated and re-emitted.
+  Future<Result<User, AppFailure>> updateProfile({
+    String? fullName,
+    String? phone,
+    DateTime? birthday,
+    bool clearBirthday = false,
+    String? avatarUrl,
+  });
+
   /// Performs a single-flight refresh against the backend. Used by the auth
   /// interceptor and called automatically on 401.
   Future<Result<AuthSession, AppFailure>> refresh();
 
   Future<void> logout();
+
+  /// Persist an externally-issued session (e.g. the tokens the orders
+  /// endpoint hands back when a guest checkout creates a new account).
+  /// Stores the tokens and emits the new session so the router + UI
+  /// immediately reflect the logged-in state.
+  Future<AuthSession> adoptSession(AuthSession session);
 }

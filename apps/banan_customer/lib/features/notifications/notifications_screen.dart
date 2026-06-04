@@ -15,16 +15,17 @@ class NotificationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(notificationsControllerProvider);
     final controller = ref.read(notificationsControllerProvider.notifier);
+    final s = ref.watch(stringsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text(s.notifications),
         actions: [
           if (state.unread > 0)
             TextButton.icon(
               onPressed: controller.markAllRead,
               icon: const Icon(Icons.done_all),
-              label: const Text('Mark all read'),
+              label: Text(s.markAllRead),
             ),
         ],
       ),
@@ -33,14 +34,15 @@ class NotificationsScreen extends ConsumerWidget {
   }
 }
 
-class _Body extends StatelessWidget {
+class _Body extends ConsumerWidget {
   const _Body({required this.state, required this.controller});
 
   final NotificationsState state;
   final NotificationsController controller;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
     if (state.loading && state.items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -51,9 +53,9 @@ class _Body extends StatelessWidget {
       );
     }
     if (state.items.isEmpty) {
-      return const EmptyState(
-        title: 'No notifications yet',
-        message: 'Order updates and offers land here.',
+      return EmptyState(
+        title: s.noNotificationsTitle,
+        message: s.noNotificationsMsg,
         icon: Icons.notifications_none_outlined,
       );
     }

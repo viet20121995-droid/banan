@@ -49,6 +49,10 @@ export class MerchantCollectionsController {
 
   @Get()
   list(@CurrentUser() user: AuthPrincipal) {
+    // Admin has no assigned store — show every store's collections.
+    if (user.role === Role.ADMIN) {
+      return this.collections.listForStore(null);
+    }
     if (!user.storeId) {
       throw new BadRequestException({ code: 'NO_STORE_ASSIGNED' });
     }

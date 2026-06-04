@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/shell/merchant_shell.dart';
+
 @immutable
 class RefundsState {
   const RefundsState({
@@ -109,28 +111,9 @@ class RefundsScreen extends ConsumerWidget {
       decimalDigits: 0,
     );
 
-    return AppScaffold(
-      appBar: AppBar(
-        title: const Text('Refunds'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.receipt_long_outlined),
-            tooltip: 'Orders',
-            onPressed: () => context.go('/'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: controller.refresh,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
-          ),
-        ],
-      ),
+    return MerchantShell(
+      title: 'Hoàn tiền',
+      onRefresh: controller.refresh,
       body: Column(
         children: [
           _Filter(selected: state.statusFilter, onSelect: controller.setFilter),
@@ -150,11 +133,11 @@ class _Filter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final filters = <(String, RefundStatus?)>[
-      ('All', null),
-      ('Requested', RefundStatus.requested),
-      ('Processing', RefundStatus.processing),
-      ('Completed', RefundStatus.completed),
-      ('Rejected', RefundStatus.rejected),
+      ('Tất cả', null),
+      ('Đã yêu cầu', RefundStatus.requested),
+      ('Đang xử lý', RefundStatus.processing),
+      ('Hoàn thành', RefundStatus.completed),
+      ('Từ chối', RefundStatus.rejected),
     ];
     return SizedBox(
       height: 40,
@@ -200,8 +183,8 @@ class _Body extends StatelessWidget {
     }
     if (state.refunds.isEmpty) {
       return const EmptyState(
-        title: 'Inbox is clear',
-        message: 'New refund requests will appear here in real time.',
+        title: 'Hộp thư trống',
+        message: 'Yêu cầu hoàn tiền mới sẽ hiện ở đây theo thời gian thực.',
         icon: Icons.assignment_return_outlined,
       );
     }
@@ -234,7 +217,7 @@ class _Row extends StatelessWidget {
     if (!context.mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not approve refund — try again.')),
+        const SnackBar(content: Text('Không duyệt được — thử lại.')),
       );
     }
   }
@@ -246,7 +229,7 @@ class _Row extends StatelessWidget {
     if (!context.mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not reject refund — try again.')),
+        const SnackBar(content: Text('Không từ chối được — thử lại.')),
       );
     }
   }
@@ -256,20 +239,20 @@ class _Row extends StatelessWidget {
     final reason = await showDialog<String?>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reject refund'),
+        title: const Text('Từ chối hoàn tiền'),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(labelText: 'Reason'),
+          decoration: const InputDecoration(labelText: 'Lý do'),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: const Text('Huỷ'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Reject'),
+            child: const Text('Từ chối'),
           ),
         ],
       ),
@@ -302,7 +285,7 @@ class _Row extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Order ${refund.orderId.substring(0, 8)}…',
+                  'Đơn ${refund.orderId.substring(0, 8)}…',
                   style: theme.textTheme.titleSmall,
                 ),
               ),
@@ -324,13 +307,13 @@ class _Row extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: () => _approve(context),
                   icon: const Icon(Icons.check),
-                  label: const Text('Approve'),
+                  label: const Text('Duyệt'),
                 ),
                 const SizedBox(width: BananSpacing.sm),
                 OutlinedButton.icon(
                   onPressed: () => _reject(context),
                   icon: const Icon(Icons.close),
-                  label: const Text('Reject'),
+                  label: const Text('Từ chối'),
                 ),
               ],
             ),

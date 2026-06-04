@@ -3,24 +3,70 @@ import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/addresses/addresses_screen.dart';
 import '../features/cart/cart_screen.dart';
 import '../features/checkout/checkout_screen.dart';
+import '../features/content/about_screen.dart';
+import '../features/content/contact_screen.dart';
+import '../features/content/faq_screen.dart';
+import '../features/content/legal_screens.dart';
+import '../features/locations/locations_screen.dart';
+import '../features/marketing/marketing_pages.dart';
 import '../features/membership/membership_screen.dart';
 import '../features/menu/menu_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/orders/order_detail_screen.dart';
 import '../features/orders/orders_list_screen.dart';
 import '../features/payment_return/payment_return_screen.dart';
+import '../features/bundles/bundle_detail_screen.dart';
 import '../features/product_detail/product_detail_screen.dart';
+import '../features/profile/profile_screen.dart';
+import '../features/wishlist/wishlist_screen.dart';
 
 const _login = '/login';
 const _register = '/register';
 const _wrongApp = '/wrong-app';
 const _home = '/';
 
-/// Customer app router. Auth-aware: redirects unauthenticated traffic to
-/// /login, sends non-customer accounts to /wrong-app, and bounces logged-in
-/// users away from /login or /register.
+/// Routes a guest (unauthenticated) shopper is allowed to access. Browsing,
+/// product detail, cart, checkout (with guest fields), payment return, and
+/// the auth screens themselves. Everything else (orders history, membership,
+/// notifications) is gated to logged-in customers.
+const _guestAllowed = <String>{
+  _home,
+  '/cart',
+  '/checkout',
+  '/locations',
+  // Public trust / legal / help pages (P3) — browsable without an account.
+  '/privacy',
+  '/terms',
+  '/faq',
+  '/about',
+  '/contact',
+  // P2 marketing surfaces — browsable; the pages themselves gate on the
+  // admin toggle + prompt login where needed (referral / rewards).
+  '/referral',
+  '/gift-cards',
+  '/subscription',
+  '/catering',
+  '/rewards',
+  _login,
+  _register,
+};
+
+bool _isGuestAllowed(String loc) {
+  if (_guestAllowed.contains(loc)) return true;
+  // Path-prefix matches (these accept :id segments). Browsing surfaces —
+  // products, bundles/combos, and the payment-return bridge — are all
+  // open to guests so they can shop before signing in.
+  if (loc.startsWith('/product/')) return true;
+  if (loc.startsWith('/bundles/')) return true;
+  if (loc.startsWith('/payments/return/')) return true;
+  return false;
+}
+
+/// Customer app router. Guests can browse + check out; signed-in customers
+/// get the full surface. Non-customer accounts land on /wrong-app.
 final customerRouterProvider = Provider<GoRouter>((ref) {
   final repo = ref.watch(authRepositoryProvider);
   final refresh = GoRouterRefreshStream(repo.watchSession());
@@ -35,12 +81,23 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       final atAuthPage = loc == _login || loc == _register;
 
       if (session == null) {
-        return atAuthPage ? null : _login;
+        if (_isGuestAllowed(loc)) return null;
+        // Stash where the user wanted to go so we can send them back there
+        // after sign-in. Example: protected /orders → /login?next=/orders.
+        final next = Uri.encodeComponent(loc);
+        return '$_login?next=$next';
       }
       if (!session.user.role.isCustomer) {
         return loc == _wrongApp ? null : _wrongApp;
       }
-      if (atAuthPage || loc == _wrongApp) return _home;
+      if (atAuthPage || loc == _wrongApp) {
+        // Just signed in — honour ?next= if the caller set it, else home.
+        final next = state.uri.queryParameters['next'];
+        if (next != null && next.isNotEmpty && next.startsWith('/')) {
+          return next;
+        }
+        return _home;
+      }
       return null;
     },
     routes: [
@@ -53,10 +110,43 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
+      GoRoute(
+        path: '/locations',
+        builder: (_, __) => const LocationsScreen(),
+      ),
+      // P3 — trust / legal / help content pages.
+      GoRoute(path: '/privacy', builder: (_, __) => const PrivacyScreen()),
+      GoRoute(path: '/terms', builder: (_, __) => const TermsScreen()),
+      GoRoute(path: '/faq', builder: (_, __) => const FaqScreen()),
+      GoRoute(path: '/about', builder: (_, __) => const AboutScreen()),
+      GoRoute(path: '/contact', builder: (_, __) => const ContactScreen()),
+      // P2 — marketing programs (each gates internally on admin toggle).
+      GoRoute(path: '/referral', builder: (_, __) => const ReferralScreen()),
+      GoRoute(path: '/gift-cards', builder: (_, __) => const GiftCardScreen()),
+      GoRoute(
+          path: '/subscription',
+          builder: (_, __) => const SubscriptionScreen()),
+      GoRoute(path: '/catering', builder: (_, __) => const CateringScreen()),
+      GoRoute(path: '/rewards', builder: (_, __) => const RewardsScreen()),
       GoRoute(path: '/orders', builder: (_, __) => const OrdersListScreen()),
+      GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
+      GoRoute(
+        path: '/bundles/:id',
+        builder: (context, state) => BundleDetailScreen(
+          bundleId: state.pathParameters['id']!,
+        ),
+      ),
       GoRoute(
         path: '/membership',
         builder: (_, __) => const MembershipScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (_, __) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/addresses',
+        builder: (_, __) => const AddressesScreen(),
       ),
       GoRoute(
         path: '/notifications',
@@ -76,18 +166,32 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: _login,
-        builder: (context, state) => LoginScreen(
-          title: 'Banan',
-          subtitle: "Sign in to order today's creations.",
-          showRegisterLink: true,
-          onRegisterTapped: () => context.go(_register),
-        ),
+        builder: (context, state) {
+          // Carry `?next=` through to the register screen so users who
+          // bounce between login/register still end up where they wanted.
+          final next = state.uri.queryParameters['next'];
+          final regPath = next == null
+              ? _register
+              : '$_register?next=${Uri.encodeComponent(next)}';
+          return LoginScreen(
+            title: 'Banan Fukuoka Saigon',
+            subtitle: "Sign in to order today's creations.",
+            showRegisterLink: true,
+            onRegisterTapped: () => context.go(regPath),
+          );
+        },
       ),
       GoRoute(
         path: _register,
-        builder: (context, state) => RegisterScreen(
-          onBackToLogin: () => context.go(_login),
-        ),
+        builder: (context, state) {
+          final next = state.uri.queryParameters['next'];
+          final loginPath = next == null
+              ? _login
+              : '$_login?next=${Uri.encodeComponent(next)}';
+          return RegisterScreen(
+            onBackToLogin: () => context.go(loginPath),
+          );
+        },
       ),
       GoRoute(
         path: _wrongApp,

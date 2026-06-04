@@ -74,7 +74,7 @@ class _MembershipBadge extends StatelessWidget {
         border: Border.all(color: BananColors.gold.withValues(alpha: 0.5)),
       ),
       child: Text(
-        '$label  ·  $points pts',
+        '$label  ·  $points Micho',
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
               color: BananColors.gold,
               fontWeight: FontWeight.w600,

@@ -47,11 +47,11 @@ class _SearchFieldState extends State<SearchField> {
       onChanged: _onChanged,
       decoration: InputDecoration(
         hintText: widget.hint,
-        prefixIcon: const Icon(Icons.search, size: 20),
+        prefixIcon: const Icon(Icons.search_rounded, size: 20),
         suffixIcon: _controller.text.isEmpty
             ? null
             : IconButton(
-                icon: const Icon(Icons.close, size: 18),
+                icon: const Icon(Icons.close_rounded, size: 18),
                 onPressed: () {
                   _controller.clear();
                   _onChanged('');

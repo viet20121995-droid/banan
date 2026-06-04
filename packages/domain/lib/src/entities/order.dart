@@ -17,6 +17,7 @@ class OrderItem extends Equatable {
     this.variantId,
     this.variantLabel,
     this.customMessage,
+    this.personalization,
   });
 
   final String id;
@@ -29,6 +30,10 @@ class OrderItem extends Equatable {
   final double lineTotal;
   final String? customMessage;
 
+  /// Cake personalization payload — wizard output. Free-form JSON map.
+  /// Only set when the customer used the wizard at checkout.
+  final Map<String, dynamic>? personalization;
+
   @override
   List<Object?> get props => [
         id,
@@ -40,6 +45,7 @@ class OrderItem extends Equatable {
         unitPrice,
         lineTotal,
         customMessage,
+        personalization,
       ];
 }
 
@@ -88,6 +94,13 @@ class Order extends Equatable {
     this.storeName,
     this.kitchenId,
     this.kitchenStatus,
+    this.requestVatInvoice = false,
+    this.invoiceCompanyName,
+    this.invoiceTaxId,
+    this.invoiceAddress,
+    this.invoiceEmail,
+    this.invoiceIssuedAt,
+    this.invoiceFileUrl,
   });
 
   final String id;
@@ -109,6 +122,19 @@ class Order extends Equatable {
   final Address? address;
   final DateTime? scheduledFor;
   final String? notes;
+
+  /// VAT invoice (hóa đơn đỏ) — `requestVatInvoice` toggles the section in
+  /// the customer order detail; the 4 company fields are the snapshot the
+  /// merchant uses to issue the invoice externally. `invoiceIssuedAt` +
+  /// `invoiceFileUrl` are filled by the merchant once the invoice exists.
+  final bool requestVatInvoice;
+  final String? invoiceCompanyName;
+  final String? invoiceTaxId;
+  final String? invoiceAddress;
+  final String? invoiceEmail;
+  final DateTime? invoiceIssuedAt;
+  final String? invoiceFileUrl;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -142,6 +168,13 @@ class Order extends Equatable {
         address,
         scheduledFor,
         notes,
+        requestVatInvoice,
+        invoiceCompanyName,
+        invoiceTaxId,
+        invoiceAddress,
+        invoiceEmail,
+        invoiceIssuedAt,
+        invoiceFileUrl,
         createdAt,
         updatedAt,
       ];

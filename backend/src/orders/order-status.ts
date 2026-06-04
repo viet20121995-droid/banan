@@ -6,7 +6,7 @@ import { KitchenStatus, OrderStatus } from '@prisma/client';
  */
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PENDING: ['ACCEPTED', 'CANCELLED'],
-  ACCEPTED: ['IN_PREPARATION', 'CANCELLED'],
+  ACCEPTED: ['IN_PREPARATION', 'SENT_TO_KITCHEN', 'CANCELLED'],
   IN_PREPARATION: ['READY_FOR_PICKUP', 'DELIVERING', 'SENT_TO_KITCHEN', 'CANCELLED'],
   SENT_TO_KITCHEN: ['IN_PREPARATION', 'READY_FOR_PICKUP', 'DELIVERING', 'CANCELLED'],
   READY_FOR_PICKUP: ['COMPLETED', 'CANCELLED'],
@@ -26,14 +26,12 @@ export function canCustomerCancel(status: OrderStatus): boolean {
 
 /**
  * Kitchen kanban state machine. Forward-only — corrections are merchant-side
- * via order-level cancellation.
+ * via order-level cancellation. Simplified to 3 stages so the kanban stays
+ * readable; merchants who want fine-grained stages can track them out-of-band.
  */
 const KITCHEN_TRANSITIONS: Record<KitchenStatus, KitchenStatus[]> = {
-  PREPARING: ['BAKING'],
-  BAKING: ['COOLING'],
-  COOLING: ['DECORATING'],
-  DECORATING: ['PACKED'],
-  PACKED: ['READY_DISPATCH'],
+  PENDING_ACK: ['PREPARING'],
+  PREPARING: ['READY_DISPATCH'],
   READY_DISPATCH: [],
 };
 
@@ -42,6 +40,6 @@ export function isAllowedKitchenTransition(
   from: KitchenStatus | null,
   to: KitchenStatus,
 ): boolean {
-  if (from === null) return to === 'PREPARING';
+  if (from === null) return to === 'PENDING_ACK';
   return KITCHEN_TRANSITIONS[from]?.includes(to) ?? false;
 }

@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { birthdayCakeProductIds } from '../products/birthday-cake.util';
 
 import type {
   CollectionItemInputDto,
@@ -34,7 +35,7 @@ export class CollectionsService {
 
   /** Public read — pinned + active collections shown on customer home. */
   async listForHome(storeId?: string) {
-    return this.prisma.collection.findMany({
+    const collections = await this.prisma.collection.findMany({
       where: {
         isActive: true,
         isPinnedToHome: true,
@@ -45,12 +46,35 @@ export class CollectionsService {
       include: COLLECTION_INCLUDE,
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
+    return this.applyBirthdayFlag(collections);
+  }
+
+  /// Mutates every nested product with the `isBirthdayCake` flag (one
+  /// membership query across all the given collections) so the customer
+  /// cake-personalization wizard fires from home strips and collection
+  /// pages too — matching the menu grid's quick-add behaviour.
+  private async applyBirthdayFlag<
+    C extends { items: Array<{ product: { id: string } }> },
+  >(collections: C[]): Promise<C[]> {
+    const ids: string[] = [];
+    for (const c of collections) {
+      for (const it of c.items) ids.push(it.product.id);
+    }
+    const birthdayIds = await birthdayCakeProductIds(this.prisma, ids);
+    for (const c of collections) {
+      for (const it of c.items) {
+        (it.product as Record<string, unknown>).isBirthdayCake =
+          birthdayIds.has(it.product.id);
+      }
+    }
+    return collections;
   }
 
   /** Merchant-side list — every collection for the store. */
-  async listForStore(storeId: string) {
+  /** Merchant list. `storeId` null = admin → every store's collections. */
+  async listForStore(storeId: string | null) {
     return this.prisma.collection.findMany({
-      where: { storeId },
+      where: storeId === null ? {} : { storeId },
       include: COLLECTION_INCLUDE,
       orderBy: [{ isPinnedToHome: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
@@ -67,7 +91,8 @@ export class CollectionsService {
     if (storeIdScope && collection.storeId !== storeIdScope) {
       throw new ForbiddenException({ code: 'AUTH_FORBIDDEN' });
     }
-    return collection;
+    const [decorated] = await this.applyBirthdayFlag([collection]);
+    return decorated;
   }
 
   async create(storeId: string, dto: CreateCollectionDto) {

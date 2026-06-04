@@ -39,9 +39,9 @@ enum PaymentMethod {
   String get label {
     switch (this) {
       case PaymentMethod.cash:
-        return 'Cash on pickup';
+        return 'Tiền mặt khi nhận hàng';
       case PaymentMethod.stripe:
-        return 'Card · Stripe';
+        return 'Thẻ quốc tế · Stripe';
       case PaymentMethod.vnpay:
         return 'VNPay';
       case PaymentMethod.momo:
@@ -83,17 +83,17 @@ enum PaymentStatus {
   String get label {
     switch (this) {
       case PaymentStatus.initiated:
-        return 'Awaiting payment';
+        return 'Chờ thanh toán';
       case PaymentStatus.authorized:
-        return 'Pay at pickup';
+        return 'Trả khi nhận hàng';
       case PaymentStatus.captured:
-        return 'Paid';
+        return 'Đã thanh toán';
       case PaymentStatus.failed:
-        return 'Payment failed';
+        return 'Thanh toán thất bại';
       case PaymentStatus.voided:
-        return 'Payment voided';
+        return 'Đã huỷ thanh toán';
       case PaymentStatus.refunded:
-        return 'Refunded';
+        return 'Đã hoàn tiền';
     }
   }
 }

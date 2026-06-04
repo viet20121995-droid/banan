@@ -40,9 +40,13 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
   late final TextEditingController _description;
   late final TextEditingController _basePrice;
   late final TextEditingController _prep;
+  late final TextEditingController _leadHours;
+  late final TextEditingController _dailyMax;
   String? _categoryId;
   bool _available = true;
   bool _seasonal = false;
+  /// 0=Sun..6=Sat. Empty = every day (no restriction).
+  List<int> _availableDow = [];
   List<String> _images = [];
   List<String> _tags = [];
   List<VariantDraft> _variants = [VariantDraft(size: '6"', flavor: 'Classic')];
@@ -58,6 +62,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _description = TextEditingController();
     _basePrice = TextEditingController(text: '0');
     _prep = TextEditingController(text: '60');
+    _leadHours = TextEditingController();
+    _dailyMax = TextEditingController();
   }
 
   @override
@@ -67,6 +73,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _description.dispose();
     _basePrice.dispose();
     _prep.dispose();
+    _leadHours.dispose();
+    _dailyMax.dispose();
     super.dispose();
   }
 
@@ -81,6 +89,9 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _categoryId = p.categoryId;
     _available = p.isAvailable;
     _seasonal = p.isSeasonal;
+    _leadHours.text = p.leadTimeHours?.toString() ?? '';
+    _dailyMax.text = p.dailyMaxQuantity?.toString() ?? '';
+    _availableDow = List.of(p.availableDaysOfWeek);
     _images = List.of(p.images);
     _tags = List.of(p.tags);
     _variants = p.variants
@@ -120,7 +131,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       },
       failure: (f) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: ${authFailureMessage(f)}')),
+          SnackBar(content: Text('Tải ảnh thất bại: ${authFailureMessage(f)}')),
         );
       },
     );
@@ -142,11 +153,11 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_categoryId == null) {
-      setState(() => _error = 'Please pick a category.');
+      setState(() => _error = 'Vui lòng chọn danh mục.');
       return;
     }
     if (_variants.isEmpty) {
-      setState(() => _error = 'At least one variant is required.');
+      setState(() => _error = 'Cần ít nhất một biến thể.');
       return;
     }
     setState(() {
@@ -154,6 +165,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       _error = null;
     });
 
+    final leadRaw = _leadHours.text.trim();
+    final dailyRaw = _dailyMax.text.trim();
     final draft = ProductDraft(
       categoryId: _categoryId!,
       name: _name.text.trim(),
@@ -166,6 +179,9 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       preparationMinutes: int.tryParse(_prep.text),
       isAvailable: _available,
       isSeasonal: _seasonal,
+      leadTimeHours: leadRaw.isEmpty ? null : int.tryParse(leadRaw),
+      availableDaysOfWeek: List.of(_availableDow)..sort(),
+      dailyMaxQuantity: dailyRaw.isEmpty ? null : int.tryParse(dailyRaw),
     );
 
     final repo = ref.read(catalogRepositoryProvider);
@@ -212,11 +228,11 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit product' : 'New product'),
+        title: Text(widget.isEditing ? 'Sửa sản phẩm' : 'Sản phẩm mới'),
         actions: [
           TextButton(
             onPressed: _saving ? null : () => context.pop(),
-            child: const Text('Cancel'),
+            child: const Text('Huỷ'),
           ),
           const SizedBox(width: BananSpacing.sm),
           FilledButton.icon(
@@ -228,7 +244,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.check),
-            label: const Text('Save'),
+            label: const Text('Lưu'),
           ),
           const SizedBox(width: BananSpacing.md),
         ],
@@ -258,13 +274,14 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                         child: Text(_error!),
                       ),
                     _Section(
-                      title: 'Basics',
+                      title: 'Thông tin chung',
                       children: [
                         TextFormField(
                           controller: _name,
-                          decoration: const InputDecoration(labelText: 'Name'),
+                          maxLength: 120,
+                          decoration: const InputDecoration(labelText: 'Tên'),
                           validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Required'
+                              ? 'Bắt buộc'
                               : null,
                           onChanged: (v) {
                             if (_slug.text.isEmpty) {
@@ -275,22 +292,24 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                         const SizedBox(height: BananSpacing.md),
                         TextFormField(
                           controller: _slug,
+                          maxLength: 160,
                           decoration: const InputDecoration(
-                            labelText: 'URL slug',
-                            helperText: 'Lowercase, dashes, unique per store',
+                            labelText: 'Slug URL',
+                            helperText: 'Chữ thường, gạch nối, duy nhất trong cửa hàng',
                           ),
                           validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Required'
+                              ? 'Bắt buộc'
                               : null,
                         ),
                         const SizedBox(height: BananSpacing.md),
                         TextFormField(
                           controller: _description,
                           maxLines: 4,
+                          maxLength: 1000,
                           decoration:
-                              const InputDecoration(labelText: 'Description'),
+                              const InputDecoration(labelText: 'Mô tả'),
                           validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Required'
+                              ? 'Bắt buộc'
                               : null,
                         ),
                         const SizedBox(height: BananSpacing.md),
@@ -298,11 +317,11 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                           loading: () =>
                               const LinearProgressIndicator(minHeight: 2),
                           error: (e, _) =>
-                              Text('Could not load categories: $e'),
+                              Text('Không tải được danh mục: $e'),
                           data: (categories) => DropdownButtonFormField<String>(
                             initialValue: _categoryId,
                             decoration: const InputDecoration(
-                              labelText: 'Category',
+                              labelText: 'Danh mục',
                             ),
                             items: categories
                                 .map(
@@ -319,7 +338,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                       ],
                     ),
                     _Section(
-                      title: 'Pricing & timing',
+                      title: 'Giá & thời gian',
                       children: [
                         Row(
                           children: [
@@ -331,12 +350,12 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                                   decimal: true,
                                 ),
                                 decoration: const InputDecoration(
-                                  labelText: 'Base price (₫)',
+                                  labelText: 'Giá gốc (₫)',
                                 ),
                                 validator: (v) {
                                   final n = double.tryParse(v ?? '');
                                   if (n == null || n < 0) {
-                                    return 'Enter a valid price';
+                                    return 'Nhập giá hợp lệ';
                                   }
                                   return null;
                                 },
@@ -348,7 +367,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                                 controller: _prep,
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                  labelText: 'Prep time (min)',
+                                  labelText: 'Thời gian làm (phút)',
                                 ),
                               ),
                             ),
@@ -357,29 +376,29 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                         const SizedBox(height: BananSpacing.md),
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('Available to customers'),
+                          title: const Text('Hiển thị cho khách'),
                           value: _available,
                           onChanged: (v) => setState(() => _available = v),
                         ),
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('Seasonal'),
+                          title: const Text('Theo mùa'),
                           value: _seasonal,
                           onChanged: (v) => setState(() => _seasonal = v),
                         ),
                       ],
                     ),
                     _Section(
-                      title: 'Photos',
+                      title: 'Hình ảnh',
                       action: TextButton.icon(
                         onPressed: _saving ? null : _pickImage,
                         icon: const Icon(Icons.add_photo_alternate_outlined),
-                        label: const Text('Upload photo'),
+                        label: const Text('Tải ảnh'),
                       ),
                       children: [
                         if (_images.isEmpty)
                           const Text(
-                            'No photos yet. The first photo becomes the cover.',
+                            'Chưa có ảnh. Ảnh đầu tiên sẽ làm ảnh bìa.',
                           )
                         else
                           Wrap(
@@ -401,11 +420,11 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                       ],
                     ),
                     _Section(
-                      title: 'Tags',
+                      title: 'Nhãn',
                       children: [
                         Text(
-                          'Free-form badges shown on the customer card. '
-                          'Examples: Vegan, Bestseller, Gluten-free.',
+                          'Nhãn tự do hiển thị trên thẻ sản phẩm khách thấy. '
+                          'Ví dụ: Thuần chay, Bán chạy, Không gluten.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: BananSpacing.md),
@@ -418,6 +437,72 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                     _VariantsSection(
                       variants: _variants,
                       onChanged: (vs) => setState(() => _variants = vs),
+                    ),
+                    _Section(
+                      title: 'Khả dụng & quy tắc đặt hàng',
+                      children: [
+                        Text(
+                          'Tuỳ chọn — bỏ trống nếu sản phẩm bán bình thường '
+                          'mọi ngày và dùng quy tắc chung của cửa hàng.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                        TextFormField(
+                          controller: _leadHours,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Thời gian báo trước (giờ)',
+                            helperText:
+                                'Khách phải đặt trước ít nhất số giờ này. '
+                                'Bỏ trống = dùng mặc định của cửa hàng.',
+                          ),
+                          validator: (v) {
+                            final t = (v ?? '').trim();
+                            if (t.isEmpty) return null;
+                            final n = int.tryParse(t);
+                            if (n == null || n < 0 || n > 720) {
+                              return 'Nhập số giờ từ 0 đến 720';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                        TextFormField(
+                          controller: _dailyMax,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Số lượng tối đa mỗi ngày',
+                            helperText:
+                                'Bỏ trống = không giới hạn. Khi đạt mức này, '
+                                'sản phẩm sẽ tự ẩn cho đến ngày hôm sau.',
+                          ),
+                          validator: (v) {
+                            final t = (v ?? '').trim();
+                            if (t.isEmpty) return null;
+                            final n = int.tryParse(t);
+                            if (n == null || n < 1) {
+                              return 'Nhập số nguyên ≥ 1';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                        Text(
+                          'Ngày trong tuần nhận đơn',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: BananSpacing.xs),
+                        Text(
+                          'Bỏ chọn tất cả = bán mọi ngày.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: BananSpacing.sm),
+                        _DowChips(
+                          selected: _availableDow,
+                          onChanged: (next) =>
+                              setState(() => _availableDow = next),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: BananSpacing.xxxl),
                   ],
@@ -520,6 +605,27 @@ class _TagsInput extends StatefulWidget {
 class _TagsInputState extends State<_TagsInput> {
   final _controller = TextEditingController();
 
+  /// Curated quick-add chips for a Japanese-inspired patisserie. Grouped so
+  /// the merchant taps instead of typing — keeps wording consistent across
+  /// the whole menu (important: the customer filters/searches on these).
+  static const _dietary = <(String, IconData)>[
+    ('Không gluten', Icons.spa_outlined),
+    ('Thuần chay', Icons.eco_outlined),
+    ('Không sữa', Icons.no_drinks_outlined),
+    ('Không trứng', Icons.egg_alt_outlined),
+    ('Không hạt', Icons.health_and_safety_outlined),
+    ('Không đường', Icons.icecream_outlined),
+    ('Ít ngọt', Icons.cake_outlined),
+    ('Halal', Icons.verified_outlined),
+    ('Hữu cơ', Icons.grass_outlined),
+  ];
+  static const _highlight = <(String, IconData)>[
+    ('Bán chạy', Icons.local_fire_department_outlined),
+    ('Mới', Icons.fiber_new_outlined),
+    ('Đầu bếp gợi ý', Icons.star_outline),
+    ('Giới hạn', Icons.timelapse_outlined),
+  ];
+
   @override
   void dispose() {
     _controller.dispose();
@@ -535,17 +641,74 @@ class _TagsInputState extends State<_TagsInput> {
     _controller.clear();
   }
 
+  void _toggle(String tag) {
+    if (widget.tags.contains(tag)) {
+      widget.onChanged(widget.tags.where((t) => t != tag).toList());
+    } else if (widget.tags.length < 8) {
+      widget.onChanged([...widget.tags, tag]);
+    }
+  }
+
+  Widget _presetGroup(String title, List<(String, IconData)> presets) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.outline,
+            letterSpacing: 0.4,
+          ),
+        ),
+        const SizedBox(height: BananSpacing.xs),
+        Wrap(
+          spacing: BananSpacing.sm,
+          runSpacing: BananSpacing.sm,
+          children: [
+            for (final (label, icon) in presets)
+              FilterChip(
+                avatar: Icon(icon, size: 16),
+                label: Text(label),
+                selected: widget.tags.contains(label),
+                onSelected: (_) => _toggle(label),
+              ),
+          ],
+        ),
+        const SizedBox(height: BananSpacing.md),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Custom tags = whatever isn't in the preset lists (free-typed extras).
+    final presetLabels = {
+      ..._dietary.map((e) => e.$1),
+      ..._highlight.map((e) => e.$1),
+    };
+    final customTags =
+        widget.tags.where((t) => !presetLabels.contains(t)).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.tags.isNotEmpty) ...[
+        _presetGroup('CHẾ ĐỘ ĂN & DỊ ỨNG', _dietary),
+        _presetGroup('ĐIỂM NỔI BẬT', _highlight),
+        if (customTags.isNotEmpty) ...[
+          Text(
+            'TUỲ CHỈNH',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
+                  letterSpacing: 0.4,
+                ),
+          ),
+          const SizedBox(height: BananSpacing.xs),
           Wrap(
             spacing: BananSpacing.sm,
             runSpacing: BananSpacing.sm,
             children: [
-              for (final tag in widget.tags)
+              for (final tag in customTags)
                 InputChip(
                   label: Text(tag),
                   onDeleted: () => widget.onChanged(
@@ -559,10 +722,12 @@ class _TagsInputState extends State<_TagsInput> {
         TextField(
           controller: _controller,
           decoration: InputDecoration(
-            labelText: 'Add a tag',
+            labelText: 'Thêm nhãn tuỳ chỉnh',
+            helperText:
+                'Đã dùng ${widget.tags.length}/8 · chạm chip ở trên hoặc tự nhập',
             hintText: widget.tags.length >= 8
-                ? 'Maximum 8 tags'
-                : 'Type and press Enter',
+                ? 'Tối đa 8 nhãn'
+                : 'vd. Matcha, Đặt trước',
             suffixIcon: IconButton(
               icon: const Icon(Icons.add),
               onPressed: widget.tags.length >= 8
@@ -588,7 +753,7 @@ class _VariantsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Section(
-      title: 'Variants',
+      title: 'Biến thể',
       action: TextButton.icon(
         onPressed: () => onChanged(
           [
@@ -597,7 +762,7 @@ class _VariantsSection extends StatelessWidget {
           ],
         ),
         icon: const Icon(Icons.add),
-        label: const Text('Add variant'),
+        label: const Text('Thêm biến thể'),
       ),
       children: [
         for (var i = 0; i < variants.length; i++)
@@ -653,20 +818,22 @@ class _VariantRowState extends State<_VariantRow> {
         Expanded(
           child: TextFormField(
             controller: _size,
-            decoration: const InputDecoration(labelText: 'Size'),
+            maxLength: 40,
+            decoration: const InputDecoration(labelText: 'Kích cỡ'),
             onChanged: (v) => widget.variant.size = v,
             validator: (v) =>
-                (v == null || v.isEmpty) ? 'Required' : null,
+                (v == null || v.isEmpty) ? 'Bắt buộc' : null,
           ),
         ),
         const SizedBox(width: BananSpacing.sm),
         Expanded(
           child: TextFormField(
             controller: _flavor,
-            decoration: const InputDecoration(labelText: 'Flavor'),
+            maxLength: 40,
+            decoration: const InputDecoration(labelText: 'Hương vị'),
             onChanged: (v) => widget.variant.flavor = v,
             validator: (v) =>
-                (v == null || v.isEmpty) ? 'Required' : null,
+                (v == null || v.isEmpty) ? 'Bắt buộc' : null,
           ),
         ),
         const SizedBox(width: BananSpacing.sm),
@@ -677,8 +844,8 @@ class _VariantRowState extends State<_VariantRow> {
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
-              labelText: 'Δ price (₫)',
-              helperText: '+ over base',
+              labelText: 'Δ giá (₫)',
+              helperText: '+ so với giá gốc',
             ),
             onChanged: (v) =>
                 widget.variant.priceDelta = double.tryParse(v) ?? 0,
@@ -691,6 +858,50 @@ class _VariantRowState extends State<_VariantRow> {
               icon: const Icon(Icons.delete_outline),
               onPressed: widget.onRemove,
             ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Multi-select chips for days-of-week. JS-style indexing (0=CN..6=T7).
+class _DowChips extends StatelessWidget {
+  const _DowChips({required this.selected, required this.onChanged});
+
+  final List<int> selected;
+  final ValueChanged<List<int>> onChanged;
+
+  static const _days = <(int dow, String label)>[
+    (1, 'T2'),
+    (2, 'T3'),
+    (3, 'T4'),
+    (4, 'T5'),
+    (5, 'T6'),
+    (6, 'T7'),
+    (0, 'CN'),
+  ];
+
+  void _toggle(int dow) {
+    final next = [...selected];
+    if (next.contains(dow)) {
+      next.remove(dow);
+    } else {
+      next.add(dow);
+    }
+    onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: BananSpacing.sm,
+      runSpacing: BananSpacing.sm,
+      children: [
+        for (final d in _days)
+          FilterChip(
+            label: Text(d.$2),
+            selected: selected.contains(d.$1),
+            onSelected: (_) => _toggle(d.$1),
           ),
       ],
     );

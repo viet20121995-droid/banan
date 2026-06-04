@@ -8,3 +8,4 @@ export 'src/auth/go_router_refresh.dart';
 export 'src/auth/login_screen.dart';
 export 'src/auth/register_screen.dart';
 export 'src/auth/wrong_app_screen.dart';
+export 'src/i18n/app_strings.dart';

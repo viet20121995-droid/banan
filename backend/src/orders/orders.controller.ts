@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -15,10 +16,12 @@ import { OrderStatus, Role } from '@prisma/client';
 import type { Request } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
 import { CreateOrderDto } from './dto/create-order.dto';
+import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { TransferToKitchenDto } from './dto/transfer-order.dto';
 import { CancelOrderDto, TransitionOrderDto } from './dto/transition-order.dto';
 import { OrdersService } from './orders.service';
@@ -29,14 +32,20 @@ import { OrdersService } from './orders.service';
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
-  @Roles(Role.CUSTOMER)
+  /**
+   * Public endpoint — supports both authenticated customers and guests.
+   * Guests must supply `guestFullName` + `guestPhone` (and optionally
+   * `guestEmail` + `guestBirthday`) on the DTO; the service upserts a
+   * CUSTOMER user keyed by phone before persisting the order.
+   */
+  @Public()
   @Post()
   create(
-    @CurrentUser() user: AuthPrincipal,
+    @CurrentUser() user: AuthPrincipal | null,
     @Body() dto: CreateOrderDto,
     @Req() req: Request,
   ) {
-    return this.orders.create(user.sub, dto, req.ip ?? '0.0.0.0');
+    return this.orders.create(user?.sub ?? null, dto, req.ip ?? '0.0.0.0');
   }
 
   @Roles(Role.CUSTOMER)
@@ -86,7 +95,9 @@ export class MerchantOrdersController {
     if (!user.storeId && user.role !== Role.ADMIN) {
       throw new BadRequestException({ code: 'NO_STORE_ASSIGNED' });
     }
-    return this.orders.listForStore(user.storeId!, {
+    // Admin has no storeId → list across every store. Merchants stay
+    // scoped to the store they own/operate.
+    return this.orders.listForStore(user.storeId ?? null, {
       status,
       page: Number(page) || 1,
       perPage: Number(perPage) || 30,
@@ -119,5 +130,18 @@ export class MerchantOrdersController {
       kitchenId: dto.kitchenId,
       note: dto.note,
     });
+  }
+
+  /// VAT-invoice issuance — fills `invoiceIssuedAt` (now) and (optionally)
+  /// `invoiceFileUrl`. Only the merchants of the fulfilling store + admin
+  /// can do this; rejects if the order didn't request an invoice.
+  @Patch(':id/invoice')
+  @HttpCode(HttpStatus.OK)
+  issueInvoice(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id') id: string,
+    @Body() dto: IssueInvoiceDto,
+  ) {
+    return this.orders.issueInvoice(id, user, dto.invoiceFileUrl);
   }
 }

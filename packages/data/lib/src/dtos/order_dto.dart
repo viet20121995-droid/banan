@@ -22,6 +22,7 @@ class OrderItemDto {
     this.variantId,
     this.variantLabel,
     this.customMessage,
+    this.personalization,
   });
 
   factory OrderItemDto.fromJson(Map<String, dynamic> json) {
@@ -35,6 +36,7 @@ class OrderItemDto {
       unitPrice: _toDouble(json['unitPrice']),
       lineTotal: _toDouble(json['lineTotal']),
       customMessage: json['customMessage'] as String?,
+      personalization: json['personalization'] as Map<String, dynamic>?,
     );
   }
 
@@ -47,6 +49,7 @@ class OrderItemDto {
   final double unitPrice;
   final double lineTotal;
   final String? customMessage;
+  final Map<String, dynamic>? personalization;
 
   OrderItem toDomain() => OrderItem(
         id: id,
@@ -58,6 +61,7 @@ class OrderItemDto {
         unitPrice: unitPrice,
         lineTotal: lineTotal,
         customMessage: customMessage,
+        personalization: personalization,
       );
 }
 
@@ -122,6 +126,13 @@ class OrderDto {
     this.storeName,
     this.kitchenId,
     this.kitchenStatus,
+    this.requestVatInvoice = false,
+    this.invoiceCompanyName,
+    this.invoiceTaxId,
+    this.invoiceAddress,
+    this.invoiceEmail,
+    this.invoiceIssuedAt,
+    this.invoiceFileUrl,
   });
 
   factory OrderDto.fromJson(Map<String, dynamic> json) {
@@ -156,6 +167,13 @@ class OrderDto {
           : AddressDto.fromJson(json['address'] as Map<String, dynamic>),
       scheduledFor: json['scheduledFor'] as String?,
       notes: json['notes'] as String?,
+      requestVatInvoice: json['requestVatInvoice'] as bool? ?? false,
+      invoiceCompanyName: json['invoiceCompanyName'] as String?,
+      invoiceTaxId: json['invoiceTaxId'] as String?,
+      invoiceAddress: json['invoiceAddress'] as String?,
+      invoiceEmail: json['invoiceEmail'] as String?,
+      invoiceIssuedAt: json['invoiceIssuedAt'] as String?,
+      invoiceFileUrl: json['invoiceFileUrl'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -180,6 +198,14 @@ class OrderDto {
   final AddressDto? address;
   final String? scheduledFor;
   final String? notes;
+  final bool requestVatInvoice;
+  final String? invoiceCompanyName;
+  final String? invoiceTaxId;
+  final String? invoiceAddress;
+  final String? invoiceEmail;
+  /// ISO-8601 string from the API (kept raw so a null roundtrip stays null).
+  final String? invoiceIssuedAt;
+  final String? invoiceFileUrl;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -205,6 +231,14 @@ class OrderDto {
         scheduledFor:
             scheduledFor == null ? null : DateTime.tryParse(scheduledFor!),
         notes: notes,
+        requestVatInvoice: requestVatInvoice,
+        invoiceCompanyName: invoiceCompanyName,
+        invoiceTaxId: invoiceTaxId,
+        invoiceAddress: invoiceAddress,
+        invoiceEmail: invoiceEmail,
+        invoiceIssuedAt:
+            invoiceIssuedAt == null ? null : DateTime.tryParse(invoiceIssuedAt!),
+        invoiceFileUrl: invoiceFileUrl,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );

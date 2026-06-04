@@ -15,11 +15,28 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   override canActivate(context: ExecutionContext) {
+    // We always run the underlying Passport auth so `req.user` is populated
+    // when a Bearer token is present, even on `@Public()` routes. This lets
+    // us support "optional auth" endpoints (e.g. guest checkout, where a
+    // logged-in customer should still be linked to their account).
+    return super.canActivate(context);
+  }
+
+  override handleRequest<TUser = unknown>(
+    err: unknown,
+    user: TUser,
+    info: unknown,
+    context: ExecutionContext,
+  ): TUser {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (isPublic) return true;
-    return super.canActivate(context);
+    if (isPublic) {
+      // Public routes never throw — `req.user` is `null` when there's no
+      // token (or the token is invalid).
+      return (user ?? null) as TUser;
+    }
+    return super.handleRequest(err, user, info, context);
   }
 }

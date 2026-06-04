@@ -19,7 +19,7 @@ class MerchantHomeScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
+            tooltip: 'Đăng xuất',
             onPressed: () =>
                 ref.read(authControllerProvider.notifier).logout(),
           ),
@@ -34,19 +34,19 @@ class MerchantHomeScreen extends ConsumerWidget {
               Text(
                 user == null
                     ? 'Banan Merchant'
-                    : 'Welcome, ${user.fullName}',
+                    : 'Chào ${user.fullName}',
                 style: theme.textTheme.displaySmall,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: BananSpacing.sm),
               if (user?.storeId != null)
                 Text(
-                  'Store id: ${user!.storeId}',
+                  'Mã cửa hàng: ${user!.storeId}',
                   style: theme.textTheme.bodySmall,
                 ),
               const SizedBox(height: BananSpacing.xxl),
               Text(
-                'Orders queue, menu management, and analytics arrive in M2.',
+                'Hàng đợi đơn hàng, quản lý thực đơn và phân tích sẽ có ở M2.',
                 style: theme.textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),

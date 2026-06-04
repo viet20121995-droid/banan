@@ -1,7 +1,9 @@
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
+import '../i18n/app_strings.dart';
 import 'auth_controller.dart';
 import 'auth_failure_message.dart';
 
@@ -25,6 +27,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _email = TextEditingController();
   final _phone = TextEditingController();
   final _password = TextEditingController();
+  DateTime? _birthday;
 
   @override
   void dispose() {
@@ -33,6 +36,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _phone.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickBirthday() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birthday ?? DateTime(now.year - 25),
+      firstDate: DateTime(now.year - 100),
+      lastDate: now,
+      helpText: 'Your birthday',
+    );
+    if (picked != null) setState(() => _birthday = picked);
   }
 
   String? _validateEmail(String? v) {
@@ -53,6 +68,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           password: _password.text,
           fullName: _name.text,
           phone: _phone.text.isEmpty ? null : _phone.text,
+          birthday: _birthday,
         );
     if (ok && mounted) widget.onRegistered?.call();
   }
@@ -61,6 +77,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
 
     return AppScaffold(
       body: Center(
@@ -72,18 +89,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Create your Banan account',
+                Text(s.registerTitle,
                     style: theme.textTheme.displaySmall),
                 const SizedBox(height: BananSpacing.sm),
                 Text(
-                  'Earn points on every order. Free to join.',
+                  s.registerSubtitle,
                   style: theme.textTheme.bodyMedium,
                 ),
                 const SizedBox(height: BananSpacing.xxl),
-                _Field(label: 'Full name', controller: _name, icon: Icons.person_outline),
+                _Field(label: s.fullName, controller: _name, icon: Icons.person_outline),
                 const SizedBox(height: BananSpacing.md),
                 _Field(
-                  label: 'Email',
+                  label: s.email,
                   controller: _email,
                   icon: Icons.alternate_email,
                   keyboardType: TextInputType.emailAddress,
@@ -91,15 +108,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ),
                 const SizedBox(height: BananSpacing.md),
                 _Field(
-                  label: 'Phone (optional)',
+                  label: s.phone,
                   controller: _phone,
                   icon: Icons.phone_outlined,
                   keyboardType: TextInputType.phone,
-                  required: false,
+                ),
+                const SizedBox(height: BananSpacing.md),
+                _BirthdayField(
+                  value: _birthday,
+                  onTap: _pickBirthday,
                 ),
                 const SizedBox(height: BananSpacing.md),
                 _Field(
-                  label: 'Password',
+                  label: s.password,
                   controller: _password,
                   icon: Icons.lock_outline,
                   obscureText: true,
@@ -119,7 +140,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ],
                 const SizedBox(height: BananSpacing.xl),
                 PrimaryButton(
-                  label: 'Create account',
+                  label: s.createAccount,
                   loading: state.submitting,
                   expand: true,
                   onPressed: _submit,
@@ -127,11 +148,39 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 const SizedBox(height: BananSpacing.md),
                 TextButton(
                   onPressed: state.submitting ? null : widget.onBackToLogin,
-                  child: const Text('Already have an account? Sign in'),
+                  child: Text(s.backToLogin),
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Read-only field that opens a date picker on tap. Birthday is optional —
+/// the helper text nudges the user without making it a hard requirement.
+class _BirthdayField extends StatelessWidget {
+  const _BirthdayField({required this.value, required this.onTap});
+  final DateTime? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat.yMMMd();
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BananRadii.rmd,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Birthday (optional)',
+          helperText: "We'll send you a treat each year.",
+          prefixIcon: const Icon(Icons.cake_outlined, size: 20),
+          suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+        ),
+        child: Text(
+          value == null ? 'Tap to choose…' : fmt.format(value!),
         ),
       ),
     );

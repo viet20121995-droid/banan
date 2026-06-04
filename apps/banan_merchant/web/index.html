@@ -41,6 +41,87 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <!-- New-order chime. Browsers block WebAudio until a user gesture, so we
+       create one shared AudioContext and resume it on the first
+       interaction (login click, etc.). __bananChime() is called from Dart
+       when an order.created realtime event arrives. -->
+  <script>
+    (function () {
+      var ctx = null;
+      function ensureCtx() {
+        if (!ctx) {
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (AC) ctx = new AC();
+        }
+        if (ctx && ctx.state === 'suspended') ctx.resume();
+        return ctx;
+      }
+      // Unlock on the first user interaction of the session.
+      function unlock() { ensureCtx(); }
+      ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+        window.addEventListener(ev, unlock, { once: false, passive: true });
+      });
+      window.__bananChime = function () {
+        try {
+          var c = ensureCtx();
+          if (!c) return;
+          function tone(freq, start, dur) {
+            var o = c.createOscillator();
+            var g = c.createGain();
+            o.type = 'sine';
+            o.frequency.value = freq;
+            o.connect(g);
+            g.connect(c.destination);
+            var t = c.currentTime + start;
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            o.start(t);
+            o.stop(t + dur + 0.02);
+          }
+          tone(880, 0.0, 0.2);
+          tone(1175, 0.22, 0.28);
+        } catch (e) {}
+      };
+    })();
+  </script>
+  <!-- FCM web push. Foreground messages re-use the new-order chime above. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js"></script>
+  <script>
+    (function () {
+      var firebaseConfig = {
+        apiKey: "AIzaSyC5af81AJ4SNHl4dKRdsij2rBDsLP8ZjU8",
+        authDomain: "banan-f0229.firebaseapp.com",
+        projectId: "banan-f0229",
+        storageBucket: "banan-f0229.firebasestorage.app",
+        messagingSenderId: "1020298007280",
+        appId: "1:1020298007280:web:3ae7afd59fa074b43fe835",
+        measurementId: "G-V8FGQNH42X"
+      };
+      var VAPID_KEY = "BInU4dWosJ6Jk_V1Drl6rWlPyFRl005O8n_2FERWdFFWH4JgNGK2gRE8PytwX6kY5XuBxnfzVjXqoU9AiPCpG-E";
+      try { firebase.initializeApp(firebaseConfig); } catch (e) {}
+      try {
+        firebase.messaging().onMessage(function () {
+          if (window.__bananChime) window.__bananChime();
+        });
+      } catch (e) {}
+      window.__bananGetPushToken = async function () {
+        try {
+          if (!('serviceWorker' in navigator) || typeof firebase === 'undefined') return '';
+          if (firebase.messaging.isSupported && !firebase.messaging.isSupported()) return '';
+          if (!('Notification' in window)) return '';
+          var perm = Notification.permission;
+          if (perm === 'default') perm = await Notification.requestPermission();
+          if (perm !== 'granted') return '';
+          var reg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+          return (await firebase.messaging().getToken({
+            vapidKey: VAPID_KEY, serviceWorkerRegistration: reg
+          })) || '';
+        } catch (e) { console.warn('[push] token error', e); return ''; }
+      };
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

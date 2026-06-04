@@ -62,23 +62,23 @@ enum OrderStatus {
   String get label {
     switch (this) {
       case OrderStatus.pending:
-        return 'Pending';
+        return 'Chờ duyệt';
       case OrderStatus.accepted:
-        return 'Accepted';
+        return 'Đã nhận';
       case OrderStatus.inPreparation:
-        return 'In preparation';
+        return 'Đang chuẩn bị';
       case OrderStatus.sentToKitchen:
-        return 'Sent to kitchen';
+        return 'Đã chuyển bếp';
       case OrderStatus.readyForPickup:
-        return 'Ready for pickup';
+        return 'Sẵn sàng lấy';
       case OrderStatus.delivering:
-        return 'Delivering';
+        return 'Đang giao';
       case OrderStatus.completed:
-        return 'Completed';
+        return 'Hoàn tất';
       case OrderStatus.cancelled:
-        return 'Cancelled';
+        return 'Đã huỷ';
       case OrderStatus.refunded:
-        return 'Refunded';
+        return 'Đã hoàn tiền';
     }
   }
 

@@ -14,10 +14,14 @@ import { PrismaService } from '../prisma/prisma.service';
  * `LoyaltyConfig` table when admin UI lands.
  */
 const CONFIG = {
-  /** 1 point per N VND spent on the order subtotal. */
-  earnRatePerVnd: 10_000,
-  /** 1 point redeems for N VND off. */
+  /** 1 Micho per N VND spent on the order subtotal. */
+  earnRatePerVnd: 50_000,
+  /** Legacy: 1 point redeems for N VND off (kept for the loyalty view). */
   redemptionValueVnd: 100,
+  /** Members holding more than this many Micho get an automatic order
+   *  discount of [michoDiscountRate]. */
+  michoDiscountThreshold: 100,
+  michoDiscountRate: 0.05,
   tiers: {
     silver: 0,
     gold: 1_000,
@@ -73,7 +77,7 @@ export class LoyaltyService {
     if (args.pointsToRedeem > user.pointsBalance) {
       throw new BadRequestException({
         code: 'LOYALTY_INSUFFICIENT_POINTS',
-        message: `You only have ${user.pointsBalance} points.`,
+        message: `You only have ${user.pointsBalance} Micho.`,
       });
     }
     // Cap at the subtotal — redemptions can never make subtotal negative.
@@ -106,6 +110,40 @@ export class LoyaltyService {
       type: 'ADJUSTMENT',
       delta: -redeem.delta, // delta was negative, so this restores the points
       reason: 'Reversed redemption — order cancelled',
+    });
+  }
+
+  /**
+   * Manual points adjustment by store staff (goodwill, birthday gift,
+   * compensation for a bad order). `delta` may be negative. Recorded as an
+   * ADJUSTMENT event so it shows in the customer's loyalty history.
+   */
+  async adminAdjust(args: {
+    userId: string;
+    delta: number;
+    reason: string;
+  }): Promise<LoyaltyEvent> {
+    if (!Number.isInteger(args.delta) || args.delta === 0) {
+      throw new BadRequestException({
+        code: 'LOYALTY_INVALID_DELTA',
+        message: 'Adjustment must be a non-zero whole number.',
+      });
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: args.userId },
+      select: { pointsBalance: true },
+    });
+    if (user.pointsBalance + args.delta < 0) {
+      throw new BadRequestException({
+        code: 'LOYALTY_NEGATIVE_BALANCE',
+        message: `Customer only has ${user.pointsBalance} Micho.`,
+      });
+    }
+    return this.recordEvent({
+      userId: args.userId,
+      type: 'ADJUSTMENT',
+      delta: args.delta,
+      reason: args.reason,
     });
   }
 

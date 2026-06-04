@@ -3,8 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'colors.dart';
 
-/// Display family: Cormorant Garamond (serif, premium feel).
-/// UI family: Inter (sans, neutral, high legibility).
+/// Display family: Lora — elegant transitional serif with full Vietnamese
+/// subset on Google Fonts web delivery (the previous Noto Serif was
+/// dropping diacritics like ế / ã / ô on the web build because the auto
+/// subset didn't include `vietnamese`, leaving "Khuy?n m�i").
+/// UI family: Inter (sans, neutral, high legibility, Vietnamese-safe).
 ///
 /// On web/desktop, prefer self-hosting these in production for performance —
 /// we use google_fonts during development for speed of iteration.
@@ -12,8 +15,8 @@ class BananTypography {
   const BananTypography._();
 
   static TextTheme textTheme({required Color ink, required Color inkSoft}) {
-    final display = GoogleFonts.cormorantGaramond(color: ink, height: 1.1);
-    final body = GoogleFonts.inter(color: ink, height: 1.4);
+    final display = GoogleFonts.lora(color: ink, height: 1.2);
+    final body = GoogleFonts.inter(color: ink, height: 1.45);
 
     return TextTheme(
       displayLarge: display.copyWith(

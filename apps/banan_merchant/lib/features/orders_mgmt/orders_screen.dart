@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/shell/merchant_shell.dart';
+import 'alert_sound.dart';
 import 'order_status_visuals.dart';
 
 @immutable
@@ -17,18 +19,52 @@ class StoreOrdersState {
     this.loading = false,
     this.failure,
     this.statusFilter,
+    this.scheduledOnly = false,
+    this.newOrderCount = 0,
+    this.storeIdFilter,
   });
 
   final List<Order> orders;
   final bool loading;
   final AppFailure? failure;
   final OrderStatus? statusFilter;
+  /// When true, only orders with `scheduledFor != null` are shown — sorted
+  /// by upcoming pickup/delivery time.
+  final bool scheduledOnly;
+
+  /// Orders that arrived via realtime since the merchant last acknowledged.
+  /// Drives the attention banner; cleared when the merchant taps it.
+  final int newOrderCount;
+
+  /// Admin-only client-side filter: when set, only show orders from this
+  /// store. Merchants are already server-scoped to their own store so this
+  /// stays null for them.
+  final String? storeIdFilter;
+
+  /// Orders after applying the in-memory filters (scheduled + store).
+  List<Order> get visibleOrders {
+    Iterable<Order> list = orders;
+    if (scheduledOnly) {
+      list = list.where((o) => o.scheduledFor != null);
+    }
+    if (storeIdFilter != null) {
+      list = list.where((o) => o.storeId == storeIdFilter);
+    }
+    final out = list.toList();
+    if (scheduledOnly) {
+      out.sort((a, b) => a.scheduledFor!.compareTo(b.scheduledFor!));
+    }
+    return out;
+  }
 
   StoreOrdersState copyWith({
     List<Order>? orders,
     bool? loading,
     Object? failure = _sentinel,
     Object? statusFilter = _sentinel,
+    bool? scheduledOnly,
+    int? newOrderCount,
+    Object? storeIdFilter = _sentinel,
   }) =>
       StoreOrdersState(
         orders: orders ?? this.orders,
@@ -37,6 +73,11 @@ class StoreOrdersState {
         statusFilter: statusFilter == _sentinel
             ? this.statusFilter
             : statusFilter as OrderStatus?,
+        scheduledOnly: scheduledOnly ?? this.scheduledOnly,
+        newOrderCount: newOrderCount ?? this.newOrderCount,
+        storeIdFilter: storeIdFilter == _sentinel
+            ? this.storeIdFilter
+            : storeIdFilter as String?,
       );
 }
 
@@ -59,9 +100,37 @@ class StoreOrdersController extends StateNotifier<StoreOrdersState> {
     );
   }
 
-  Future<void> setFilter(OrderStatus? status) async {
-    state = state.copyWith(statusFilter: status);
+  /// Called from the realtime listener when a brand-new order lands.
+  /// Bumps the attention counter; the UI plays a chime + shows a banner.
+  void onNewOrder() {
+    state = state.copyWith(newOrderCount: state.newOrderCount + 1);
+  }
+
+  /// Merchant tapped the banner — clear the badge and refresh the list.
+  Future<void> acknowledgeNewOrders() async {
+    state = state.copyWith(newOrderCount: 0);
     await refresh();
+  }
+
+  Future<void> setFilter(OrderStatus? status) async {
+    state = state.copyWith(statusFilter: status, scheduledOnly: false);
+    await refresh();
+  }
+
+  /// Toggle the "Scheduled" pseudo-filter. We don't have a backend `scheduled`
+  /// query param, so we fetch all PENDING orders and filter client-side.
+  Future<void> setScheduledOnly(bool on) async {
+    state = state.copyWith(
+      statusFilter: on ? OrderStatus.pending : null,
+      scheduledOnly: on,
+    );
+    await refresh();
+  }
+
+  /// Admin-only client-side branch filter. Pass null to clear (show all).
+  /// Doesn't refetch — the admin view already has every store's orders.
+  void setStoreFilter(String? storeId) {
+    state = state.copyWith(storeIdFilter: storeId);
   }
 }
 
@@ -73,8 +142,13 @@ final storeOrdersControllerProvider = StateNotifierProvider.autoDispose<
       StoreOrdersController(ref.watch(orderRepositoryProvider));
   ref.listen<AsyncValue<RealtimeEvent>>(realtimeEventsProvider, (_, next) {
     next.whenData((event) {
-      if (event.event == 'order.created' ||
-          event.event == 'order.status_changed') {
+      if (event.event == 'order.created') {
+        // New order — chime + bump the attention counter, then refresh.
+        playNewOrderChime();
+        controller.onNewOrder();
+        controller.refresh();
+      } else if (event.event == 'order.status_changed' ||
+          event.event == 'order.due_soon') {
         controller.refresh();
       }
     });
@@ -95,52 +169,42 @@ class MerchantOrdersScreen extends ConsumerWidget {
       decimalDigits: 0,
     );
 
-    return AppScaffold(
-      appBar: AppBar(
-        title: const Text('Orders'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.bar_chart_outlined),
-            tooltip: 'Dashboard',
-            onPressed: () => context.push('/dashboard'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.assignment_return_outlined),
-            tooltip: 'Refunds',
-            onPressed: () => context.push('/refunds'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.menu_book_outlined),
-            tooltip: 'Menu',
-            onPressed: () => context.push('/menu'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.collections_bookmark_outlined),
-            tooltip: 'Collections',
-            onPressed: () => context.push('/collections'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.forum_outlined),
-            tooltip: 'Threads',
-            onPressed: () => context.push('/threads'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: controller.refresh,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
-          ),
-        ],
-      ),
+    final s = ref.watch(stringsProvider);
+    final isAdmin = ref
+            .watch(authSessionProvider)
+            .valueOrNull
+            ?.user
+            .role
+            .isAdmin ??
+        false;
+
+    return MerchantShell(
+      title: s.orders,
+      onRefresh: controller.refresh,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Filter(selected: state.statusFilter, onSelect: controller.setFilter),
+          if (state.newOrderCount > 0)
+            _NewOrderBanner(
+              count: state.newOrderCount,
+              onTap: controller.acknowledgeNewOrders,
+            ),
+          // Branch filter — admin only. Merchants only see their own
+          // store's orders so the row would be redundant for them.
+          if (isAdmin)
+            _StoreFilter(
+              orders: state.orders,
+              selected: state.storeIdFilter,
+              onSelect: controller.setStoreFilter,
+            ),
+          if (isAdmin) const SizedBox(height: BananSpacing.sm),
+          _Filter(
+            selected: state.statusFilter,
+            scheduledOnly: state.scheduledOnly,
+            onSelect: controller.setFilter,
+            onScheduledToggle: () =>
+                controller.setScheduledOnly(!state.scheduledOnly),
+          ),
           const SizedBox(height: BananSpacing.lg),
           Expanded(
             child: _Body(state: state, fmt: fmt, controller: controller),
@@ -151,33 +215,127 @@ class MerchantOrdersScreen extends ConsumerWidget {
   }
 }
 
+/// Pulsing call-to-action that appears the moment new orders arrive over
+/// realtime. Impossible to miss during a busy shift; tap clears it and
+/// refreshes the list.
+class _NewOrderBanner extends StatefulWidget {
+  const _NewOrderBanner({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  State<_NewOrderBanner> createState() => _NewOrderBannerState();
+}
+
+class _NewOrderBannerState extends State<_NewOrderBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 850),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final n = widget.count;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: BananSpacing.md),
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 0.75, end: 1).animate(_pulse),
+        child: Material(
+          color: BananColors.primary,
+          borderRadius: BananRadii.rlg,
+          child: InkWell(
+            borderRadius: BananRadii.rlg,
+            onTap: widget.onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(BananSpacing.md),
+              child: Row(
+                children: [
+                  const Icon(Icons.notifications_active,
+                      color: Colors.white,),
+                  const SizedBox(width: BananSpacing.md),
+                  Expanded(
+                    child: Text(
+                      n == 1
+                          ? 'Vừa có 1 đơn hàng mới!'
+                          : 'Vừa có $n đơn hàng mới!',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const Text(
+                    'Bấm để xem',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: BananSpacing.xs),
+                  const Icon(Icons.arrow_forward, color: Colors.white,
+                      size: 18,),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Filter extends StatelessWidget {
-  const _Filter({required this.selected, required this.onSelect});
+  const _Filter({
+    required this.selected,
+    required this.scheduledOnly,
+    required this.onSelect,
+    required this.onScheduledToggle,
+  });
   final OrderStatus? selected;
+  final bool scheduledOnly;
   final ValueChanged<OrderStatus?> onSelect;
+  final VoidCallback onScheduledToggle;
 
   @override
   Widget build(BuildContext context) {
     final filters = <(String, OrderStatus?)>[
-      ('All', null),
-      ('Pending', OrderStatus.pending),
-      ('Accepted', OrderStatus.accepted),
-      ('In preparation', OrderStatus.inPreparation),
-      ('Ready', OrderStatus.readyForPickup),
-      ('Delivering', OrderStatus.delivering),
-      ('Completed', OrderStatus.completed),
+      ('Tất cả', null),
+      ('Chờ duyệt', OrderStatus.pending),
+      ('Đã nhận', OrderStatus.accepted),
+      ('Đang làm', OrderStatus.inPreparation),
+      ('Sẵn sàng', OrderStatus.readyForPickup),
+      ('Đang giao', OrderStatus.delivering),
+      ('Hoàn thành', OrderStatus.completed),
     ];
     return SizedBox(
       height: 40,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
+          // Distinct pseudo-filter — pickups & deliveries scheduled for later.
+          Padding(
+            padding: const EdgeInsets.only(right: BananSpacing.sm),
+            child: ChoiceChip(
+              avatar: const Icon(Icons.event_outlined, size: 18),
+              label: const Text('Lên lịch'),
+              selected: scheduledOnly,
+              onSelected: (_) => onScheduledToggle(),
+            ),
+          ),
           for (final f in filters)
             Padding(
               padding: const EdgeInsets.only(right: BananSpacing.sm),
               child: ChoiceChip(
                 label: Text(f.$1),
-                selected: selected == f.$2,
+                selected: !scheduledOnly && selected == f.$2,
                 onSelected: (_) => onSelect(f.$2),
               ),
             ),
@@ -200,30 +358,37 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (state.loading && state.orders.isEmpty) {
+    final visible = state.visibleOrders;
+    if (state.loading && visible.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (state.failure != null && state.orders.isEmpty) {
+    if (state.failure != null && visible.isEmpty) {
       return ErrorState(
         message: authFailureMessage(state.failure!),
         onRetry: controller.refresh,
       );
     }
-    if (state.orders.isEmpty) {
-      return const EmptyState(
-        title: 'No orders here',
-        message: 'New orders appear in real time.',
-        icon: Icons.receipt_long_outlined,
+    if (visible.isEmpty) {
+      return EmptyState(
+        title: state.scheduledOnly
+            ? 'Chưa có đơn lên lịch'
+            : 'Chưa có đơn ở đây',
+        message: state.scheduledOnly
+            ? 'Đơn đặt trước cho ngày sau sẽ hiển thị ở đây.'
+            : 'Đơn hàng mới sẽ xuất hiện theo thời gian thực.',
+        icon: state.scheduledOnly
+            ? Icons.event_outlined
+            : Icons.receipt_long_outlined,
       );
     }
     return RefreshIndicator(
       onRefresh: controller.refresh,
       child: ListView.separated(
         padding: const EdgeInsets.only(bottom: BananSpacing.huge),
-        itemCount: state.orders.length,
+        itemCount: visible.length,
         separatorBuilder: (_, __) => const SizedBox(height: BananSpacing.md),
         itemBuilder: (context, i) {
-          final o = state.orders[i];
+          final o = visible[i];
           return InkWell(
             onTap: () => context.push('/orders/${o.id}'),
             borderRadius: BananRadii.rlg,
@@ -249,16 +414,58 @@ class _Body extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          o.code,
-                          style: Theme.of(context).textTheme.titleSmall,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                o.code,
+                                style: Theme.of(context).textTheme.titleSmall,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            // Branch label — important context for admin
+                            // (chain-wide view) and helpful for staff who
+                            // jump between branches. Hidden when the order
+                            // has no store info attached.
+                            if ((o.storeName ?? '').isNotEmpty) ...[
+                              const SizedBox(width: BananSpacing.xs),
+                              _StorePill(name: o.storeName!),
+                            ],
+                            if (o.requestVatInvoice) ...[
+                              const SizedBox(width: BananSpacing.xs),
+                              const StatusBadge(
+                                label: 'VAT',
+                                intent: StatusIntent.info,
+                                dense: true,
+                              ),
+                            ],
+                          ],
                         ),
                         Text(
-                          '${o.itemCount} item${o.itemCount == 1 ? '' : 's'} · '
+                          '${o.itemCount} món · '
                           '${fmt.format(o.total)} · '
                           '${DateFormat.jm().format(o.createdAt.toLocal())}',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
+                        if (o.scheduledFor != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.event,
+                                    size: 13, color: BananColors.gold,),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Cho ${DateFormat.MMMd().add_jm().format(o.scheduledFor!.toLocal())}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(color: BananColors.gold),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -274,6 +481,101 @@ class _Body extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Tiny branch-name pill shown next to the order code. Surface so admin
+/// (who sees every store's queue) and floating staff always know which
+/// store an action will affect.
+class _StorePill extends StatelessWidget {
+  const _StorePill({required this.name});
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Drop the "Banan – " prefix on display — it's redundant in a tight
+    // pill and eats horizontal room. We keep it in the underlying value
+    // for analytics / accessibility.
+    final short = name.replaceFirst(RegExp(r'^Banan\s*[–-]\s*'), '');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: theme.colorScheme.primary.withValues(alpha: 0.10),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Text(
+        short,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// Branch filter chips for the admin order queue. Derives the option set
+/// from the actual `state.orders` so a branch only appears in the row
+/// once an order from it shows up — avoids cluttering admins with empty
+/// stores during quiet hours.
+class _StoreFilter extends StatelessWidget {
+  const _StoreFilter({
+    required this.orders,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final List<Order> orders;
+  final String? selected;
+  final ValueChanged<String?> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    // Unique (id, name) pairs in order-of-appearance. We don't sort —
+    // branches show up in the same order admin would see in the order
+    // queue itself.
+    final seen = <String>{};
+    final stores = <({String id, String name})>[];
+    for (final o in orders) {
+      if (o.storeName == null || o.storeName!.isEmpty) continue;
+      if (seen.add(o.storeId)) {
+        stores.add((id: o.storeId, name: o.storeName!));
+      }
+    }
+    if (stores.length <= 1) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 36,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: BananSpacing.sm),
+            child: ChoiceChip(
+              avatar: const Icon(Icons.storefront_outlined, size: 16),
+              label: const Text('Tất cả chi nhánh'),
+              selected: selected == null,
+              onSelected: (_) => onSelect(null),
+            ),
+          ),
+          for (final s in stores)
+            Padding(
+              padding: const EdgeInsets.only(right: BananSpacing.sm),
+              child: ChoiceChip(
+                label: Text(
+                  s.name.replaceFirst(RegExp(r'^Banan\s*[–-]\s*'), ''),
+                ),
+                selected: selected == s.id,
+                onSelected: (_) => onSelect(s.id),
+              ),
+            ),
+        ],
       ),
     );
   }

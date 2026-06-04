@@ -42,6 +42,10 @@ model User {
   pointsBalance  Int            @default(0)
   birthday       DateTime?      @db.Date
 
+  // Merchant-only CRM: private staff notes + tags (VIP, allergy, …).
+  merchantNotes String?
+  merchantTags  String[] @default([])
+
   // Staff linkage — null for customers.
   storeId   String?
   store     Store?   @relation(fields: [storeId], references: [id])
@@ -56,6 +60,9 @@ model User {
   refreshTokens      RefreshToken[]
   couponRedemptions  CouponRedemption[]
   authoredThreads    Thread[]           @relation("ThreadAuthor")
+  devices            DeviceToken[]
+  reviews            Review[]
+  wishlistItems      WishlistItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -97,14 +104,117 @@ model Store {
   defaultKitchenId String?
   defaultKitchen   Kitchen? @relation(fields: [defaultKitchenId], references: [id])
 
+  /// Minutes before a scheduled order's pickup/delivery time the merchant
+  /// wants to start preparation. Used by the scheduler to surface orders
+  /// in the merchant's "Due soon" view.
+  preparationLeadMinutes Int @default(120)
+
+  /// HCMC ward this branch physically sits in (slug from `hcm-wards.ts`).
+  /// Drives the new same-ward / other-ward delivery fee rule.
+  wardCode String?
+
+  /// Master "stop everything" toggle. When true the store rejects every new
+  /// order regardless of channel, with `pauseReason` shown to the customer.
+  /// The two channel-specific flags below let the merchant pause just one
+  /// fulfilment type (e.g. shipper not available → pause delivery only).
+  isPaused         Boolean @default(false)
+  isPickupPaused   Boolean @default(false)
+  isDeliveryPaused Boolean @default(false)
+  pauseReason      String?
+
+  /// Minimum subtotal accepted on a new order (₫). 0 = no minimum.
+  minOrderVnd      Int @default(0)
+  /// Default advance notice (in hours) required for any order at this store.
+  /// Product.leadTimeHours overrides this when set.
+  defaultLeadHours Int @default(0)
+
   users       User[]
   products    Product[]
   orders      Order[]
   collections Collection[]
+  bundles     Bundle[]
   threads     Thread[]
+  coupons     Coupon[]
+  banners     Banner[]
+  blackoutDates StoreBlackoutDate[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// Singleton row driving the customer-site promotional popup. Bumping
+/// `version` re-triggers display for all customers (clients persist the
+/// last seen version in localStorage).
+model PromoPopup {
+  id               String   @id @default("default")
+  isActive         Boolean  @default(false)
+  title            String   @default("Chào mừng đến với Banan")
+  body             String   @default("")
+  imageUrl         String?
+  ctaLabel         String?
+  ctaUrl           String?
+  /// 0 = no auto-close. Else closes after N seconds with a countdown bar.
+  countdownSeconds Int      @default(0)
+  version          Int      @default(1)
+  updatedAt        DateTime @updatedAt
+}
+
+/// Singleton row holding the admin-tunable delivery-fee config. Pricing
+/// has two tiers (standard products vs. items in the birthday cake
+/// collection) × two distance bands (within `thresholdKm` vs. beyond).
+/// Looked up by the fixed primary key "default" so we never need a
+/// separate lookup table.
+model DeliveryConfig {
+  id                            String   @id @default("default")
+  /// Standard products — same ward as the routed store (often free).
+  standardFeeSameWardVnd        Int      @default(0)
+  /// Standard products — customer ward differs from the routed store.
+  standardFeeOtherWardVnd       Int      @default(30000)
+  /// Birthday cakes — same ward as the routed store. Higher than standard
+  /// because cakes are fragile + need careful handling.
+  birthdayCakeFeeSameWardVnd    Int      @default(30000)
+  /// Birthday cakes — different ward from the routed store.
+  birthdayCakeFeeOtherWardVnd   Int      @default(70000)
+  /// Slug of the collection whose products get the "birthday cake" pricing
+  /// tier. Matching is by Collection.slug so the admin can re-point this
+  /// to a different curated set without code changes.
+  birthdayCakeCollectionSlug    String   @default("home-birthday-cakes")
+  /// Legacy field kept for backward compat — pre-2026 versions used a
+  /// distance band rule. Ignored by the current ward-equality logic.
+  thresholdKm                   Float    @default(3)
+  updatedAt                     DateTime @updatedAt
+}
+
+/// One-off closure date for a store (Tết, public holidays, vacation). Orders
+/// scheduled for the date are blocked with `reason` surfaced to the customer.
+model StoreBlackoutDate {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@unique([storeId, date])
+  @@index([storeId])
+}
+
+/// Home-page hero banner. Null storeId = chain-wide (admin). Merchants
+/// manage their own store's banners.
+model Banner {
+  id        String   @id @default(uuid())
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id])
+  imageUrl  String
+  title     String?
+  ctaUrl    String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, isActive])
 }
 
 model Kitchen {
@@ -156,9 +266,33 @@ model Product {
   isSeasonal         Boolean          @default(false)
   seasonStart        DateTime?
   seasonEnd          DateTime?
+
+  /// Per-product overrides for store-wide order rules.
+  ///   leadTimeHours       — null = use Store.defaultLeadHours; else this.
+  ///   availableDaysOfWeek — empty = every day. Else JS getDay() ints
+  ///                          (0=Sun..6=Sat); only those days accept orders.
+  ///   dailyMaxQuantity    — null = unlimited. Else a daily order cap
+  ///                          enforced across all customers for that date.
+  leadTimeHours       Int?
+  availableDaysOfWeek Int[]  @default([])
+  dailyMaxQuantity    Int?
+
+  /// Flavor-composition products (macaron sets). When [flavorPickCount]
+  /// is set, the customer must compose exactly that many picks from
+  /// [flavorOptions] before adding to cart — repeats allowed
+  /// ("3× Jasmine + 2× Lemon" for a set of 5). Null = no composer.
+  /// The chosen composition is stored on `OrderItem.personalization`
+  /// as `{ "flavors": { "Jasmine": 3, "Lemon": 2 } }`.
+  flavorPickCount     Int?
+  flavorOptions       String[] @default([])
+
   variants           ProductVariant[]
   orderItems         OrderItem[]
   collectionItems    CollectionItem[]
+  linkedThreads      Thread[]         @relation("ThreadProduct")
+  reviews            Review[]
+  wishlistedBy       WishlistItem[]
+  bundleItems        BundleItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -184,6 +318,7 @@ model ProductVariant {
   stockQty    Int?
   isAvailable Boolean     @default(true)
   orderItems  OrderItem[]
+  bundleItems BundleItem[]
 
   @@unique([productId, size, flavor])
 }
@@ -237,12 +372,28 @@ model Thread {
   title       String
   body        String    @db.Text
   imageUrl    String?
+  /// Carousel images (first is the cover). `imageUrl` kept for back-compat.
+  images      String[]  @default([])
+  /// Extracted from the body (#hashtag) on save; powers search + filter.
+  hashtags    String[]  @default([])
+  /// Optional "Shop this" deep-link target.
+  productId   String?
+  product     Product?  @relation("ThreadProduct", fields: [productId], references: [id])
+  /// Configurable call-to-action button.
+  ctaLabel    String?
+  ctaUrl      String?
+  /// When set + still in the future, the scheduler auto-publishes at this
+  /// time (sets publishedAt). Lets merchants queue posts.
+  scheduledPublishAt DateTime?
+  /// Lightweight impression counter for the merchant insights view.
+  viewCount   Int       @default(0)
   publishedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([storeId, publishedAt])
+  @@index([scheduledPublishAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -259,7 +410,13 @@ model Address {
   line1      String
   line2      String?
   city       String
+  /// Legacy column — kept nullable for pre-reform addresses. New addresses
+  /// rely on `wardCode` instead (HCMC's 2025 reform abolished districts).
   district   String?
+  /// References our hard-coded HCMC ward catalog. Centroid (lat/lng) is
+  /// resolved server-side so we can compute a haversine distance from the
+  /// fulfilling store and surcharge delivery beyond a configurable radius.
+  wardCode   String?
   postalCode String?
   lat        Float?
   lng        Float?
@@ -267,6 +424,7 @@ model Address {
   orders     Order[]
 
   @@index([userId])
+  @@index([wardCode])
 }
 
 enum PaymentProvider {
@@ -314,12 +472,9 @@ enum OrderStatus {
 }
 
 enum KitchenStatus {
-  PREPARING
-  BAKING
-  COOLING
-  DECORATING
-  PACKED
-  READY_DISPATCH
+  PENDING_ACK    // newly sent to kitchen, awaiting staff acknowledgement
+  PREPARING      // kitchen is actively making the order
+  READY_DISPATCH // done — awaiting return to the merchant
 }
 
 model Order {
@@ -334,6 +489,9 @@ model Order {
   kitchen         Kitchen?        @relation("KitchenOrders", fields: [kitchenId], references: [id])
   fulfillmentType FulfillmentType
   scheduledFor    DateTime?
+  /// Set the first time the scheduler surfaces this order as "due soon",
+  /// so the cron doesn't spam the same order on every tick.
+  dueSoonNotifiedAt DateTime?
   addressId       String?
   address         Address?        @relation(fields: [addressId], references: [id])
   status          OrderStatus     @default(PENDING)
@@ -348,12 +506,30 @@ model Order {
   couponId       String?
   coupon         Coupon? @relation(fields: [couponId], references: [id])
   couponDiscount Decimal @db.Decimal(12, 2) @default(0)
+  // Gift-card redemption applied to this order (balance-based; one card may
+  // span several orders). `giftCardCode` is the code used; the amount is the
+  // VND deducted from this order's total.
+  giftCardCode     String?
+  giftCardAmountVnd Int    @default(0)
   total          Decimal @db.Decimal(12, 2)
 
   customMessage String?
   notes         String?
 
+  // VAT invoice (hóa đơn đỏ) — optional company invoice request.
+  // Toggled at checkout; the merchant fulfills outside the app (xuất hóa
+  // đơn từ hệ thống thuế). We just persist the request data so the
+  // merchant can issue the invoice and the customer can see status.
+  requestVatInvoice    Boolean @default(false)
+  invoiceCompanyName   String?
+  invoiceTaxId         String?
+  invoiceAddress       String?
+  invoiceEmail         String?
+  invoiceIssuedAt      DateTime?
+  invoiceFileUrl       String?
+
   items             OrderItem[]
+  reviews           Review[]
   payments          Payment[]
   refunds           Refund[]
   statusEvents      OrderStatusEvent[]
@@ -383,6 +559,18 @@ model OrderItem {
   unitPrice     Decimal         @db.Decimal(12, 2)
   customMessage String?
   lineTotal     Decimal         @db.Decimal(12, 2)
+
+  /// Cake personalization payload — only set when the customer used the
+  /// wizard (shown for products in the `birthdayCakeCollectionSlug`
+  /// from `DeliveryConfig`). Schema-less so we can evolve the wizard
+  /// without DB migrations:
+  ///   {
+  ///     "textOnCake": "Happy birthday Mai",
+  ///     "candleCount": 7,
+  ///     "referenceImageUrl": "https://...",
+  ///     "note": "Ribbon vàng, không sprinkles"
+  ///   }
+  personalization Json?
 }
 
 model OrderStatusEvent {
@@ -506,8 +694,18 @@ model Coupon {
   perUserLimit   Int        @default(1)
   isActive       Boolean    @default(true)
 
+  /// Owning store. Null = chain-wide (admin-issued, valid at any store).
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+  /// Merchant-facing description shown in the coupon manager.
+  label   String?
+
   redemptionLog CouponRedemption[]
   orders        Order[]
+
+  createdAt DateTime @default(now())
+
+  @@index([storeId])
 }
 
 model CouponRedemption {
@@ -569,4 +767,219 @@ model Notification {
   createdAt DateTime  @default(now())
 
   @@index([userId, createdAt])
+}
+
+/// One push-notification target per device. The customer / staff app
+/// registers its FCM token here on launch; we wipe it on logout.
+/// `platform` lets us target a specific app surface (web push, iOS, APK).
+enum DevicePlatform {
+  WEB
+  IOS
+  ANDROID
+}
+
+model DeviceToken {
+  id        String         @id @default(uuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform  DevicePlatform
+  token     String         @unique
+  lastSeen  DateTime       @default(now())
+  createdAt DateTime       @default(now())
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reviews & wishlist (P0 conversion features)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+}
+
+/// Customer review of a product. Only customers who have a completed
+/// order containing the product can review (enforced by the service).
+/// Each user can leave at most one review per product (composite unique).
+model Review {
+  id        String       @id @default(uuid())
+  productId String
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     Order?       @relation(fields: [orderId], references: [id])
+  rating    Int          // 1..5
+  body      String?      @db.Text
+  images    String[]     @default([])
+  status    ReviewStatus @default(PUBLISHED)
+  /// Merchant moderation note (visible to admin/merchant only).
+  moderationNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, userId])
+  @@index([productId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// A fixed-price combo of products — "Combo bữa sáng = 1 croissant + 1
+/// cà phê" etc. The bundle has its own price and image; the items it
+/// includes link to existing Product rows so we don't duplicate catalog
+/// data. At order time the bundle becomes a single OrderItem with
+/// `productName` = bundle name and the constituent items snapshotted in
+/// the `personalization`-style metadata (kept simple — the kitchen
+/// reads it for what to make).
+model Bundle {
+  id            String         @id @default(uuid())
+  storeId       String
+  store         Store          @relation(fields: [storeId], references: [id])
+  name          String
+  slug          String
+  description   String?        @db.Text
+  imageUrl      String?
+  priceVnd      Int
+  isActive      Boolean        @default(true)
+  isPinnedToHome Boolean       @default(false)
+  sortOrder     Int            @default(0)
+  items         BundleItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, slug])
+  @@index([storeId, isPinnedToHome])
+}
+
+model BundleItem {
+  id        String         @id @default(uuid())
+  bundleId  String
+  bundle    Bundle         @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product        @relation(fields: [productId], references: [id])
+  /// Optional variant pin — null = use the product's default variant at
+  /// order time. Useful when a bundle specifies "the matcha flavour" of
+  /// a multi-flavour product.
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity  Int            @default(1)
+
+  @@unique([bundleId, productId, variantId])
+}
+
+/// Singleton (id = "default") of chain-wide customer-facing display
+/// preferences. Right now it carries one toggle — whether to show
+/// stock-remaining badges on the customer site — but it's designed to
+/// grow as we add other "should the storefront show X?" controls
+/// (review counts, recently viewed, etc.).
+///
+/// Merchant-editable static page content (FAQ, About …). One row per
+/// page, keyed by a stable string. `data` is free-form JSON whose shape
+/// depends on the key (FAQ = { items:[{q,a}] }, About = { intro, sections:
+/// [{heading,body}] }). The service falls back to a built-in default when a
+/// row is absent, so the customer always sees content.
+model SiteContent {
+  key       String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+/// Admin-controlled marketing programs. Singleton (id="default"). Each
+/// program ships DISABLED — admin flips it on and tweaks its config from
+/// the merchant "Chương trình Marketing" page. `*Config` JSON holds the
+/// per-program settings (shapes documented in the marketing module's
+/// defaults). Customer surfaces are hidden until the matching flag is true.
+model MarketingConfig {
+  id String @id @default("default")
+
+  referralEnabled     Boolean @default(false)
+  referralConfig      Json?
+  giftCardEnabled     Boolean @default(false)
+  giftCardConfig      Json?
+  subscriptionEnabled Boolean @default(false)
+  subscriptionConfig  Json?
+  cateringEnabled     Boolean @default(false)
+  cateringConfig      Json?
+  rewardsEnabled      Boolean @default(false)
+  rewardsConfig       Json?
+
+  updatedAt DateTime @updatedAt
+}
+
+/// Prepaid gift card / e-voucher. Admin issues one → a unique `code` is
+/// generated with a starting value; `balanceVnd` decrements as the customer
+/// redeems it across one or more orders at checkout.
+model GiftCard {
+  id         String    @id @default(uuid())
+  code       String    @unique
+  initialVnd Int
+  balanceVnd Int
+  expiresAt  DateTime?
+  isActive   Boolean   @default(true)
+  note       String?
+  issuedById String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([isActive])
+}
+
+/// Stock is intentionally OFF by default: the underlying `stockQty`
+/// lives on `ProductVariant` and is shared across every branch, so
+/// surfacing "Còn 3 cái" can mislead a customer in a different branch.
+/// Merchants flip the toggle on only when stock is genuinely scarce
+/// chain-wide (limited-edition releases, seasonal drops).
+model DisplayConfig {
+  id                     String   @id @default("default")
+  showStockToCustomers   Boolean  @default(false)
+
+  /// Contact widget — a floating "Liên hệ" FAB on the customer site
+  /// that surfaces these channels in a bottom sheet. Each field null →
+  /// that channel is hidden from the sheet. When every field is null
+  /// the FAB itself is hidden.
+  contactPhone        String?
+  contactZaloOaId     String?   // Zalo Official Account id → deep link `https://zalo.me/{id}`
+  contactMessengerId  String?   // FB page username → `https://m.me/{id}`
+  contactEmail        String?
+
+  updatedAt              DateTime @updatedAt
+}
+
+/// Heart / "Yêu thích" — saved products per customer.
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId, createdAt])
+}
+
+/// Marketing mailing list. Double opt-in flow:
+///   1. Customer submits email → row created with `confirmedAt = null`.
+///   2. Resend sends a verify email with `unsubscribeToken` link.
+///   3. Customer clicks link → `confirmedAt = now()`.
+///   4. Unsubscribe at any time via the same token in the email footer.
+///
+/// Phone-only is optional (we accept email-only for now). The
+/// `source` field tracks where the signup came from (footer / popup /
+/// checkout / merchant-bulk) so we can measure each channel.
+model NewsletterSubscriber {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  fullName         String?
+  source           String?
+  unsubscribeToken String    @unique @default(uuid())
+  subscribedAt     DateTime  @default(now())
+  confirmedAt      DateTime?
+  unsubscribedAt   DateTime?
+
+  @@index([confirmedAt])
+  @@index([subscribedAt])
 }

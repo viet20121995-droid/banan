@@ -1,38 +1,53 @@
 import 'package:flutter/material.dart';
 
-/// Brand palette — luxury patisserie. Soft pastel cream backdrop, deep cocoa
-/// for ink, rose primary, gold accent. All values picked for AA contrast on
-/// the cream surface (≥ 4.5:1 for body text).
+/// Brand palette — Banan Fukuoka Saigon. Refreshed to mirror the
+/// banana-leaf logo: forest-green primary (logo background), gold trim,
+/// crimson accent (logo segments) and a warm cream surface. The vibe is
+/// Vietnamese Tết-festive on a kissaten quietness — bold red+green
+/// accents over a cream canvas.
+///
+/// All foreground tones target AA contrast (≥ 4.5:1) on the cream
+/// surface for body text and on the green primary for inverse text.
 class BananColors {
   const BananColors._();
 
-  // Primary
-  static const Color primary = Color(0xFFC9405C);   // rose
-  static const Color primaryDark = Color(0xFF9F2D45);
-  static const Color primaryLight = Color(0xFFE6839A);
+  // ── Primary — deep forest green from the logo backdrop ────────────────
+  static const Color primary = Color(0xFF1E6A35);     // forest green
+  static const Color primaryDark = Color(0xFF15522A); // for hover / pressed
+  static const Color primaryLight = Color(0xFFB6D27A); // lime accent (leaf)
 
-  // Accent
-  static const Color gold = Color(0xFFC7A24A);
-  static const Color goldLight = Color(0xFFE6CB87);
+  // ── Accent — crimson red lifted from the logo's leaf segments.
+  // Used for hero CTAs, sale badges, festive highlights. Keep small-area —
+  // body text on red drops below 4.5:1 fast.
+  static const Color accent = Color(0xFFC12B36);
+  static const Color accentDark = Color(0xFF971F28);
+  static const Color accentLight = Color(0xFFE8C0C4);
 
-  // Neutrals — light theme
-  static const Color cream = Color(0xFFFAF6F1);     // app background
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceDim = Color(0xFFF3EDE5);
-  static const Color cocoa = Color(0xFF3B2A22);     // ink / headlines
-  static const Color cocoaSoft = Color(0xFF6B5A52);
-  static const Color outline = Color(0xFFE0D7CC);
+  // ── Gold — logo trim. Replaces the previous hojicha gold.
+  static const Color gold = Color(0xFFD4B14B);
+  static const Color goldLight = Color(0xFFEAD589);
 
-  // Neutrals — dark theme
-  static const Color darkBg = Color(0xFF1A130F);
-  static const Color darkSurface = Color(0xFF221814);
-  static const Color darkSurfaceDim = Color(0xFF2D2017);
-  static const Color darkInk = Color(0xFFF5EFE6);
-  static const Color darkInkSoft = Color(0xFFB8AB9C);
-  static const Color darkOutline = Color(0xFF3D2D24);
+  // ── Neutrals — warm cream backdrop. Slightly less peach than before so
+  // it harmonises with the green+red brand without fighting it.
+  static const Color cream = Color(0xFFF7EBC8);       // logo cream-segment tone
+  static const Color surface = Color(0xFFFCF6E2);     // page background
+  static const Color surfaceDim = Color(0xFFEEDFAE);  // kraft / dim surface
+  static const Color cocoa = Color(0xFF2B2A22);       // sumi ink — body text
+  static const Color cocoaSoft = Color(0xFF5E5848);   // secondary text
+  static const Color outline = Color(0xFFD8C794);     // tracks cream
 
-  // Semantic
-  static const Color success = Color(0xFF2E7D5B);
+  // ── Neutrals — dark theme
+  static const Color darkBg = Color(0xFF101810);
+  static const Color darkSurface = Color(0xFF182018);
+  static const Color darkSurfaceDim = Color(0xFF223024);
+  static const Color darkInk = Color(0xFFF1F2E9);
+  static const Color darkInkSoft = Color(0xFFAEB4A0);
+  static const Color darkOutline = Color(0xFF2E3A2E);
+
+  // ── Semantic — success stays in green family (slightly distinct from
+  // brand primary so badges read as state, not brand). Danger pulls from
+  // the same red lineage as `accent` for cohesion.
+  static const Color success = Color(0xFF2E8B57);
   static const Color warning = Color(0xFFD08A1F);
   static const Color danger = Color(0xFFB3261E);
   static const Color info = Color(0xFF3F6FB0);

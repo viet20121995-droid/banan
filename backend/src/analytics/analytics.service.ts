@@ -62,12 +62,14 @@ export class AnalyticsService {
     return '7d';
   }
 
-  async merchantSummary(storeId: string, range: RangeKey): Promise<MerchantSummary> {
+  async merchantSummary(storeId: string | null, range: RangeKey): Promise<MerchantSummary> {
     const { start, end } = this.window(range);
+    // Admin (no storeId) sees aggregated stats across every store.
+    const scope = storeId != null ? { storeId } : {};
 
     const [orders, items] = await this.prisma.$transaction([
       this.prisma.order.findMany({
-        where: { storeId, createdAt: { gte: start, lt: end } },
+        where: { ...scope, createdAt: { gte: start, lt: end } },
         select: {
           id: true,
           status: true,
@@ -77,7 +79,7 @@ export class AnalyticsService {
       }),
       this.prisma.orderItem.findMany({
         where: {
-          order: { storeId, createdAt: { gte: start, lt: end } },
+          order: { ...scope, createdAt: { gte: start, lt: end } },
         },
         select: {
           productId: true,

@@ -42,6 +42,7 @@ export class AuthService {
           passwordHash,
           fullName: dto.fullName,
           role: 'CUSTOMER',
+          birthday: dto.birthday ? new Date(dto.birthday) : null,
         },
       });
       return this.issueSession(user, deviceId);
@@ -108,6 +109,56 @@ export class AuthService {
       throw new UnauthorizedException({ code: 'AUTH_USER_NOT_FOUND' });
     }
     return user;
+  }
+
+  /** Self-service profile update. Only the supplied fields change; an empty
+   *  phone string clears it. Phone is unique — collisions surface as 409. */
+  async updateProfile(
+    userId: string,
+    dto: {
+      fullName?: string;
+      phone?: string;
+      birthday?: string;
+      avatarUrl?: string;
+    },
+  ): Promise<User> {
+    const data: Prisma.UserUpdateInput = {};
+    if (dto.fullName !== undefined) data.fullName = dto.fullName.trim();
+    if (dto.phone !== undefined) {
+      const p = dto.phone.trim();
+      data.phone = p.length === 0 ? null : p;
+    }
+    if (dto.birthday !== undefined) {
+      data.birthday = dto.birthday ? new Date(dto.birthday) : null;
+    }
+    if (dto.avatarUrl !== undefined) {
+      const a = dto.avatarUrl.trim();
+      data.avatarUrl = a.length === 0 ? null : a;
+    }
+    try {
+      return await this.prisma.user.update({ where: { id: userId }, data });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException({
+          code: 'AUTH_PHONE_TAKEN',
+          message: 'That phone number is already in use.',
+        });
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Public wrapper around `issueSession` — lets sibling services (e.g.
+   * OrdersService during guest checkout) issue tokens for a user without
+   * going through password auth. Use sparingly: the caller is the trust
+   * boundary.
+   */
+  async issueSessionForUser(user: User, deviceId?: string): Promise<IssuedTokens> {
+    return this.issueSession(user, deviceId);
   }
 
   private async issueSession(user: User, deviceId?: string): Promise<IssuedTokens> {

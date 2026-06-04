@@ -1,24 +1,21 @@
 /// Mirrors the backend `KitchenStatus` enum.
+///
+/// Simplified 3-stage workflow (M11 trim-down from the original 6-stage one):
+/// orders enter at [pendingAck] when the merchant transfers them, kitchen
+/// staff explicitly accept into [preparing], then mark them [readyDispatch]
+/// when finished. The kitchen UI shows a 4-column kanban with a virtual
+/// "Completed" column populated from today's dispatched orders.
 enum KitchenStatus {
+  pendingAck,
   preparing,
-  baking,
-  cooling,
-  decorating,
-  packed,
   readyDispatch;
 
   static KitchenStatus fromWire(String value) {
     switch (value) {
+      case 'PENDING_ACK':
+        return KitchenStatus.pendingAck;
       case 'PREPARING':
         return KitchenStatus.preparing;
-      case 'BAKING':
-        return KitchenStatus.baking;
-      case 'COOLING':
-        return KitchenStatus.cooling;
-      case 'DECORATING':
-        return KitchenStatus.decorating;
-      case 'PACKED':
-        return KitchenStatus.packed;
       case 'READY_DISPATCH':
         return KitchenStatus.readyDispatch;
       default:
@@ -28,16 +25,10 @@ enum KitchenStatus {
 
   String get wire {
     switch (this) {
+      case KitchenStatus.pendingAck:
+        return 'PENDING_ACK';
       case KitchenStatus.preparing:
         return 'PREPARING';
-      case KitchenStatus.baking:
-        return 'BAKING';
-      case KitchenStatus.cooling:
-        return 'COOLING';
-      case KitchenStatus.decorating:
-        return 'DECORATING';
-      case KitchenStatus.packed:
-        return 'PACKED';
       case KitchenStatus.readyDispatch:
         return 'READY_DISPATCH';
     }
@@ -45,46 +36,33 @@ enum KitchenStatus {
 
   String get label {
     switch (this) {
+      case KitchenStatus.pendingAck:
+        return 'Chờ nhận';
       case KitchenStatus.preparing:
-        return 'Preparing';
-      case KitchenStatus.baking:
-        return 'Baking';
-      case KitchenStatus.cooling:
-        return 'Cooling';
-      case KitchenStatus.decorating:
-        return 'Decorating';
-      case KitchenStatus.packed:
-        return 'Packed';
+        return 'Đang chuẩn bị';
       case KitchenStatus.readyDispatch:
-        return 'Ready to dispatch';
+        return 'Sẵn sàng giao';
     }
   }
 
   /// Forward state-machine successor — null on the terminal `readyDispatch`.
   KitchenStatus? get next {
     switch (this) {
+      case KitchenStatus.pendingAck:
+        return KitchenStatus.preparing;
       case KitchenStatus.preparing:
-        return KitchenStatus.baking;
-      case KitchenStatus.baking:
-        return KitchenStatus.cooling;
-      case KitchenStatus.cooling:
-        return KitchenStatus.decorating;
-      case KitchenStatus.decorating:
-        return KitchenStatus.packed;
-      case KitchenStatus.packed:
         return KitchenStatus.readyDispatch;
       case KitchenStatus.readyDispatch:
         return null;
     }
   }
 
-  /// Order in which columns appear on the kanban (left to right).
+  /// Order in which active-kitchen columns appear on the kanban (left to
+  /// right). The "Completed" column is rendered separately because it shows
+  /// orders that have left this kitchen.
   static const orderedColumns = [
+    KitchenStatus.pendingAck,
     KitchenStatus.preparing,
-    KitchenStatus.baking,
-    KitchenStatus.cooling,
-    KitchenStatus.decorating,
-    KitchenStatus.packed,
     KitchenStatus.readyDispatch,
   ];
 }

@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/shell/merchant_shell.dart';
+
 @immutable
 class MerchantMenuState {
   const MerchantMenuState({
@@ -65,8 +67,21 @@ class MerchantMenuController extends StateNotifier<MerchantMenuState> {
     await refresh();
   }
 
-  Future<bool> delete(String id) async {
+  /// Returns the delete outcome so the screen can show the right snackbar.
+  /// `null` = the call failed.
+  Future<DeleteProductResult?> delete(String id) async {
     final res = await _repo.deleteProduct(id);
+    return res.when(
+      success: (outcome) async {
+        await refresh();
+        return outcome;
+      },
+      failure: (_) => null,
+    );
+  }
+
+  Future<bool> restore(String id) async {
+    final res = await _repo.restoreProduct(id);
     return res.when(
       success: (_) async {
         await refresh();
@@ -95,33 +110,19 @@ class MerchantMenuListScreen extends ConsumerWidget {
       decimalDigits: 0,
     );
 
-    return AppScaffold(
-      appBar: AppBar(
-        title: const Text('Menu'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.receipt_long_outlined),
-            tooltip: 'Orders',
-            onPressed: () => context.go('/'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
-          ),
-        ],
-      ),
+    return MerchantShell(
+      title: 'Thực đơn',
+      onRefresh: controller.refresh,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/menu/new'),
         icon: const Icon(Icons.add),
-        label: const Text('New product'),
+        label: const Text('Sản phẩm mới'),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SearchField(
-            hint: 'Search your products',
+            hint: 'Tìm sản phẩm của bạn',
             onChanged: controller.setQuery,
           ),
           const SizedBox(height: BananSpacing.lg),
@@ -156,8 +157,8 @@ class _Body extends StatelessWidget {
     }
     if (state.products.isEmpty) {
       return const EmptyState(
-        title: 'No products yet',
-        message: 'Tap "New product" to add your first cake.',
+        title: 'Chưa có sản phẩm',
+        message: 'Chạm "Sản phẩm mới" để thêm chiếc bánh đầu tiên.',
         icon: Icons.cake_outlined,
       );
     }
@@ -174,6 +175,21 @@ class _Body extends StatelessWidget {
             fmt: fmt,
             onEdit: () => context.push('/menu/${p.id}'),
             onDelete: () => _confirmDelete(context, controller, p),
+            onRestore: () async {
+              final ok = await controller.restore(p.id);
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context)
+                ..removeCurrentSnackBar()
+                ..showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      ok
+                          ? 'Đã đưa "${p.name}" trở lại menu.'
+                          : 'Không khôi phục được — thử lại.',
+                    ),
+                  ),
+                );
+            },
           );
         },
       ),
@@ -188,29 +204,46 @@ class _Body extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Delete "${product.name}"?'),
+        title: Text('Xoá "${product.name}"?'),
         content: const Text(
-          'This product will be removed from the catalog. '
-          'Existing orders are unaffected.',
+          'Sản phẩm sẽ bị gỡ khỏi danh mục. '
+          'Đơn hàng đã có không bị ảnh hưởng.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Huỷ'),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: const Text('Xoá'),
           ),
         ],
       ),
     );
     if (confirm ?? false) {
-      final ok = await controller.delete(product.id);
+      final outcome = await controller.delete(product.id);
       if (!context.mounted) return;
-      if (!ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not delete — try again.')),
+      final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();
+      if (outcome == null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Không xoá được — thử lại.')),
+        );
+      } else if (outcome.deleted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Đã xoá "${product.name}".')),
+        );
+      } else {
+        // Archived because of past orders — explain so the merchant
+        // doesn't think the action failed.
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '"${product.name}" đã có đơn cũ — chuyển sang trạng thái '
+              'Đã ẩn, không bán nữa nhưng giữ lịch sử đơn.',
+            ),
+            duration: const Duration(seconds: 5),
+          ),
         );
       }
     }
@@ -223,12 +256,14 @@ class _Row extends StatelessWidget {
     required this.fmt,
     required this.onEdit,
     required this.onDelete,
+    required this.onRestore,
   });
 
   final Product product;
   final NumberFormat fmt;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onRestore;
 
   @override
   Widget build(BuildContext context) {
@@ -282,7 +317,7 @@ class _Row extends StatelessWidget {
                         const Padding(
                           padding: EdgeInsets.only(left: BananSpacing.sm),
                           child: Chip(
-                            label: Text('Hidden'),
+                            label: Text('Đã ẩn'),
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
@@ -291,9 +326,8 @@ class _Row extends StatelessWidget {
                   const SizedBox(height: BananSpacing.xs),
                   Text(
                     '${product.category?.name ?? "—"}  ·  '
-                    '${product.variants.length} variant'
-                    '${product.variants.length == 1 ? "" : "s"}  ·  '
-                    'from ${fmt.format(product.minPrice)}',
+                    '${product.variants.length} biến thể  ·  '
+                    'từ ${fmt.format(product.minPrice)}',
                     style: theme.textTheme.bodySmall,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -301,11 +335,18 @@ class _Row extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete',
-              onPressed: onDelete,
-            ),
+            if (product.isAvailable)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Xoá',
+                onPressed: onDelete,
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.restore_outlined),
+                tooltip: 'Khôi phục',
+                onPressed: onRestore,
+              ),
             const Icon(Icons.chevron_right),
           ],
         ),

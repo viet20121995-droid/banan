@@ -54,6 +54,7 @@ class AuthController extends StateNotifier<AuthFormState> {
     required String password,
     required String fullName,
     String? phone,
+    DateTime? birthday,
   }) async {
     state = state.copyWith(submitting: true, clearFailure: true);
     final result = await _repo.register(
@@ -61,6 +62,7 @@ class AuthController extends StateNotifier<AuthFormState> {
       password: password,
       fullName: fullName.trim(),
       phone: phone?.trim(),
+      birthday: birthday,
     );
     return result.when(
       success: (_) {

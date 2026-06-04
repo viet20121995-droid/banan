@@ -1,11 +1,11 @@
 {
-    "name": "banan_merchant",
-    "short_name": "banan_merchant",
+    "name": "Banan Merchant",
+    "short_name": "Banan Merchant",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FCF6E2",
+    "theme_color": "#1E6A35",
+    "description": "Banan merchant dashboard — orders, menu, customers, analytics.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -15,8 +15,14 @@ export class EnvelopeInterceptor implements NestInterceptor {
           return value;
         }
         if (value && typeof value === 'object' && 'meta' in value && 'items' in value) {
-          const { items, meta } = value as { items: unknown; meta: unknown };
-          return { data: items, meta };
+          // Preserve any extra top-level keys (e.g. `summary` from reviews
+          // listing) so callers can rely on them.
+          const { items, meta, ...rest } = value as {
+            items: unknown;
+            meta: unknown;
+            [k: string]: unknown;
+          };
+          return { data: items, meta, ...rest };
         }
         return { data: value };
       }),

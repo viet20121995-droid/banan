@@ -23,13 +23,13 @@
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="banan_customer">
+  <meta name="apple-mobile-web-app-title" content="Banan Fukuoka Saigon">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>banan_customer</title>
+  <title>Banan Fukuoka Saigon</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -41,6 +41,158 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <!-- PWA install: capture the browser's install prompt so the Flutter
+       app can trigger it from an in-app "Install" button. -->
+  <script>
+    window.__bananCanInstall = false;
+    window.__bananDeferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      window.__bananDeferredPrompt = e;
+      window.__bananCanInstall = true;
+    });
+    window.addEventListener('appinstalled', function () {
+      window.__bananCanInstall = false;
+      window.__bananDeferredPrompt = null;
+    });
+    window.__bananPromptInstall = function () {
+      var p = window.__bananDeferredPrompt;
+      if (!p) return;
+      p.prompt();
+      p.userChoice.finally(function () {
+        window.__bananDeferredPrompt = null;
+        window.__bananCanInstall = false;
+      });
+    };
+    // Persist the customer's language choice across reloads.
+    window.__bananGetLocale = function () {
+      try { return window.localStorage.getItem('banan.locale') || ''; }
+      catch (e) { return ''; }
+    };
+    window.__bananSetLocale = function (code) {
+      try { window.localStorage.setItem('banan.locale', code); }
+      catch (e) {}
+    };
+    // Generic localStorage bridge — used by the promo popup (and any
+    // future feature) to persist tiny key/value pairs across reloads.
+    window.__bananStorageGet = function (key) {
+      try { return window.localStorage.getItem(key) || ''; }
+      catch (e) { return ''; }
+    };
+    window.__bananStorageSet = function (key, value) {
+      try { window.localStorage.setItem(key, value); }
+      catch (e) {}
+    };
+  </script>
+  <script>
+    // Self-heal stale bundles: an offline-first service worker from an
+    // earlier build can keep serving an old app even after a rebuild.
+    // Unregister any SW and wipe its caches on every load so the latest
+    // build always shows after a normal refresh.
+    (function () {
+      function swUrl(r) {
+        var w = r.active || r.waiting || r.installing;
+        return (w && w.scriptURL) || '';
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations()
+          .then(function (regs) {
+            regs.forEach(function (r) {
+              // Keep the FCM push worker — unregistering it would break
+              // background web push. Only flush stale Flutter workers.
+              if (swUrl(r).indexOf('firebase-messaging-sw.js') === -1) {
+                r.unregister();
+              }
+            });
+          })
+          .catch(function () {});
+      }
+      if (window.caches && caches.keys) {
+        caches.keys()
+          .then(function (keys) {
+            keys.forEach(function (k) {
+              if (String(k).indexOf('firebase') === -1) caches.delete(k);
+            });
+          })
+          .catch(function () {});
+      }
+    })();
+  </script>
+  <!-- Firebase Cloud Messaging (web push). Public config — safe to embed.
+       Exposes window.__bananGetPushToken(): requests notification
+       permission, registers the SW, and returns an FCM token (or '' if
+       denied/unsupported, e.g. iOS Safari without "Add to Home Screen"). -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js"></script>
+  <script>
+    (function () {
+      var firebaseConfig = {
+        apiKey: "AIzaSyC5af81AJ4SNHl4dKRdsij2rBDsLP8ZjU8",
+        authDomain: "banan-f0229.firebaseapp.com",
+        projectId: "banan-f0229",
+        storageBucket: "banan-f0229.firebasestorage.app",
+        messagingSenderId: "1020298007280",
+        appId: "1:1020298007280:web:3ae7afd59fa074b43fe835",
+        measurementId: "G-V8FGQNH42X"
+      };
+      var VAPID_KEY = "BInU4dWosJ6Jk_V1Drl6rWlPyFRl005O8n_2FERWdFFWH4JgNGK2gRE8PytwX6kY5XuBxnfzVjXqoU9AiPCpG-E";
+      try { firebase.initializeApp(firebaseConfig); } catch (e) {}
+
+      // Audible chime (Web Audio), unlocked on first user interaction.
+      var __actx = null;
+      function __ensureCtx() {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!__actx && AC) __actx = new AC();
+        if (__actx && __actx.state === 'suspended') __actx.resume();
+        return __actx;
+      }
+      ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+        window.addEventListener(ev, __ensureCtx, { passive: true });
+      });
+      window.__bananChime = function () {
+        try {
+          var c = __ensureCtx(); if (!c) return;
+          [[880, 0.0, 0.2], [1175, 0.22, 0.28]].forEach(function (s) {
+            var o = c.createOscillator(), g = c.createGain();
+            o.type = 'sine'; o.frequency.value = s[0];
+            o.connect(g); g.connect(c.destination);
+            var t = c.currentTime + s[1];
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + s[2]);
+            o.start(t); o.stop(t + s[2] + 0.02);
+          });
+        } catch (e) {}
+      };
+      // Foreground push → chime (the open page already updates its UI).
+      try {
+        firebase.messaging().onMessage(function () {
+          if (window.__bananChime) window.__bananChime();
+        });
+      } catch (e) {}
+
+      window.__bananGetPushToken = async function () {
+        try {
+          if (!('serviceWorker' in navigator) || typeof firebase === 'undefined') return '';
+          if (firebase.messaging.isSupported && !firebase.messaging.isSupported()) return '';
+          if (!('Notification' in window)) return '';
+          var perm = Notification.permission;
+          if (perm === 'default') perm = await Notification.requestPermission();
+          if (perm !== 'granted') return '';
+          var reg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+          var messaging = firebase.messaging();
+          var token = await messaging.getToken({
+            vapidKey: VAPID_KEY,
+            serviceWorkerRegistration: reg
+          });
+          return token || '';
+        } catch (e) {
+          console.warn('[push] token error', e);
+          return '';
+        }
+      };
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

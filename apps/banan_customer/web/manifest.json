@@ -1,11 +1,11 @@
 {
-    "name": "banan_customer",
-    "short_name": "banan_customer",
+    "name": "Banan Fukuoka Saigon",
+    "short_name": "Banan",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FCF6E2",
+    "theme_color": "#1E6A35",
+    "description": "Order artisan cakes & puddings from Banan Fukuoka Saigon — pickup or delivery.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

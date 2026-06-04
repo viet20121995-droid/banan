@@ -1,4 +1,11 @@
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsDateString,
+  IsEmail,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -18,4 +25,9 @@ export class RegisterDto {
   @MinLength(1)
   @MaxLength(120)
   fullName!: string;
+
+  /// ISO date — used for birthday treat notifications.
+  @IsOptional()
+  @IsDateString()
+  birthday?: string;
 }

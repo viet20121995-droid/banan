@@ -57,11 +57,11 @@ class _PaymentReturnScreenState extends ConsumerState<PaymentReturnScreen> {
             ),
             const SizedBox(height: BananSpacing.md),
             Text(
-              ok ? 'Payment confirmed' : 'Payment incomplete',
+              ok ? 'Đã xác nhận thanh toán' : 'Thanh toán chưa hoàn tất',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: BananSpacing.sm),
-            const Text('Taking you to your order…'),
+            const Text('Đang chuyển sang đơn hàng của bạn…'),
           ],
         ),
       ),

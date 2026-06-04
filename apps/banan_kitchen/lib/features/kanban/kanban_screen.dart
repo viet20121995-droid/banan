@@ -8,6 +8,10 @@ import 'package:intl/intl.dart';
 
 import 'kanban_controller.dart';
 
+/// Simplified 4-column kanban: **Pending → Preparing → Ready → Completed**.
+/// The first three are the live kitchen workflow; "Completed" is a virtual
+/// column populated from today's dispatched orders so staff can see the
+/// running tally without leaving the board.
 class KanbanScreen extends ConsumerWidget {
   const KanbanScreen({super.key});
 
@@ -15,24 +19,25 @@ class KanbanScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(kanbanControllerProvider);
     final controller = ref.read(kanbanControllerProvider.notifier);
+    final s = ref.watch(stringsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Production board'),
+        title: Text(s.productionBoard),
         actions: [
           IconButton(
             icon: const Icon(Icons.bar_chart_outlined),
-            tooltip: 'Analytics',
+            tooltip: s.analytics,
             onPressed: () => context.push('/analytics'),
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: s.refresh,
             onPressed: controller.refresh,
           ),
           IconButton(
             icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
+            tooltip: s.signOut,
             onPressed: () =>
                 ref.read(authControllerProvider.notifier).logout(),
           ),
@@ -58,27 +63,186 @@ class _Board extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final byColumn = state.byColumn;
+    final byColumn = state.activeByColumn;
+    final completed = state.completedToday;
+
     return Padding(
       padding: const EdgeInsets.all(BananSpacing.lg),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final column in KitchenStatus.orderedColumns)
-              Padding(
-                padding: const EdgeInsets.only(right: BananSpacing.lg),
-                child: _Column(
-                  title: column.label,
-                  status: column,
-                  cards: byColumn[column] ?? const [],
-                  controller: controller,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _StatsBar(state: state),
+          const SizedBox(height: BananSpacing.lg),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Column(
+                    title: 'Pending',
+                    subtitle: 'Waiting for you to accept',
+                    accent: BananColors.warning,
+                    cards: byColumn[KitchenStatus.pendingAck] ?? const [],
+                    cardBuilder: (order) => _PendingCard(
+                      order: order,
+                      controller: controller,
+                    ),
+                  ),
+                  const SizedBox(width: BananSpacing.lg),
+                  _Column(
+                    title: 'Preparing',
+                    subtitle: 'In the oven',
+                    accent: BananColors.gold,
+                    cards: byColumn[KitchenStatus.preparing] ?? const [],
+                    cardBuilder: (order) => _PreparingCard(
+                      order: order,
+                      controller: controller,
+                    ),
+                  ),
+                  const SizedBox(width: BananSpacing.lg),
+                  _Column(
+                    title: 'Ready',
+                    subtitle: 'For pickup / delivery',
+                    accent: BananColors.success,
+                    cards: byColumn[KitchenStatus.readyDispatch] ?? const [],
+                    cardBuilder: (order) => _ReadyCard(
+                      order: order,
+                      controller: controller,
+                    ),
+                  ),
+                  const SizedBox(width: BananSpacing.lg),
+                  _Column(
+                    title: 'Completed today',
+                    subtitle: 'Dispatched from kitchen',
+                    accent: BananColors.cocoaSoft,
+                    cards: completed,
+                    cardBuilder: (order) => _CompletedCard(order: order),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsBar extends StatelessWidget {
+  const _StatsBar({required this.state});
+  final KanbanState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final byColumn = state.activeByColumn;
+    final pending = byColumn[KitchenStatus.pendingAck]?.length ?? 0;
+    final preparing = byColumn[KitchenStatus.preparing]?.length ?? 0;
+    final ready = byColumn[KitchenStatus.readyDispatch]?.length ?? 0;
+    final completed = state.completedToday.length;
+
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(BananSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rlg,
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+      ),
+      child: Row(
+        children: [
+          _Stat(
+            label: 'Pending',
+            value: pending.toString(),
+            icon: Icons.notifications_active_outlined,
+            color: BananColors.warning,
+            emphasize: pending > 0,
+          ),
+          _StatDivider(),
+          _Stat(
+            label: 'Preparing',
+            value: preparing.toString(),
+            icon: Icons.cake_outlined,
+            color: BananColors.gold,
+          ),
+          _StatDivider(),
+          _Stat(
+            label: 'Ready',
+            value: ready.toString(),
+            icon: Icons.local_shipping_outlined,
+            color: BananColors.success,
+            emphasize: ready > 0,
+          ),
+          _StatDivider(),
+          _Stat(
+            label: 'Done today',
+            value: completed.toString(),
+            icon: Icons.task_alt,
+            color: BananColors.cocoaSoft,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Expanded(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(BananSpacing.sm),
+            decoration: BoxDecoration(
+              borderRadius: BananRadii.rmd,
+              color: color.withValues(alpha: emphasize ? 0.18 : 0.10),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: BananSpacing.md),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: emphasize ? color : null,
                 ),
               ),
-          ],
-        ),
+              Text(label, style: theme.textTheme.bodySmall),
+            ],
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _StatDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 40,
+      margin: const EdgeInsets.symmetric(horizontal: BananSpacing.md),
+      color: Theme.of(context).dividerTheme.color ?? Colors.black12,
     );
   }
 }
@@ -86,21 +250,23 @@ class _Board extends StatelessWidget {
 class _Column extends StatelessWidget {
   const _Column({
     required this.title,
-    required this.status,
+    required this.subtitle,
+    required this.accent,
     required this.cards,
-    required this.controller,
+    required this.cardBuilder,
   });
 
   final String title;
-  final KitchenStatus status;
+  final String subtitle;
+  final Color accent;
   final List<Order> cards;
-  final KanbanController controller;
+  final Widget Function(Order) cardBuilder;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      width: 280,
+      width: 300,
       padding: const EdgeInsets.all(BananSpacing.md),
       decoration: BoxDecoration(
         borderRadius: BananRadii.rlg,
@@ -112,13 +278,17 @@ class _Column extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleSmall,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accent,
                 ),
+              ),
+              const SizedBox(width: BananSpacing.sm),
+              Expanded(
+                child: Text(title, style: theme.textTheme.titleSmall),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -127,16 +297,21 @@ class _Column extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   borderRadius: BananRadii.rPill,
-                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  color: accent.withValues(alpha: 0.15),
                 ),
                 child: Text(
                   '${cards.length}',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.primary,
+                    color: accent,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
             ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 16, top: 2),
+            child: Text(subtitle, style: theme.textTheme.bodySmall),
           ),
           const SizedBox(height: BananSpacing.md),
           if (cards.isEmpty)
@@ -152,11 +327,7 @@ class _Column extends StatelessWidget {
             for (final order in cards)
               Padding(
                 padding: const EdgeInsets.only(bottom: BananSpacing.sm),
-                child: _Card(
-                  order: order,
-                  status: status,
-                  controller: controller,
-                ),
+                child: cardBuilder(order),
               ),
         ],
       ),
@@ -164,16 +335,11 @@ class _Column extends StatelessWidget {
   }
 }
 
-class _Card extends StatelessWidget {
-  const _Card({
-    required this.order,
-    required this.status,
-    required this.controller,
-  });
-
+/// Shared frame used by all 4 card variants.
+class _CardFrame extends StatelessWidget {
+  const _CardFrame({required this.order, required this.child});
   final Order order;
-  final KitchenStatus status;
-  final KanbanController controller;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -181,27 +347,6 @@ class _Card extends StatelessWidget {
     final summary = order.items
         .map((i) => '${i.quantity}× ${i.productName}')
         .join('\n');
-    final next = status.next;
-
-    Future<void> handleAdvance() async {
-      final ok = await controller.advance(order.id, next!);
-      if (!context.mounted) return;
-      if (!ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not advance — try again.')),
-        );
-      }
-    }
-
-    Future<void> handleDispatch() async {
-      final ok = await controller.dispatch(order.id);
-      if (!context.mounted) return;
-      if (!ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not dispatch — try again.')),
-        );
-      }
-    }
 
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -231,23 +376,171 @@ class _Card extends StatelessWidget {
               ),
             ],
           ),
+          // Which branch sent this order. Kitchen needs this to know who to
+          // hand it back to after dispatch — and to spot-check before
+          // starting prep that the order is going to the right place.
+          if (order.storeName != null) ...[
+            const SizedBox(height: BananSpacing.xs),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: BananSpacing.sm,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BananRadii.rPill,
+                    color: BananColors.gold.withValues(alpha: 0.15),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.storefront_outlined,
+                        size: 12,
+                        color: BananColors.cocoa,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        order.storeName!,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: BananColors.cocoa,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: BananSpacing.xs),
+                Text(
+                  order.fulfillmentType == FulfillmentType.delivery
+                      ? 'delivery'
+                      : 'pickup',
+                  style: theme.textTheme.labelSmall,
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: BananSpacing.xs),
           Text(summary, style: theme.textTheme.bodySmall),
           const SizedBox(height: BananSpacing.sm),
-          if (status == KitchenStatus.readyDispatch)
-            FilledButton.icon(
-              onPressed: handleDispatch,
-              icon: const Icon(Icons.local_shipping_outlined, size: 16),
-              label: const Text('Dispatch'),
-            )
-          else if (next != null)
-            FilledButton.tonalIcon(
-              onPressed: handleAdvance,
-              icon: const Icon(Icons.arrow_forward, size: 16),
-              label: Text('Move to ${next.label}'),
-            ),
+          child,
         ],
       ),
     );
+  }
+}
+
+class _PendingCard extends StatelessWidget {
+  const _PendingCard({required this.order, required this.controller});
+  final Order order;
+  final KanbanController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CardFrame(
+      order: order,
+      child: FilledButton.icon(
+        onPressed: () async {
+          final ok = await controller.accept(order.id);
+          if (!context.mounted) return;
+          if (!ok) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Could not accept — try again.')),
+            );
+          }
+        },
+        icon: const Icon(Icons.play_arrow, size: 16),
+        label: const Text('Accept & start'),
+      ),
+    );
+  }
+}
+
+class _PreparingCard extends StatelessWidget {
+  const _PreparingCard({required this.order, required this.controller});
+  final Order order;
+  final KanbanController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CardFrame(
+      order: order,
+      child: FilledButton.tonalIcon(
+        onPressed: () async {
+          final ok = await controller.markReady(order.id);
+          if (!context.mounted) return;
+          if (!ok) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Could not update — try again.')),
+            );
+          }
+        },
+        icon: const Icon(Icons.check, size: 16),
+        label: const Text('Mark ready'),
+      ),
+    );
+  }
+}
+
+class _ReadyCard extends StatelessWidget {
+  const _ReadyCard({required this.order, required this.controller});
+  final Order order;
+  final KanbanController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CardFrame(
+      order: order,
+      child: FilledButton.icon(
+        onPressed: () async {
+          final ok = await controller.dispatch(order.id);
+          if (!context.mounted) return;
+          if (!ok) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Could not dispatch — try again.')),
+            );
+          }
+        },
+        icon: const Icon(Icons.local_shipping_outlined, size: 16),
+        label: const Text('Dispatch'),
+      ),
+    );
+  }
+}
+
+class _CompletedCard extends StatelessWidget {
+  const _CompletedCard({required this.order});
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CardFrame(
+      order: order,
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_outline,
+              size: 16, color: BananColors.success,),
+          const SizedBox(width: BananSpacing.xs),
+          Text(
+            _statusLabel(order.status),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _statusLabel(OrderStatus s) {
+    switch (s) {
+      case OrderStatus.readyForPickup:
+        return 'Ready for pickup';
+      case OrderStatus.delivering:
+        return 'Out for delivery';
+      case OrderStatus.completed:
+        return 'Completed';
+      default:
+        return s.label;
+    }
   }
 }

@@ -18,6 +18,13 @@ class ProductCard extends StatelessWidget {
     this.seasonal = false,
     this.unavailable = false,
     this.onTap,
+    this.onQuickAdd,
+    this.onToggleWishlist,
+    this.isWishlisted = false,
+    this.averageRating = 0,
+    this.reviewCount = 0,
+    this.stockRemaining,
+    this.soldOut = false,
     super.key,
   });
 
@@ -30,6 +37,30 @@ class ProductCard extends StatelessWidget {
   final bool seasonal;
   final bool unavailable;
   final VoidCallback? onTap;
+
+  /// Optional quick-add callback. When non-null, a small "+" floating
+  /// button appears at the bottom-right of the cover image — single tap
+  /// adds to cart without leaving the menu. Tap card body still opens
+  /// the product detail screen as before.
+  final VoidCallback? onQuickAdd;
+
+  /// Optional wishlist toggle. When non-null, a heart button appears at
+  /// the top-right of the cover. [isWishlisted] paints it filled.
+  final VoidCallback? onToggleWishlist;
+  final bool isWishlisted;
+
+  /// Star summary shown under the price. 0 / 0 hides the row entirely.
+  final double averageRating;
+  final int reviewCount;
+
+  /// When non-null AND ≤ 5, a "Còn N cái" badge is overlaid on the cover.
+  /// Higher counts are hidden — the urgency cue only fires near sell-out.
+  /// Pass null for UNLIMITED-only products to skip the indicator entirely.
+  final int? stockRemaining;
+
+  /// When true, a "Hết hàng" overlay covers the cover and the card looks
+  /// disabled — prevents accidental quick-adds.
+  final bool soldOut;
 
   @override
   Widget build(BuildContext context) {
@@ -72,19 +103,61 @@ class ProductCard extends StatelessWidget {
                           color: BananColors.gold,
                         ),
                       ),
-                    if (unavailable)
+                    if (unavailable || soldOut)
                       Positioned.fill(
                         child: ColoredBox(
                           color: Colors.black.withValues(alpha: 0.35),
-                          child: const Center(
+                          child: Center(
                             child: Text(
-                              'Unavailable',
-                              style: TextStyle(
+                              soldOut ? 'Hết hàng' : 'Tạm ngưng',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
+                        ),
+                      ),
+                    if (stockRemaining != null &&
+                        stockRemaining! > 0 &&
+                        stockRemaining! <= 5 &&
+                        !soldOut)
+                      Positioned(
+                        bottom: BananSpacing.sm,
+                        left: BananSpacing.sm,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: BananColors.accent.withValues(alpha: 0.95),
+                            borderRadius: BananRadii.rPill,
+                          ),
+                          child: Text(
+                            'Còn $stockRemaining',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (onQuickAdd != null && !unavailable)
+                      Positioned(
+                        bottom: BananSpacing.sm,
+                        right: BananSpacing.sm,
+                        child: _QuickAddButton(onTap: onQuickAdd!),
+                      ),
+                    if (onToggleWishlist != null)
+                      Positioned(
+                        top: BananSpacing.sm,
+                        right: BananSpacing.sm,
+                        child: _WishlistHeart(
+                          active: isWishlisted,
+                          onTap: onToggleWishlist!,
                         ),
                       ),
                   ],
@@ -127,11 +200,40 @@ class ProductCard extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: BananSpacing.sm),
-                    Text(
-                      priceLabel,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            priceLabel,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        if (reviewCount > 0) ...[
+                          const Icon(
+                            Icons.star_rounded,
+                            size: 14,
+                            color: BananColors.gold,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            averageRating.toStringAsFixed(1),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '($reviewCount)',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.outline,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -155,7 +257,7 @@ class _Cover extends StatelessWidget {
         color: BananColors.surfaceDim,
         alignment: Alignment.center,
         child: const Icon(
-          Icons.cake_outlined,
+          Icons.bakery_dining_rounded,
           size: 48,
           color: BananColors.cocoaSoft,
         ),
@@ -168,7 +270,7 @@ class _Cover extends StatelessWidget {
         color: BananColors.surfaceDim,
         alignment: Alignment.center,
         child: const Icon(
-          Icons.broken_image_outlined,
+          Icons.image_not_supported_rounded,
           size: 32,
           color: BananColors.cocoaSoft,
         ),
@@ -208,6 +310,68 @@ class _MiniTag extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact circular "+" overlay shown on the product cover. Tap adds the
+/// product to the cart without navigating away — the parent decides
+/// whether that opens a variant sheet first or skips straight to add.
+class _QuickAddButton extends StatelessWidget {
+  const _QuickAddButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.primary,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: const SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(
+            Icons.add,
+            size: 22,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Heart toggle painted in the top-right of the cover.
+///   - active=false → outlined heart on a translucent white pill
+///   - active=true  → filled red heart on the same pill
+class _WishlistHeart extends StatelessWidget {
+  const _WishlistHeart({required this.active, required this.onTap});
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.92),
+      shape: const CircleBorder(),
+      elevation: 1,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: Icon(
+            active ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+            size: 18,
+            color: active ? Colors.redAccent : BananColors.cocoaSoft,
+          ),
         ),
       ),
     );

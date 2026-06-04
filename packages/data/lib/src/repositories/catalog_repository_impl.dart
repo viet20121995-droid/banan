@@ -48,6 +48,15 @@ class CatalogRepositoryImpl implements CatalogRepository {
   }
 
   @override
+  Future<Result<List<Product>, AppFailure>> recommendations(
+    String productId, {
+    int limit = 8,
+  }) async {
+    final res = await _api.recommendations(productId, limit: limit);
+    return res.map((list) => list.map((d) => d.toDomain()).toList());
+  }
+
+  @override
   Future<Result<ProductPage, AppFailure>> merchantProducts({
     String? q,
     int page = 1,
@@ -85,8 +94,17 @@ class CatalogRepositoryImpl implements CatalogRepository {
   }
 
   @override
-  Future<Result<void, AppFailure>> deleteProduct(String id) {
-    return _api.deleteProduct(id);
+  Future<Result<DeleteProductResult, AppFailure>> deleteProduct(String id) async {
+    final res = await _api.deleteProduct(id);
+    return res.map(
+      (o) => DeleteProductResult(deleted: o.deleted, archived: o.archived),
+    );
+  }
+
+  @override
+  Future<Result<Product, AppFailure>> restoreProduct(String id) async {
+    final res = await _api.restoreProduct(id);
+    return res.map((d) => d.toDomain());
   }
 
   @override
@@ -128,6 +146,11 @@ class CatalogRepositoryImpl implements CatalogRepository {
         'seasonStart': d.seasonStart!.toUtc().toIso8601String(),
       if (d.seasonEnd != null)
         'seasonEnd': d.seasonEnd!.toUtc().toIso8601String(),
+      // Availability rules. Sending an empty array is meaningful — it
+      // explicitly clears any previous restriction.
+      'leadTimeHours': d.leadTimeHours,
+      'availableDaysOfWeek': d.availableDaysOfWeek,
+      'dailyMaxQuantity': d.dailyMaxQuantity,
       'variants': d.variants
           .map(
             (v) => {

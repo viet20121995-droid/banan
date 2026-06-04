@@ -2,6 +2,7 @@ import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../i18n/app_strings.dart';
 import 'auth_controller.dart';
 import 'auth_failure_message.dart';
 
@@ -51,6 +52,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
 
     return AppScaffold(
       body: Center(
@@ -68,7 +70,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: BananSpacing.xxl),
                 AppTextField(
                   controller: _email,
-                  label: 'Email or phone',
+                  label: s.emailOrPhone,
                   prefixIcon: Icons.alternate_email,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
@@ -77,7 +79,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: BananSpacing.md),
                 AppTextField(
                   controller: _password,
-                  label: 'Password',
+                  label: s.password,
                   prefixIcon: Icons.lock_outline,
                   obscureText: _obscure,
                   textInputAction: TextInputAction.done,
@@ -115,7 +117,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
                 const SizedBox(height: BananSpacing.xl),
                 PrimaryButton(
-                  label: 'Sign in',
+                  label: s.signIn,
                   loading: state.submitting,
                   expand: true,
                   onPressed: _submit,
@@ -124,7 +126,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: BananSpacing.md),
                   TextButton(
                     onPressed: state.submitting ? null : widget.onRegisterTapped,
-                    child: const Text("Don't have an account? Create one"),
+                    child: Text(s.noAccount),
                   ),
                 ],
               ],

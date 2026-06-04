@@ -4,6 +4,8 @@ import 'package:banan_domain/banan_domain.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'alert_sound.dart';
+
 @immutable
 class KanbanState {
   const KanbanState({
@@ -12,21 +14,30 @@ class KanbanState {
     this.failure,
   });
 
+  /// Both active-in-kitchen orders AND today's dispatched orders mixed in.
+  /// Use [activeByColumn] for the 3 kitchen-owned columns and [completedToday]
+  /// for the "Completed" column.
   final List<Order> orders;
   final bool loading;
   final AppFailure? failure;
 
-  /// Group orders by their current `kitchenStatus` for column rendering.
-  Map<KitchenStatus, List<Order>> get byColumn {
+  /// Group active kitchen orders by their `kitchenStatus`.
+  Map<KitchenStatus, List<Order>> get activeByColumn {
     final map = <KitchenStatus, List<Order>>{
       for (final c in KitchenStatus.orderedColumns) c: [],
     };
     for (final o in orders) {
+      if (o.status != OrderStatus.sentToKitchen) continue;
       final s = o.kitchenStatus;
-      if (s != null) map[s]!.add(o);
+      if (s != null && map.containsKey(s)) map[s]!.add(o);
     }
     return map;
   }
+
+  /// Orders this kitchen dispatched today — no longer SENT_TO_KITCHEN.
+  List<Order> get completedToday => orders
+      .where((o) => o.status != OrderStatus.sentToKitchen)
+      .toList();
 
   KanbanState copyWith({
     List<Order>? orders,
@@ -51,13 +62,21 @@ class KanbanController extends StateNotifier<KanbanState> {
 
   Future<void> refresh() async {
     state = state.copyWith(loading: true, failure: null);
-    final res = await _repo.kitchenQueue();
+    final res = await _repo.kitchenQueue(includeDoneToday: true);
     res.when(
       success: (list) =>
           state = state.copyWith(orders: list, loading: false),
       failure: (f) => state = state.copyWith(loading: false, failure: f),
     );
   }
+
+  /// Accept an incoming order (PENDING_ACK → PREPARING).
+  Future<bool> accept(String orderId) =>
+      advance(orderId, KitchenStatus.preparing);
+
+  /// Mark order as ready for dispatch (PREPARING → READY_DISPATCH).
+  Future<bool> markReady(String orderId) =>
+      advance(orderId, KitchenStatus.readyDispatch);
 
   Future<bool> advance(String orderId, KitchenStatus next) async {
     final res = await _repo.transitionKitchen(orderId, next);
@@ -89,6 +108,10 @@ final kanbanControllerProvider =
     next.whenData((event) {
       if (event.event == 'order.status_changed' ||
           event.event == 'order.kitchen_status_changed') {
+        // A fresh order just landed in this kitchen → audible chime.
+        if (event.data['toStatus'] == 'SENT_TO_KITCHEN') {
+          playNewTicketChime();
+        }
         controller.refresh();
       }
     });

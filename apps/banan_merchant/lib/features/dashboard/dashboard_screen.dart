@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/shell/merchant_shell.dart';
+
 final _summaryProvider = FutureProvider.autoDispose
     .family<MerchantSummary, String>((ref, range) async {
   final res = await ref.watch(analyticsApiProvider).merchantSummary(range: range);
@@ -31,28 +33,9 @@ class _MerchantDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final summaryAsync = ref.watch(_summaryProvider(_range));
-    return AppScaffold(
-      appBar: AppBar(
-        title: const Text('Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.receipt_long_outlined),
-            tooltip: 'Orders',
-            onPressed: () => context.go('/'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.menu_book_outlined),
-            tooltip: 'Menu',
-            onPressed: () => context.go('/menu'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
-          ),
-        ],
-      ),
+    return MerchantShell(
+      title: 'Bảng điều khiển',
+      onRefresh: () async => ref.invalidate(_summaryProvider(_range)),
       body: summaryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorState(
@@ -101,9 +84,9 @@ class _Body extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: BananSpacing.lg),
           child: SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: '24h', label: Text('24h')),
-              ButtonSegment(value: '7d', label: Text('7 days')),
-              ButtonSegment(value: '30d', label: Text('30 days')),
+              ButtonSegment(value: '24h', label: Text('24 giờ')),
+              ButtonSegment(value: '7d', label: Text('7 ngày')),
+              ButtonSegment(value: '30d', label: Text('30 ngày')),
             ],
             selected: {range},
             onSelectionChanged: (s) => onRange(s.first),
@@ -121,19 +104,19 @@ class _Body extends StatelessWidget {
               childAspectRatio: 1.7,
               children: [
                 StatCard(
-                  label: 'Revenue',
+                  label: 'Doanh thu',
                   value: fmt.format(revenue),
                   icon: Icons.payments_outlined,
                   intent: StatIntent.success,
-                  hint: '$completed completed orders',
+                  hint: '$completed đơn hoàn thành',
                 ),
                 StatCard(
-                  label: 'Orders',
+                  label: 'Đơn hàng',
                   value: '$orders',
                   icon: Icons.receipt_long_outlined,
                 ),
                 StatCard(
-                  label: 'Refund rate',
+                  label: 'Tỉ lệ hoàn tiền',
                   value: '${(refundRate * 100).toStringAsFixed(1)}%',
                   icon: Icons.refresh,
                   intent: refundRate > 0.1
@@ -141,7 +124,7 @@ class _Body extends StatelessWidget {
                       : StatIntent.neutral,
                 ),
                 StatCard(
-                  label: 'Avg order value',
+                  label: 'Giá trị đơn TB',
                   value: fmt.format(aov),
                   icon: Icons.trending_up,
                 ),
@@ -151,7 +134,7 @@ class _Body extends StatelessWidget {
         ),
         const SizedBox(height: BananSpacing.xl),
         _Section(
-          title: 'Revenue',
+          title: 'Doanh thu',
           child: SizedBox(
             height: 220,
             child: _RevenueChart(daily: summary.daily, fmt: fmt),
@@ -159,12 +142,12 @@ class _Body extends StatelessWidget {
         ),
         const SizedBox(height: BananSpacing.xl),
         _Section(
-          title: 'Best sellers',
+          title: 'Bán chạy nhất',
           child: _BestSellersList(items: summary.bestSellers, fmt: fmt),
         ),
         const SizedBox(height: BananSpacing.xl),
         _Section(
-          title: 'Peak hours',
+          title: 'Khung giờ cao điểm',
           child: SizedBox(
             height: 180,
             child: _PeakHoursChart(hours: summary.peakHours),
@@ -341,7 +324,7 @@ class _BestSellersList extends StatelessWidget {
     if (items.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: BananSpacing.lg),
-        child: Text('No completed orders in this range yet.'),
+        child: Text('Chưa có đơn hoàn thành trong khoảng thời gian này.'),
       );
     }
     final theme = Theme.of(context);
@@ -374,7 +357,7 @@ class _BestSellersList extends StatelessWidget {
                         style: theme.textTheme.titleSmall,
                       ),
                       Text(
-                        '${items[i]['unitsSold']} sold · ${fmt.format(items[i]['revenue'])}',
+                        '${items[i]['unitsSold']} đã bán · ${fmt.format(items[i]['revenue'])}',
                         style: theme.textTheme.bodySmall,
                       ),
                     ],

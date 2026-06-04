@@ -19,12 +19,17 @@ class AuthApi {
     required String password,
     required String fullName,
     String? phone,
+    DateTime? birthday,
   }) async {
     return _post('/auth/register', {
       'email': email,
       'password': password,
       'fullName': fullName,
       if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (birthday != null)
+        'birthday':
+            DateTime.utc(birthday.year, birthday.month, birthday.day)
+                .toIso8601String(),
     });
   }
 
@@ -62,6 +67,44 @@ class AuthApi {
   Future<Result<UserDto, AppFailure>> me() async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/auth/me');
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      final userJson = data?['user'] as Map<String, dynamic>?;
+      if (res.statusCode != 200 || userJson == null) {
+        return Result.failure(mapHttpStatusToFailure(res));
+      }
+      return Result.success(UserDto.fromJson(userJson));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  /// Self-service profile update. Sends only the fields the caller wants to
+  /// change; returns the refreshed user.
+  Future<Result<UserDto, AppFailure>> updateProfile({
+    String? fullName,
+    String? phone,
+    DateTime? birthday,
+    bool clearBirthday = false,
+    String? avatarUrl,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        if (fullName != null) 'fullName': fullName,
+        if (phone != null) 'phone': phone,
+        if (clearBirthday)
+          'birthday': null
+        else if (birthday != null)
+          'birthday':
+              DateTime.utc(birthday.year, birthday.month, birthday.day)
+                  .toIso8601String(),
+        if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      };
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/auth/me',
+        data: body,
+      );
       final data = res.data?['data'] as Map<String, dynamic>?;
       final userJson = data?['user'] as Map<String, dynamic>?;
       if (res.statusCode != 200 || userJson == null) {

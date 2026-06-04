@@ -3,11 +3,12 @@ import 'package:flutter/widgets.dart';
 class BananRadii {
   const BananRadii._();
 
-  static const double xs = 4;
-  static const double sm = 8;
-  static const double md = 12;
-  static const double lg = 16;
-  static const double xl = 24;
+  // Softer, pillowy corners for a calm kissaten feel.
+  static const double xs = 6;
+  static const double sm = 12;
+  static const double md = 16;
+  static const double lg = 22;
+  static const double xl = 30;
   static const double pill = 999;
 
   static const BorderRadius rxs = BorderRadius.all(Radius.circular(xs));

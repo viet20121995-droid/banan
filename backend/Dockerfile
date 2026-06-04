@@ -22,10 +22,8 @@ COPY . .
 
 RUN pnpm prisma:generate
 RUN pnpm build
-
-# Strip dev dependencies for a smaller runtime image.
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts && \
-    pnpm prisma:generate
+# (Skipping the prod-prune — keeps the prisma CLI available for runtime
+#  `migrate deploy`. Image ends up ~250 MB instead of ~150 MB; fine for now.)
 
 # ─── Stage 3: minimal runtime ─────────────────────────────────────────────
 FROM node:20-alpine AS runner
@@ -54,4 +52,4 @@ EXPOSE 3000
 # tini = proper signal handling so the container shuts down cleanly.
 # Migrations run on every boot; they're no-ops once applied (idempotent).
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]

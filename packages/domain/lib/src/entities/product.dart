@@ -23,6 +23,14 @@ class Product extends Equatable {
     this.isSeasonal = false,
     this.seasonStart,
     this.seasonEnd,
+    this.leadTimeHours,
+    this.availableDaysOfWeek = const [],
+    this.dailyMaxQuantity,
+    this.averageRating = 0,
+    this.reviewCount = 0,
+    this.isBirthdayCake = false,
+    this.flavorPickCount,
+    this.flavorOptions = const [],
   });
 
   final String id;
@@ -42,6 +50,74 @@ class Product extends Equatable {
   final bool isSeasonal;
   final DateTime? seasonStart;
   final DateTime? seasonEnd;
+
+  /// Minimum advance notice (hours) the merchant requires for this product.
+  /// Null = use the store-wide default.
+  final int? leadTimeHours;
+
+  /// Days of week (0=Sun..6=Sat, matches JS Date.getDay()) when this product
+  /// is sold. Empty = every day. Used for things like "Trà chiều chỉ T2-T6".
+  final List<int> availableDaysOfWeek;
+
+  /// Hard daily quantity cap. Null = unlimited.
+  final int? dailyMaxQuantity;
+
+  /// Average star rating across all PUBLISHED reviews (0..5). 0 means no
+  /// reviews yet (use [reviewCount] == 0 to distinguish from "rated 0").
+  final double averageRating;
+  final int reviewCount;
+
+  /// True when the product belongs to the chain's birthday-cake
+  /// collection (slug matches `DeliveryConfig.birthdayCakeCollectionSlug`
+  /// on the backend). Drives the cake personalization wizard on the
+  /// customer product detail.
+  final bool isBirthdayCake;
+
+  /// Macaron-set composer. When non-null, the customer must pick exactly
+  /// this many flavours from [flavorOptions] (repeats allowed) before
+  /// adding to cart. Null = ordinary product (no composer).
+  final int? flavorPickCount;
+  final List<String> flavorOptions;
+
+  bool get hasFlavorComposer =>
+      flavorPickCount != null &&
+      flavorPickCount! > 0 &&
+      flavorOptions.isNotEmpty;
+
+  /// Sum of remaining stock across every LIMITED variant. `null` when
+  /// every variant is UNLIMITED — the UI then knows to hide the indicator
+  /// instead of showing "Còn 0" by mistake.
+  int? get totalLimitedStock {
+    int sum = 0;
+    var anyLimited = false;
+    for (final v in variants) {
+      if (v.stockMode == StockMode.limited) {
+        anyLimited = true;
+        sum += v.stockQty ?? 0;
+      }
+    }
+    return anyLimited ? sum : null;
+  }
+
+  /// True when any LIMITED variant is at or below 5 units — drives the
+  /// "Còn N cái cuối" urgency badge.
+  bool get isLowStock {
+    final qty = totalLimitedStock;
+    return qty != null && qty > 0 && qty <= 5;
+  }
+
+  /// True when every LIMITED variant is sold out (or there are no
+  /// UNLIMITED variants left to fall back to).
+  bool get isSoldOut {
+    if (variants.isEmpty) return false;
+    final unlimited = variants.any(
+      (v) => v.stockMode == StockMode.unlimited && v.isAvailable,
+    );
+    if (unlimited) return false;
+    return variants
+        .where((v) => v.isAvailable)
+        .every((v) => v.stockMode == StockMode.limited && (v.stockQty ?? 0) <= 0);
+  }
 
   String? get coverImage => images.isEmpty ? null : images.first;
 
@@ -83,6 +159,14 @@ class Product extends Equatable {
         isSeasonal,
         seasonStart,
         seasonEnd,
+        leadTimeHours,
+        availableDaysOfWeek,
+        dailyMaxQuantity,
+        averageRating,
+        reviewCount,
+        isBirthdayCake,
+        flavorPickCount,
+        flavorOptions,
       ];
 }
 

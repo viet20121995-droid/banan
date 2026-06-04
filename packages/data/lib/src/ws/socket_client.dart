@@ -18,29 +18,34 @@ const _kEvents = [
   'kitchen.batch_updated',
   'payment.updated',
   'notification.new',
+  // Realtime catalog sync (M11): merchant writes broadcast these to the
+  // `public` room so every client refetches without a manual refresh.
+  'catalog.changed',
+  'config.changed',
 ];
 
-/// Single Socket.IO connection per authenticated session. JWT is presented
-/// via handshake auth; the gateway joins the relevant rooms on connect.
+/// Single Socket.IO connection. When [accessToken] is null the client
+/// connects anonymously (guest) — the gateway still joins it to the `public`
+/// room so it receives catalog/config broadcasts. With a token, the gateway
+/// also joins the user's role-specific rooms.
 class SocketClient {
   SocketClient._(this._socket, this._controller);
 
   factory SocketClient.connect({
     required String url,
-    required String accessToken,
+    String? accessToken,
   }) {
     final controller = StreamController<RealtimeEvent>.broadcast();
-    final socket = io.io(
-      url,
-      io.OptionBuilder()
-          .setTransports(const ['websocket'])
-          .setAuth({'token': accessToken})
-          .enableForceNew()
-          .enableReconnection()
-          .setReconnectionDelay(1000)
-          .setReconnectionDelayMax(5000)
-          .build(),
-    );
+    final builder = io.OptionBuilder()
+        .setTransports(const ['websocket'])
+        .enableForceNew()
+        .enableReconnection()
+        .setReconnectionDelay(1000)
+        .setReconnectionDelayMax(5000);
+    if (accessToken != null && accessToken.isNotEmpty) {
+      builder.setAuth({'token': accessToken});
+    }
+    final socket = io.io(url, builder.build());
 
     for (final name in _kEvents) {
       socket.on(name, (data) {

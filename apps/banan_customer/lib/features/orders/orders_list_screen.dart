@@ -1,11 +1,13 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../cart/cart_controller.dart';
 import 'order_status_visuals.dart';
 
 final myOrdersProvider = FutureProvider.autoDispose<List<Order>>((ref) async {
@@ -34,6 +36,7 @@ class OrdersListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ordersAsync = ref.watch(myOrdersProvider);
+    final s = ref.watch(stringsProvider);
     final fmt = NumberFormat.currency(
       locale: 'vi_VN',
       symbol: '₫',
@@ -41,7 +44,7 @@ class OrdersListScreen extends ConsumerWidget {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My orders')),
+      appBar: AppBar(title: Text(s.myOrders)),
       body: ordersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorState(
@@ -50,9 +53,9 @@ class OrdersListScreen extends ConsumerWidget {
         ),
         data: (orders) {
           if (orders.isEmpty) {
-            return const EmptyState(
-              title: 'No orders yet',
-              message: 'Your cake adventures will appear here.',
+            return EmptyState(
+              title: s.noOrdersTitle,
+              message: s.noOrdersMsg,
               icon: Icons.receipt_long_outlined,
             );
           }
@@ -79,7 +82,7 @@ class OrdersListScreen extends ConsumerWidget {
   }
 }
 
-class _OrderRow extends StatelessWidget {
+class _OrderRow extends ConsumerWidget {
   const _OrderRow({
     required this.order,
     required this.fmt,
@@ -90,9 +93,39 @@ class _OrderRow extends StatelessWidget {
   final NumberFormat fmt;
   final VoidCallback onTap;
 
+  void _reorder(BuildContext context, WidgetRef ref, Order order) {
+    final added = ref.read(cartControllerProvider.notifier).reorder(
+          items: [
+            for (final i in order.items)
+              (
+                productId: i.productId,
+                variantId: i.variantId,
+                productName: i.productName,
+                variantLabel: i.variantLabel,
+                unitPrice: i.unitPrice,
+                quantity: i.quantity,
+                customMessage: i.customMessage,
+                personalization: i.personalization,
+              ),
+          ],
+        );
+    // Snackbar would otherwise linger across the navigation push and
+    // overlap the cart's bottom bar. Clear pending then go.
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Đã thêm $added món vào giỏ hàng.'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    context.push('/cart');
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return InkWell(
       onTap: onTap,
       borderRadius: BananRadii.rlg,
@@ -126,10 +159,28 @@ class _OrderRow extends StatelessWidget {
                 ],
               ),
             ),
-            StatusBadge(
-              label: order.status.label,
-              intent: intentForStatus(order.status),
-              dense: true,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                StatusBadge(
+                  label: s.orderStatusLabel(order.status),
+                  intent: intentForStatus(order.status),
+                  dense: true,
+                ),
+                const SizedBox(height: 4),
+                // One-tap reorder — adds items to cart + jumps to /cart
+                // without leaving the list.
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: const Icon(Icons.refresh, size: 14),
+                  label: const Text('Đặt lại', style: TextStyle(fontSize: 12)),
+                  onPressed: () => _reorder(context, ref, order),
+                ),
+              ],
             ),
             const SizedBox(width: BananSpacing.sm),
             const Icon(Icons.chevron_right),

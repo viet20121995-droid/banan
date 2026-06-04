@@ -95,6 +95,83 @@ A realistic build order. Each milestone is a *vertical slice* — DB → API →
 - [ ] Localization: full vi_VN pass.
 - [ ] App Store / Play Store / web hosting pipelines.
 
+## M11 — Mobile release prep: realtime catalog sync (2–3 days)
+
+**Trigger:** before publishing the customer mobile app to App Store / Play Store.
+
+**Why:** today the merchant changes products / phí ship / popup and the
+customer only sees it on next pull-to-refresh. With mobile users in the
+wild (vs. a handful of web testers) we need every change to land on every
+connected client *immediately*, both web and mobile, without a manual
+refresh.
+
+The web + mobile customer apps share the same Flutter codebase
+(`apps/banan_customer`) and the same `SocketClient` — so adding the
+broadcast on the backend automatically reaches both platforms.
+
+### Backend — add a `public` room + broadcast events
+
+1. In `RealtimeGateway.handleConnection`, after the user-specific joins:
+   ```ts
+   await client.join('public');   // every connected client, customer or merchant
+   ```
+2. Emit on every merchant write that affects what customers see:
+
+   | Event                         | Bắn từ service                        | Payload                |
+   |-------------------------------|---------------------------------------|------------------------|
+   | `product.updated`             | `products.service` (create/update/delete) | `{ id, storeId }`  |
+   | `category.updated`            | `categories.service`                  | `{ id }`               |
+   | `store.updated`               | `stores.service` (pause / hours / blackout) | `{ id }`         |
+   | `delivery_config.updated`     | `geo/delivery-config.service`         | `{}` (singleton)       |
+   | `promo_popup.updated`         | `promo-popup.service`                 | `{ version }`          |
+
+   Pattern:
+   ```ts
+   this.realtime.emit(['public'], 'product.updated', { id, storeId });
+   ```
+
+### Frontend — listen and invalidate
+
+1. Extend `_kEvents` in `packages/data/lib/src/ws/socket_client.dart` with
+   the 5 event names above.
+2. In customer app root (or per-feature controllers), listen and invalidate
+   the matching Riverpod providers:
+   ```dart
+   ref.listen<AsyncValue<RealtimeEvent>>(realtimeEventsProvider, (_, next) {
+     next.whenData((e) {
+       switch (e.event) {
+         case 'product.updated':         ref.invalidate(productsProvider); break;
+         case 'delivery_config.updated': ref.invalidate(deliveryQuoteProvider); break;
+         case 'promo_popup.updated':     ref.invalidate(promoPopupProvider); break;
+         // …
+       }
+     });
+   });
+   ```
+
+### Mobile-specific add-ons (do at the same time)
+
+- **FCM push notifications** — socket only ticks while app is foreground.
+  For "đơn của bạn đang giao" / "khuyến mãi mới" while the app is
+  backgrounded, ship M8 (push) alongside this milestone.
+- **API URL from build flag**, not hardcoded localhost:
+  ```bash
+  flutter build apk --dart-define=API_URL=https://api.banan.com
+  ```
+- **Connection resume on app resume** — when the app comes back to
+  foreground on mobile, force a `socket.connect()` and invalidate all
+  catalog providers once, so we never show stale data after a long sleep.
+
+### Scaling note
+
+The gateway today is single-instance and uses in-memory rooms. Before
+running >1 backend pod, swap in the Redis adapter
+(`@socket.io/redis-adapter`) so broadcasts fan out across all instances.
+Not needed for launch, but cheap to add when scaling.
+
+**Exit:** Merchant flips pause on a cake → both the open web tab and the
+mobile app on the desk hide it within a second, no refresh.
+
 ## What I'd build first (recommendation)
 
 Once you confirm the foundation, I'd start with **M0 + M1** in one go: scaffold all three Flutter apps, backend, Prisma migration, design-system tokens, and the full auth slice. That gives us a real, runnable system to extend feature-by-feature.

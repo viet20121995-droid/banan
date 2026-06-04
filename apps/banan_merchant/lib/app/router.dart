@@ -3,14 +3,33 @@ import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/admin_mgmt/accounts_screen.dart';
+import '../features/admin_mgmt/delivery_config_screen.dart';
+import '../features/admin_mgmt/display_config_screen.dart';
+import '../features/admin_mgmt/promo_popup_screen.dart';
+import '../features/banners_mgmt/banners_screen.dart';
+import '../features/broadcast_mgmt/broadcast_screen.dart';
+import '../features/bulk_tools/bulk_tools_screen.dart';
+import '../features/bundles_mgmt/bundle_editor_screen.dart';
+import '../features/bundles_mgmt/bundles_list_screen.dart';
 import '../features/collections_mgmt/collection_editor_screen.dart';
+import '../features/content_mgmt/site_content_editor_screen.dart';
+import '../features/marketing_mgmt/marketing_screen.dart';
+import '../features/gift_cards_mgmt/gift_cards_screen.dart';
 import '../features/collections_mgmt/collections_list_screen.dart';
+import '../features/coupons_mgmt/coupons_screen.dart';
+import '../features/customers_mgmt/customer_detail_screen.dart';
+import '../features/customers_mgmt/customers_list_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/menu_mgmt/menu_list_screen.dart';
 import '../features/menu_mgmt/product_editor_screen.dart';
+import '../features/newsletter_mgmt/newsletter_screen.dart';
 import '../features/orders_mgmt/order_detail_screen.dart';
 import '../features/orders_mgmt/orders_screen.dart';
 import '../features/refunds/refunds_screen.dart';
+import '../features/reports_mgmt/reports_screen.dart';
+import '../features/reviews_mgmt/reviews_screen.dart';
+import '../features/store_settings/store_settings_screen.dart';
 import '../features/threads_mgmt/thread_editor_screen.dart';
 import '../features/threads_mgmt/threads_list_screen.dart';
 
@@ -53,6 +72,15 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
         path: '/menu',
         builder: (_, __) => const MerchantMenuListScreen(),
       ),
+      // P4 — bulk ops (CSV import + bulk price) and campaign broadcast.
+      GoRoute(
+        path: '/tools/bulk',
+        builder: (_, __) => const BulkToolsScreen(),
+      ),
+      GoRoute(
+        path: '/broadcast',
+        builder: (_, __) => const BroadcastScreen(),
+      ),
       GoRoute(
         path: '/refunds',
         builder: (_, __) => const RefundsScreen(),
@@ -66,6 +94,19 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const CollectionsListScreen(),
       ),
       GoRoute(
+        path: '/bundles',
+        builder: (_, __) => const BundlesListScreen(),
+      ),
+      GoRoute(
+        path: '/bundles/new',
+        builder: (_, __) => const BundleEditorScreen(),
+      ),
+      GoRoute(
+        path: '/bundles/:id',
+        builder: (context, state) =>
+            BundleEditorScreen(bundleId: state.pathParameters['id']),
+      ),
+      GoRoute(
         path: '/collections/new',
         builder: (_, __) => const CollectionEditorScreen(),
       ),
@@ -73,6 +114,68 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
         path: '/collections/:id',
         builder: (context, state) =>
             CollectionEditorScreen(collectionId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '/admin/accounts',
+        builder: (_, __) => const AccountsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/delivery-config',
+        builder: (_, __) => const DeliveryConfigScreen(),
+      ),
+      GoRoute(
+        path: '/admin/promo-popup',
+        builder: (_, __) => const PromoPopupScreen(),
+      ),
+      GoRoute(
+        path: '/admin/display',
+        builder: (_, __) => const DisplayConfigScreen(),
+      ),
+      GoRoute(
+        path: '/reviews',
+        builder: (_, __) => const ReviewsModerationScreen(),
+      ),
+      GoRoute(
+        path: '/reports',
+        builder: (_, __) => const ReportsScreen(),
+      ),
+      GoRoute(
+        path: '/newsletter',
+        builder: (_, __) => const NewsletterScreen(),
+      ),
+      GoRoute(
+        path: '/banners',
+        builder: (_, __) => const BannersScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (_, __) => const StoreSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/settings/content',
+        builder: (_, __) => const SiteContentEditorScreen(),
+      ),
+      GoRoute(
+        path: '/marketing',
+        builder: (_, __) => const MarketingScreen(),
+      ),
+      GoRoute(
+        path: '/gift-cards',
+        builder: (_, __) => const GiftCardsScreen(),
+      ),
+      GoRoute(
+        path: '/coupons',
+        builder: (_, __) => const CouponsScreen(),
+      ),
+      GoRoute(
+        path: '/customers',
+        builder: (_, __) => const CustomersListScreen(),
+      ),
+      GoRoute(
+        path: '/customers/:id',
+        builder: (context, state) => CustomerDetailScreen(
+          customerId: state.pathParameters['id']!,
+        ),
       ),
       GoRoute(
         path: '/threads',

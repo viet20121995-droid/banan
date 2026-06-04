@@ -1,0 +1,103 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import type { AuthPrincipal } from '../auth/types/jwt-payload';
+
+import { BundlesService } from './bundles.service';
+import { CreateBundleDto, UpdateBundleDto } from './dto';
+
+@ApiTags('bundles')
+@Controller({ path: 'bundles', version: '1' })
+export class BundlesController {
+  constructor(private readonly bundles: BundlesService) {}
+
+  @Public()
+  @Get()
+  list() {
+    return this.bundles.list();
+  }
+
+  /// Pinned-to-home subset — customer home page renders these as a
+  /// "Combo nổi bật" carousel.
+  @Public()
+  @Get('home')
+  home() {
+    return this.bundles.homePinned();
+  }
+
+  @Public()
+  @Get(':id')
+  async detail(@Param('id') id: string) {
+    const bundle = await this.bundles.findOne(id);
+    const savedVnd = await this.bundles.savings(id);
+    return { ...bundle, savedVnd };
+  }
+}
+
+@ApiBearerAuth()
+@ApiTags('merchant.bundles')
+@Controller({ path: 'merchant/bundles', version: '1' })
+@Roles(Role.MERCHANT_OWNER, Role.ADMIN)
+export class MerchantBundlesController {
+  constructor(private readonly bundles: BundlesService) {}
+
+  /// Admin scope = chain-wide (storeIdScope null); merchants scope to
+  /// their own store. Same pattern as products / collections.
+  private scope(user: AuthPrincipal): string | null {
+    return user.role === Role.ADMIN ? null : (user.storeId ?? null);
+  }
+
+  @Get()
+  list(@CurrentUser() user: AuthPrincipal) {
+    return this.bundles.listForMerchant(this.scope(user));
+  }
+
+  @Get(':id')
+  findOne(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
+    return this.bundles.findOneForMerchant(id, this.scope(user));
+  }
+
+  @Post()
+  create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateBundleDto) {
+    // Admin creating a bundle has no implicit store — they need to be
+    // a merchant of that store. Keep this simple: admin creates against
+    // the catalog store (same one products live in) for now.
+    const storeId = user.storeId;
+    if (!storeId) {
+      // For ADMIN we'd need a `storeId` query param, but for now reuse
+      // the merchant who owns the catalog. The seed always has at least
+      // one merchant tied to the LTT store.
+      throw new Error('Admin chưa hỗ trợ tạo bundle qua API — login với merchant owner.');
+    }
+    return this.bundles.create(storeId, dto);
+  }
+
+  @Patch(':id')
+  update(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id') id: string,
+    @Body() dto: UpdateBundleDto,
+  ) {
+    return this.bundles.update(id, this.scope(user), dto);
+  }
+
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete(':id')
+  async remove(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
+    await this.bundles.remove(id, this.scope(user));
+  }
+}

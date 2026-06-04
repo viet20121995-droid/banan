@@ -142,6 +142,30 @@ class CatalogApi {
     }
   }
 
+  /// "Khách cũng mua" recommendations for a product detail page.
+  /// Returns an ordered list (highest co-occurrence first).
+  Future<Result<List<ProductDto>, AppFailure>> recommendations(
+    String productId, {
+    int limit = 8,
+  }) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/products/$productId/recommendations',
+        queryParameters: {'limit': limit},
+      );
+      final raw = res.data?['data'] as List? ?? const [];
+      return Result.success(
+        raw
+            .map((e) => ProductDto.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
   Future<Result<ProductDto, AppFailure>> createProduct(
     Map<String, dynamic> body,
   ) async {
@@ -185,15 +209,40 @@ class CatalogApi {
     }
   }
 
-  Future<Result<void, AppFailure>> deleteProduct(String id) async {
+  /// Outcome of `DELETE /products/:id` so the merchant UI can show the
+  /// correct toast — hard delete vs archived because of past orders.
+  Future<Result<DeleteProductOutcome, AppFailure>> deleteProduct(
+    String id,
+  ) async {
     try {
-      final res = await _dio.delete<dynamic>('/products/$id');
-      if (res.statusCode != null &&
-          res.statusCode! >= 200 &&
-          res.statusCode! < 300) {
-        return const Result.success(null);
+      final res = await _dio.delete<Map<String, dynamic>>('/products/$id');
+      final code = res.statusCode ?? 0;
+      if (code < 200 || code >= 300) {
+        return Result.failure(mapHttpStatusToFailure(res));
       }
-      return Result.failure(mapHttpStatusToFailure(res));
+      final data = res.data?['data'] as Map<String, dynamic>? ?? const {};
+      return Result.success(
+        DeleteProductOutcome(
+          deleted: data['deleted'] as bool? ?? true,
+          archived: data['archived'] as bool? ?? false,
+        ),
+      );
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  /// Brings an archived product back to the menu.
+  Future<Result<ProductDto, AppFailure>> restoreProduct(String id) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/products/$id/restore',
+      );
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      if (data == null) return Result.failure(mapHttpStatusToFailure(res));
+      return Result.success(ProductDto.fromJson(data));
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
     } catch (e) {
@@ -238,4 +287,12 @@ class CatalogApi {
       return Result.failure(UnknownFailure(cause: e));
     }
   }
+}
+
+/// Indicates whether the product was actually removed from the DB or just
+/// archived because past orders still reference it.
+class DeleteProductOutcome {
+  const DeleteProductOutcome({required this.deleted, required this.archived});
+  final bool deleted;
+  final bool archived;
 }

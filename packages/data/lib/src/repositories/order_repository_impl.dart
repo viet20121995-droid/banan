@@ -14,6 +14,7 @@ class OrderRepositoryImpl implements OrderRepository {
       (apiResult) => PlaceOrderResult(
         order: apiResult.order.toDomain(),
         payment: apiResult.payment.toDomain(),
+        guestSession: apiResult.guestSession?.toDomain(),
       ),
     );
   }
@@ -88,10 +89,23 @@ class OrderRepositoryImpl implements OrderRepository {
   }
 
   @override
+  Future<Result<Order, AppFailure>> issueInvoice(
+    String id, {
+    String? invoiceFileUrl,
+  }) async {
+    final res = await _api.issueInvoice(id, invoiceFileUrl: invoiceFileUrl);
+    return res.map((d) => d.toDomain());
+  }
+
+  @override
   Future<Result<List<Order>, AppFailure>> kitchenQueue({
     KitchenStatus? status,
+    bool includeDoneToday = false,
   }) async {
-    final res = await _api.kitchenQueue(kitchenStatus: status?.wire);
+    final res = await _api.kitchenQueue(
+      kitchenStatus: status?.wire,
+      includeDoneToday: includeDoneToday,
+    );
     return res.map((list) => list.map((d) => d.toDomain()).toList());
   }
 

@@ -70,7 +70,7 @@ export class VNPayPaymentService {
       vnp_Amount: String(amountX100),
       vnp_CurrCode: args.currency,
       vnp_TxnRef: txnRef,
-      vnp_OrderInfo: `Banan order ${args.orderCode}`,
+      vnp_OrderInfo: `Banan_order_${args.orderCode}`,
       vnp_OrderType: 'other',
       vnp_Locale: 'vn',
       vnp_ReturnUrl: returnUrl,
@@ -165,28 +165,26 @@ function signVnpParams(
   return { ...params, vnp_SecureHash: hash };
 }
 
+/**
+ * VNPay's official Node demo signs and stringifies WITHOUT URL-encoding —
+ * `qs.stringify(params, { encode: false })`. We match that exactly so the
+ * signature on the redirect matches the signature their server recomputes.
+ *
+ * Source: https://github.com/vnpay/vnpay-nodejs-demo `index.js` (Aug 2024).
+ */
 function computeVnpHash(
   params: Record<string, string>,
   secret: string,
 ): string {
-  const sortedKeys = Object.keys(params).sort();
-  const signData = sortedKeys
-    .map((k) => `${k}=${encodeRfc3986(params[k])}`)
-    .join('&');
+  const signData = stringifyNoEncode(params);
   return createHmac('sha512', secret).update(signData, 'utf8').digest('hex');
 }
 
 function buildVnpQueryString(params: Record<string, string>): string {
-  const sortedKeys = Object.keys(params).sort();
-  return sortedKeys
-    .map((k) => `${encodeRfc3986(k)}=${encodeRfc3986(params[k])}`)
-    .join('&');
+  return stringifyNoEncode(params);
 }
 
-/** RFC 3986 percent-encoding — VNPay's spec is strict about + → %20 etc. */
-function encodeRfc3986(str: string): string {
-  return encodeURIComponent(str).replace(
-    /[!'()*]/g,
-    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
+function stringifyNoEncode(params: Record<string, string>): string {
+  const sortedKeys = Object.keys(params).sort();
+  return sortedKeys.map((k) => `${k}=${params[k]}`).join('&');
 }

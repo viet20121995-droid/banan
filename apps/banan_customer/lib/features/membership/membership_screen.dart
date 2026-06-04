@@ -1,6 +1,7 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -12,7 +13,7 @@ class MembershipScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(membershipSummaryProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Membership')),
+      appBar: AppBar(title: Text(ref.watch(stringsProvider).membershipTitle)),
       body: summaryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorState(
@@ -25,13 +26,14 @@ class MembershipScreen extends ConsumerWidget {
   }
 }
 
-class _Body extends StatelessWidget {
+class _Body extends ConsumerWidget {
   const _Body({required this.summary});
   final MembershipSummary summary;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final fmt = NumberFormat.currency(
       locale: 'vi_VN',
       symbol: '₫',
@@ -71,7 +73,7 @@ class _Body extends StatelessWidget {
                       ),
                       const SizedBox(height: BananSpacing.sm),
                       Text(
-                        '${summary.balance} pts',
+                        s.michoBalance(summary.balance),
                         style: theme.textTheme.displaySmall?.copyWith(
                           color: Colors.white,
                         ),
@@ -79,8 +81,9 @@ class _Body extends StatelessWidget {
                       const SizedBox(height: BananSpacing.sm),
                       Text(
                         summary.pointsToNextTier == null
-                            ? "You're at the top tier — thank you!"
-                            : '${summary.pointsToNextTier} more points until next tier',
+                            ? s.topTier
+                            : s.michoUntilNextTier(
+                                summary.pointsToNextTier!,),
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: Colors.white.withValues(alpha: 0.85),
                         ),
@@ -101,24 +104,26 @@ class _Body extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('How it works', style: theme.textTheme.titleMedium),
+                      Text(s.howItWorks, style: theme.textTheme.titleMedium),
                       const SizedBox(height: BananSpacing.sm),
                       Text(
-                        'Earn 1 point for every ${fmt.format(summary.earnRatePerVnd)} you spend. '
-                        'Each point is worth ${fmt.format(summary.redemptionValueVnd)} off your next order.',
+                        s.loyaltyHowText(
+                          fmt.format(summary.earnRatePerVnd),
+                          fmt.format(summary.redemptionValueVnd),
+                        ),
                         style: theme.textTheme.bodyMedium,
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: BananSpacing.xl),
-                Text('History', style: theme.textTheme.titleLarge),
+                Text(s.history, style: theme.textTheme.titleLarge),
                 const SizedBox(height: BananSpacing.sm),
                 if (summary.history.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: BananSpacing.lg),
                     child: Text(
-                      'No activity yet. Place an order to start earning.',
+                      s.noLoyaltyActivity,
                       style: theme.textTheme.bodyMedium,
                     ),
                   )
@@ -168,7 +173,7 @@ class _HistoryRow extends StatelessWidget {
             ),
           ),
           Text(
-            (positive ? '+' : '') + event.delta.toString(),
+            '${positive ? '+' : ''}${event.delta} Micho',
             style: theme.textTheme.titleSmall?.copyWith(
               color: positive ? BananColors.success : theme.colorScheme.error,
             ),

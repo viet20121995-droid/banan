@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../shared/cover_image_picker.dart';
+import '../../shared/gallery_image_picker.dart';
 import 'threads_list_screen.dart';
 
 final _editorThreadProvider = FutureProvider.autoDispose
@@ -16,6 +16,17 @@ final _editorThreadProvider = FutureProvider.autoDispose
   return res.when(
     success: (t) => t,
     failure: (f) => throw Exception(f.message ?? f.code),
+  );
+});
+
+/// Merchant's own products — for the optional "Shop this" link.
+final _pickerProductsProvider =
+    FutureProvider.autoDispose<List<domain.Product>>((ref) async {
+  final repo = ref.watch(catalogRepositoryProvider);
+  final res = await repo.merchantProducts(perPage: 100);
+  return res.when(
+    success: (page) => page.items,
+    failure: (_) => const <domain.Product>[],
   );
 });
 
@@ -34,7 +45,11 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   final _title = TextEditingController();
   final _body = TextEditingController();
-  String? _coverUrl;
+  final _ctaLabel = TextEditingController();
+  final _ctaUrl = TextEditingController();
+  List<String> _images = [];
+  String? _productId;
+  DateTime? _scheduledAt;
   bool _publish = false;
   bool _saving = false;
   bool _initialized = false;
@@ -44,6 +59,8 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
   void dispose() {
     _title.dispose();
     _body.dispose();
+    _ctaLabel.dispose();
+    _ctaUrl.dispose();
     super.dispose();
   }
 
@@ -52,9 +69,50 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
     _initialized = true;
     _title.text = t.title;
     _body.text = t.body;
-    _coverUrl = t.imageUrl;
+    _ctaLabel.text = t.ctaLabel ?? '';
+    _ctaUrl.text = t.ctaUrl ?? '';
+    _images = t.gallery;
+    _productId = t.productId;
+    _scheduledAt = t.scheduledPublishAt;
     _publish = t.isPublished;
     setState(() {});
+  }
+
+  List<String> get _previewHashtags {
+    final re = RegExp(r'#[\p{L}0-9_]+', unicode: true);
+    final seen = <String>{};
+    for (final m in re.allMatches(_body.text)) {
+      seen.add(m.group(0)!.toLowerCase());
+      if (seen.length >= 15) break;
+    }
+    return seen.toList();
+  }
+
+  Future<void> _pickSchedule() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _scheduledAt ?? now.add(const Duration(hours: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        _scheduledAt ?? now.add(const Duration(hours: 1)),
+      ),
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      _scheduledAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+    });
   }
 
   Future<void> _save({required bool publish}) async {
@@ -67,7 +125,14 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
     final draft = domain.ThreadDraft(
       title: _title.text.trim(),
       body: _body.text.trim(),
-      imageUrl: _coverUrl,
+      imageUrl: _images.isNotEmpty ? _images.first : null,
+      images: _images,
+      productId: _productId,
+      ctaLabel: _ctaLabel.text.trim().isEmpty ? null : _ctaLabel.text.trim(),
+      ctaUrl: _ctaUrl.text.trim().isEmpty ? null : _ctaUrl.text.trim(),
+      scheduledPublishAt: (!publish && _scheduledAt != null)
+          ? _scheduledAt
+          : null,
       publish: publish,
     );
     final repo = ref.read(threadsRepositoryProvider);
@@ -103,17 +168,20 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
       );
     }
 
+    final theme = Theme.of(context);
+    final tags = _previewHashtags;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit thread' : 'New thread'),
+        title: Text(widget.isEditing ? 'Sửa bài đăng' : 'Bài đăng mới'),
         actions: [
           TextButton(
             onPressed: _saving ? null : () => context.pop(),
-            child: const Text('Cancel'),
+            child: const Text('Huỷ'),
           ),
           OutlinedButton(
             onPressed: _saving ? null : () => _save(publish: false),
-            child: const Text('Save draft'),
+            child: Text(_scheduledAt != null ? 'Lưu & lên lịch' : 'Lưu nháp'),
           ),
           const SizedBox(width: BananSpacing.sm),
           FilledButton.icon(
@@ -125,7 +193,7 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.publish_outlined),
-            label: Text(widget.isEditing && _publish ? 'Update' : 'Publish'),
+            label: Text(widget.isEditing && _publish ? 'Cập nhật' : 'Đăng'),
           ),
           const SizedBox(width: BananSpacing.md),
         ],
@@ -148,9 +216,7 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
                             const EdgeInsets.only(bottom: BananSpacing.lg),
                         decoration: BoxDecoration(
                           borderRadius: BananRadii.rmd,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .errorContainer
+                          color: theme.colorScheme.errorContainer
                               .withValues(alpha: 0.4),
                         ),
                         child: Text(_error!),
@@ -158,30 +224,128 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
                     TextFormField(
                       controller: _title,
                       decoration: const InputDecoration(
-                        labelText: 'Title',
-                        helperText: 'Up to 140 characters',
+                        labelText: 'Tiêu đề',
+                        helperText: 'Tối đa 140 ký tự',
                       ),
                       validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          (v == null || v.trim().isEmpty) ? 'Bắt buộc' : null,
                     ),
                     const SizedBox(height: BananSpacing.lg),
-                    CoverImagePicker(
-                      url: _coverUrl,
-                      onChanged: (url) => setState(() => _coverUrl = url),
-                      helperText:
-                          'Shown on the customer home thread strip.',
+                    GalleryImagePicker(
+                      urls: _images,
+                      onChanged: (next) => setState(() => _images = next),
                     ),
                     const SizedBox(height: BananSpacing.lg),
                     TextFormField(
                       controller: _body,
-                      maxLines: 12,
+                      maxLines: 10,
+                      onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(
-                        labelText: 'Body',
+                        labelText: 'Nội dung',
                         helperText:
-                            'Markdown not supported yet — plain text only.',
+                            'Dùng #hashtag trong nội dung — chúng sẽ trở thành '
+                            'bộ lọc bấm được trên feed khách hàng.',
                       ),
                       validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          (v == null || v.trim().isEmpty) ? 'Bắt buộc' : null,
+                    ),
+                    if (tags.isNotEmpty) ...[
+                      const SizedBox(height: BananSpacing.sm),
+                      Wrap(
+                        spacing: BananSpacing.xs,
+                        runSpacing: BananSpacing.xs,
+                        children: [
+                          for (final t in tags)
+                            Chip(
+                              label: Text(t),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: BananSpacing.xl),
+                    Text('Mua sản phẩm này',
+                        style: theme.textTheme.titleSmall,),
+                    const SizedBox(height: BananSpacing.xs),
+                    Text(
+                      'Tuỳ chọn — liên kết bài đăng với một sản phẩm của bạn.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: BananSpacing.sm),
+                    _ProductPicker(
+                      selectedId: _productId,
+                      onChanged: (id) => setState(() => _productId = id),
+                    ),
+                    const SizedBox(height: BananSpacing.xl),
+                    Text('Nút kêu gọi hành động',
+                        style: theme.textTheme.titleSmall,),
+                    const SizedBox(height: BananSpacing.sm),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _ctaLabel,
+                            maxLength: 40,
+                            decoration: const InputDecoration(
+                              labelText: 'Nhãn nút',
+                              hintText: 'Đặt ngay',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: BananSpacing.md),
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            controller: _ctaUrl,
+                            maxLength: 300,
+                            decoration: const InputDecoration(
+                              labelText: 'Liên kết nút (URL)',
+                              hintText: 'https://…',
+                            ),
+                            validator: (v) {
+                              final s = v?.trim() ?? '';
+                              if (s.isEmpty) return null;
+                              final ok = Uri.tryParse(s)?.hasAbsolutePath ??
+                                  false;
+                              return ok ? null : 'Nhập URL hợp lệ';
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: BananSpacing.xl),
+                    Text('Lên lịch', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: BananSpacing.xs),
+                    Text(
+                      'Lưu nháp với thời gian trong tương lai, hệ thống sẽ '
+                      'tự đăng đúng giờ đó. Bấm "Đăng" ngay sẽ bỏ qua lịch hẹn.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: BananSpacing.sm),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _pickSchedule,
+                          icon: const Icon(Icons.schedule_outlined),
+                          label: Text(
+                            _scheduledAt == null
+                                ? 'Chọn thời gian đăng'
+                                : _fmt(_scheduledAt!),
+                          ),
+                        ),
+                        if (_scheduledAt != null) ...[
+                          const SizedBox(width: BananSpacing.sm),
+                          TextButton.icon(
+                            onPressed: () =>
+                                setState(() => _scheduledAt = null),
+                            icon: const Icon(Icons.close),
+                            label: const Text('Xoá lịch'),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -190,6 +354,51 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  String _fmt(DateTime d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)} '
+        '${two(d.hour)}:${two(d.minute)}';
+  }
+}
+
+class _ProductPicker extends ConsumerWidget {
+  const _ProductPicker({required this.selectedId, required this.onChanged});
+
+  final String? selectedId;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(_pickerProductsProvider);
+    return async.when(
+      loading: () => const LinearProgressIndicator(),
+      error: (_, __) => const Text('Không tải được sản phẩm.'),
+      data: (products) {
+        final ids = products.map((p) => p.id).toSet();
+        final value = ids.contains(selectedId) ? selectedId : null;
+        return DropdownButtonFormField<String?>(
+          initialValue: value,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Sản phẩm liên kết',
+          ),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('Không có'),
+            ),
+            for (final p in products)
+              DropdownMenuItem<String?>(
+                value: p.id,
+                child: Text(p.name, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: onChanged,
+        );
+      },
     );
   }
 }

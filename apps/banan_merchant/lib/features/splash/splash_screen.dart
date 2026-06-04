@@ -20,7 +20,7 @@ class MerchantSplashScreen extends ConsumerWidget {
             ),
             const SizedBox(height: BananSpacing.sm),
             Text(
-              'Store Operations Console',
+              'Quản trị vận hành cửa hàng',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: BananSpacing.xxxl),
@@ -31,7 +31,7 @@ class MerchantSplashScreen extends ConsumerWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               error: (e, _) => ErrorState(
-                title: 'Backend unreachable',
+                title: 'Không kết nối được máy chủ',
                 message: e.toString(),
                 onRetry: () => ref.invalidate(_healthProbeProvider),
               ),
@@ -41,7 +41,7 @@ class MerchantSplashScreen extends ConsumerWidget {
                   size: 16,
                   color: BananColors.success,
                 ),
-                label: Text('Backend OK · ${status.environment}'),
+                label: Text('Máy chủ hoạt động · ${status.environment}'),
               ),
             ),
           ],

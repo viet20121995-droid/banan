@@ -33,18 +33,19 @@ class _KitchenAnalyticsScreenState
   @override
   Widget build(BuildContext context) {
     final summaryAsync = ref.watch(_summaryProvider(_range));
+    final s = ref.watch(stringsProvider);
     return AppScaffold(
       appBar: AppBar(
-        title: const Text('Kitchen Analytics'),
+        title: Text(s.kitchenAnalytics),
         actions: [
           IconButton(
             icon: const Icon(Icons.dashboard_outlined),
-            tooltip: 'Kanban',
+            tooltip: s.kanban,
             onPressed: () => context.go('/'),
           ),
           IconButton(
             icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
+            tooltip: s.signOut,
             onPressed: () =>
                 ref.read(authControllerProvider.notifier).logout(),
           ),

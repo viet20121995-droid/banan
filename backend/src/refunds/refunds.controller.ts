@@ -34,7 +34,7 @@ export class RefundsController {
     if (!user.storeId && user.role !== Role.ADMIN) {
       throw new BadRequestException({ code: 'NO_STORE_ASSIGNED' });
     }
-    return this.refunds.listForStore(user.storeId!, {
+    return this.refunds.listForStore(user.storeId ?? null, {
       status,
       page: Number(page) || 1,
       perPage: Number(perPage) || 30,

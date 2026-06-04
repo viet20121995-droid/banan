@@ -1,0 +1,193 @@
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+
+import { PrismaService } from '../prisma/prisma.service';
+
+import type { BulkImportDto, BulkPriceDto } from './dto/bulk.dto';
+
+/** Vietnamese-aware slugify: strips diacritics → lower-kebab ASCII. */
+function slugify(input: string): string {
+  return input
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // combining diacritical marks
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+export interface BulkImportResult {
+  created: number;
+  skipped: number;
+  errors: Array<{ row: number; name: string; error: string }>;
+}
+
+export interface BulkPriceResult {
+  matched: number;
+  updated: number;
+  dryRun: boolean;
+  sample: Array<{ name: string; from: number; to: number }>;
+}
+
+@Injectable()
+export class ProductsBulkService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * CSV product import (create-only). Each row is upserted-by-creation: an
+   * existing [storeId, slug] is skipped (not overwritten) so a re-run is
+   * safe. Every new product gets a single "Default · Original" variant so
+   * the order-item shape stays uniform.
+   */
+  async bulkImport(
+    storeId: string,
+    dto: BulkImportDto,
+  ): Promise<BulkImportResult> {
+    const cats = await this.prisma.category.findMany({
+      select: { id: true, name: true },
+    });
+    const byId = new Map(cats.map((c) => [c.id, c]));
+    const byName = new Map(cats.map((c) => [c.name.toLowerCase().trim(), c]));
+
+    let created = 0;
+    let skipped = 0;
+    const errors: BulkImportResult['errors'] = [];
+
+    for (let i = 0; i < dto.rows.length; i++) {
+      const row = dto.rows[i];
+      const rowNo = i + 1;
+      const name = row.name?.trim();
+      if (!name) {
+        errors.push({ row: rowNo, name: '', error: 'NAME_REQUIRED' });
+        continue;
+      }
+      const cat = row.categoryId
+        ? byId.get(row.categoryId)
+        : row.categoryName
+          ? byName.get(row.categoryName.toLowerCase().trim())
+          : undefined;
+      if (!cat) {
+        errors.push({ row: rowNo, name, error: 'CATEGORY_NOT_FOUND' });
+        continue;
+      }
+      const slug = (row.slug?.trim() || slugify(name)) || `sp-${rowNo}`;
+
+      const existing = await this.prisma.product.findUnique({
+        where: { storeId_slug: { storeId, slug } },
+        select: { id: true },
+      });
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        await this.prisma.product.create({
+          data: {
+            storeId,
+            categoryId: cat.id,
+            name,
+            slug,
+            description: row.description?.trim() || name,
+            basePrice: new Prisma.Decimal(row.basePrice),
+            images: row.imageUrl?.trim() ? [row.imageUrl.trim()] : [],
+            variants: {
+              create: [{ size: 'Default', flavor: 'Original' }],
+            },
+          },
+        });
+        created++;
+      } catch (e) {
+        errors.push({
+          row: rowNo,
+          name,
+          error: e instanceof Error ? e.message : 'CREATE_FAILED',
+        });
+      }
+    }
+
+    return { created, skipped, errors };
+  }
+
+  /**
+   * Bulk price adjustment over all / a category / a collection. Percent or
+   * fixed delta, never below 0, optional rounding. `dryRun` returns the
+   * preview without writing.
+   */
+  async bulkPrice(dto: BulkPriceDto): Promise<BulkPriceResult> {
+    const storeId = await this.catalogStoreId();
+
+    let where: Prisma.ProductWhereInput = { storeId };
+    if (dto.scope === 'category') {
+      if (!dto.categoryId) {
+        throw new BadRequestException({ code: 'CATEGORY_REQUIRED' });
+      }
+      where = { storeId, categoryId: dto.categoryId };
+    } else if (dto.scope === 'collection') {
+      if (!dto.collectionSlug) {
+        throw new BadRequestException({ code: 'COLLECTION_REQUIRED' });
+      }
+      const items = await this.prisma.collectionItem.findMany({
+        where: { collection: { slug: dto.collectionSlug } },
+        select: { productId: true },
+      });
+      const ids = items.map((i) => i.productId);
+      where = { storeId, id: { in: ids.length ? ids : ['__none__'] } };
+    }
+
+    const products = await this.prisma.product.findMany({
+      where,
+      select: { id: true, name: true, basePrice: true },
+    });
+
+    const compute = (cur: number): number => {
+      let next =
+        dto.mode === 'percent' ? cur * (1 + dto.amount / 100) : cur + dto.amount;
+      if (next < 0) next = 0;
+      if (dto.roundTo && dto.roundTo > 0) {
+        next = Math.round(next / dto.roundTo) * dto.roundTo;
+      }
+      return Math.round(next * 100) / 100;
+    };
+
+    const planned = products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      from: Number(p.basePrice),
+      to: compute(Number(p.basePrice)),
+    }));
+
+    const dryRun = dto.dryRun === true;
+    if (!dryRun && planned.length > 0) {
+      await this.prisma.$transaction(
+        planned.map((p) =>
+          this.prisma.product.update({
+            where: { id: p.id },
+            data: { basePrice: new Prisma.Decimal(p.to) },
+          }),
+        ),
+      );
+    }
+
+    return {
+      matched: planned.length,
+      updated: dryRun ? 0 : planned.length,
+      dryRun,
+      sample: planned.slice(0, 10).map((p) => ({
+        name: p.name,
+        from: p.from,
+        to: p.to,
+      })),
+    };
+  }
+
+  private async catalogStoreId(): Promise<string> {
+    const primary = await this.prisma.store.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (!primary) throw new BadRequestException({ code: 'NO_STORE' });
+    return primary.id;
+  }
+}
