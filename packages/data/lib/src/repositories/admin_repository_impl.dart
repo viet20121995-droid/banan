@@ -21,6 +21,24 @@ class AdminRepositoryImpl implements AdminRepository {
       _api.createUser(draft.toJson());
 
   @override
+  Future<Result<AdminUser, AppFailure>> updateUser(
+    String id,
+    EditUserDraft draft,
+  ) =>
+      _api.updateUser(id, draft.toJson());
+
+  @override
+  Future<Result<bool, AppFailure>> resetUserPassword(
+    String id,
+    String password,
+  ) =>
+      _api.resetUserPassword(id, password);
+
+  @override
+  Future<Result<bool, AppFailure>> deactivateUser(String id) =>
+      _api.deactivateUser(id);
+
+  @override
   Future<Result<List<OrgOption>, AppFailure>> stores() => _api.stores();
 
   @override

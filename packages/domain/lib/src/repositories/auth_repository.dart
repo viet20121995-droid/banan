@@ -32,6 +32,22 @@ abstract class AuthRepository {
 
   Future<Result<User, AppFailure>> me();
 
+  /// Change password for the signed-in user (verifies current password).
+  Future<Result<bool, AppFailure>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
+
+  /// Request a password-reset email for [email]. Always resolves to success
+  /// when accepted (the server never reveals whether the email exists).
+  Future<Result<bool, AppFailure>> forgotPassword(String email);
+
+  /// Complete a password reset with the token from the email link.
+  Future<Result<bool, AppFailure>> resetPassword({
+    required String token,
+    required String newPassword,
+  });
+
   /// Self-service profile update for the signed-in user. Only non-null
   /// fields are sent. Pass [clearBirthday] to remove an existing birthday.
   /// On success the cached session is updated and re-emitted.

@@ -1,9 +1,13 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/addresses/addresses_screen.dart';
+import '../features/auth/change_password_screen.dart';
+import '../features/auth/forgot_password_screen.dart';
+import '../features/auth/reset_password_screen.dart';
 import '../features/cart/cart_screen.dart';
 import '../features/checkout/checkout_screen.dart';
 import '../features/content/about_screen.dart';
@@ -25,6 +29,9 @@ import '../features/wishlist/wishlist_screen.dart';
 
 const _login = '/login';
 const _register = '/register';
+const _forgotPassword = '/forgot-password';
+const _resetPassword = '/reset-password';
+const _changePassword = '/change-password';
 const _wrongApp = '/wrong-app';
 const _home = '/';
 
@@ -52,6 +59,9 @@ const _guestAllowed = <String>{
   '/rewards',
   _login,
   _register,
+  // Account recovery — reachable without a session (the user is locked out).
+  _forgotPassword,
+  _resetPassword,
 };
 
 bool _isGuestAllowed(String loc) {
@@ -145,6 +155,10 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const ProfileScreen(),
       ),
       GoRoute(
+        path: _changePassword,
+        builder: (_, __) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
         path: '/addresses',
         builder: (_, __) => const AddressesScreen(),
       ),
@@ -173,11 +187,31 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
           final regPath = next == null
               ? _register
               : '$_register?next=${Uri.encodeComponent(next)}';
-          return LoginScreen(
-            title: 'Banan Fukuoka Saigon',
-            subtitle: "Sign in to order today's creations.",
-            showRegisterLink: true,
-            onRegisterTapped: () => context.go(regPath),
+          return Stack(
+            children: [
+              LoginScreen(
+                title: 'Banan Fukuoka Saigon',
+                subtitle: "Sign in to order today's creations.",
+                showRegisterLink: true,
+                onRegisterTapped: () => context.go(regPath),
+              ),
+              // "Forgot password?" link pinned below the centred login form.
+              // LoginScreen is a shared widget without a slot for it, so we
+              // overlay it here in the customer route.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 24,
+                child: SafeArea(
+                  child: Center(
+                    child: TextButton(
+                      onPressed: () => context.push(_forgotPassword),
+                      child: const Text('Quên mật khẩu?'),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -192,6 +226,16 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
             onBackToLogin: () => context.go(loginPath),
           );
         },
+      ),
+      GoRoute(
+        path: _forgotPassword,
+        builder: (_, __) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: _resetPassword,
+        builder: (context, state) => ResetPasswordScreen(
+          token: state.uri.queryParameters['token'] ?? '',
+        ),
       ),
       GoRoute(
         path: _wrongApp,

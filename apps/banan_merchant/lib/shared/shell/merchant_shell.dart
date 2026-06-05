@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'change_password_dialog.dart';
+
 /// Persistent navigation shell shared by every merchant screen.
 ///
 /// Lays out a left sidebar (desktop ≥ md) + slim app bar; on mobile the
@@ -119,6 +121,8 @@ class _AccountMenu extends ConsumerWidget {
       onSelected: (v) {
         if (v == 'logout') {
           ref.read(authControllerProvider.notifier).logout();
+        } else if (v == 'password') {
+          showChangePasswordDialog(context, ref);
         }
       },
       itemBuilder: (_) => [
@@ -143,6 +147,16 @@ class _AccountMenu extends ConsumerWidget {
           ),
         ),
         const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: 'password',
+          child: Row(
+            children: [
+              Icon(Icons.password_outlined, size: 18),
+              SizedBox(width: 8),
+              Text('Đổi mật khẩu'),
+            ],
+          ),
+        ),
         const PopupMenuItem<String>(
           value: 'logout',
           child: Row(

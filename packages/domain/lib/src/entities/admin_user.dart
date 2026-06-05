@@ -10,8 +10,11 @@ class AdminUser extends Equatable {
     required this.fullName,
     required this.role,
     required this.createdAt,
+    this.isActive = true,
     this.phone,
+    this.storeId,
     this.storeName,
+    this.kitchenId,
     this.kitchenName,
   });
 
@@ -20,13 +23,27 @@ class AdminUser extends Equatable {
   final String fullName;
   final String? phone;
   final Role role;
+  final bool isActive;
+  final String? storeId;
   final String? storeName;
+  final String? kitchenId;
   final String? kitchenName;
   final DateTime createdAt;
 
   @override
-  List<Object?> get props =>
-      [id, email, fullName, phone, role, storeName, kitchenName, createdAt];
+  List<Object?> get props => [
+        id,
+        email,
+        fullName,
+        phone,
+        role,
+        isActive,
+        storeId,
+        storeName,
+        kitchenId,
+        kitchenName,
+        createdAt,
+      ];
 }
 
 /// A selectable store / kitchen when provisioning a staff account.

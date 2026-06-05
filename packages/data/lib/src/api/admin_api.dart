@@ -66,6 +66,60 @@ class AdminApi {
     }
   }
 
+  Future<Result<AdminUser, AppFailure>> updateUser(
+    String id,
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/admin/users/$id',
+        data: body,
+      );
+      final code = res.statusCode ?? 0;
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      if (code < 200 || code >= 300 || data == null) {
+        return Result.failure(mapHttpStatusToFailure(res));
+      }
+      return Result.success(AdminUserDto.fromJson(data).toDomain());
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  Future<Result<bool, AppFailure>> resetUserPassword(
+    String id,
+    String password,
+  ) async {
+    try {
+      final res = await _dio.post<dynamic>(
+        '/admin/users/$id/reset-password',
+        data: {'password': password},
+      );
+      final code = res.statusCode ?? 0;
+      if (code >= 200 && code < 300) return Result.success(true);
+      return Result.failure(mapHttpStatusToFailure(res));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  Future<Result<bool, AppFailure>> deactivateUser(String id) async {
+    try {
+      final res = await _dio.delete<dynamic>('/admin/users/$id');
+      final code = res.statusCode ?? 0;
+      if (code >= 200 && code < 300) return Result.success(true);
+      return Result.failure(mapHttpStatusToFailure(res));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
   Future<Result<List<OrgOption>, AppFailure>> _options(String path) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(path);

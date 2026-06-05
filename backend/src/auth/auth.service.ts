@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -9,6 +10,7 @@ import { Prisma, type User } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 
+import { EmailService } from '../notifications/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 import type { LoginDto } from './dto/login.dto';
@@ -25,11 +27,13 @@ interface IssuedTokens {
 export class AuthService {
   private static readonly BCRYPT_ROUNDS = 10;
   private static readonly REFRESH_TTL_DAYS = 30;
+  private static readonly RESET_TTL_MINUTES = 60;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly email: EmailService,
   ) {}
 
   async register(dto: RegisterDto, deviceId?: string): Promise<IssuedTokens> {
@@ -66,6 +70,7 @@ export class AuthService {
 
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) throw this.invalidCredentials();
+    if (!user.isActive) throw this.accountDisabled();
 
     return this.issueSession(user, deviceId);
   }
@@ -88,6 +93,7 @@ export class AuthService {
         message: 'Refresh token invalid or expired.',
       });
     }
+    if (!record.user.isActive) throw this.accountDisabled();
     await this.prisma.refreshToken.update({
       where: { id: record.id },
       data: { revokedAt: new Date() },
@@ -161,6 +167,96 @@ export class AuthService {
     return this.issueSession(user, deviceId);
   }
 
+  /** Change password for a logged-in user (verifies the current password). */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException({ code: 'AUTH_USER_NOT_FOUND' });
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException({
+        code: 'AUTH_CURRENT_PASSWORD_WRONG',
+        message: 'Mật khẩu hiện tại không đúng.',
+      });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, AuthService.BCRYPT_ROUNDS);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+  }
+
+  /**
+   * Start the forgot-password flow. Always resolves without revealing whether
+   * the email exists (anti-enumeration). On a hit, mints a single-use reset
+   * token and emails the reset link. The raw token is logged in dry-run mode
+   * (no RESEND_API_KEY) so it can still be recovered from server logs.
+   */
+  async forgotPassword(email: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+    if (!user || !user.isActive) return;
+
+    // Invalidate any prior unused tokens for this user.
+    await this.prisma.passwordReset.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    const rawToken = randomBytes(32).toString('base64url');
+    const tokenHash = AuthService.hashToken(rawToken);
+    const expiresAt = new Date(
+      Date.now() + AuthService.RESET_TTL_MINUTES * 60 * 1000,
+    );
+    await this.prisma.passwordReset.create({
+      data: { userId: user.id, tokenHash, expiresAt },
+    });
+
+    const base = (
+      this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081'
+    ).replace(/\/$/, '');
+    const resetUrl = `${base}/reset-password?token=${rawToken}`;
+    await this.email.sendPasswordResetEmail({
+      toEmail: user.email,
+      toName: user.fullName,
+      resetUrl,
+    });
+  }
+
+  /** Complete the forgot-password flow: validate the token, set the new
+   *  password, mark the token used, and revoke all of the user's sessions. */
+  async resetPassword(rawToken: string, newPassword: string): Promise<void> {
+    const tokenHash = AuthService.hashToken(rawToken);
+    const record = await this.prisma.passwordReset.findUnique({
+      where: { tokenHash },
+    });
+    if (!record || record.usedAt || record.expiresAt < new Date()) {
+      throw new BadRequestException({
+        code: 'AUTH_RESET_INVALID',
+        message: 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.',
+      });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, AuthService.BCRYPT_ROUNDS);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.passwordReset.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId: record.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+  }
+
   private async issueSession(user: User, deviceId?: string): Promise<IssuedTokens> {
     const payload: JwtPayload = {
       sub: user.id,
@@ -197,6 +293,13 @@ export class AuthService {
     return new UnauthorizedException({
       code: 'AUTH_INVALID_CREDENTIALS',
       message: 'Invalid email or password.',
+    });
+  }
+
+  private accountDisabled() {
+    return new UnauthorizedException({
+      code: 'AUTH_ACCOUNT_DISABLED',
+      message: 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.',
     });
   }
 

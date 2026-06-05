@@ -35,11 +35,35 @@ class KanbanScreen extends ConsumerWidget {
             tooltip: s.refresh,
             onPressed: controller.refresh,
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: s.signOut,
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
+          PopupMenuButton<String>(
+            tooltip: 'Tài khoản',
+            icon: const Icon(Icons.account_circle_outlined),
+            onSelected: (value) {
+              switch (value) {
+                case 'change-password':
+                  context.push('/change-password');
+                case 'logout':
+                  ref.read(authControllerProvider.notifier).logout();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'change-password',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.lock_reset_outlined),
+                  title: Text('Đổi mật khẩu'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.logout),
+                  title: Text(s.signOut),
+                ),
+              ),
+            ],
           ),
         ],
       ),

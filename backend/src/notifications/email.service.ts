@@ -127,6 +127,45 @@ export class EmailService {
     }
   }
 
+  /// Password-reset email (forgot-password flow). In dry-run mode (no
+  /// RESEND_API_KEY) the reset URL is logged so it can still be recovered
+  /// from server logs as a fallback.
+  async sendPasswordResetEmail(args: {
+    toEmail: string;
+    toName: string;
+    resetUrl: string;
+  }): Promise<void> {
+    if (!isRealEmail(args.toEmail)) return;
+    const subject = 'Đặt lại mật khẩu Banan';
+    if (!this.client) {
+      this.logger.log(
+        `[email dry-run] to=${args.toEmail} subject="${subject}" resetUrl=${args.resetUrl}`,
+      );
+      return;
+    }
+    const html = renderResetEmail({
+      recipientName: args.toName,
+      resetUrl: args.resetUrl,
+    });
+    try {
+      const result = await this.client.emails.send({
+        from: this.from,
+        to: args.toEmail,
+        subject,
+        html,
+      });
+      if (result.error) {
+        this.logger.warn(
+          `Resend error (reset) to ${args.toEmail}: ${result.error.message}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed sending reset to ${args.toEmail}: ${(err as Error).message}`,
+      );
+    }
+  }
+
   /// Exposed for newsletter — built from CUSTOMER_APP_BASE_URL.
   get customerAppBaseUrl(): string {
     return this.customerAppUrl;
@@ -209,6 +248,75 @@ function renderOrderEmail(args: {
               <hr style="border:none;border-top:1px solid #E0D7CC;margin:0 0 20px 0;" />
               <p style="margin:0 0 6px 0;font-size:12px;color:#6B5A52;">
                 Email này được gửi tự động khi đơn hàng của bạn thay đổi trạng thái.
+              </p>
+              <p style="margin:0;font-size:12px;color:#6B5A52;">
+                Cảm ơn bạn đã chọn Banan ♥
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/// Password-reset email — same Banan-branded shell with a prominent
+/// "Đặt lại mật khẩu" button and a 60-minute expiry note.
+function renderResetEmail(args: {
+  recipientName: string;
+  resetUrl: string;
+}): string {
+  const url = escapeHtml(args.resetUrl);
+  return `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Đặt lại mật khẩu Banan</title>
+</head>
+<body style="margin:0;padding:0;background:#FAF6F1;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#3B2A22;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FAF6F1;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #E0D7CC;border-radius:12px;overflow:hidden;">
+          <tr>
+            <td style="padding:32px 32px 8px 32px;">
+              <div style="font-family:Georgia,serif;font-size:24px;color:#C9405C;font-weight:700;letter-spacing:-0.3px;">
+                Banan
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 32px 8px 32px;">
+              <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:700;color:#3B2A22;">
+                Đặt lại mật khẩu
+              </h1>
+              <p style="margin:0 0 12px 0;font-size:15px;line-height:1.5;color:#3B2A22;">
+                Xin chào ${escapeHtml(args.recipientName)},
+              </p>
+              <p style="margin:0 0 24px 0;font-size:15px;line-height:1.6;color:#3B2A22;">
+                Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.
+                Bấm nút bên dưới để tạo mật khẩu mới. Liên kết có hiệu lực trong 60 phút.
+              </p>
+              <a href="${url}"
+                 style="display:inline-block;padding:12px 28px;background:#C9405C;
+                        color:#ffffff;text-decoration:none;border-radius:24px;
+                        font-weight:600;letter-spacing:0.3px;">
+                Đặt lại mật khẩu
+              </a>
+              <p style="margin:24px 0 0 0;font-size:13px;line-height:1.5;color:#6B5A52;">
+                Nếu nút không hoạt động, sao chép liên kết sau vào trình duyệt:<br/>
+                <span style="color:#C9405C;word-break:break-all;">${url}</span>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 32px 28px 32px;">
+              <hr style="border:none;border-top:1px solid #E0D7CC;margin:0 0 20px 0;" />
+              <p style="margin:0 0 6px 0;font-size:12px;color:#6B5A52;">
+                Nếu bạn không yêu cầu việc này, hãy bỏ qua email — mật khẩu của bạn không thay đổi.
               </p>
               <p style="margin:0;font-size:12px;color:#6B5A52;">
                 Cảm ơn bạn đã chọn Banan ♥

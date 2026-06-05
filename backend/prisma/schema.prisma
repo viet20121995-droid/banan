@@ -37,6 +37,8 @@ model User {
   fullName       String
   avatarUrl      String?
   role           Role           @default(CUSTOMER)
+  // Disabled accounts cannot log in (soft-delete / suspension by admin).
+  isActive       Boolean        @default(true)
   // Loyalty (denormalized current balance; LoyaltyEvent is the source of truth)
   membershipTier MembershipTier @default(SILVER)
   pointsBalance  Int            @default(0)
@@ -58,6 +60,7 @@ model User {
   loyaltyEvents      LoyaltyEvent[]
   notifications      Notification[]
   refreshTokens      RefreshToken[]
+  passwordResets     PasswordReset[]
   couponRedemptions  CouponRedemption[]
   authoredThreads    Thread[]           @relation("ThreadAuthor")
   devices            DeviceToken[]
@@ -82,6 +85,20 @@ model RefreshToken {
   ipAddress String?
   expiresAt DateTime
   revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Single-use password-reset tokens (forgot-password flow). We store only the
+// sha256 hash of the opaque token; the raw token travels by email link.
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // sha256 of opaque reset token
+  expiresAt DateTime
+  usedAt    DateTime?
   createdAt DateTime  @default(now())
 
   @@index([userId])

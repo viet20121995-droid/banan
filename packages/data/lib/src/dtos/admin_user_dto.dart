@@ -13,7 +13,10 @@ class AdminUserDto {
         fullName: _json['fullName'] as String,
         phone: _json['phone'] as String?,
         role: Role.fromWire(_json['role'] as String),
+        isActive: _json['isActive'] as bool? ?? true,
+        storeId: _json['storeId'] as String?,
         storeName: _json['storeName'] as String?,
+        kitchenId: _json['kitchenId'] as String?,
         kitchenName: _json['kitchenName'] as String?,
         createdAt: DateTime.parse(_json['createdAt'] as String),
       );

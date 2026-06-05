@@ -3,6 +3,7 @@ import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/account/change_password_screen.dart';
 import '../features/analytics/analytics_screen.dart';
 import '../features/kanban/kanban_screen.dart';
 
@@ -36,6 +37,10 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/analytics',
         builder: (_, __) => const KitchenAnalyticsScreen(),
+      ),
+      GoRoute(
+        path: '/change-password',
+        builder: (_, __) => const ChangePasswordScreen(),
       ),
       GoRoute(
         path: _login,

@@ -301,6 +301,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/wishlist'),
                     ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.lock_outline),
+                      title: const Text('Đổi mật khẩu'),
+                      subtitle: const Text(
+                        'Cập nhật mật khẩu đăng nhập của bạn.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/change-password'),
+                    ),
                   ],
                 ),
               ),

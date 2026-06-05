@@ -92,6 +92,27 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<Result<bool, AppFailure>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) =>
+      _api.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+
+  @override
+  Future<Result<bool, AppFailure>> forgotPassword(String email) =>
+      _api.forgotPassword(email);
+
+  @override
+  Future<Result<bool, AppFailure>> resetPassword({
+    required String token,
+    required String newPassword,
+  }) =>
+      _api.resetPassword(token: token, newPassword: newPassword);
+
+  @override
   Future<Result<User, AppFailure>> updateProfile({
     String? fullName,
     String? phone,

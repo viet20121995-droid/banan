@@ -130,6 +130,55 @@ class AuthApi {
     }
   }
 
+  /// Change password for the signed-in user (verifies current password).
+  Future<Result<bool, AppFailure>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) =>
+      _ok('/auth/change-password', {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      });
+
+  /// Request a password-reset email. Server always returns 200 (no account
+  /// enumeration), so success just means the request was accepted.
+  Future<Result<bool, AppFailure>> forgotPassword(String email) =>
+      _ok('/auth/forgot-password', {'email': email}, skipRefresh: true);
+
+  /// Complete a password reset using the token from the email link.
+  Future<Result<bool, AppFailure>> resetPassword({
+    required String token,
+    required String newPassword,
+  }) =>
+      _ok(
+        '/auth/reset-password',
+        {'token': token, 'newPassword': newPassword},
+        skipRefresh: true,
+      );
+
+  /// POST a body and return success/failure only (no payload).
+  Future<Result<bool, AppFailure>> _ok(
+    String path,
+    Map<String, dynamic> body, {
+    bool skipRefresh = false,
+  }) async {
+    try {
+      final res = await _dio.post<dynamic>(
+        path,
+        data: body,
+        options:
+            skipRefresh ? Options(extra: const {kSkipAuthRefresh: true}) : null,
+      );
+      final code = res.statusCode ?? 0;
+      if (code >= 200 && code < 300) return Result.success(true);
+      return Result.failure(mapHttpStatusToFailure(res));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
   Future<Result<AuthResponseDto, AppFailure>> _post(
     String path,
     Map<String, dynamic> body,

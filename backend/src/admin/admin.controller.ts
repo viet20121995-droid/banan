@@ -1,16 +1,23 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
 import { CreateUserDto } from './dto/create-user.dto';
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { AdminService } from './admin.service';
 
 @ApiBearerAuth()
@@ -38,6 +45,32 @@ export class AdminController {
       page: Number(page) || 1,
       perPage: Number(perPage) || 30,
     });
+  }
+
+  @Get('users/:id')
+  getUser(@Param('id') id: string) {
+    return this.admin.getUser(id);
+  }
+
+  @Patch('users/:id')
+  updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.admin.updateUser(id, dto);
+  }
+
+  @Post('users/:id/reset-password')
+  resetUserPassword(
+    @Param('id') id: string,
+    @Body() dto: ResetUserPasswordDto,
+  ) {
+    return this.admin.resetUserPassword(id, dto.password);
+  }
+
+  @Delete('users/:id')
+  deactivateUser(
+    @Param('id') id: string,
+    @CurrentUser() principal: AuthPrincipal,
+  ) {
+    return this.admin.deactivateUser(id, principal.sub);
   }
 
   @Get('stores')

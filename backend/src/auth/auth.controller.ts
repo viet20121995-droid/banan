@@ -13,9 +13,12 @@ import type { User } from '@prisma/client';
 
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AuthService } from './auth.service';
 import type { AuthPrincipal } from './types/jwt-payload';
@@ -74,6 +77,43 @@ export class AuthController {
   ) {
     const user = await this.auth.updateProfile(principal.sub, dto);
     return { user: AuthController.toUserView(user) };
+  }
+
+  // ── Password management ───────────────────────────────────────────────────
+
+  @ApiBearerAuth()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('change-password')
+  async changePassword(
+    @CurrentUser() principal: AuthPrincipal,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<void> {
+    await this.auth.changePassword(
+      principal.sub,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+  }
+
+  // Returns 200 with {ok:true} whether or not the email exists — never leak
+  // account existence to an unauthenticated caller.
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.auth.forgotPassword(dto.email);
+    return { ok: true };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.auth.resetPassword(dto.token, dto.newPassword);
+    return { ok: true };
   }
 
   private static toSession(input: {
