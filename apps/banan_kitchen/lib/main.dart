@@ -6,9 +6,13 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 
 import 'app/app.dart';
+import 'app/url_strategy.dart'
+    if (dart.library.html) 'app/url_strategy_web.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Clean path-based URLs on web so deep links resolve to the right screen.
+  configureWebUrlStrategy();
   initLogging();
 
   Intl.defaultLocale = 'vi_VN';
