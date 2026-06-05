@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { FulfillmentType } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
@@ -12,14 +12,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class CashPaymentService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Cash is only allowed for pickup — delivery would mean no one to collect from. */
-  validateAllowed(fulfillment: FulfillmentType): void {
-    if (fulfillment !== 'PICKUP') {
-      throw new BadRequestException({
-        code: 'CASH_PICKUP_ONLY',
-        message: 'Cash is only available for pickup orders.',
-      });
-    }
+  /**
+   * Cash on receipt. Allowed for BOTH pickup (pay at the counter) and
+   * delivery (COD — pay the courier), which is the norm in Vietnam.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  validateAllowed(_fulfillment: FulfillmentType): void {
+    // No restriction — cash is accepted for every fulfillment type.
   }
 
   async initiate(args: {

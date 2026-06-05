@@ -29,7 +29,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   // Seeded from the menu-screen Pickup/Delivery choice in initState so the
   // customer doesn't have to pick fulfillment twice.
   late FulfillmentType _fulfillment;
-  PaymentMethod _paymentMethod = PaymentMethod.vnpay;
+  PaymentMethod _paymentMethod = PaymentMethod.cash;
   final _recipient = TextEditingController();
   final _phone = TextEditingController();
   final _line1 = TextEditingController();
@@ -920,12 +920,12 @@ class _PaymentSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(stringsProvider);
-    // MVP launch only ships with VNPay. Cash, Stripe (cards) and MoMo are
-    // kept in the codebase (backend providers still work) so we can flip them
-    // back on by listing them here.
+    // Cash on receipt (COD) is the active method while VNPay API keys aren't
+    // configured yet. Stripe/MoMo backend providers still work too. To turn a
+    // method back on, just add its row here, e.g.:
+    //   (PaymentMethod.vnpay, Icons.account_balance_outlined, s.vnpayHint),
     final options = <(PaymentMethod, IconData, String)>[
-      (PaymentMethod.vnpay, Icons.account_balance_outlined, s.vnpayHint),
+      (PaymentMethod.cash, Icons.payments_outlined, 'Trả tiền mặt khi nhận hàng'),
     ];
     return Column(
       children: [
