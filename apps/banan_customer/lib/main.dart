@@ -8,9 +8,14 @@ import 'package:intl/intl.dart';
 
 import 'app/app.dart';
 import 'app/locale_store.dart';
+import 'app/url_strategy.dart'
+    if (dart.library.html) 'app/url_strategy_web.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Clean path-based URLs on web so deep links (/reset-password?token=...,
+  // /product/:id) resolve to the right screen instead of falling back to home.
+  configureWebUrlStrategy();
   initLogging();
 
   // Default every `DateFormat(...)` call (which currently doesn't pass a
