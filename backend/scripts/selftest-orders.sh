@@ -107,9 +107,9 @@ R=$(place_c "$DELIV_BODY")
 want "DELIVERY order (VNPAY) created" "$R" '"code":"BAN-'
 want "  → fulfillmentType DELIVERY" "$R" '"fulfillmentType":"DELIVERY"'
 
-# 1.9 DELIVERY + CASH rejected
+# 1.9 DELIVERY + CASH accepted — COD is enabled for delivery (Vietnam norm)
 R=$(place_c "{\"items\":[{\"productId\":\"$STD_PROD\",\"quantity\":1}],\"fulfillmentType\":\"DELIVERY\",\"paymentMethod\":\"CASH\",\"address\":{\"recipient\":\"A\",\"phone\":\"0900000000\",\"line1\":\"12 Le Loi\",\"city\":\"HCMC\",\"wardCode\":\"sai-gon\"},\"scheduledFor\":\"$TOMORROW\"}")
-want "DELIVERY + CASH rejected (CASH_PICKUP_ONLY)" "$R" 'CASH_PICKUP_ONLY'
+want "DELIVERY + CASH accepted (COD)" "$R" '"code":"BAN-'
 
 # 1.10 DELIVERY without address rejected
 R=$(place_c "{\"items\":[{\"productId\":\"$STD_PROD\",\"quantity\":1}],\"fulfillmentType\":\"DELIVERY\",\"paymentMethod\":\"VNPAY\",\"scheduledFor\":\"$TOMORROW\"}")
