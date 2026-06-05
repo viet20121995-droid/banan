@@ -280,13 +280,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     result.when(
       success: (placed) async {
         ref.read(cartControllerProvider.notifier).clear();
-        // Refresh membership balance — points + earn-on-completion both
-        // change the user state.
-        ref.invalidate(membershipSummaryProvider);
 
-        // Guest checkout just created a fresh account — adopt the tokens
-        // the backend handed back so the customer is logged in for the
-        // order-detail view and survives a page refresh.
+        // Guest checkout for a NEW phone gets fresh tokens from the backend —
+        // adopt them so the customer is logged in for order tracking. A
+        // RETURNING guest (existing phone) does NOT get a session (avoids
+        // phone-only account takeover), so we handle that case below.
         if (placed.guestSession != null) {
           await ref
               .read(authRepositoryProvider)
@@ -311,7 +309,25 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           return;
         }
         if (!context.mounted) return;
-        context.go('/orders/${placed.order.id}');
+
+        final session = ref.read(authRepositoryProvider).currentSession;
+        if (session != null) {
+          // Logged-in customer or freshly-created guest → full order tracking.
+          ref.invalidate(membershipSummaryProvider);
+          context.go('/orders/${placed.order.id}');
+        } else {
+          // Returning guest (no session): the order page is auth-gated, so
+          // confirm here and return home instead of bouncing to the login
+          // screen. The order IS placed — staff will process it.
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Đặt hàng thành công! Chúng tôi sẽ liên hệ xác nhận đơn của bạn.',
+              ),
+            ),
+          );
+          context.go('/');
+        }
       },
       failure: (f) => setState(() => _error = authFailureMessage(f)),
     );
