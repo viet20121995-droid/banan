@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import type { Request } from 'express';
 import { diskStorage } from 'multer';
@@ -26,7 +27,10 @@ export class UploadsController {
    * `main.ts`. M-later swaps this for an S3 / R2 pre-signed flow without
    * changing the response shape.
    */
-  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN)
+  // Customers may upload too (profile avatar). Image-only + 20 MB cap below;
+  // a tighter rate limit guards against storage abuse by signed-in users.
+  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN, Role.CUSTOMER)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post()
   @UseInterceptors(
     FileInterceptor('file', {
