@@ -240,6 +240,10 @@ class _Body extends ConsumerWidget {
                     ),
                   ),
                 ],
+                if (order.isGift) ...[
+                  const SizedBox(height: BananSpacing.xl),
+                  _GiftBlock(order: order),
+                ],
                 if (order.requestVatInvoice) ...[
                   const SizedBox(height: BananSpacing.xl),
                   _VatInvoiceBlock(order: order),
@@ -1190,6 +1194,112 @@ class _VatInvoiceBlock extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// "🎁 Đơn quà tặng" card on the customer order detail — confirms the
+/// greeting message, recipient (name + phone) and shows a "Gói quà" badge
+/// when the order was wrapped. Rendered only when `order.isGift` is true.
+class _GiftBlock extends StatelessWidget {
+  const _GiftBlock({required this.order});
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasRecipient = (order.giftRecipientName?.isNotEmpty ?? false) ||
+        (order.giftRecipientPhone?.isNotEmpty ?? false);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: BananColors.gold.withValues(alpha: 0.10),
+        border: Border.all(color: BananColors.gold.withValues(alpha: 0.4)),
+      ),
+      padding: const EdgeInsets.all(BananSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🎁', style: TextStyle(fontSize: 18)),
+              const SizedBox(width: BananSpacing.xs),
+              Text('Đơn quà tặng', style: theme.textTheme.titleSmall),
+              if (order.giftWrap) ...[
+                const SizedBox(width: BananSpacing.sm),
+                _GiftFlagChip(label: 'Gói quà'),
+              ],
+            ],
+          ),
+          if (order.giftMessage != null &&
+              order.giftMessage!.isNotEmpty) ...[
+            const SizedBox(height: BananSpacing.sm),
+            Text(
+              '“${order.giftMessage!}”',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          if (hasRecipient) ...[
+            const SizedBox(height: BananSpacing.sm),
+            Row(
+              children: [
+                Icon(
+                  Icons.card_giftcard_outlined,
+                  size: 16,
+                  color: theme.colorScheme.outline,
+                ),
+                const SizedBox(width: BananSpacing.xs),
+                Expanded(
+                  child: Text(
+                    'Người nhận: '
+                    '${order.giftRecipientName ?? '—'}'
+                    '${(order.giftRecipientPhone?.isNotEmpty ?? false) ? ' · ${order.giftRecipientPhone}' : ''}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (order.hidePrice) ...[
+            const SizedBox(height: BananSpacing.xs),
+            Text(
+              'Phiếu giao cho người nhận sẽ ẩn giá tiền.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Small pill used inside the gift card for the "Gói quà" flag.
+class _GiftFlagChip extends StatelessWidget {
+  const _GiftFlagChip({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rPill,
+        color: BananColors.gold.withValues(alpha: 0.22),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: BananColors.cocoa,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+        ),
       ),
     );
   }

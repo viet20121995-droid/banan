@@ -58,6 +58,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _invoiceTaxId = TextEditingController();
   final _invoiceAddress = TextEditingController();
   final _invoiceEmail = TextEditingController();
+
+  // Gift order (tặng quà) — opt-in. When ON, the greeting message + recipient
+  // + wrap/hide-price flags are sent with the order.
+  bool _isGift = false;
+  final _giftMessage = TextEditingController();
+  final _giftRecipientName = TextEditingController();
+  final _giftRecipientPhone = TextEditingController();
+  bool _giftWrap = false;
+  bool _hidePrice = false;
   CouponPreview? _appliedCoupon;
   String? _couponError;
   bool _validatingCoupon = false;
@@ -116,6 +125,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _invoiceTaxId.dispose();
     _invoiceAddress.dispose();
     _invoiceEmail.dispose();
+    _giftMessage.dispose();
+    _giftRecipientName.dispose();
+    _giftRecipientPhone.dispose();
     super.dispose();
   }
 
@@ -324,6 +336,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       invoiceAddress:
           _requestVatInvoice ? _invoiceAddress.text.trim() : null,
       invoiceEmail: _requestVatInvoice ? _invoiceEmail.text.trim() : null,
+      // Gift fields — only sent when the gift toggle is on; off → nothing.
+      isGift: _isGift,
+      giftMessage: _isGift && _giftMessage.text.trim().isNotEmpty
+          ? _giftMessage.text.trim()
+          : null,
+      giftRecipientName: _isGift && _giftRecipientName.text.trim().isNotEmpty
+          ? _giftRecipientName.text.trim()
+          : null,
+      giftRecipientPhone: _isGift && _giftRecipientPhone.text.trim().isNotEmpty
+          ? _giftRecipientPhone.text.trim()
+          : null,
+      giftWrap: _isGift && _giftWrap,
+      hidePrice: _isGift && _hidePrice,
     );
 
     final repo = ref.read(orderRepositoryProvider);
@@ -713,6 +738,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       address: _invoiceAddress,
                       email: _invoiceEmail,
                     ),
+                    const SizedBox(height: BananSpacing.xl),
+                    _GiftSection(
+                      enabled: _isGift,
+                      onToggle: (v) => setState(() => _isGift = v),
+                      message: _giftMessage,
+                      recipientName: _giftRecipientName,
+                      recipientPhone: _giftRecipientPhone,
+                      giftWrap: _giftWrap,
+                      onGiftWrap: (v) => setState(() => _giftWrap = v),
+                      hidePrice: _hidePrice,
+                      onHidePrice: (v) => setState(() => _hidePrice = v),
+                    ),
                     const SizedBox(height: BananSpacing.xxl),
                     _Summary(
                       cart: cart,
@@ -813,6 +850,121 @@ class _VatInvoiceSection extends StatelessWidget {
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
                 labelText: 'Email nhận hoá đơn',
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// "🎁 Gửi tặng / Đây là quà tặng" block. Hidden by default; turning the
+/// switch on reveals the greeting message, recipient name + phone, and the
+/// "Gói quà" / "Ẩn giá trên phiếu giao" checkboxes. Mirrors the VAT section
+/// styling so the two opt-in cards look consistent.
+class _GiftSection extends StatelessWidget {
+  const _GiftSection({
+    required this.enabled,
+    required this.onToggle,
+    required this.message,
+    required this.recipientName,
+    required this.recipientPhone,
+    required this.giftWrap,
+    required this.onGiftWrap,
+    required this.hidePrice,
+    required this.onHidePrice,
+  });
+
+  final bool enabled;
+  final ValueChanged<bool> onToggle;
+  final TextEditingController message;
+  final TextEditingController recipientName;
+  final TextEditingController recipientPhone;
+  final bool giftWrap;
+  final ValueChanged<bool> onGiftWrap;
+  final bool hidePrice;
+  final ValueChanged<bool> onHidePrice;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+        borderRadius: BananRadii.rmd,
+        color: theme.colorScheme.surface,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: BananSpacing.md,
+        vertical: BananSpacing.sm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            value: enabled,
+            onChanged: onToggle,
+            title: const Text('🎁 Gửi tặng / Đây là quà tặng'),
+            subtitle: Text(
+              enabled
+                  ? 'Kèm thiệp chúc, người nhận và tuỳ chọn gói quà.'
+                  : 'Bật khi bạn muốn gửi đơn này làm quà tặng.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+          ),
+          if (enabled) ...[
+            const SizedBox(height: BananSpacing.xs),
+            TextField(
+              controller: message,
+              maxLines: 3,
+              maxLength: 280,
+              decoration: const InputDecoration(
+                labelText: 'Lời chúc',
+                hintText: 'Lời chúc gửi kèm thiệp…',
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            TextField(
+              controller: recipientName,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Tên người nhận',
+                helperText: 'Người sẽ nhận món quà này (không bắt buộc).',
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            TextField(
+              controller: recipientPhone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'SĐT người nhận',
+                helperText: 'Để shipper liên hệ người nhận (không bắt buộc).',
+              ),
+            ),
+            const SizedBox(height: BananSpacing.xs),
+            CheckboxListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: giftWrap,
+              onChanged: (v) => onGiftWrap(v ?? false),
+              title: const Text('Gói quà / hộp quà'),
+            ),
+            CheckboxListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: hidePrice,
+              onChanged: (v) => onHidePrice(v ?? false),
+              title: const Text('Ẩn giá trên phiếu giao'),
+              subtitle: Text(
+                'Người nhận sẽ không thấy giá tiền.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
               ),
             ),
             const SizedBox(height: BananSpacing.sm),

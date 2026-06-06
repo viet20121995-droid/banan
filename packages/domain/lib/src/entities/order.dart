@@ -105,6 +105,12 @@ class Order extends Equatable {
     this.campaignInfo,
     this.pointsRedeemed = 0,
     this.pointsDiscount = 0,
+    this.isGift = false,
+    this.giftMessage,
+    this.giftRecipientName,
+    this.giftRecipientPhone,
+    this.giftWrap = false,
+    this.hidePrice = false,
   });
 
   final String id;
@@ -154,6 +160,17 @@ class Order extends Equatable {
   final DateTime? invoiceIssuedAt;
   final String? invoiceFileUrl;
 
+  /// Gift order (tặng quà) — `isGift` toggles the gift block in both apps.
+  /// When true, the fields below carry the greeting-card message + recipient
+  /// and the staff prep flags. `giftWrap` adds wrapping/box; `hidePrice` hides
+  /// all amounts on the slip placed in the gift box.
+  final bool isGift;
+  final String? giftMessage;
+  final String? giftRecipientName;
+  final String? giftRecipientPhone;
+  final bool giftWrap;
+  final bool hidePrice;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -198,6 +215,12 @@ class Order extends Equatable {
         campaignInfo,
         pointsRedeemed,
         pointsDiscount,
+        isGift,
+        giftMessage,
+        giftRecipientName,
+        giftRecipientPhone,
+        giftWrap,
+        hidePrice,
         createdAt,
         updatedAt,
       ];

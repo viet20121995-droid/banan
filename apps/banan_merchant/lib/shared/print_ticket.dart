@@ -33,6 +33,34 @@ String _persText(Map<String, dynamic> p) {
   return parts.join(' · ');
 }
 
+/// Renders the dashed "ĐƠN QUÀ TẶNG" block printed on the slip when the
+/// order is a gift — greeting message, recipient and the GÓI QUÀ / ẨN GIÁ
+/// notes so staff prepare the card + wrapping. Returns '' when not a gift.
+String _giftBlockHtml(Order order) {
+  if (!order.isGift) return '';
+  final flags = <String>[];
+  if (order.giftWrap) flags.add('GÓI QUÀ');
+  if (order.hidePrice) flags.add('ẨN GIÁ');
+  final b = StringBuffer()
+    ..write('<div class="gift">')
+    ..write('<div class="ghead">🎁 ĐƠN QUÀ TẶNG'
+        '${flags.isEmpty ? '' : ' · ${_esc(flags.join(' · '))}'}</div>');
+  if ((order.giftMessage ?? '').isNotEmpty) {
+    b.write('<div class="gmsg">"${_esc(order.giftMessage!)}"</div>');
+  }
+  final name = order.giftRecipientName ?? '';
+  final phone = order.giftRecipientPhone ?? '';
+  if (name.isNotEmpty || phone.isNotEmpty) {
+    final recipient = [
+      if (name.isNotEmpty) _esc(name),
+      if (phone.isNotEmpty) _esc(phone),
+    ].join(' · ');
+    b.write('<div class="muted">Người nhận: $recipient</div>');
+  }
+  b.write('</div>');
+  return b.toString();
+}
+
 void _printHtml(String inner, {required String title}) {
   final doc = '<html><head><meta charset="utf-8"><title>${_esc(title)}</title>'
       '<style>'
@@ -46,6 +74,10 @@ void _printHtml(String inner, {required String title}) {
       '.big{font-size:16px;font-weight:700}'
       '.item{margin:6px 0}'
       '.pers{color:#a0522d;font-size:12px;margin:2px 0 2px 10px}'
+      '.gift{border:1px dashed #b8932f;border-radius:6px;padding:8px;'
+      'margin:10px 0;background:#fbf6e6}'
+      '.gift .ghead{font-weight:700;font-size:14px;margin-bottom:4px}'
+      '.gift .gmsg{font-style:italic;font-size:13px;margin:2px 0}'
       '@media print{button{display:none}}'
       '</style></head><body>$inner'
       '<script>setTimeout(function(){window.print();},250);</script>'
@@ -62,10 +94,18 @@ void _printHtml(String inner, {required String title}) {
 }
 
 /// Customer receipt — items + prices + total.
+///
+/// For a gift order (`order.isGift`) the gift block (greeting + recipient +
+/// GÓI QUÀ note) is printed at the top. When `order.hidePrice` is also true,
+/// the slip is the copy placed inside the gift box: it lists items +
+/// quantities + the gift message but OMITS every price, line total, discount
+/// and the grand total so the recipient never sees the amount paid.
 void printReceipt(Order order) {
+  // Hide all amounts only on a gift slip that explicitly opted into it.
+  final hidePrice = order.isGift && order.hidePrice;
   final b = StringBuffer()
     ..write('<h1>Banan Fukuoka Saigon</h1>')
-    ..write('<div class="muted">Phiếu thanh toán</div>')
+    ..write('<div class="muted">${hidePrice ? 'Phiếu giao' : 'Phiếu thanh toán'}</div>')
     ..write(
         '<div class="row"><span>Mã đơn</span><span class="big">${_esc(order.code)}</span></div>')
     ..write(
@@ -76,12 +116,15 @@ void printReceipt(Order order) {
     b.write(
         '<div class="muted">${_esc(order.address!.recipient)} · ${_esc(order.address!.phone)}<br>${_esc(order.address!.oneLine)}</div>');
   }
+  // Gift block at the top so staff (and the recipient on a hide-price slip)
+  // see the greeting + wrapping note first.
+  b.write(_giftBlockHtml(order));
   b.write('<h2>Món</h2>');
   for (final it in order.items) {
-    b
-      ..write('<div class="item"><div class="row">'
-          '<span>${it.quantity}× ${_esc(it.productName)}</span>'
-          '<span>${_fmt.format(it.lineTotal)}</span></div>');
+    b.write('<div class="item"><div class="row">'
+        '<span>${it.quantity}× ${_esc(it.productName)}</span>'
+        // Omit per-line price on a hide-price gift slip.
+        '${hidePrice ? '' : '<span>${_fmt.format(it.lineTotal)}</span>'}</div>');
     if ((it.variantLabel ?? '').isNotEmpty) {
       b.write('<div class="muted">${_esc(it.variantLabel!)}</div>');
     }
@@ -91,23 +134,24 @@ void printReceipt(Order order) {
     }
     b.write('</div>');
   }
-  b
-    ..write('<h2></h2>')
-    ..write(
-        '<div class="row"><span>Tạm tính</span><span>${_fmt.format(order.subtotal)}</span></div>');
-  if (order.campaignDiscount > 0) {
+  if (!hidePrice) {
+    b
+      ..write('<h2></h2>')
+      ..write(
+          '<div class="row"><span>Tạm tính</span><span>${_fmt.format(order.subtotal)}</span></div>');
+    if (order.campaignDiscount > 0) {
+      b.write(
+          '<div class="row"><span>Khuyến mãi</span><span>−${_fmt.format(order.campaignDiscount)}</span></div>');
+    }
+    if (order.deliveryFee > 0) {
+      b.write(
+          '<div class="row"><span>Phí giao</span><span>${_fmt.format(order.deliveryFee)}</span></div>');
+    }
     b.write(
-        '<div class="row"><span>Khuyến mãi</span><span>−${_fmt.format(order.campaignDiscount)}</span></div>');
+        '<div class="row big"><span>Tổng</span><span>${_fmt.format(order.total)}</span></div>');
   }
-  if (order.deliveryFee > 0) {
-    b.write(
-        '<div class="row"><span>Phí giao</span><span>${_fmt.format(order.deliveryFee)}</span></div>');
-  }
-  b
-    ..write(
-        '<div class="row big"><span>Tổng</span><span>${_fmt.format(order.total)}</span></div>')
-    ..write(
-        '<div class="muted" style="text-align:center;margin-top:16px">Cảm ơn quý khách!</div>');
+  b.write(
+      '<div class="muted" style="text-align:center;margin-top:16px">Cảm ơn quý khách!</div>');
   _printHtml(b.toString(), title: 'Phiếu ${order.code}');
 }
 
@@ -119,6 +163,7 @@ void printKitchenTicket(Order order) {
         '<span>${order.fulfillmentType == FulfillmentType.delivery ? 'GIAO' : 'LẤY'}</span></div>')
     ..write(
         '<div class="muted">${DateFormat.yMMMd().add_jm().format(order.createdAt.toLocal())}</div>')
+    ..write(_giftBlockHtml(order))
     ..write('<h2>Cần làm</h2>');
   for (final it in order.items) {
     b.write('<div class="item big">${it.quantity}× ${_esc(it.productName)}</div>');

@@ -177,6 +177,10 @@ class _Body extends ConsumerWidget {
                       style: theme.textTheme.titleSmall,),
                   Text(order.notes!, style: theme.textTheme.bodyMedium),
                 ],
+                if (order.isGift) ...[
+                  const SizedBox(height: BananSpacing.lg),
+                  _GiftBlock(order: order),
+                ],
                 if (order.requestVatInvoice) ...[
                   const SizedBox(height: BananSpacing.lg),
                   _VatInvoiceBlock(order: order),
@@ -376,6 +380,116 @@ class _Line extends StatelessWidget {
         Expanded(child: Text(label, style: style)),
         Text(value, style: style),
       ],
+    );
+  }
+}
+
+/// Prominent gift block on the merchant order detail — tells staff to
+/// prepare a greeting card + wrapping. Shows the message, recipient
+/// (name + phone) and the "Gói quà" / "Ẩn giá" flags. Gold-accented so it
+/// stands out from the rest of the order. Rendered only when `order.isGift`.
+class _GiftBlock extends StatelessWidget {
+  const _GiftBlock({required this.order});
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasRecipient = (order.giftRecipientName?.isNotEmpty ?? false) ||
+        (order.giftRecipientPhone?.isNotEmpty ?? false);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(BananSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: BananColors.gold.withValues(alpha: 0.12),
+        border: Border.all(
+          color: BananColors.gold.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🎁', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: BananSpacing.xs),
+              Text(
+                'ĐƠN QUÀ TẶNG',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: BananColors.cocoa,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: BananSpacing.xs),
+          Wrap(
+            spacing: BananSpacing.xs,
+            runSpacing: BananSpacing.xs,
+            children: [
+              if (order.giftWrap) const _GiftFlagChip(label: 'Gói quà'),
+              if (order.hidePrice)
+                const _GiftFlagChip(label: 'Ẩn giá trên phiếu'),
+            ],
+          ),
+          if (order.giftMessage != null &&
+              order.giftMessage!.isNotEmpty) ...[
+            const SizedBox(height: BananSpacing.sm),
+            Text('Lời chúc (in lên thiệp):',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                )),
+            Text(
+              '“${order.giftMessage!}”',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          if (hasRecipient) ...[
+            const SizedBox(height: BananSpacing.sm),
+            Text('Người nhận:',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                )),
+            Text(
+              '${order.giftRecipientName ?? '—'}'
+              '${(order.giftRecipientPhone?.isNotEmpty ?? false) ? ' · ${order.giftRecipientPhone}' : ''}',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Small gold pill used inside the merchant gift block for the wrap / hide
+/// flags.
+class _GiftFlagChip extends StatelessWidget {
+  const _GiftFlagChip({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rPill,
+        color: BananColors.gold.withValues(alpha: 0.28),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: BananColors.cocoa,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+        ),
+      ),
     );
   }
 }

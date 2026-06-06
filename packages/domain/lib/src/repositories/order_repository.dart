@@ -89,6 +89,12 @@ class NewOrder {
     this.invoiceTaxId,
     this.invoiceAddress,
     this.invoiceEmail,
+    this.isGift = false,
+    this.giftMessage,
+    this.giftRecipientName,
+    this.giftRecipientPhone,
+    this.giftWrap = false,
+    this.hidePrice = false,
   });
 
   final List<NewOrderItem> items;
@@ -124,6 +130,16 @@ class NewOrder {
   final String? invoiceAddress;
   final String? invoiceEmail;
 
+  /// Gift order (tặng quà) — when `isGift` is false the gift fields are
+  /// omitted from the payload entirely. When true, the greeting message,
+  /// recipient name/phone and the `giftWrap` / `hidePrice` flags are sent.
+  final bool isGift;
+  final String? giftMessage;
+  final String? giftRecipientName;
+  final String? giftRecipientPhone;
+  final bool giftWrap;
+  final bool hidePrice;
+
   Map<String, dynamic> toJson() => {
         'items': items.map((i) => i.toJson()).toList(),
         'fulfillmentType': fulfillmentType.wire,
@@ -157,6 +173,17 @@ class NewOrder {
             'invoiceAddress': invoiceAddress,
           if (invoiceEmail != null && invoiceEmail!.isNotEmpty)
             'invoiceEmail': invoiceEmail,
+        },
+        if (isGift) ...{
+          'isGift': true,
+          if (giftMessage != null && giftMessage!.isNotEmpty)
+            'giftMessage': giftMessage,
+          if (giftRecipientName != null && giftRecipientName!.isNotEmpty)
+            'giftRecipientName': giftRecipientName,
+          if (giftRecipientPhone != null && giftRecipientPhone!.isNotEmpty)
+            'giftRecipientPhone': giftRecipientPhone,
+          'giftWrap': giftWrap,
+          'hidePrice': hidePrice,
         },
       };
 }

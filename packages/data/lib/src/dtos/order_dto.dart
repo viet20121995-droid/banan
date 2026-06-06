@@ -147,6 +147,12 @@ class OrderDto {
     this.campaignInfo,
     this.pointsRedeemed = 0,
     this.pointsDiscount = 0,
+    this.isGift = false,
+    this.giftMessage,
+    this.giftRecipientName,
+    this.giftRecipientPhone,
+    this.giftWrap = false,
+    this.hidePrice = false,
   });
 
   factory OrderDto.fromJson(Map<String, dynamic> json) {
@@ -195,6 +201,12 @@ class OrderDto {
           .toList(),
       pointsRedeemed: _toIntVnd(json['pointsRedeemed']),
       pointsDiscount: _toIntVnd(json['pointsDiscount']),
+      isGift: json['isGift'] as bool? ?? false,
+      giftMessage: json['giftMessage'] as String?,
+      giftRecipientName: json['giftRecipientName'] as String?,
+      giftRecipientPhone: json['giftRecipientPhone'] as String?,
+      giftWrap: json['giftWrap'] as bool? ?? false,
+      hidePrice: json['hidePrice'] as bool? ?? false,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -231,6 +243,12 @@ class OrderDto {
   final List<Map<String, dynamic>>? campaignInfo;
   final int pointsRedeemed;
   final int pointsDiscount;
+  final bool isGift;
+  final String? giftMessage;
+  final String? giftRecipientName;
+  final String? giftRecipientPhone;
+  final bool giftWrap;
+  final bool hidePrice;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -268,6 +286,12 @@ class OrderDto {
         campaignInfo: campaignInfo,
         pointsRedeemed: pointsRedeemed,
         pointsDiscount: pointsDiscount,
+        isGift: isGift,
+        giftMessage: giftMessage,
+        giftRecipientName: giftRecipientName,
+        giftRecipientPhone: giftRecipientPhone,
+        giftWrap: giftWrap,
+        hidePrice: hidePrice,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );
