@@ -130,6 +130,38 @@ export class CreateOrderDto {
   @MaxLength(280)
   notes?: string;
 
+  // ── Gift order ("tặng quà khi đặt hàng") ─────────────────────────────────
+
+  @IsOptional()
+  @IsBoolean()
+  isGift?: boolean;
+
+  /** Greeting-card message included with the gift. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(280)
+  giftMessage?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  giftRecipientName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  giftRecipientPhone?: string;
+
+  /** Add gift wrapping / a gift box. */
+  @IsOptional()
+  @IsBoolean()
+  giftWrap?: boolean;
+
+  /** Hide prices on the printed slip the recipient sees. */
+  @IsOptional()
+  @IsBoolean()
+  hidePrice?: boolean;
+
   /** Optional coupon code — case-insensitive. Validated server-side. */
   @IsOptional()
   @IsString()

@@ -563,6 +563,16 @@ model Order {
   customMessage String?
   notes         String?
 
+  // Gift order ("tặng quà khi đặt hàng") — the buyer sends this order as a
+  // gift: a greeting-card message, an optional separate recipient, gift
+  // wrapping, and the option to hide prices on the slip the recipient sees.
+  isGift             Boolean @default(false)
+  giftMessage        String?
+  giftRecipientName  String?
+  giftRecipientPhone String?
+  giftWrap           Boolean @default(false)
+  hidePrice          Boolean @default(false)
+
   // VAT invoice (hóa đơn đỏ) — optional company invoice request.
   // Toggled at checkout; the merchant fulfills outside the app (xuất hóa
   // đơn từ hệ thống thuế). We just persist the request data so the

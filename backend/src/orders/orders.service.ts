@@ -515,6 +515,16 @@ export class OrdersService {
           pointsDiscount,
           total,
           notes: dto.notes,
+          isGift: dto.isGift ?? false,
+          giftMessage: dto.isGift ? dto.giftMessage?.trim() || null : null,
+          giftRecipientName: dto.isGift
+            ? dto.giftRecipientName?.trim() || null
+            : null,
+          giftRecipientPhone: dto.isGift
+            ? dto.giftRecipientPhone?.trim() || null
+            : null,
+          giftWrap: dto.isGift ? dto.giftWrap ?? false : false,
+          hidePrice: dto.isGift ? dto.hidePrice ?? false : false,
           requestVatInvoice: dto.requestVatInvoice ?? false,
           invoiceCompanyName: dto.invoiceCompanyName?.trim() || null,
           invoiceTaxId: dto.invoiceTaxId?.trim() || null,
