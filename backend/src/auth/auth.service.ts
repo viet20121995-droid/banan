@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, type User } from '@prisma/client';
+import { type Gender, Prisma, type User } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 
@@ -126,6 +126,7 @@ export class AuthService {
       fullName?: string;
       phone?: string;
       birthday?: string;
+      gender?: Gender;
       avatarUrl?: string;
       marketingOptIn?: boolean;
       orderUpdatesOptIn?: boolean;
@@ -140,6 +141,7 @@ export class AuthService {
     if (dto.birthday !== undefined) {
       data.birthday = dto.birthday ? new Date(dto.birthday) : null;
     }
+    if (dto.gender !== undefined) data.gender = dto.gender;
     if (dto.avatarUrl !== undefined) {
       const a = dto.avatarUrl.trim();
       data.avatarUrl = a.length === 0 ? null : a;

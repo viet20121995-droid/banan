@@ -180,6 +180,7 @@ export class AuthController {
       membershipTier: user.membershipTier,
       pointsBalance: user.pointsBalance,
       birthday: user.birthday?.toISOString() ?? null,
+      gender: user.gender,
       marketingOptIn: user.marketingOptIn,
       orderUpdatesOptIn: user.orderUpdatesOptIn,
       storeId: user.storeId,

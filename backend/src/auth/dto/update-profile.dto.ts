@@ -1,6 +1,8 @@
+import { Gender } from '@prisma/client';
 import {
   IsBoolean,
   IsDateString,
+  IsEnum,
   IsOptional,
   IsString,
   IsUrl,
@@ -26,6 +28,10 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsDateString()
   birthday?: string;
+
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
 
   @IsOptional()
   @IsUrl({ require_tld: false })

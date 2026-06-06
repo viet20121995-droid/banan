@@ -23,8 +23,9 @@ const CONFIG = {
   michoDiscountThreshold: 100,
   michoDiscountRate: 0.05,
   tiers: {
-    silver: 0,
-    gold: 1_000,
+    bronze: 0,
+    silver: 500,
+    gold: 2_000,
     platinum: 5_000,
   },
 };
@@ -250,7 +251,8 @@ export class LoyaltyService {
 function tierFor(balance: number): MembershipTier {
   if (balance >= CONFIG.tiers.platinum) return 'PLATINUM';
   if (balance >= CONFIG.tiers.gold) return 'GOLD';
-  return 'SILVER';
+  if (balance >= CONFIG.tiers.silver) return 'SILVER';
+  return 'BRONZE';
 }
 
 /** Re-export for tests / consumers. */

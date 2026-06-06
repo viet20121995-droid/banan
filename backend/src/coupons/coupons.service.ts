@@ -14,6 +14,16 @@ export interface CouponValidation {
   appliesToDelivery: boolean;
 }
 
+export interface WalletCoupon {
+  code: string;
+  type: CouponType;
+  value: string;
+  minSubtotal: string | null;
+  label: string | null;
+  startsAt: string;
+  endsAt: string;
+}
+
 @Injectable()
 export class CouponsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -113,6 +123,59 @@ export class CouponsService {
       where: { id: args.couponId },
       data: { redemptions: { increment: 1 } },
     });
+  }
+
+  /** Voucher wallet for a customer — active coupons grouped into
+   *  available / used / expired. Coupons are shared codes (not assigned), so
+   *  "available" = active + in-window + not exhausted (globally or per user). */
+  async listForCustomer(userId: string) {
+    const now = new Date();
+    const [coupons, redemptions] = await Promise.all([
+      this.prisma.coupon.findMany({
+        where: { isActive: true },
+        orderBy: { endsAt: 'asc' },
+      }),
+      this.prisma.couponRedemption.findMany({
+        where: { userId },
+        include: { coupon: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+    const usedByCoupon = new Map<string, number>();
+    for (const r of redemptions) {
+      usedByCoupon.set(r.couponId, (usedByCoupon.get(r.couponId) ?? 0) + 1);
+    }
+    const available: WalletCoupon[] = [];
+    const expired: WalletCoupon[] = [];
+    for (const c of coupons) {
+      if (c.endsAt < now) {
+        expired.push(this.walletView(c));
+        continue;
+      }
+      if (c.startsAt > now) continue; // not started yet
+      const globalExhausted =
+        c.maxRedemptions != null && c.redemptions >= c.maxRedemptions;
+      const userExhausted = (usedByCoupon.get(c.id) ?? 0) >= c.perUserLimit;
+      if (globalExhausted || userExhausted) continue;
+      available.push(this.walletView(c));
+    }
+    const used = redemptions.map((r) => ({
+      ...this.walletView(r.coupon),
+      usedAt: r.createdAt.toISOString(),
+    }));
+    return { available, used, expired };
+  }
+
+  private walletView(c: Coupon): WalletCoupon {
+    return {
+      code: c.code,
+      type: c.type,
+      value: c.value.toString(),
+      minSubtotal: c.minSubtotal?.toString() ?? null,
+      label: c.label,
+      startsAt: c.startsAt.toISOString(),
+      endsAt: c.endsAt.toISOString(),
+    };
   }
 
   // ───────────────────────── Merchant management ─────────────────────────

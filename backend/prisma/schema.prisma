@@ -24,9 +24,16 @@ enum Role {
 }
 
 enum MembershipTier {
+  BRONZE
   SILVER
   GOLD
   PLATINUM
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
 }
 
 model User {
@@ -40,9 +47,10 @@ model User {
   // Disabled accounts cannot log in (soft-delete / suspension by admin).
   isActive       Boolean        @default(true)
   // Loyalty (denormalized current balance; LoyaltyEvent is the source of truth)
-  membershipTier MembershipTier @default(SILVER)
+  membershipTier MembershipTier @default(BRONZE)
   pointsBalance  Int            @default(0)
   birthday       DateTime?      @db.Date
+  gender         Gender?
 
   // Notification preferences (customer self-service opt-out).
   marketingOptIn    Boolean @default(true)

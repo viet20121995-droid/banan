@@ -69,6 +69,13 @@ export class CouponsController {
       appliesToDelivery: result.appliesToDelivery,
     };
   }
+
+  /** Voucher wallet — the customer's coupons grouped into
+   *  available / used / expired. */
+  @Get('mine')
+  async mine(@CurrentUser() user: AuthPrincipal) {
+    return this.coupons.listForCustomer(user.sub);
+  }
 }
 
 class CreateCouponDto {
