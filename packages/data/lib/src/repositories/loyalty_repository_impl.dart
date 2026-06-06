@@ -31,4 +31,10 @@ class CouponRepositoryImpl implements CouponRepository {
     );
     return res.map((d) => d.toDomain());
   }
+
+  @override
+  Future<Result<VoucherWallet, AppFailure>> myWallet() async {
+    final res = await _api.myWallet();
+    return res.map((d) => d.toDomain());
+  }
 }

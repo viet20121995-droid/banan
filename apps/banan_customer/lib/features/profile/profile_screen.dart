@@ -25,6 +25,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _phone = TextEditingController();
   final _avatar = TextEditingController();
   DateTime? _birthday;
+  Gender? _gender;
   bool _hydrated = false;
   bool _saving = false;
   String? _error;
@@ -50,6 +51,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _phone.text = u.phone ?? '';
     _avatar.text = u.avatarUrl ?? '';
     _birthday = u.birthday;
+    _gender = u.gender;
     _marketingOptIn = u.marketingOptIn;
     _orderUpdatesOptIn = u.orderUpdatesOptIn;
   }
@@ -160,6 +162,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               avatarUrl: avatar == (original.avatarUrl ?? '') ? null : avatar,
               birthday: newBirthday == origBirthday ? null : newBirthday,
               clearBirthday: origBirthday != null && newBirthday == null,
+              // Only send gender when the user picked/changed it. The backend
+              // has no "clear" path, so an unchanged (incl. unset) value is
+              // simply omitted.
+              gender: _gender == original.gender ? null : _gender,
             );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -303,6 +309,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: BananSpacing.md),
+                    // Gender — optional. Tapping the already-selected chip
+                    // clears it back to "not set".
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Giới tính',
+                        prefixIcon: Icon(Icons.wc_outlined),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          spacing: BananSpacing.sm,
+                          children: [
+                            for (final g in Gender.values)
+                              ChoiceChip(
+                                label: Text(g.label),
+                                selected: _gender == g,
+                                onSelected: (sel) => setState(
+                                  () => _gender = sel ? g : null,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: BananSpacing.md),
                     TextFormField(
                       controller: _avatar,
                       keyboardType: TextInputType.url,
@@ -376,6 +409,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/wishlist'),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.confirmation_number_outlined),
+                      title: const Text('Ví voucher'),
+                      subtitle: const Text(
+                        'Mã giảm giá khả dụng, đã dùng và hết hạn.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/vouchers'),
                     ),
                     ListTile(
                       contentPadding: EdgeInsets.zero,

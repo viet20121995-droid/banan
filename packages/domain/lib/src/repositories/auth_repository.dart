@@ -57,6 +57,7 @@ abstract class AuthRepository {
     DateTime? birthday,
     bool clearBirthday = false,
     String? avatarUrl,
+    Gender? gender,
     bool? marketingOptIn,
     bool? orderUpdatesOptIn,
   });

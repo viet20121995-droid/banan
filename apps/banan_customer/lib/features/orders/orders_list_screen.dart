@@ -30,11 +30,46 @@ final myOrdersProvider = FutureProvider.autoDispose<List<Order>>((ref) async {
   );
 });
 
-class OrdersListScreen extends ConsumerWidget {
+/// Client-side status filter for the orders list. "Đang xử lý" = any
+/// non-terminal status; "Hoàn thành" = COMPLETED; "Đã hủy" = CANCELLED.
+enum _OrderFilter {
+  all('Tất cả'),
+  processing('Đang xử lý'),
+  completed('Hoàn thành'),
+  cancelled('Đã hủy');
+
+  const _OrderFilter(this.label);
+  final String label;
+
+  bool matches(OrderStatus status) {
+    switch (this) {
+      case _OrderFilter.all:
+        return true;
+      case _OrderFilter.completed:
+        return status == OrderStatus.completed;
+      case _OrderFilter.cancelled:
+        return status == OrderStatus.cancelled;
+      case _OrderFilter.processing:
+        // Everything that isn't completed or cancelled (incl. refunded,
+        // pending, accepted, in-prep, delivering, …) counts as "in progress".
+        return status != OrderStatus.completed &&
+            status != OrderStatus.cancelled;
+    }
+  }
+}
+
+class OrdersListScreen extends ConsumerStatefulWidget {
   const OrdersListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrdersListScreen> createState() => _OrdersListScreenState();
+}
+
+class _OrdersListScreenState extends ConsumerState<OrdersListScreen> {
+  _OrderFilter _filter = _OrderFilter.all;
+
+  @override
+  Widget build(BuildContext context) {
     final ordersAsync = ref.watch(myOrdersProvider);
     final s = ref.watch(stringsProvider);
     final fmt = NumberFormat.currency(
@@ -59,24 +94,82 @@ class OrdersListScreen extends ConsumerWidget {
               icon: Icons.receipt_long_outlined,
             );
           }
+          final filtered =
+              orders.where((o) => _filter.matches(o.status)).toList();
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(myOrdersProvider),
-            child: ListView.separated(
-              padding: const EdgeInsets.all(BananSpacing.lg),
-              itemCount: orders.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(height: BananSpacing.md),
-              itemBuilder: (context, i) {
-                final o = orders[i];
-                return _OrderRow(
-                  order: o,
-                  fmt: fmt,
-                  onTap: () => context.push('/orders/${o.id}'),
-                );
-              },
+            child: Column(
+              children: [
+                _FilterChips(
+                  selected: _filter,
+                  onChanged: (f) => setState(() => _filter = f),
+                ),
+                Expanded(
+                  child: filtered.isEmpty
+                      // Keep the list scrollable so pull-to-refresh still works
+                      // even when the active filter has no matching orders.
+                      ? ListView(
+                          children: [
+                            const SizedBox(height: BananSpacing.xxl),
+                            EmptyState(
+                              title: 'Không có đơn',
+                              message:
+                                  'Không có đơn hàng nào ở mục "${_filter.label}".',
+                              icon: Icons.filter_list_off_outlined,
+                            ),
+                          ],
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(BananSpacing.lg),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: BananSpacing.md),
+                          itemBuilder: (context, i) {
+                            final o = filtered[i];
+                            return _OrderRow(
+                              order: o,
+                              fmt: fmt,
+                              onTap: () => context.push('/orders/${o.id}'),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Horizontally-scrolling status filter chips above the orders list.
+class _FilterChips extends StatelessWidget {
+  const _FilterChips({required this.selected, required this.onChanged});
+
+  final _OrderFilter selected;
+  final ValueChanged<_OrderFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(
+        horizontal: BananSpacing.lg,
+        vertical: BananSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          for (final f in _OrderFilter.values) ...[
+            ChoiceChip(
+              label: Text(f.label),
+              selected: selected == f,
+              onSelected: (_) => onChanged(f),
+            ),
+            if (f != _OrderFilter.values.last)
+              const SizedBox(width: BananSpacing.sm),
+          ],
+        ],
       ),
     );
   }

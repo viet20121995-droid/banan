@@ -1,4 +1,5 @@
 import 'package:banan_core/banan_core.dart';
+import 'package:banan_domain/banan_domain.dart';
 import 'package:dio/dio.dart';
 
 import '../dtos/auth_response_dto.dart';
@@ -88,6 +89,7 @@ class AuthApi {
     DateTime? birthday,
     bool clearBirthday = false,
     String? avatarUrl,
+    Gender? gender,
     bool? marketingOptIn,
     bool? orderUpdatesOptIn,
   }) async {
@@ -102,6 +104,7 @@ class AuthApi {
               DateTime.utc(birthday.year, birthday.month, birthday.day)
                   .toIso8601String(),
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
+        if (gender != null) 'gender': gender.wire,
         if (marketingOptIn != null) 'marketingOptIn': marketingOptIn,
         if (orderUpdatesOptIn != null) 'orderUpdatesOptIn': orderUpdatesOptIn,
       };

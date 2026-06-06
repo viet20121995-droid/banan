@@ -93,7 +93,8 @@ class MembershipSummaryDto {
         earnRatePerVnd: earnRatePerVnd,
         redemptionValueVnd: redemptionValueVnd,
         tierThresholds: {
-          MembershipTier.silver: tierThresholds['silver'] ?? 0,
+          MembershipTier.bronze: tierThresholds['bronze'] ?? 0,
+          MembershipTier.silver: tierThresholds['silver'] ?? 500,
           MembershipTier.gold: tierThresholds['gold'] ?? 1000,
           MembershipTier.platinum: tierThresholds['platinum'] ?? 5000,
         },

@@ -89,16 +89,24 @@ class MembershipSummary extends Equatable {
 
   /// Points needed to reach the next tier (null if at top tier).
   int? get pointsToNextTier {
-    final order = [
+    final next = nextTier;
+    if (next == null) return null;
+    final nextThreshold = tierThresholds[next] ?? 0;
+    final delta = nextThreshold - balance;
+    return delta > 0 ? delta : null;
+  }
+
+  /// The tier directly above the current one, or null if already at the top.
+  MembershipTier? get nextTier {
+    const ladder = [
+      MembershipTier.bronze,
       MembershipTier.silver,
       MembershipTier.gold,
       MembershipTier.platinum,
     ];
-    final idx = order.indexOf(tier);
-    if (idx < 0 || idx == order.length - 1) return null;
-    final nextThreshold = tierThresholds[order[idx + 1]] ?? 0;
-    final delta = nextThreshold - balance;
-    return delta > 0 ? delta : null;
+    final idx = ladder.indexOf(tier);
+    if (idx < 0 || idx == ladder.length - 1) return null;
+    return ladder[idx + 1];
   }
 
   @override

@@ -14,4 +14,8 @@ abstract class CouponRepository {
     required int subtotalVnd,
     required int deliveryFeeVnd,
   });
+
+  /// The signed-in customer's voucher wallet (GET /coupons/mine), split into
+  /// available / used / expired buckets.
+  Future<Result<VoucherWallet, AppFailure>> myWallet();
 }

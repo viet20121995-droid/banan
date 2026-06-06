@@ -182,6 +182,7 @@ class _CampaignCard extends ConsumerWidget {
     String fmtValue(num v) =>
         kind == 'FIXED' ? '${_vnd.format(v)}₫' : '${_numText(v)}%';
     const order = [
+      ('BRONZE', 'Đồng'),
       ('SILVER', 'Bạc'),
       ('GOLD', 'Vàng'),
       ('PLATINUM', 'Bạch kim'),
@@ -438,6 +439,7 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
   final _getQty = TextEditingController(text: '1');
   final _getDiscountPct = TextEditingController(text: '100');
   // Membership benefit — per-tier value (blank/0 = tier excluded).
+  final _bronzeValue = TextEditingController();
   final _silverValue = TextEditingController();
   final _goldValue = TextEditingController();
   final _platinumValue = TextEditingController();
@@ -507,6 +509,8 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
       // Phase-3 membership benefit — per-tier values.
       final tierValues = (cfg['tierValues'] as Map?)?.cast<String, dynamic>();
       if (tierValues != null) {
+        final bronze = tierValues['BRONZE'] as num?;
+        if (bronze != null) _bronzeValue.text = _numText(bronze);
         final silver = tierValues['SILVER'] as num?;
         if (silver != null) _silverValue.text = _numText(silver);
         final gold = tierValues['GOLD'] as num?;
@@ -535,6 +539,7 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
     _buyQty.dispose();
     _getQty.dispose();
     _getDiscountPct.dispose();
+    _bronzeValue.dispose();
     _silverValue.dispose();
     _goldValue.dispose();
     _platinumValue.dispose();
@@ -642,6 +647,8 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
       // blank or 0. No product/category scope.
       case CampaignType.membershipBenefit:
         final tierValues = <String, dynamic>{};
+        final bronze = num.tryParse(_bronzeValue.text.trim());
+        if (bronze != null && bronze > 0) tierValues['BRONZE'] = bronze;
         final silver = num.tryParse(_silverValue.text.trim());
         if (silver != null && silver > 0) tierValues['SILVER'] = silver;
         final gold = num.tryParse(_goldValue.text.trim());
@@ -868,6 +875,12 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.outline,
                 ),
+              ),
+              const SizedBox(height: BananSpacing.sm),
+              _TierValueField(
+                controller: _bronzeValue,
+                label: 'Đồng (BRONZE)',
+                kind: _kind,
               ),
               const SizedBox(height: BananSpacing.sm),
               _TierValueField(

@@ -53,4 +53,20 @@ class CouponsApi {
       return Result.failure(UnknownFailure(cause: e));
     }
   }
+
+  /// The signed-in customer's voucher wallet (GET /coupons/mine).
+  Future<Result<VoucherWalletDto, AppFailure>> myWallet() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>('/coupons/mine');
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      if (res.statusCode != 200 || data == null) {
+        return Result.failure(mapHttpStatusToFailure(res));
+      }
+      return Result.success(VoucherWalletDto.fromJson(data));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
 }

@@ -134,6 +134,7 @@ class AuthRepositoryImpl implements AuthRepository {
     DateTime? birthday,
     bool clearBirthday = false,
     String? avatarUrl,
+    Gender? gender,
     bool? marketingOptIn,
     bool? orderUpdatesOptIn,
   }) async {
@@ -143,6 +144,7 @@ class AuthRepositoryImpl implements AuthRepository {
       birthday: birthday,
       clearBirthday: clearBirthday,
       avatarUrl: avatarUrl,
+      gender: gender,
       marketingOptIn: marketingOptIn,
       orderUpdatesOptIn: orderUpdatesOptIn,
     );

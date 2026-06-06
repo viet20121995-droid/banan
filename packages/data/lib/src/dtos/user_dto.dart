@@ -12,6 +12,7 @@ class UserDto {
     this.phone,
     this.avatarUrl,
     this.birthday,
+    this.gender,
     this.storeId,
     this.kitchenId,
     this.marketingOptIn = true,
@@ -29,6 +30,7 @@ class UserDto {
       membershipTier: json['membershipTier'] as String,
       pointsBalance: (json['pointsBalance'] as num).toInt(),
       birthday: json['birthday'] as String?,
+      gender: json['gender'] as String?,
       storeId: json['storeId'] as String?,
       kitchenId: json['kitchenId'] as String?,
       marketingOptIn: json['marketingOptIn'] as bool? ?? true,
@@ -45,6 +47,7 @@ class UserDto {
   final String membershipTier;
   final int pointsBalance;
   final String? birthday;
+  final String? gender;
   final String? storeId;
   final String? kitchenId;
   final bool marketingOptIn;
@@ -61,6 +64,7 @@ class UserDto {
       membershipTier: MembershipTier.fromWire(membershipTier),
       pointsBalance: pointsBalance,
       birthday: birthday == null ? null : DateTime.tryParse(birthday!),
+      gender: gender == null ? null : Gender.fromWire(gender!),
       storeId: storeId,
       kitchenId: kitchenId,
       marketingOptIn: marketingOptIn,

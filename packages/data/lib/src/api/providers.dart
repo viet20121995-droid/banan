@@ -342,6 +342,18 @@ final FutureProvider<MembershipSummary> membershipSummaryProvider =
   );
 });
 
+/// Customer's voucher wallet (GET /coupons/mine) — available / used / expired.
+/// Auto-disposed: only alive while the wallet screen is mounted.
+final voucherWalletProvider =
+    FutureProvider.autoDispose<VoucherWallet>((ref) async {
+  final repo = ref.watch(couponRepositoryProvider);
+  final res = await repo.myWallet();
+  return res.when(
+    success: (w) => w,
+    failure: (f) => throw Exception(f.message ?? f.code),
+  );
+});
+
 /// Analytics — merchant + kitchen dashboard summary endpoints.
 final Provider<AnalyticsApi> analyticsApiProvider = Provider<AnalyticsApi>(
   (ref) => AnalyticsApi(ref.watch(dioProvider)),

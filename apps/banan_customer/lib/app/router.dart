@@ -26,6 +26,7 @@ import '../features/payment_return/payment_return_screen.dart';
 import '../features/bundles/bundle_detail_screen.dart';
 import '../features/product_detail/product_detail_screen.dart';
 import '../features/profile/profile_screen.dart';
+import '../features/vouchers/voucher_wallet_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
 
 const _login = '/login';
@@ -154,6 +155,12 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/membership',
         builder: (_, __) => const MembershipScreen(),
+      ),
+      // Voucher wallet — CUSTOMER-only (not in `_guestAllowed`, so the
+      // redirect bounces guests to /login and non-customers to /wrong-app).
+      GoRoute(
+        path: '/vouchers',
+        builder: (_, __) => const VoucherWalletScreen(),
       ),
       GoRoute(
         path: '/profile',
