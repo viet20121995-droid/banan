@@ -23,6 +23,12 @@ async function bootstrap() {
   });
   app.useLogger(app.get(Logger));
 
+  // Behind Caddy (reverse proxy): trust X-Forwarded-* so `req.protocol` is
+  // 'https' and `req.get('host')` is the public host. Used to build absolute
+  // upload URLs — without this they'd be http:// and get blocked as mixed
+  // content on the https sites.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   const config = app.get(ConfigService);
 
   app.use(
