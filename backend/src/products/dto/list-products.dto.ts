@@ -28,6 +28,6 @@ export class ListProductsDto {
   @Transform(({ value }) => Number(value))
   @IsInt()
   @Min(1)
-  @Max(50)
+  @Max(500)
   perPage?: number;
 }
