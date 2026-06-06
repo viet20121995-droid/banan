@@ -44,6 +44,10 @@ model User {
   pointsBalance  Int            @default(0)
   birthday       DateTime?      @db.Date
 
+  // Notification preferences (customer self-service opt-out).
+  marketingOptIn    Boolean @default(true)
+  orderUpdatesOptIn Boolean @default(true)
+
   // Merchant-only CRM: private staff notes + tags (VIP, allergy, …).
   merchantNotes String?
   merchantTags  String[] @default([])
@@ -61,6 +65,7 @@ model User {
   notifications      Notification[]
   refreshTokens      RefreshToken[]
   passwordResets     PasswordReset[]
+  emailChanges       EmailChange[]
   couponRedemptions  CouponRedemption[]
   authoredThreads    Thread[]           @relation("ThreadAuthor")
   devices            DeviceToken[]
@@ -97,6 +102,19 @@ model PasswordReset {
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String    @unique // sha256 of opaque reset token
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model EmailChange {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  newEmail  String
+  tokenHash String    @unique // sha256 of opaque verification token
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())

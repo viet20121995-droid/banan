@@ -128,8 +128,9 @@ export class NotificationsService {
     template: { type: string; title: string; body: string },
     data?: Record<string, unknown>,
   ): Promise<{ recipients: number }> {
+    // Respect the marketing opt-out + skip disabled/deleted accounts.
     const users = await this.prisma.user.findMany({
-      where: { role: 'CUSTOMER' },
+      where: { role: 'CUSTOMER', marketingOptIn: true, isActive: true },
       select: { id: true },
     });
     if (users.length === 0) return { recipients: 0 };

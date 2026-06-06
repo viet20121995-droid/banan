@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsDateString,
   IsOptional,
   IsString,
@@ -30,4 +31,13 @@ export class UpdateProfileDto {
   @IsUrl({ require_tld: false })
   @MaxLength(500)
   avatarUrl?: string;
+
+  /// Notification preferences (opt-out).
+  @IsOptional()
+  @IsBoolean()
+  marketingOptIn?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  orderUpdatesOptIn?: boolean;
 }

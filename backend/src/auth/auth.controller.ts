@@ -20,6 +20,9 @@ import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
+import { ChangeEmailDto } from './dto/change-email.dto';
+import { ConfirmEmailChangeDto } from './dto/confirm-email-change.dto';
 import { AuthService } from './auth.service';
 import type { AuthPrincipal } from './types/jwt-payload';
 
@@ -116,6 +119,43 @@ export class AuthController {
     return { ok: true };
   }
 
+  // ── Account management ────────────────────────────────────────────────────
+
+  @ApiBearerAuth()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('delete-account')
+  async deleteAccount(
+    @CurrentUser() principal: AuthPrincipal,
+    @Body() dto: DeleteAccountDto,
+  ): Promise<void> {
+    await this.auth.deleteAccount(principal.sub, dto.password);
+  }
+
+  @ApiBearerAuth()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post('change-email')
+  async changeEmail(
+    @CurrentUser() principal: AuthPrincipal,
+    @Body() dto: ChangeEmailDto,
+  ) {
+    await this.auth.requestEmailChange(
+      principal.sub,
+      dto.newEmail,
+      dto.password,
+    );
+    return { ok: true };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post('change-email/confirm')
+  async confirmEmailChange(@Body() dto: ConfirmEmailChangeDto) {
+    return this.auth.confirmEmailChange(dto.token);
+  }
+
   private static toSession(input: {
     accessToken: string;
     refreshToken: string;
@@ -140,6 +180,8 @@ export class AuthController {
       membershipTier: user.membershipTier,
       pointsBalance: user.pointsBalance,
       birthday: user.birthday?.toISOString() ?? null,
+      marketingOptIn: user.marketingOptIn,
+      orderUpdatesOptIn: user.orderUpdatesOptIn,
       storeId: user.storeId,
       kitchenId: user.kitchenId,
     };

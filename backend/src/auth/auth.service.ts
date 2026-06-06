@@ -28,6 +28,7 @@ export class AuthService {
   private static readonly BCRYPT_ROUNDS = 10;
   private static readonly REFRESH_TTL_DAYS = 30;
   private static readonly RESET_TTL_MINUTES = 60;
+  private static readonly EMAIL_CHANGE_TTL_MINUTES = 60;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -126,6 +127,8 @@ export class AuthService {
       phone?: string;
       birthday?: string;
       avatarUrl?: string;
+      marketingOptIn?: boolean;
+      orderUpdatesOptIn?: boolean;
     },
   ): Promise<User> {
     const data: Prisma.UserUpdateInput = {};
@@ -140,6 +143,10 @@ export class AuthService {
     if (dto.avatarUrl !== undefined) {
       const a = dto.avatarUrl.trim();
       data.avatarUrl = a.length === 0 ? null : a;
+    }
+    if (dto.marketingOptIn !== undefined) data.marketingOptIn = dto.marketingOptIn;
+    if (dto.orderUpdatesOptIn !== undefined) {
+      data.orderUpdatesOptIn = dto.orderUpdatesOptIn;
     }
     try {
       return await this.prisma.user.update({ where: { id: userId }, data });
@@ -255,6 +262,162 @@ export class AuthService {
         data: { revokedAt: new Date() },
       }),
     ]);
+  }
+
+  /**
+   * Self-service account deletion (right-to-erasure). Verifies the password,
+   * then anonymises the PII and deactivates the account — order history is
+   * kept (FK-safe) but no longer linked to identifiable data. Saved addresses,
+   * wishlist, devices, notifications and sessions are removed.
+   */
+  async deleteAccount(userId: string, password: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException({ code: 'AUTH_USER_NOT_FOUND' });
+    if (user.role !== 'CUSTOMER') {
+      throw new BadRequestException({
+        code: 'AUTH_CANNOT_DELETE_STAFF',
+        message: 'Tài khoản nhân viên không thể tự xoá.',
+      });
+    }
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException({
+        code: 'AUTH_CURRENT_PASSWORD_WRONG',
+        message: 'Mật khẩu không đúng.',
+      });
+    }
+    const scrambled = await bcrypt.hash(
+      randomBytes(24).toString('base64url'),
+      AuthService.BCRYPT_ROUNDS,
+    );
+    await this.prisma.$transaction([
+      this.prisma.address.deleteMany({ where: { userId } }),
+      this.prisma.wishlistItem.deleteMany({ where: { userId } }),
+      this.prisma.deviceToken.deleteMany({ where: { userId } }),
+      this.prisma.notification.deleteMany({ where: { userId } }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          isActive: false,
+          email: `deleted-${user.id}@deleted.banan.local`,
+          phone: null,
+          fullName: 'Tài khoản đã xoá',
+          avatarUrl: null,
+          birthday: null,
+          passwordHash: scrambled,
+          marketingOptIn: false,
+          orderUpdatesOptIn: false,
+          merchantNotes: null,
+          merchantTags: [],
+        },
+      }),
+    ]);
+  }
+
+  /** Start an email-change: verify password, ensure the target is free, then
+   *  email a single-use confirmation link to the NEW address. */
+  async requestEmailChange(
+    userId: string,
+    newEmailRaw: string,
+    password: string,
+  ): Promise<void> {
+    const newEmail = newEmailRaw.toLowerCase().trim();
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException({ code: 'AUTH_USER_NOT_FOUND' });
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException({
+        code: 'AUTH_CURRENT_PASSWORD_WRONG',
+        message: 'Mật khẩu không đúng.',
+      });
+    }
+    if (newEmail === user.email) {
+      throw new BadRequestException({
+        code: 'AUTH_EMAIL_SAME',
+        message: 'Email mới trùng với email hiện tại.',
+      });
+    }
+    const taken = await this.prisma.user.findUnique({
+      where: { email: newEmail },
+    });
+    if (taken) {
+      throw new ConflictException({
+        code: 'AUTH_EMAIL_TAKEN',
+        message: 'Email này đã được sử dụng.',
+      });
+    }
+    await this.prisma.emailChange.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    const rawToken = randomBytes(32).toString('base64url');
+    const tokenHash = AuthService.hashToken(rawToken);
+    const expiresAt = new Date(
+      Date.now() + AuthService.EMAIL_CHANGE_TTL_MINUTES * 60 * 1000,
+    );
+    await this.prisma.emailChange.create({
+      data: { userId, newEmail, tokenHash, expiresAt },
+    });
+    const base = (
+      this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081'
+    ).replace(/\/$/, '');
+    const confirmUrl = `${base}/change-email?token=${rawToken}`;
+    await this.email.sendRaw({
+      toEmail: newEmail,
+      subject: 'Xác nhận đổi email — Banan',
+      html: `
+        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2b2a22;">
+          <h2 style="color:#1E6A35;margin:0 0 12px 0">Xác nhận đổi email</h2>
+          <p>Xin chào ${user.fullName},</p>
+          <p>Bạn vừa yêu cầu đổi email đăng nhập sang địa chỉ này. Bấm nút bên dưới để xác nhận:</p>
+          <p style="margin: 24px 0">
+            <a href="${confirmUrl}"
+               style="background:#1E6A35;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600">
+              Xác nhận đổi email
+            </a>
+          </p>
+          <p style="color:#5e5848;font-size:13px">Nếu không phải bạn, hãy bỏ qua email này. Liên kết hết hạn sau 1 giờ.</p>
+        </div>
+      `,
+    });
+  }
+
+  /** Complete an email-change from the confirmation link. */
+  async confirmEmailChange(rawToken: string): Promise<{ email: string }> {
+    const tokenHash = AuthService.hashToken(rawToken);
+    const record = await this.prisma.emailChange.findUnique({
+      where: { tokenHash },
+    });
+    if (!record || record.usedAt || record.expiresAt < new Date()) {
+      throw new BadRequestException({
+        code: 'AUTH_EMAIL_CHANGE_INVALID',
+        message: 'Liên kết đổi email không hợp lệ hoặc đã hết hạn.',
+      });
+    }
+    const taken = await this.prisma.user.findFirst({
+      where: { email: record.newEmail, id: { not: record.userId } },
+    });
+    if (taken) {
+      throw new ConflictException({
+        code: 'AUTH_EMAIL_TAKEN',
+        message: 'Email này đã được sử dụng.',
+      });
+    }
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { email: record.newEmail },
+      }),
+      this.prisma.emailChange.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+    return { email: record.newEmail };
   }
 
   private async issueSession(user: User, deviceId?: string): Promise<IssuedTokens> {
