@@ -27,6 +27,7 @@ import 'analytics_api.dart';
 import 'auth_api.dart';
 import 'banners_api.dart';
 import 'bundles_api.dart';
+import 'campaigns_api.dart';
 import 'catalog_api.dart';
 import 'collections_api.dart';
 import 'contact_api.dart';
@@ -456,3 +457,15 @@ final Provider<MerchantCouponsRepository> merchantCouponsRepositoryProvider =
   (ref) =>
       MerchantCouponsRepositoryImpl(ref.watch(merchantCouponsApiProvider)),
 );
+
+/// Admin promotions manager — chain-wide / per-store campaign CRUD.
+/// The API surface returns domain [Campaign] objects directly, so the
+/// merchant screen watches/reads this provider with no separate repository.
+final Provider<CampaignsApi> campaignsApiProvider = Provider<CampaignsApi>(
+  (ref) => CampaignsApi(ref.watch(dioProvider)),
+);
+
+/// Alias kept for parity with the other repository-style providers — points
+/// at the same [CampaignsApi]. Widgets may `ref.watch`/`ref.read` either name.
+final Provider<CampaignsApi> campaignsRepositoryProvider =
+    Provider<CampaignsApi>((ref) => ref.watch(campaignsApiProvider));

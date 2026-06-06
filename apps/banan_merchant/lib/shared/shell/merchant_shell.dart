@@ -203,13 +203,9 @@ class _SidebarNav extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final isAdmin = ref
-            .watch(authSessionProvider)
-            .valueOrNull
-            ?.user
-            .role
-            .isAdmin ??
-        false;
+    final role = ref.watch(authSessionProvider).valueOrNull?.user.role;
+    final isAdmin = role?.isAdmin ?? false;
+    final isOwner = role == Role.merchantOwner;
     final currentPath = GoRouterState.of(context).matchedLocation;
 
     // Sidebar layout. Several entries are intentionally hidden for the
@@ -294,6 +290,15 @@ class _SidebarNav extends ConsumerWidget {
               icon: Icons.local_offer_outlined,
               iconSelected: Icons.local_offer,
               route: '/coupons',
+            ),
+          // Promotions / campaigns — admin-managed chain-wide programs.
+          // Backend gates this on the ADMIN role; owners see it too.
+          if (isAdmin || isOwner)
+            const _NavItem(
+              label: 'Khuyến mãi',
+              icon: Icons.sell_outlined,
+              iconSelected: Icons.sell,
+              route: '/campaigns',
             ),
           const _NavItem(
             label: 'Popup quảng cáo',

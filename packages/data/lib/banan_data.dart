@@ -8,6 +8,7 @@ export 'src/api/analytics_api.dart';
 export 'src/api/auth_api.dart' show kSkipAuthRefresh;
 export 'src/api/banners_api.dart';
 export 'src/api/bundles_api.dart';
+export 'src/api/campaigns_api.dart';
 export 'src/api/catalog_api.dart';
 export 'src/api/collections_api.dart';
 export 'src/api/contact_api.dart';

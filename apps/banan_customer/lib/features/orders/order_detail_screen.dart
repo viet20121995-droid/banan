@@ -255,6 +255,11 @@ class _Body extends ConsumerWidget {
                   ),
                 const Divider(height: BananSpacing.xl),
                 _Line(label: s.subtotal, value: fmt.format(order.subtotal)),
+                if (order.campaignDiscount > 0)
+                  _Line(
+                    label: s.campaignDiscount,
+                    value: '−${fmt.format(order.campaignDiscount)}',
+                  ),
                 _Line(
                   label: s.deliveryFee,
                   value: fmt.format(order.deliveryFee),

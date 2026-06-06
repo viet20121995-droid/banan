@@ -224,6 +224,11 @@ class _Body extends ConsumerWidget {
                   ),
                 const Divider(height: BananSpacing.xl),
                 _Line(label: 'Tạm tính', value: fmt.format(order.subtotal)),
+                if (order.campaignDiscount > 0)
+                  _Line(
+                    label: 'Khuyến mãi',
+                    value: '−${fmt.format(order.campaignDiscount)}',
+                  ),
                 _Line(
                   label: 'Phí giao hàng',
                   value: fmt.format(order.deliveryFee),

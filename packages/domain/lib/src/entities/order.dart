@@ -101,6 +101,8 @@ class Order extends Equatable {
     this.invoiceEmail,
     this.invoiceIssuedAt,
     this.invoiceFileUrl,
+    this.campaignDiscount = 0,
+    this.campaignInfo,
   });
 
   final String id;
@@ -115,6 +117,14 @@ class Order extends Equatable {
   final double subtotal;
   final double deliveryFee;
   final double total;
+
+  /// Total promotion (campaign) discount applied to this order, in VND.
+  /// 0 when no campaign matched. Drives the "Khuyến mãi −{amount}₫" line.
+  final int campaignDiscount;
+
+  /// Optional breakdown of which campaigns applied — each entry is
+  /// `{id, name, type, discountVnd}`. Null when the API omits it.
+  final List<Map<String, dynamic>>? campaignInfo;
   final List<OrderItem> items;
   final List<OrderStatusEvent> statusEvents;
   final List<PaymentSummary> payments;
@@ -175,6 +185,8 @@ class Order extends Equatable {
         invoiceEmail,
         invoiceIssuedAt,
         invoiceFileUrl,
+        campaignDiscount,
+        campaignInfo,
         createdAt,
         updatedAt,
       ];

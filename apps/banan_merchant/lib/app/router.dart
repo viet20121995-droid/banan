@@ -12,6 +12,7 @@ import '../features/broadcast_mgmt/broadcast_screen.dart';
 import '../features/bulk_tools/bulk_tools_screen.dart';
 import '../features/bundles_mgmt/bundle_editor_screen.dart';
 import '../features/bundles_mgmt/bundles_list_screen.dart';
+import '../features/campaigns_mgmt/campaigns_screen.dart';
 import '../features/collections_mgmt/collection_editor_screen.dart';
 import '../features/content_mgmt/site_content_editor_screen.dart';
 import '../features/marketing_mgmt/marketing_screen.dart';
@@ -166,6 +167,10 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/coupons',
         builder: (_, __) => const CouponsScreen(),
+      ),
+      GoRoute(
+        path: '/campaigns',
+        builder: (_, __) => const CampaignsScreen(),
       ),
       GoRoute(
         path: '/customers',

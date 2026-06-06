@@ -11,6 +11,16 @@ double _toDouble(Object? value) {
   return 0;
 }
 
+/// Parses a VND amount that may arrive as a number or a Decimal string.
+int _toIntVnd(Object? value) {
+  if (value == null) return 0;
+  if (value is num) return value.toInt();
+  if (value is String) {
+    return int.tryParse(value) ?? (double.tryParse(value)?.round() ?? 0);
+  }
+  return 0;
+}
+
 class OrderItemDto {
   const OrderItemDto({
     required this.id,
@@ -133,10 +143,13 @@ class OrderDto {
     this.invoiceEmail,
     this.invoiceIssuedAt,
     this.invoiceFileUrl,
+    this.campaignDiscount = 0,
+    this.campaignInfo,
   });
 
   factory OrderDto.fromJson(Map<String, dynamic> json) {
     final store = json['store'] as Map<String, dynamic>?;
+    final campaignInfoRaw = json['campaignInfo'] as List?;
     return OrderDto(
       id: json['id'] as String,
       code: json['code'] as String,
@@ -174,6 +187,10 @@ class OrderDto {
       invoiceEmail: json['invoiceEmail'] as String?,
       invoiceIssuedAt: json['invoiceIssuedAt'] as String?,
       invoiceFileUrl: json['invoiceFileUrl'] as String?,
+      campaignDiscount: _toIntVnd(json['campaignDiscount']),
+      campaignInfo: campaignInfoRaw
+          ?.map((e) => (e as Map).cast<String, dynamic>())
+          .toList(),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -206,6 +223,8 @@ class OrderDto {
   /// ISO-8601 string from the API (kept raw so a null roundtrip stays null).
   final String? invoiceIssuedAt;
   final String? invoiceFileUrl;
+  final int campaignDiscount;
+  final List<Map<String, dynamic>>? campaignInfo;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -239,6 +258,8 @@ class OrderDto {
         invoiceIssuedAt:
             invoiceIssuedAt == null ? null : DateTime.tryParse(invoiceIssuedAt!),
         invoiceFileUrl: invoiceFileUrl,
+        campaignDiscount: campaignDiscount,
+        campaignInfo: campaignInfo,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );

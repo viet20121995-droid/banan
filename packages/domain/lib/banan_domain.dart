@@ -7,6 +7,7 @@ export 'src/entities/admin_user.dart';
 export 'src/entities/auth_session.dart';
 export 'src/entities/banner.dart';
 export 'src/entities/bundle.dart';
+export 'src/entities/campaign.dart';
 export 'src/entities/category.dart';
 export 'src/entities/collection.dart';
 export 'src/entities/coupon.dart';
