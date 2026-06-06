@@ -15,6 +15,8 @@ class User extends Equatable {
     this.birthday,
     this.storeId,
     this.kitchenId,
+    this.marketingOptIn = true,
+    this.orderUpdatesOptIn = true,
   });
 
   final String id;
@@ -29,6 +31,12 @@ class User extends Equatable {
   final String? storeId;
   final String? kitchenId;
 
+  /// Whether the customer opted in to promotional / marketing messages.
+  final bool marketingOptIn;
+
+  /// Whether the customer opted in to order-status update notifications.
+  final bool orderUpdatesOptIn;
+
   @override
   List<Object?> get props => [
         id,
@@ -42,5 +50,7 @@ class User extends Equatable {
         birthday,
         storeId,
         kitchenId,
+        marketingOptIn,
+        orderUpdatesOptIn,
       ];
 }

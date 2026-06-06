@@ -88,6 +88,8 @@ class AuthApi {
     DateTime? birthday,
     bool clearBirthday = false,
     String? avatarUrl,
+    bool? marketingOptIn,
+    bool? orderUpdatesOptIn,
   }) async {
     try {
       final body = <String, dynamic>{
@@ -100,6 +102,8 @@ class AuthApi {
               DateTime.utc(birthday.year, birthday.month, birthday.day)
                   .toIso8601String(),
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
+        if (marketingOptIn != null) 'marketingOptIn': marketingOptIn,
+        if (orderUpdatesOptIn != null) 'orderUpdatesOptIn': orderUpdatesOptIn,
       };
       final res = await _dio.patch<Map<String, dynamic>>(
         '/auth/me',
@@ -155,6 +159,47 @@ class AuthApi {
         {'token': token, 'newPassword': newPassword},
         skipRefresh: true,
       );
+
+  /// Self-service account deletion for the signed-in user. Verifies the
+  /// current password server-side; old orders are anonymised. Returns 204.
+  Future<Result<bool, AppFailure>> deleteAccount(String password) =>
+      _ok('/auth/delete-account', {'password': password});
+
+  /// Start an email change. The backend emails a confirmation link to the
+  /// NEW address; the change only lands once that link is confirmed.
+  /// Errors: 401 wrong password, 409 email taken (`AUTH_EMAIL_TAKEN`),
+  /// 400 same email.
+  Future<Result<bool, AppFailure>> requestEmailChange({
+    required String newEmail,
+    required String password,
+  }) =>
+      _ok('/auth/change-email', {
+        'newEmail': newEmail,
+        'password': password,
+      });
+
+  /// Complete an email change using the token from the confirmation link.
+  /// Public (no auth). Returns the new email on success; 400 if the token
+  /// is invalid or expired.
+  Future<Result<String, AppFailure>> confirmEmailChange(String token) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/auth/change-email/confirm',
+        data: {'token': token},
+        options: Options(extra: const {kSkipAuthRefresh: true}),
+      );
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      final email = data?['email'] as String?;
+      if (res.statusCode != 200 || email == null) {
+        return Result.failure(mapHttpStatusToFailure(res));
+      }
+      return Result.success(email);
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
 
   /// POST a body and return success/failure only (no payload).
   Future<Result<bool, AppFailure>> _ok(

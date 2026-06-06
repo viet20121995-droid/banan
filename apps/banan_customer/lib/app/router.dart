@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/addresses/addresses_screen.dart';
+import '../features/auth/change_email_confirm_screen.dart';
 import '../features/auth/change_password_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/reset_password_screen.dart';
@@ -32,6 +33,7 @@ const _register = '/register';
 const _forgotPassword = '/forgot-password';
 const _resetPassword = '/reset-password';
 const _changePassword = '/change-password';
+const _changeEmail = '/change-email';
 const _wrongApp = '/wrong-app';
 const _home = '/';
 
@@ -62,6 +64,9 @@ const _guestAllowed = <String>{
   // Account recovery — reachable without a session (the user is locked out).
   _forgotPassword,
   _resetPassword,
+  // Email-change confirmation — opened from the link emailed to the new
+  // address; the change logs the user out, so it must be guest-allowed.
+  _changeEmail,
 };
 
 bool _isGuestAllowed(String loc) {
@@ -234,6 +239,12 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: _resetPassword,
         builder: (context, state) => ResetPasswordScreen(
+          token: state.uri.queryParameters['token'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: _changeEmail,
+        builder: (context, state) => ChangeEmailConfirmScreen(
           token: state.uri.queryParameters['token'] ?? '',
         ),
       ),

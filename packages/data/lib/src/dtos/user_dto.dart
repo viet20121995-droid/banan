@@ -14,6 +14,8 @@ class UserDto {
     this.birthday,
     this.storeId,
     this.kitchenId,
+    this.marketingOptIn = true,
+    this.orderUpdatesOptIn = true,
   });
 
   factory UserDto.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,8 @@ class UserDto {
       birthday: json['birthday'] as String?,
       storeId: json['storeId'] as String?,
       kitchenId: json['kitchenId'] as String?,
+      marketingOptIn: json['marketingOptIn'] as bool? ?? true,
+      orderUpdatesOptIn: json['orderUpdatesOptIn'] as bool? ?? true,
     );
   }
 
@@ -43,6 +47,8 @@ class UserDto {
   final String? birthday;
   final String? storeId;
   final String? kitchenId;
+  final bool marketingOptIn;
+  final bool orderUpdatesOptIn;
 
   User toDomain() {
     return User(
@@ -57,6 +63,8 @@ class UserDto {
       birthday: birthday == null ? null : DateTime.tryParse(birthday!),
       storeId: storeId,
       kitchenId: kitchenId,
+      marketingOptIn: marketingOptIn,
+      orderUpdatesOptIn: orderUpdatesOptIn,
     );
   }
 }

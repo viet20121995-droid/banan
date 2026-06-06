@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../addresses/addresses_screen.dart' show myAddressesProvider;
 import '../cart/cart_controller.dart';
 import '../locations/locations_screen.dart' show storesListProvider;
 import 'fulfillment_preference.dart';
@@ -40,6 +41,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   /// Selected HCMC ward (post-2025 reform) for the delivery address. Drives
   /// the distance-based delivery surcharge.
   String? _wardCode;
+  /// Carried through from a picked saved address (no visible fields in the
+  /// inline form). Re-sent on the order so the address book stays faithful.
+  String? _line2;
+  String? _district;
+  /// Id of the saved address the customer tapped, so the picker can show
+  /// which one is currently applied. Null = manual entry.
+  String? _selectedAddressId;
 
   final _notes = TextEditingController();
   final _coupon = TextEditingController();
@@ -109,6 +117,33 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _invoiceAddress.dispose();
     _invoiceEmail.dispose();
     super.dispose();
+  }
+
+  /// Fill the inline delivery form from a saved address. City is locked to
+  /// HCMC, so we keep the controller as-is. The ward picker selection
+  /// (`_wardCode`) and the hidden line2/district are carried through too.
+  void _applySavedAddress(Address a) {
+    setState(() {
+      _selectedAddressId = a.id;
+      _recipient.text = a.recipient;
+      _phone.text = a.phone;
+      _line1.text = a.line1;
+      _line2 = a.line2;
+      _district = a.district;
+      _wardCode = a.wardCode;
+    });
+  }
+
+  /// Once the customer hand-edits a field, the form no longer mirrors the
+  /// picked saved address — drop the highlight (and the carried line2/
+  /// district so we don't ship stale extras with a now-manual address).
+  void _clearSavedSelection() {
+    if (_selectedAddressId == null) return;
+    setState(() {
+      _selectedAddressId = null;
+      _line2 = null;
+      _district = null;
+    });
   }
 
   void _onFulfillmentChanged(FulfillmentType next) {
@@ -251,7 +286,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               recipient: _recipient.text.trim(),
               phone: _phone.text.trim(),
               line1: _line1.text.trim(),
+              line2: _line2,
               city: _city.text.trim(),
+              district: _district,
               wardCode: _wardCode,
             )
           : null,
@@ -504,10 +541,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: BananSpacing.md),
+                      // Logged-in customers can pull from their address book
+                      // instead of retyping. Guests don't have one, so the
+                      // picker is hidden for them and the manual path is used.
+                      if (!isGuest) ...[
+                        _SavedAddressPicker(
+                          selectedId: _selectedAddressId,
+                          onSelect: _applySavedAddress,
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                      ],
                       TextFormField(
                         controller: _recipient,
                         decoration:
                             InputDecoration(labelText: s.recipient),
+                        onChanged: (_) => _clearSavedSelection(),
                         validator: (v) =>
                             (v == null || v.isEmpty) ? s.required : null,
                       ),
@@ -516,6 +564,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         controller: _phone,
                         keyboardType: TextInputType.phone,
                         decoration: InputDecoration(labelText: s.phone),
+                        onChanged: (_) => _clearSavedSelection(),
                         validator: (v) =>
                             (v == null || v.isEmpty) ? s.required : null,
                       ),
@@ -526,6 +575,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                           labelText: s.addressLine,
                           helperText: 'VD: 15B8 Lê Thánh Tôn',
                         ),
+                        onChanged: (_) => _clearSavedSelection(),
                         validator: (v) =>
                             (v == null || v.isEmpty) ? s.required : null,
                       ),
@@ -1520,6 +1570,171 @@ class _GuestContactSection extends ConsumerWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// "Dùng địa chỉ đã lưu" — lets a signed-in customer pick from their address
+/// book to auto-fill the inline delivery form. Default address first.
+/// Hidden entirely when the customer has no saved addresses (the loading /
+/// error / empty states collapse to nothing so the manual form stays clean).
+class _SavedAddressPicker extends ConsumerWidget {
+  const _SavedAddressPicker({
+    required this.selectedId,
+    required this.onSelect,
+  });
+
+  final String? selectedId;
+  final ValueChanged<Address> onSelect;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final async = ref.watch(myAddressesProvider);
+    return async.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (addresses) {
+        if (addresses.isEmpty) return const SizedBox.shrink();
+        // Default address first, then the rest in their existing order.
+        final sorted = [...addresses]
+          ..sort((a, b) =>
+              (b.isDefault ? 1 : 0).compareTo(a.isDefault ? 1 : 0));
+        return Container(
+          padding: const EdgeInsets.all(BananSpacing.md),
+          decoration: BoxDecoration(
+            borderRadius: BananRadii.rmd,
+            color: theme.colorScheme.surface,
+            border:
+                Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.bookmark_outline,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: BananSpacing.sm),
+                  Text(
+                    'Dùng địa chỉ đã lưu',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ],
+              ),
+              const SizedBox(height: BananSpacing.sm),
+              for (final a in sorted)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: BananSpacing.xs),
+                  child: _SavedAddressTile(
+                    address: a,
+                    selected: a.id == selectedId,
+                    onTap: () => onSelect(a),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SavedAddressTile extends StatelessWidget {
+  const _SavedAddressTile({
+    required this.address,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Address address;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color =
+        selected ? theme.colorScheme.primary : theme.colorScheme.outline;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BananRadii.rmd,
+      child: Container(
+        padding: const EdgeInsets.all(BananSpacing.md),
+        decoration: BoxDecoration(
+          borderRadius: BananRadii.rmd,
+          color: selected
+              ? theme.colorScheme.primary.withValues(alpha: 0.06)
+              : theme.colorScheme.surface,
+          border: Border.all(color: color, width: selected ? 1.5 : 1),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_off,
+              size: 20,
+              color: color,
+            ),
+            const SizedBox(width: BananSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          address.label,
+                          style: theme.textTheme.titleSmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (address.isDefault) ...[
+                        const SizedBox(width: BananSpacing.sm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: BananColors.gold,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Mặc định',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${address.recipient} · ${address.phone}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  Text(
+                    address.oneLine,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

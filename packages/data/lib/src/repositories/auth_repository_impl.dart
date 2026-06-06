@@ -113,12 +113,29 @@ class AuthRepositoryImpl implements AuthRepository {
       _api.resetPassword(token: token, newPassword: newPassword);
 
   @override
+  Future<Result<bool, AppFailure>> deleteAccount(String password) =>
+      _api.deleteAccount(password);
+
+  @override
+  Future<Result<bool, AppFailure>> requestEmailChange({
+    required String newEmail,
+    required String password,
+  }) =>
+      _api.requestEmailChange(newEmail: newEmail, password: password);
+
+  @override
+  Future<Result<String, AppFailure>> confirmEmailChange(String token) =>
+      _api.confirmEmailChange(token);
+
+  @override
   Future<Result<User, AppFailure>> updateProfile({
     String? fullName,
     String? phone,
     DateTime? birthday,
     bool clearBirthday = false,
     String? avatarUrl,
+    bool? marketingOptIn,
+    bool? orderUpdatesOptIn,
   }) async {
     final res = await _api.updateProfile(
       fullName: fullName,
@@ -126,6 +143,8 @@ class AuthRepositoryImpl implements AuthRepository {
       birthday: birthday,
       clearBirthday: clearBirthday,
       avatarUrl: avatarUrl,
+      marketingOptIn: marketingOptIn,
+      orderUpdatesOptIn: orderUpdatesOptIn,
     );
     return res.when(
       success: (dto) {

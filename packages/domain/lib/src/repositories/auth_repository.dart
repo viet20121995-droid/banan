@@ -57,7 +57,25 @@ abstract class AuthRepository {
     DateTime? birthday,
     bool clearBirthday = false,
     String? avatarUrl,
+    bool? marketingOptIn,
+    bool? orderUpdatesOptIn,
   });
+
+  /// Permanently delete the signed-in user's account (verifies [password]
+  /// server-side). On success the caller should clear the local session.
+  Future<Result<bool, AppFailure>> deleteAccount(String password);
+
+  /// Start an email change for the signed-in user. The backend emails a
+  /// confirmation link to [newEmail]; the change only completes once that
+  /// link is confirmed via [confirmEmailChange].
+  Future<Result<bool, AppFailure>> requestEmailChange({
+    required String newEmail,
+    required String password,
+  });
+
+  /// Complete an email change with the token from the confirmation link.
+  /// Public — no session required. Resolves to the new email on success.
+  Future<Result<String, AppFailure>> confirmEmailChange(String token);
 
   /// Performs a single-flight refresh against the backend. Used by the auth
   /// interceptor and called automatically on 401.
