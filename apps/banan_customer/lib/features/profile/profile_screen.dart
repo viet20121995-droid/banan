@@ -3,6 +3,7 @@ import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,6 +30,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _hydrated = false;
   bool _saving = false;
   String? _error;
+
+  /// True while a picked avatar image is being uploaded to `/uploads`.
+  /// Drives the spinner overlaid on the avatar.
+  bool _uploadingAvatar = false;
+
+  // Server hard limit for uploads (matches backend Multer config). Files
+  // above the soft ceiling still upload, but we warn the user first.
+  static const int _avatarSoftMaxMb = 8;
+  static const int _avatarHardMaxMb = 20;
 
   // Notification preferences — hydrated from the current user, toggled
   // independently of the main "Lưu thay đổi" save via updateProfile.
@@ -135,6 +145,98 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (picked != null) setState(() => _birthday = picked);
   }
 
+  /// Pick an image from the device, upload it to `/uploads`, then persist the
+  /// returned URL via `updateProfile(avatarUrl:)`. On web, `file_picker`
+  /// returns the file's `bytes` (no path), so we always work from bytes.
+  Future<void> _pickAvatar() async {
+    if (_uploadingAvatar) return;
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    final file = picked?.files.firstOrNull;
+    // Cancelled, or (on web) data unexpectedly absent → no-op.
+    if (file == null || file.bytes == null) return;
+
+    if (file.size > _avatarHardMaxMb * 1024 * 1024) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Ảnh vượt quá $_avatarHardMaxMb MB, vui lòng chọn ảnh nhỏ hơn.',
+          ),
+        ),
+      );
+      return;
+    }
+    // Soft warning above the recommended size — still allowed.
+    if (file.size > _avatarSoftMaxMb * 1024 * 1024 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Ảnh khá lớn (> $_avatarSoftMaxMb MB), việc tải lên có thể chậm.',
+          ),
+        ),
+      );
+    }
+
+    setState(() => _uploadingAvatar = true);
+    final res = await ref.read(catalogRepositoryProvider).uploadImage(
+          bytes: file.bytes!,
+          filename: file.name,
+          mimeType: _mimeFor(file.extension),
+        );
+    if (!mounted) return;
+
+    await res.when(
+      success: (uploaded) async {
+        // Persist immediately so the new avatar survives a reload. This also
+        // refreshes the session/user provider the screen watches.
+        final saved = await ref.read(authRepositoryProvider).updateProfile(
+              avatarUrl: uploaded.url,
+            );
+        if (!mounted) return;
+        setState(() => _uploadingAvatar = false);
+        saved.when(
+          success: (_) {
+            // Keep the raw-URL fallback field in sync with the new avatar.
+            _avatar.text = uploaded.url;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã cập nhật ảnh đại diện')),
+            );
+          },
+          failure: (_) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Tải ảnh thất bại, thử lại')),
+            );
+          },
+        );
+      },
+      failure: (_) async {
+        if (!mounted) return;
+        setState(() => _uploadingAvatar = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tải ảnh thất bại, thử lại')),
+        );
+      },
+    );
+  }
+
+  String _mimeFor(String? ext) {
+    switch ((ext ?? '').toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'avif':
+        return 'image/avif';
+      case 'gif':
+        return 'image/gif';
+      default:
+        return 'image/jpeg';
+    }
+  }
+
   Future<void> _save(User original) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
@@ -216,21 +318,96 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Center(
-                      child: CircleAvatar(
-                        radius: 44,
-                        backgroundColor: BananColors.gold,
-                        backgroundImage: (user.avatarUrl != null &&
-                                user.avatarUrl!.isNotEmpty)
-                            ? NetworkImage(user.avatarUrl!)
-                            : null,
-                        child: (user.avatarUrl == null ||
-                                user.avatarUrl!.isEmpty)
-                            ? Text(
-                                initials,
-                                style: theme.textTheme.headlineMedium
-                                    ?.copyWith(color: Colors.white),
-                              )
-                            : null,
+                      child: Column(
+                        children: [
+                          // Tappable avatar — pick + upload from device. A
+                          // spinner overlays the image while uploading; a
+                          // camera badge hints the tap target.
+                          Semantics(
+                            button: true,
+                            label: 'Đổi ảnh đại diện',
+                            child: InkWell(
+                              onTap: _uploadingAvatar ? null : _pickAvatar,
+                              customBorder: const CircleBorder(),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 44,
+                                    backgroundColor: BananColors.gold,
+                                    backgroundImage: (user.avatarUrl != null &&
+                                            user.avatarUrl!.isNotEmpty)
+                                        ? NetworkImage(user.avatarUrl!)
+                                        : null,
+                                    child: (user.avatarUrl == null ||
+                                            user.avatarUrl!.isEmpty)
+                                        ? Text(
+                                            initials,
+                                            style: theme
+                                                .textTheme.headlineMedium
+                                                ?.copyWith(
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                  if (_uploadingAvatar)
+                                    Positioned.fill(
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.black
+                                              .withValues(alpha: 0.4),
+                                        ),
+                                        child: const Center(
+                                          child: SizedBox(
+                                            width: 28,
+                                            height: 28,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.5,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  // Camera badge — bottom-right affordance.
+                                  Positioned(
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.surface,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: BananColors.gold,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.photo_camera_outlined,
+                                        size: 18,
+                                        color: BananColors.gold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: BananSpacing.sm),
+                          TextButton.icon(
+                            onPressed:
+                                _uploadingAvatar ? null : _pickAvatar,
+                            icon: const Icon(Icons.upload_outlined, size: 18),
+                            label: Text(
+                              _uploadingAvatar
+                                  ? 'Đang tải ảnh…'
+                                  : 'Đổi ảnh đại diện',
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: BananSpacing.lg),
