@@ -1,29 +1,81 @@
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 
+/// Candle type values stored in the personalization JSON.
+/// `regular` = nến thường, `number` = nến số (digit candles by age),
+/// `spiral` = nến xoắn. A null/absent type means "no candles".
+abstract final class CandleType {
+  static const String regular = 'regular';
+  static const String number = 'number';
+  static const String spiral = 'spiral';
+}
+
+/// Builds the human-readable candle line ("3 nến xoắn", "nến số 25",
+/// "5 nến") from the raw personalization fields. Shared by the wizard
+/// summary and every display site so the wording stays consistent.
+///
+/// Backward-compat: a legacy payload that has [candleCount] but no
+/// [candleType] is treated as `regular`.
+String? candleLabel({
+  String? candleType,
+  int? candleCount,
+  int? candleNumber,
+}) {
+  final type = candleType ?? (candleCount != null ? CandleType.regular : null);
+  switch (type) {
+    case CandleType.number:
+      if (candleNumber == null) return null;
+      return 'nến số $candleNumber';
+    case CandleType.spiral:
+      if (candleCount == null) return null;
+      return '$candleCount nến xoắn';
+    case CandleType.regular:
+      if (candleCount == null) return null;
+      return '$candleCount nến';
+    default:
+      return null;
+  }
+}
+
 /// Wizard payload — the keys here are the canonical JSON shape that ends
 /// up in `OrderItem.personalization` on the backend.
 class CakePersonalization {
   const CakePersonalization({
     this.textOnCake,
+    this.candleType,
     this.candleCount,
+    this.candleNumber,
     this.note,
   });
 
   factory CakePersonalization.fromMap(Map<String, dynamic> m) =>
       CakePersonalization(
         textOnCake: m['textOnCake'] as String?,
+        candleType: m['candleType'] as String?,
         candleCount: (m['candleCount'] as num?)?.toInt(),
+        candleNumber: (m['candleNumber'] as num?)?.toInt(),
         note: m['note'] as String?,
       );
 
   final String? textOnCake;
+
+  /// One of [CandleType.regular] / [CandleType.number] /
+  /// [CandleType.spiral]. Null = no candles.
+  final String? candleType;
+
+  /// Quantity — used for `regular` and `spiral`.
   final int? candleCount;
+
+  /// Age/number to spell out with digit candles — used for `number`.
+  final int? candleNumber;
+
   final String? note;
 
   bool get isEmpty =>
       (textOnCake == null || textOnCake!.isEmpty) &&
+      candleType == null &&
       candleCount == null &&
+      candleNumber == null &&
       (note == null || note!.isEmpty);
 
   Map<String, dynamic> toMap() {
@@ -31,7 +83,9 @@ class CakePersonalization {
     if (textOnCake != null && textOnCake!.isNotEmpty) {
       m['textOnCake'] = textOnCake;
     }
+    if (candleType != null) m['candleType'] = candleType;
     if (candleCount != null) m['candleCount'] = candleCount;
+    if (candleNumber != null) m['candleNumber'] = candleNumber;
     if (note != null && note!.isNotEmpty) m['note'] = note;
     return m;
   }
@@ -43,7 +97,12 @@ class CakePersonalization {
     if (textOnCake != null && textOnCake!.isNotEmpty) {
       parts.add('"${textOnCake!}"');
     }
-    if (candleCount != null) parts.add('$candleCount nến');
+    final candle = candleLabel(
+      candleType: candleType,
+      candleCount: candleCount,
+      candleNumber: candleNumber,
+    );
+    if (candle != null) parts.add(candle);
     if (note != null && note!.isNotEmpty) parts.add('ghi chú');
     return parts.isEmpty ? null : parts.join(' · ');
   }
@@ -65,10 +124,26 @@ class CakeWizardSheet extends StatefulWidget {
   State<CakeWizardSheet> createState() => _CakeWizardSheetState();
 }
 
+/// The four candle modes offered in the wizard. `null` selection = none.
+enum _CandleMode { none, regular, number, spiral }
+
 class _CakeWizardSheetState extends State<CakeWizardSheet> {
   late final TextEditingController _text;
   late final TextEditingController _note;
-  int? _candleCount;
+
+  /// Currently selected candle mode.
+  _CandleMode _mode = _CandleMode.none;
+
+  /// Quantity for regular/spiral candles (clamped 1–99).
+  int _qty = 5;
+
+  /// Age/number for digit candles (clamped 0–120).
+  int _number = 25;
+
+  /// Quick-pick quantities — the stepper still reaches any 1–99.
+  static const List<int> _qtyPresets = [
+    1, 2, 3, 5, 6, 7, 8, 9, 10, 12, 16, 18, 20, 21, 25, 30, 40, 50,
+  ];
 
   @override
   void initState() {
@@ -76,7 +151,24 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
     final init = widget.initial ?? const CakePersonalization();
     _text = TextEditingController(text: init.textOnCake ?? '');
     _note = TextEditingController(text: init.note ?? '');
-    _candleCount = init.candleCount;
+
+    // Resolve the mode from the loaded payload. Legacy payloads have a
+    // candleCount but no candleType → treat as regular.
+    final type = init.candleType ??
+        (init.candleCount != null ? CandleType.regular : null);
+    switch (type) {
+      case CandleType.number:
+        _mode = _CandleMode.number;
+        _number = (init.candleNumber ?? 25).clamp(0, 120);
+      case CandleType.spiral:
+        _mode = _CandleMode.spiral;
+        _qty = (init.candleCount ?? 5).clamp(1, 99);
+      case CandleType.regular:
+        _mode = _CandleMode.regular;
+        _qty = (init.candleCount ?? 5).clamp(1, 99);
+      default:
+        _mode = _CandleMode.none;
+    }
   }
 
   @override
@@ -134,7 +226,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                 ),
               ),
 
-              // Step 2 — candle count picker (stepper + chip presets)
+              // Step 2 — candle picker: type selector + per-type controls
               const SizedBox(height: BananSpacing.sm),
               Container(
                 padding: const EdgeInsets.all(BananSpacing.md),
@@ -151,36 +243,109 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                       children: [
                         const Icon(Icons.local_fire_department_outlined),
                         const SizedBox(width: BananSpacing.sm),
-                        Text('Số nến',
-                            style: theme.textTheme.titleSmall),
-                        const Spacer(),
-                        if (_candleCount != null)
-                          Text(
-                            '$_candleCount',
-                            style: theme.textTheme.titleLarge,
-                          ),
+                        Text('Nến', style: theme.textTheme.titleSmall),
                       ],
+                    ),
+                    const SizedBox(height: BananSpacing.xs),
+                    Text(
+                      'Loại nến',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
                     ),
                     const SizedBox(height: BananSpacing.sm),
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        ChoiceChip(
-                          label: const Text('Không nến'),
-                          selected: _candleCount == null,
-                          onSelected: (_) =>
-                              setState(() => _candleCount = null),
-                        ),
-                        for (final n in const [1, 3, 5, 7, 10, 18, 21, 30])
+                        for (final entry in const [
+                          (_CandleMode.none, 'Không nến'),
+                          (_CandleMode.regular, 'Nến thường'),
+                          (_CandleMode.number, 'Nến số'),
+                          (_CandleMode.spiral, 'Nến xoắn'),
+                        ])
                           ChoiceChip(
-                            label: Text('$n'),
-                            selected: _candleCount == n,
+                            label: Text(entry.$2),
+                            selected: _mode == entry.$1,
                             onSelected: (_) =>
-                                setState(() => _candleCount = n),
+                                setState(() => _mode = entry.$1),
                           ),
                       ],
                     ),
+
+                    // Quantity controls for regular / spiral candles.
+                    if (_mode == _CandleMode.regular ||
+                        _mode == _CandleMode.spiral) ...[
+                      const SizedBox(height: BananSpacing.md),
+                      Row(
+                        children: [
+                          Icon(
+                            _mode == _CandleMode.spiral
+                                ? Icons.cyclone
+                                : Icons.local_fire_department,
+                            size: 18,
+                            color: BananColors.primary,
+                          ),
+                          const SizedBox(width: BananSpacing.xs),
+                          Text(
+                            _mode == _CandleMode.spiral
+                                ? 'Số nến xoắn'
+                                : 'Số nến',
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                          const Spacer(),
+                          _Stepper(
+                            value: _qty,
+                            min: 1,
+                            max: 99,
+                            onChanged: (v) => setState(() => _qty = v),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: BananSpacing.sm),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final n in _qtyPresets)
+                            ChoiceChip(
+                              label: Text('$n'),
+                              selected: _qty == n,
+                              onSelected: (_) => setState(() => _qty = n),
+                            ),
+                        ],
+                      ),
+                    ],
+
+                    // Age input for number (digit) candles.
+                    if (_mode == _CandleMode.number) ...[
+                      const SizedBox(height: BananSpacing.md),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.tag,
+                            size: 18,
+                            color: BananColors.primary,
+                          ),
+                          const SizedBox(width: BananSpacing.xs),
+                          Text('Số tuổi', style: theme.textTheme.bodyMedium),
+                          const Spacer(),
+                          _Stepper(
+                            value: _number,
+                            min: 0,
+                            max: 120,
+                            onChanged: (v) => setState(() => _number = v),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: BananSpacing.xs),
+                      Text(
+                        'Nến hình con số theo tuổi (vd: 25)',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -220,11 +385,37 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                   const SizedBox(width: 4),
                   FilledButton.icon(
                     onPressed: () {
+                      // Only carry the fields that apply to the chosen
+                      // candle type; clear the rest so the payload stays
+                      // unambiguous.
+                      final String? candleType;
+                      final int? candleCount;
+                      final int? candleNumber;
+                      switch (_mode) {
+                        case _CandleMode.regular:
+                          candleType = CandleType.regular;
+                          candleCount = _qty;
+                          candleNumber = null;
+                        case _CandleMode.spiral:
+                          candleType = CandleType.spiral;
+                          candleCount = _qty;
+                          candleNumber = null;
+                        case _CandleMode.number:
+                          candleType = CandleType.number;
+                          candleCount = null;
+                          candleNumber = _number;
+                        case _CandleMode.none:
+                          candleType = null;
+                          candleCount = null;
+                          candleNumber = null;
+                      }
                       final value = CakePersonalization(
                         textOnCake: _text.text.trim().isEmpty
                             ? null
                             : _text.text.trim(),
-                        candleCount: _candleCount,
+                        candleType: candleType,
+                        candleCount: candleCount,
+                        candleNumber: candleNumber,
                         note: _note.text.trim().isEmpty
                             ? null
                             : _note.text.trim(),
@@ -239,6 +430,64 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A compact − / value / + stepper that lets any integer in [min]..[max]
+/// be reached (so the candle quantity is never limited to presets).
+class _Stepper extends StatelessWidget {
+  const _Stepper({
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  final int value;
+  final int min;
+  final int max;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rPill,
+        border: Border.all(
+          color: theme.dividerTheme.color ?? Colors.black12,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            iconSize: 18,
+            onPressed:
+                value > min ? () => onChanged(value - 1) : null,
+            icon: const Icon(Icons.remove),
+            tooltip: 'Giảm',
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 32),
+            child: Text(
+              '$value',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium,
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            iconSize: 18,
+            onPressed:
+                value < max ? () => onChanged(value + 1) : null,
+            icon: const Icon(Icons.add),
+            tooltip: 'Tăng',
+          ),
+        ],
       ),
     );
   }

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/alert_sound.dart';
+import '../product_detail/cake_wizard.dart';
 import 'order_status_visuals.dart';
 import 'orders_list_screen.dart';
 import 'reorder_helper.dart';
@@ -1285,7 +1286,11 @@ class _PersonalizationSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final text = payload['textOnCake'] as String?;
-    final candles = (payload['candleCount'] as num?)?.toInt();
+    final candle = candleLabel(
+      candleType: payload['candleType'] as String?,
+      candleCount: (payload['candleCount'] as num?)?.toInt(),
+      candleNumber: (payload['candleNumber'] as num?)?.toInt(),
+    );
     final note = payload['note'] as String?;
     final flavors = payload['flavors'] as Map<String, dynamic>?;
     final flavorLine = (flavors != null && flavors.isNotEmpty)
@@ -1329,8 +1334,8 @@ class _PersonalizationSummary extends StatelessWidget {
               child: Text('Chữ trên bánh: "$text"',
                   style: theme.textTheme.bodySmall),
             ),
-          if (candles != null)
-            Text('$candles nến', style: theme.textTheme.bodySmall),
+          if (candle != null)
+            Text('Nến: $candle', style: theme.textTheme.bodySmall),
           if (flavorLine != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),

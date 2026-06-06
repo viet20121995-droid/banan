@@ -16,13 +16,37 @@ final _fmt =
 String _esc(String s) =>
     s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
+/// Builds the candle instruction line from a personalization payload, kept
+/// clear for the baker: "3 nến xoắn", "nến số 25", "5 nến".
+///
+/// Backward-compat: a legacy payload that has `candleCount` but no
+/// `candleType` is treated as regular candles → "{count} nến".
+String? candleTicketLabel(Map<String, dynamic> p) {
+  final count = (p['candleCount'] as num?)?.toInt();
+  final number = (p['candleNumber'] as num?)?.toInt();
+  final type = (p['candleType'] as String?) ?? (count != null ? 'regular' : null);
+  switch (type) {
+    case 'number':
+      if (number == null) return null;
+      return 'nến số $number';
+    case 'spiral':
+      if (count == null) return null;
+      return '$count nến xoắn';
+    case 'regular':
+      if (count == null) return null;
+      return '$count nến';
+    default:
+      return null;
+  }
+}
+
 /// Human-readable one-line of a cart/order personalization payload.
 String _persText(Map<String, dynamic> p) {
   final parts = <String>[];
   final t = p['textOnCake'];
   if (t is String && t.isNotEmpty) parts.add('Chữ: "$t"');
-  final c = p['candleCount'];
-  if (c != null) parts.add('$c nến');
+  final candle = candleTicketLabel(p);
+  if (candle != null) parts.add(candle);
   final note = p['note'];
   if (note is String && note.isNotEmpty) parts.add('Ghi chú: $note');
   final flavors = p['flavors'];

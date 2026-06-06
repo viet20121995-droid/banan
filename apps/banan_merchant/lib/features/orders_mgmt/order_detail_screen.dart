@@ -558,7 +558,7 @@ class _MerchantPersonalizationBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final text = payload['textOnCake'] as String?;
-    final candles = (payload['candleCount'] as num?)?.toInt();
+    final candle = candleTicketLabel(payload);
     final note = payload['note'] as String?;
     final flavors = payload['flavors'] as Map<String, dynamic>?;
     final flavorLine = (flavors != null && flavors.isNotEmpty)
@@ -612,15 +612,15 @@ class _MerchantPersonalizationBlock extends StatelessWidget {
                 style: theme.textTheme.bodySmall,
               ),
             ),
-          if (candles != null)
+          if (candle != null)
             Text.rich(
               TextSpan(
                 children: [
                   const TextSpan(
-                    text: 'Số nến: ',
+                    text: 'Nến: ',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  TextSpan(text: '$candles'),
+                  TextSpan(text: candle),
                 ],
               ),
               style: theme.textTheme.bodySmall,
