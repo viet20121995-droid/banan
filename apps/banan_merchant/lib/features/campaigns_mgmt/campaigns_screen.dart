@@ -20,7 +20,7 @@ final _campaignsProvider =
 
 final _vnd = NumberFormat.decimalPattern('vi_VN');
 
-/// The campaign types that ship with a full editor (Phase 1 + Phase 2).
+/// The campaign types that ship with a full editor (Phase 1 + 2 + 3).
 const _editableTypes = <CampaignType>[
   CampaignType.productDiscount,
   CampaignType.categoryDiscount,
@@ -30,6 +30,7 @@ const _editableTypes = <CampaignType>[
   CampaignType.firstOrder,
   CampaignType.birthday,
   CampaignType.reactivation,
+  CampaignType.membershipBenefit,
 ];
 
 String _typeLabel(CampaignType t) {
@@ -51,7 +52,7 @@ String _typeLabel(CampaignType t) {
     case CampaignType.reactivation:
       return 'Kéo khách quay lại';
     case CampaignType.membershipBenefit:
-      return 'Ưu đãi thành viên';
+      return 'Ưu đãi hạng thành viên';
   }
 }
 
@@ -170,6 +171,36 @@ class _CampaignCard extends ConsumerWidget {
     return '—';
   }
 
+  /// Membership-benefit list summary, e.g. "Hạng: Vàng 5% • Bạch kim 10%".
+  /// Reads `config.tierValues` keyed by SILVER/GOLD/PLATINUM and formats each
+  /// present tier per the shared kind (PERCENT = %, FIXED = ₫).
+  String _membershipBenefitText() {
+    final kind = campaign.config['kind'] as String?;
+    final tierValues =
+        (campaign.config['tierValues'] as Map?)?.cast<String, dynamic>() ??
+            const {};
+    String fmtValue(num v) =>
+        kind == 'FIXED' ? '${_vnd.format(v)}₫' : '${_numText(v)}%';
+    const order = [
+      ('SILVER', 'Bạc'),
+      ('GOLD', 'Vàng'),
+      ('PLATINUM', 'Bạch kim'),
+    ];
+    final parts = <String>[];
+    for (final (wire, label) in order) {
+      final v = tierValues[wire] as num?;
+      if (v != null && v > 0) parts.add('$label ${fmtValue(v)}');
+    }
+    return parts.isEmpty ? 'Chưa thiết lập hạng' : 'Hạng: ${parts.join(' • ')}';
+  }
+
+  /// Renders a number without a trailing ".0".
+  static String _numText(num n) {
+    if (n is int) return n.toString();
+    if (n == n.roundToDouble()) return n.toInt().toString();
+    return n.toString();
+  }
+
   String _discountText() {
     final cfg = campaign.config;
     switch (campaign.type) {
@@ -191,11 +222,12 @@ class _CampaignCard extends ConsumerWidget {
         final pct = (cfg['getDiscountPct'] as num?)?.toInt() ?? 100;
         final gift = pct >= 100 ? 'tặng $get' : 'giảm $pct% cho $get';
         return 'Mua $buy $gift';
+      case CampaignType.membershipBenefit:
+        return _membershipBenefitText();
       case CampaignType.productDiscount:
       case CampaignType.categoryDiscount:
       case CampaignType.flashSale:
       case CampaignType.happyHour:
-      case CampaignType.membershipBenefit:
         final text = _kindValueText();
         return text == '—' ? '—' : 'Giảm ${text.substring('giảm '.length)}';
     }
@@ -405,6 +437,10 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
   final _buyQty = TextEditingController(text: '2');
   final _getQty = TextEditingController(text: '1');
   final _getDiscountPct = TextEditingController(text: '100');
+  // Membership benefit — per-tier value (blank/0 = tier excluded).
+  final _silverValue = TextEditingController();
+  final _goldValue = TextEditingController();
+  final _platinumValue = TextEditingController();
 
   CampaignType _type = CampaignType.productDiscount;
   String _kind = 'PERCENT'; // PERCENT | FIXED
@@ -468,6 +504,16 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
       if (getDiscountPct != null) {
         _getDiscountPct.text = '${getDiscountPct.toInt()}';
       }
+      // Phase-3 membership benefit — per-tier values.
+      final tierValues = (cfg['tierValues'] as Map?)?.cast<String, dynamic>();
+      if (tierValues != null) {
+        final silver = tierValues['SILVER'] as num?;
+        if (silver != null) _silverValue.text = _numText(silver);
+        final gold = tierValues['GOLD'] as num?;
+        if (gold != null) _goldValue.text = _numText(gold);
+        final platinum = tierValues['PLATINUM'] as num?;
+        if (platinum != null) _platinumValue.text = _numText(platinum);
+      }
     }
   }
 
@@ -489,6 +535,9 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
     _buyQty.dispose();
     _getQty.dispose();
     _getDiscountPct.dispose();
+    _silverValue.dispose();
+    _goldValue.dispose();
+    _platinumValue.dispose();
     super.dispose();
   }
 
@@ -520,17 +569,31 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
   bool get _productScopeRequired => _type == CampaignType.productDiscount;
   bool get _categoryScopeRequired => _type == CampaignType.categoryDiscount;
 
-  /// True for types whose primary discount is a shared kind/value pair
+  /// True for types whose primary discount is a single shared kind/value pair
   /// (percent or fixed amount). Buy X Get Y carries its own quantity-based
-  /// config and has no kind/value.
-  bool get _usesKindValue => _type != CampaignType.buyXGetY;
+  /// config; Membership Benefit carries a per-tier value map — both have no
+  /// single kind/value field.
+  bool get _usesKindValue =>
+      _type != CampaignType.buyXGetY &&
+      _type != CampaignType.membershipBenefit;
+
+  /// Whether the PERCENT/FIXED kind chips apply — shared by the single-value
+  /// types and Membership Benefit (whose per-tier values use the same kind).
+  bool get _usesKind => _usesKindValue || _type == CampaignType.membershipBenefit;
 
   Map<String, dynamic> _buildConfig() {
     final value = num.tryParse(_value.text.trim()) ?? 0;
-    // Buy X Get Y has its own shape; everything else shares kind/value.
-    final config = _type == CampaignType.buyXGetY
-        ? <String, dynamic>{}
-        : <String, dynamic>{'kind': _kind, 'value': value};
+    // Buy X Get Y has its own quantity shape (no kind/value); Membership
+    // Benefit carries the shared kind plus a per-tier value map (no single
+    // value); everything else shares a single kind/value pair.
+    final Map<String, dynamic> config;
+    if (_type == CampaignType.buyXGetY) {
+      config = <String, dynamic>{};
+    } else if (_type == CampaignType.membershipBenefit) {
+      config = <String, dynamic>{'kind': _kind};
+    } else {
+      config = <String, dynamic>{'kind': _kind, 'value': value};
+    }
     switch (_type) {
       case CampaignType.productDiscount:
         config['productIds'] = _productIds.toList();
@@ -575,10 +638,19 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
         if (_categoryIds.isNotEmpty) {
           config['categoryIds'] = _categoryIds.toList();
         }
-      // Membership benefit (Phase 3) has no editor; the selector never picks
-      // it, so we just preserve whatever kind/value was already present.
+      // Membership benefit — per-tier value map. Omit a tier whose field is
+      // blank or 0. No product/category scope.
       case CampaignType.membershipBenefit:
-        break;
+        final tierValues = <String, dynamic>{};
+        final silver = num.tryParse(_silverValue.text.trim());
+        if (silver != null && silver > 0) tierValues['SILVER'] = silver;
+        final gold = num.tryParse(_goldValue.text.trim());
+        if (gold != null && gold > 0) tierValues['GOLD'] = gold;
+        final platinum = num.tryParse(_platinumValue.text.trim());
+        if (platinum != null && platinum > 0) {
+          tierValues['PLATINUM'] = platinum;
+        }
+        config['tierValues'] = tierValues;
     }
     return config;
   }
@@ -604,6 +676,16 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
     if (_type == CampaignType.flashSale) {
       if (_startsAt == null || _endsAt == null) {
         setState(() => _error = 'Flash Sale cần thời gian bắt đầu và kết thúc.');
+        return;
+      }
+    }
+    if (_type == CampaignType.membershipBenefit) {
+      final tierValues = _buildConfig()['tierValues'] as Map;
+      if (tierValues.isEmpty) {
+        setState(() {
+          _error = 'Nhập ưu đãi cho ít nhất một hạng '
+              '(Bạc, Vàng hoặc Bạch kim).';
+        });
         return;
       }
     }
@@ -730,8 +812,9 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
                   ? 'Nhập tên chương trình'
                   : null,
             ),
-            // Kind/value: shared by every type except Buy X Get Y.
-            if (_usesKindValue) ...[
+            // Kind chips: shared by the single-value types AND Membership
+            // Benefit (its per-tier values use the same %/₫ kind).
+            if (_usesKind) ...[
               const SizedBox(height: BananSpacing.md),
               Text('Hình thức giảm', style: theme.textTheme.labelLarge),
               const SizedBox(height: BananSpacing.xs),
@@ -750,6 +833,10 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
                   ),
                 ],
               ),
+            ],
+            // Single value field — every kind/value type except Membership
+            // Benefit (which has three per-tier fields instead).
+            if (_usesKindValue) ...[
               const SizedBox(height: BananSpacing.sm),
               TextFormField(
                 controller: _value,
@@ -765,6 +852,40 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
                   if (_kind == 'PERCENT' && n > 100) return 'Tối đa 100%';
                   return null;
                 },
+              ),
+            ],
+            // Membership benefit — three per-tier value fields. Blank/0 = the
+            // tier is excluded. No product/category scope.
+            if (_type == CampaignType.membershipBenefit) ...[
+              const SizedBox(height: BananSpacing.md),
+              Text(
+                'Ưu đãi theo hạng',
+                style: theme.textTheme.labelLarge,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Để trống một hạng nếu hạng đó không được ưu đãi.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+              const SizedBox(height: BananSpacing.sm),
+              _TierValueField(
+                controller: _silverValue,
+                label: 'Bạc (SILVER)',
+                kind: _kind,
+              ),
+              const SizedBox(height: BananSpacing.sm),
+              _TierValueField(
+                controller: _goldValue,
+                label: 'Vàng (GOLD)',
+                kind: _kind,
+              ),
+              const SizedBox(height: BananSpacing.sm),
+              _TierValueField(
+                controller: _platinumValue,
+                label: 'Bạch kim (PLATINUM)',
+                kind: _kind,
               ),
             ],
             // First order — optional minimum subtotal gate.
@@ -1035,6 +1156,42 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
           ..addAll(result);
       });
     }
+  }
+}
+
+/// A single membership-tier value input. Optional (blank = the tier is
+/// excluded); when filled, validates as a positive number, capped at 100
+/// for the PERCENT kind. The suffix reflects the current kind (% / ₫).
+class _TierValueField extends StatelessWidget {
+  const _TierValueField({
+    required this.controller,
+    required this.label,
+    required this.kind,
+  });
+  final TextEditingController controller;
+  final String label;
+  final String kind;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPercent = kind == 'PERCENT';
+    return TextFormField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(
+        labelText: label,
+        suffixText: isPercent ? '%' : '₫',
+        hintText: 'Trống = không ưu đãi',
+      ),
+      validator: (v) {
+        final t = v?.trim() ?? '';
+        if (t.isEmpty) return null; // tier excluded
+        final n = num.tryParse(t);
+        if (n == null || n < 0) return 'Nhập một số hợp lệ';
+        if (isPercent && n > 100) return 'Tối đa 100%';
+        return null;
+      },
+    );
   }
 }
 

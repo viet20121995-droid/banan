@@ -65,9 +65,9 @@ enum CampaignType {
   }
 
   /// Types that ship with a full create/edit editor. Phase 1 covered the
-  /// first four; Phase 2 adds Buy X Get Y, First Order, Birthday and
-  /// Reactivation. Only [membershipBenefit] (Phase 3) remains without an
-  /// editor — recognised but disabled ("sắp ra mắt") in the merchant UI.
+  /// first four; Phase 2 added Buy X Get Y, First Order, Birthday and
+  /// Reactivation; Phase 3 adds Membership Benefit. All nine types are now
+  /// editable in the merchant UI.
   bool get hasEditor =>
       this == CampaignType.productDiscount ||
       this == CampaignType.categoryDiscount ||
@@ -76,7 +76,8 @@ enum CampaignType {
       this == CampaignType.buyXGetY ||
       this == CampaignType.firstOrder ||
       this == CampaignType.birthday ||
-      this == CampaignType.reactivation;
+      this == CampaignType.reactivation ||
+      this == CampaignType.membershipBenefit;
 }
 
 /// A promotion campaign as managed in the admin promotions screen.

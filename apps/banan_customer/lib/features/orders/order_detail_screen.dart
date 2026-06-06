@@ -260,6 +260,11 @@ class _Body extends ConsumerWidget {
                     label: s.campaignDiscount,
                     value: '−${fmt.format(order.campaignDiscount)}',
                   ),
+                if (order.pointsDiscount > 0)
+                  _Line(
+                    label: s.pointsDiscount,
+                    value: '−${fmt.format(order.pointsDiscount)}',
+                  ),
                 _Line(
                   label: s.deliveryFee,
                   value: fmt.format(order.deliveryFee),

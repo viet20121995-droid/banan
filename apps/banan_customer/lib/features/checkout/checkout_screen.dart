@@ -59,7 +59,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   int? _giftBalance;
   String? _giftMsg;
   bool _giftBusy = false;
-  final int _pointsToRedeem = 0;
+  // Loyalty point redemption — how many Micho points the (logged-in)
+  // customer chose to burn on this order. Clamped to balance + order value
+  // in build(); the backend caps it authoritatively too.
+  int _pointsToRedeem = 0;
   bool _placing = false;
   String? _error;
 
@@ -214,6 +217,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     final isGuest = ref.read(authSessionProvider).valueOrNull == null;
     final cart = ref.read(cartControllerProvider);
+
+    // Re-clamp the chosen points against the live balance + order value so we
+    // never send more than the customer can actually burn. Guests redeem
+    // nothing. The backend re-caps authoritatively; this keeps the request
+    // honest and matches the on-screen preview.
+    final membership = isGuest
+        ? null
+        : ref.read(membershipSummaryProvider).valueOrNull;
+    final couponDiscount = _appliedCoupon?.discount ?? 0.0;
+    final subtotalAfterCoupon =
+        (cart.subtotal - couponDiscount).clamp(0.0, double.infinity);
+    final maxRedeemable = (subtotalAfterCoupon ~/ _vndPerPoint)
+        .clamp(0, membership?.balance ?? 0);
+    final pointsToRedeem = _pointsToRedeem.clamp(0, maxRedeemable);
+
     final draft = NewOrder(
       items: cart.items
           .map(
@@ -253,7 +271,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       couponCode: _appliedCoupon?.code,
       giftCardCode: _giftCode,
-      pointsToRedeem: _pointsToRedeem > 0 ? _pointsToRedeem : null,
+      pointsToRedeem: pointsToRedeem > 0 ? pointsToRedeem : null,
       scheduledFor: _scheduledFor,
       guestFullName: isGuest ? _guestName.text.trim() : null,
       guestPhone: isGuest ? _guestPhone.text.trim() : null,
@@ -604,12 +622,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                               ?.copyWith(color: theme.colorScheme.error),
                         ),
                       ),
-                    // Points redemption hidden for MVP — reinstate once the
-                    // earn-burn cycle is finalised.
-                    // if (membership != null && membership.balance > 0) ...[
-                    //   const SizedBox(height: BananSpacing.lg),
-                    //   _PointsRedeemer(...),
-                    // ],
+                    // Loyalty point redemption — only for a logged-in customer
+                    // who actually has points. Guests + zero-balance accounts
+                    // never see this block.
+                    if (membership != null && membership.balance > 0) ...[
+                      const SizedBox(height: BananSpacing.lg),
+                      _PointsRedeemer(
+                        balance: membership.balance,
+                        max: maxRedeemable,
+                        value: pointsActuallyUsed,
+                        vndPerPoint: _vndPerPoint,
+                        onChanged: (v) =>
+                            setState(() => _pointsToRedeem = v),
+                        fmt: fmt,
+                      ),
+                    ],
                     const SizedBox(height: BananSpacing.xl),
                     Text(s.payment, style: theme.textTheme.titleLarge),
                     const SizedBox(height: BananSpacing.md),
@@ -853,8 +880,10 @@ class _CouponField extends ConsumerWidget {
   }
 }
 
-// Disabled for MVP; the call-site is commented out above.
-// ignore: unused_element
+/// "Dùng điểm Micho" — loyalty point redemption block. Shows the available
+/// balance, a slider to pick how many points to burn (0..max, where max is
+/// capped by both the balance and the order value), and the resulting
+/// discount preview. Rendered only for a logged-in customer with points.
 class _PointsRedeemer extends StatelessWidget {
   const _PointsRedeemer({
     required this.balance,
@@ -876,49 +905,88 @@ class _PointsRedeemer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final maxClamped = max.clamp(0, balance);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.workspace_premium_outlined,
-              size: 18,
-              color: theme.colorScheme.outline,
-            ),
-            const SizedBox(width: BananSpacing.sm),
-            Expanded(
-              child: Text(
-                'Redeem Micho  ·  $balance available',
-                style: theme.textTheme.titleSmall,
-              ),
-            ),
-            Text(
-              '−${fmt.format(value * vndPerPoint)}',
-              style: theme.textTheme.titleSmall?.copyWith(
+    return Container(
+      padding: const EdgeInsets.all(BananSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.workspace_premium_outlined,
+                size: 18,
                 color: theme.colorScheme.primary,
               ),
+              const SizedBox(width: BananSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Dùng điểm Micho',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              if (value > 0)
+                Text(
+                  '≈ −${fmt.format(value * vndPerPoint)}',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Bạn có $balance điểm (≈ ${fmt.format(balance * vndPerPoint)})',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+          if (maxClamped == 0)
+            Padding(
+              padding: const EdgeInsets.only(top: BananSpacing.xs),
+              child: Text(
+                'Giá trị đơn hàng chưa đủ để đổi điểm.',
+                style: theme.textTheme.bodySmall,
+              ),
+            )
+          else ...[
+            Slider(
+              min: 0,
+              max: maxClamped.toDouble(),
+              divisions: maxClamped,
+              value: value.toDouble().clamp(0, maxClamped.toDouble()),
+              label: '$value điểm',
+              onChanged: (v) => onChanged(v.round()),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Đổi $value/$maxClamped điểm',
+                  style: theme.textTheme.bodySmall,
+                ),
+                if (value > 0)
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: BananSpacing.sm,
+                      ),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => onChanged(0),
+                    child: const Text('Bỏ chọn'),
+                  ),
+              ],
             ),
           ],
-        ),
-        if (maxClamped == 0)
-          Padding(
-            padding: const EdgeInsets.only(top: BananSpacing.xs),
-            child: Text(
-              'Order subtotal is too low to redeem Micho yet.',
-              style: theme.textTheme.bodySmall,
-            ),
-          )
-        else
-          Slider(
-            min: 0,
-            max: maxClamped.toDouble(),
-            divisions: maxClamped,
-            value: value.toDouble().clamp(0, maxClamped.toDouble()),
-            label: '$value Micho',
-            onChanged: (v) => onChanged(v.round()),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1082,7 +1150,7 @@ class _Summary extends ConsumerWidget {
             ),
           if (pointsDiscount > 0)
             _Line(
-              label: 'Micho',
+              label: s.pointsDiscount,
               value: '−${fmt.format(pointsDiscount)}',
               accent: true,
             ),

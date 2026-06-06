@@ -107,6 +107,7 @@ abstract class AppStrings {
   String get deliveryFee;
   String get total;
   String get campaignDiscount;
+  String get pointsDiscount;
   String get placeOrder;
   String get deliveryAddress;
   String get recipientName;
@@ -352,6 +353,8 @@ class _Vi extends AppStrings {
   String get total => 'Tổng cộng';
   @override
   String get campaignDiscount => 'Khuyến mãi';
+  @override
+  String get pointsDiscount => 'Đổi điểm';
   @override
   String get placeOrder => 'Đặt hàng';
   @override
@@ -716,6 +719,8 @@ class _En extends AppStrings {
   String get total => 'Total';
   @override
   String get campaignDiscount => 'Promotion';
+  @override
+  String get pointsDiscount => 'Points redemption';
   @override
   String get placeOrder => 'Place order';
   @override

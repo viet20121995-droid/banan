@@ -145,6 +145,8 @@ class OrderDto {
     this.invoiceFileUrl,
     this.campaignDiscount = 0,
     this.campaignInfo,
+    this.pointsRedeemed = 0,
+    this.pointsDiscount = 0,
   });
 
   factory OrderDto.fromJson(Map<String, dynamic> json) {
@@ -191,6 +193,8 @@ class OrderDto {
       campaignInfo: campaignInfoRaw
           ?.map((e) => (e as Map).cast<String, dynamic>())
           .toList(),
+      pointsRedeemed: _toIntVnd(json['pointsRedeemed']),
+      pointsDiscount: _toIntVnd(json['pointsDiscount']),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -225,6 +229,8 @@ class OrderDto {
   final String? invoiceFileUrl;
   final int campaignDiscount;
   final List<Map<String, dynamic>>? campaignInfo;
+  final int pointsRedeemed;
+  final int pointsDiscount;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -260,6 +266,8 @@ class OrderDto {
         invoiceFileUrl: invoiceFileUrl,
         campaignDiscount: campaignDiscount,
         campaignInfo: campaignInfo,
+        pointsRedeemed: pointsRedeemed,
+        pointsDiscount: pointsDiscount,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );
