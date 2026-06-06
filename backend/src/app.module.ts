@@ -18,6 +18,7 @@ import { CollectionsModule } from './collections/collections.module';
 import { ContactModule } from './contact/contact.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { CouponsModule } from './coupons/coupons.module';
+import { PromotionsModule } from './promotions/promotions.module';
 import { CustomersModule } from './customers/customers.module';
 import { DisplayConfigModule } from './display-config/display-config.module';
 import { GeoModule } from './geo/geo.module';
@@ -90,6 +91,7 @@ import { WishlistModule } from './wishlist/wishlist.module';
     RefundsModule,
     LoyaltyModule,
     CouponsModule,
+    PromotionsModule,
     MarketingModule,
     NewsletterModule,
     NotificationsModule,

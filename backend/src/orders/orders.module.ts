@@ -6,6 +6,7 @@ import { GeoModule } from '../geo/geo.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { PromotionsModule } from '../promotions/promotions.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { RefundsModule } from '../refunds/refunds.module';
 
@@ -23,6 +24,7 @@ import { OrdersService } from './orders.service';
     CouponsModule,
     NotificationsModule,
     GeoModule,
+    PromotionsModule,
   ],
   controllers: [OrdersController, MerchantOrdersController],
   providers: [OrdersService, OrdersSchedulerService],

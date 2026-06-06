@@ -21,6 +21,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import type { PaymentInstructions } from '../payments/dto/payment-instructions';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { RefundsService } from '../refunds/refunds.service';
 
@@ -61,6 +62,7 @@ export class OrdersService {
     private readonly auth: AuthService,
     private readonly storeRouter: StoreRouterService,
     private readonly deliveryConfig: DeliveryConfigService,
+    private readonly promotions: PromotionsService,
   ) {}
 
   /**
@@ -326,12 +328,27 @@ export class OrdersService {
 
     // Enforce store's minimum order subtotal (set in store settings).
     await this.assertMinOrder(storeId, subtotalVnd);
+
+    // Automatic promotion-engine discounts (product/category/flash/happy-hour).
+    // Applied to the subtotal before the coupon so the coupon stacks on the
+    // already-discounted amount.
+    const promo = await this.promotions.evaluate({
+      lines: lineCreates.map((l) => ({
+        productId: l.productId,
+        quantity: l.quantity,
+        lineTotalVnd: Number(l.lineTotal.toString()),
+      })),
+      storeId,
+    });
+    const campaignDiscountVnd = Math.min(promo.discountVnd, subtotalVnd);
+    const subtotalAfterCampaign = subtotalVnd - campaignDiscountVnd;
+
     let couponDiscountVnd = 0;
     let couponId: string | null = null;
     if (dto.couponCode) {
       const v = await this.coupons.validate({
         code: dto.couponCode,
-        subtotalVnd,
+        subtotalVnd: subtotalAfterCampaign,
         deliveryFeeVnd,
         userId: customerId,
         storeId,
@@ -383,10 +400,13 @@ export class OrdersService {
       // run loyalty redemption inside the transaction so balance/event/order
       // are consistent — failures roll everything back.
       const couponDiscount = new Prisma.Decimal(couponDiscountVnd);
-      const subtotalAfterCoupon = Math.max(0, subtotalVnd - couponDiscountVnd);
+      const subtotalAfterCoupon = Math.max(
+        0,
+        subtotalAfterCampaign - couponDiscountVnd,
+      );
 
       const totalBeforePoints = new Prisma.Decimal(
-        Math.max(0, subtotalVnd - couponDiscountVnd) + deliveryFeeVnd,
+        Math.max(0, subtotalAfterCampaign - couponDiscountVnd) + deliveryFeeVnd,
       );
       // Micho perk: a member holding more than the threshold gets an
       // automatic % off the (post-coupon) subtotal. It does NOT burn
@@ -474,6 +494,11 @@ export class OrdersService {
           deliveryFee,
           couponId,
           couponDiscount,
+          campaignDiscount: new Prisma.Decimal(campaignDiscountVnd),
+          campaignInfo:
+            promo.applied.length > 0
+              ? (promo.applied as unknown as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
           giftCardCode: giftCardAmountVnd > 0 ? giftCardCode : null,
           giftCardAmountVnd,
           pointsRedeemed,
