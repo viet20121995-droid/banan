@@ -19,12 +19,17 @@ export class MerchantAnalyticsController {
   summary(
     @CurrentUser() user: AuthPrincipal,
     @Query('range') rangeRaw?: string,
+    @Query('storeId') storeIdRaw?: string,
   ) {
     if (!user.storeId && user.role !== Role.ADMIN) {
       throw new BadRequestException({ code: 'NO_STORE_ASSIGNED' });
     }
     const range = this.analytics.parseRange(rangeRaw);
-    return this.analytics.merchantSummary(user.storeId ?? null, range);
+    // Merchants are locked to their own store; admin may optionally scope to
+    // one branch (else null = whole chain, with the per-branch breakdown).
+    const scopeStoreId =
+      user.storeId ?? (storeIdRaw && storeIdRaw.trim() ? storeIdRaw.trim() : null);
+    return this.analytics.merchantSummary(scopeStoreId, range);
   }
 }
 

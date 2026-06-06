@@ -39,6 +39,17 @@ export interface MerchantSummary {
   bestSellers: BestSeller[];
   /** Hour-of-day → order count, 0..23 covering the range. */
   peakHours: { hour: number; orders: number }[];
+  /** Completed revenue + orders per branch (chain view; one entry when scoped). */
+  byStore: { storeId: string; storeName: string; revenue: number; orders: number }[];
+  /** Completed revenue + orders split by fulfillment type. */
+  byFulfillment: {
+    pickup: { revenue: number; orders: number };
+    delivery: { revenue: number; orders: number };
+  };
+  /** Completed-order counts by payment provider. */
+  byPayment: { provider: string; orders: number }[];
+  /** Total discounts given on completed orders (coupon+campaign+points+gift card), VND. */
+  discountsGiven: number;
 }
 
 export interface KitchenSummary {
@@ -75,6 +86,14 @@ export class AnalyticsService {
           status: true,
           total: true,
           createdAt: true,
+          storeId: true,
+          store: { select: { name: true } },
+          fulfillmentType: true,
+          couponDiscount: true,
+          campaignDiscount: true,
+          pointsDiscount: true,
+          giftCardAmountVnd: true,
+          payments: { select: { provider: true } },
         },
       }),
       this.prisma.orderItem.findMany({
@@ -96,6 +115,16 @@ export class AnalyticsService {
     let refunded = 0;
     const daily = new Map<string, DailyRevenuePoint>();
     const peak = Array.from({ length: 24 }, (_, h) => ({ hour: h, orders: 0 }));
+    const byStoreMap = new Map<
+      string,
+      { storeId: string; storeName: string; revenue: number; orders: number }
+    >();
+    const ful = {
+      pickup: { revenue: 0, orders: 0 },
+      delivery: { revenue: 0, orders: 0 },
+    };
+    const payMap = new Map<string, number>();
+    let discountsGiven = 0;
 
     for (const o of orders) {
       const total = Number(o.total.toString());
@@ -110,6 +139,25 @@ export class AnalyticsService {
         completed += 1;
         revenue += total;
         day.revenue += total;
+        const sb = byStoreMap.get(o.storeId) ?? {
+          storeId: o.storeId,
+          storeName: o.store?.name ?? '—',
+          revenue: 0,
+          orders: 0,
+        };
+        sb.revenue += total;
+        sb.orders += 1;
+        byStoreMap.set(o.storeId, sb);
+        const fb = o.fulfillmentType === 'DELIVERY' ? ful.delivery : ful.pickup;
+        fb.revenue += total;
+        fb.orders += 1;
+        const prov = o.payments[0]?.provider ?? 'UNKNOWN';
+        payMap.set(prov, (payMap.get(prov) ?? 0) + 1);
+        discountsGiven +=
+          Number(o.couponDiscount.toString()) +
+          Number(o.campaignDiscount.toString()) +
+          Number(o.pointsDiscount.toString()) +
+          o.giftCardAmountVnd;
       } else if (o.status === 'CANCELLED') {
         cancelled += 1;
       } else if (o.status === 'REFUNDED') {
@@ -148,6 +196,12 @@ export class AnalyticsService {
       daily: this.fillDaily(start, end, daily),
       bestSellers,
       peakHours: peak,
+      byStore: [...byStoreMap.values()].sort((a, b) => b.revenue - a.revenue),
+      byFulfillment: ful,
+      byPayment: [...payMap.entries()]
+        .map(([provider, orders]) => ({ provider, orders }))
+        .sort((a, b) => b.orders - a.orders),
+      discountsGiven,
     };
   }
 
