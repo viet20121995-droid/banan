@@ -103,6 +103,8 @@ class Order extends Equatable {
     this.invoiceFileUrl,
     this.campaignDiscount = 0,
     this.campaignInfo,
+    this.couponDiscount = 0,
+    this.giftCardAmountVnd = 0,
     this.pointsRedeemed = 0,
     this.pointsDiscount = 0,
     this.isGift = false,
@@ -133,6 +135,13 @@ class Order extends Equatable {
   /// Optional breakdown of which campaigns applied — each entry is
   /// `{id, name, type, discountVnd}`. Null when the API omits it.
   final List<Map<String, dynamic>>? campaignInfo;
+
+  /// Coupon-code discount applied, in VND. Drives the "Mã giảm giá −{amount}₫" line.
+  final int couponDiscount;
+
+  /// Gift-card amount applied to this order, in VND. Drives the
+  /// "Thẻ quà tặng −{amount}₫" line.
+  final int giftCardAmountVnd;
 
   /// Loyalty points the customer redeemed on this order. 0 when none.
   final int pointsRedeemed;
@@ -213,6 +222,8 @@ class Order extends Equatable {
         invoiceFileUrl,
         campaignDiscount,
         campaignInfo,
+        couponDiscount,
+        giftCardAmountVnd,
         pointsRedeemed,
         pointsDiscount,
         isGift,

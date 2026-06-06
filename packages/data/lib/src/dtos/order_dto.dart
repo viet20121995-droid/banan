@@ -145,6 +145,8 @@ class OrderDto {
     this.invoiceFileUrl,
     this.campaignDiscount = 0,
     this.campaignInfo,
+    this.couponDiscount = 0,
+    this.giftCardAmountVnd = 0,
     this.pointsRedeemed = 0,
     this.pointsDiscount = 0,
     this.isGift = false,
@@ -199,6 +201,8 @@ class OrderDto {
       campaignInfo: campaignInfoRaw
           ?.map((e) => (e as Map).cast<String, dynamic>())
           .toList(),
+      couponDiscount: _toIntVnd(json['couponDiscount']),
+      giftCardAmountVnd: _toIntVnd(json['giftCardAmountVnd']),
       pointsRedeemed: _toIntVnd(json['pointsRedeemed']),
       pointsDiscount: _toIntVnd(json['pointsDiscount']),
       isGift: json['isGift'] as bool? ?? false,
@@ -241,6 +245,8 @@ class OrderDto {
   final String? invoiceFileUrl;
   final int campaignDiscount;
   final List<Map<String, dynamic>>? campaignInfo;
+  final int couponDiscount;
+  final int giftCardAmountVnd;
   final int pointsRedeemed;
   final int pointsDiscount;
   final bool isGift;
@@ -284,6 +290,8 @@ class OrderDto {
         invoiceFileUrl: invoiceFileUrl,
         campaignDiscount: campaignDiscount,
         campaignInfo: campaignInfo,
+        couponDiscount: couponDiscount,
+        giftCardAmountVnd: giftCardAmountVnd,
         pointsRedeemed: pointsRedeemed,
         pointsDiscount: pointsDiscount,
         isGift: isGift,

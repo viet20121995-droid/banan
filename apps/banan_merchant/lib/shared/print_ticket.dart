@@ -143,9 +143,21 @@ void printReceipt(Order order) {
       b.write(
           '<div class="row"><span>Khuyến mãi</span><span>−${_fmt.format(order.campaignDiscount)}</span></div>');
     }
+    if (order.couponDiscount > 0) {
+      b.write(
+          '<div class="row"><span>Mã giảm giá</span><span>−${_fmt.format(order.couponDiscount)}</span></div>');
+    }
+    if (order.pointsDiscount > 0) {
+      b.write(
+          '<div class="row"><span>Đổi điểm (${order.pointsRedeemed} Micho)</span><span>−${_fmt.format(order.pointsDiscount)}</span></div>');
+    }
     if (order.deliveryFee > 0) {
       b.write(
           '<div class="row"><span>Phí giao</span><span>${_fmt.format(order.deliveryFee)}</span></div>');
+    }
+    if (order.giftCardAmountVnd > 0) {
+      b.write(
+          '<div class="row"><span>Thẻ quà tặng</span><span>−${_fmt.format(order.giftCardAmountVnd)}</span></div>');
     }
     b.write(
         '<div class="row big"><span>Tổng</span><span>${_fmt.format(order.total)}</span></div>');
