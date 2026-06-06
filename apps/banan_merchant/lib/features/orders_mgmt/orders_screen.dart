@@ -524,7 +524,19 @@ class _StorePill extends StatelessWidget {
 /// from the actual `state.orders` so a branch only appears in the row
 /// once an order from it shows up — avoids cluttering admins with empty
 /// stores during quiet hours.
-class _StoreFilter extends StatelessWidget {
+/// The full chain of branches (admin scope) so every store shows in the
+/// filter even with no orders yet. Returns [] on failure (e.g. a single-store
+/// merchant gets 403 from the admin endpoint — their filter is hidden anyway).
+final _allStoresProvider =
+    FutureProvider.autoDispose<List<({String id, String name})>>((ref) async {
+  final res = await ref.watch(adminRepositoryProvider).stores();
+  return res.when(
+    success: (list) => [for (final o in list) (id: o.id, name: o.name)],
+    failure: (_) => const <({String id, String name})>[],
+  );
+});
+
+class _StoreFilter extends ConsumerWidget {
   const _StoreFilter({
     required this.orders,
     required this.selected,
@@ -536,16 +548,22 @@ class _StoreFilter extends StatelessWidget {
   final ValueChanged<String?> onSelect;
 
   @override
-  Widget build(BuildContext context) {
-    // Unique (id, name) pairs in order-of-appearance. We don't sort —
-    // branches show up in the same order admin would see in the order
-    // queue itself.
-    final seen = <String>{};
-    final stores = <({String id, String name})>[];
-    for (final o in orders) {
-      if (o.storeName == null || o.storeName!.isEmpty) continue;
-      if (seen.add(o.storeId)) {
-        stores.add((id: o.storeId, name: o.storeName!));
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Prefer the full chain (every branch, even ones without orders). Fall
+    // back to the branches that appear in the loaded orders when the full
+    // list isn't available.
+    final all = ref.watch(_allStoresProvider).valueOrNull ?? const [];
+    List<({String id, String name})> stores;
+    if (all.length >= 2) {
+      stores = all;
+    } else {
+      final seen = <String>{};
+      stores = <({String id, String name})>[];
+      for (final o in orders) {
+        if (o.storeName == null || o.storeName!.isEmpty) continue;
+        if (seen.add(o.storeId)) {
+          stores.add((id: o.storeId, name: o.storeName!));
+        }
       }
     }
     if (stores.length <= 1) return const SizedBox.shrink();
