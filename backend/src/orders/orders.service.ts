@@ -339,6 +339,8 @@ export class OrdersService {
         lineTotalVnd: Number(l.lineTotal.toString()),
       })),
       storeId,
+      subtotalVnd,
+      customerId,
     });
     const campaignDiscountVnd = Math.min(promo.discountVnd, subtotalVnd);
     const subtotalAfterCampaign = subtotalVnd - campaignDiscountVnd;

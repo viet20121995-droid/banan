@@ -5,13 +5,28 @@ import { PrismaService } from '../prisma/prisma.service';
 
 import { CreateCampaignDto, UpdateCampaignDto } from './dto';
 
-/** Campaign types the checkout engine auto-applies (no code needed). */
+/** All campaign types the checkout engine auto-applies (no code needed). */
 const AUTO_TYPES: CampaignType[] = [
   'PRODUCT_DISCOUNT',
   'CATEGORY_DISCOUNT',
   'FLASH_SALE',
   'HAPPY_HOUR',
+  'BUY_X_GET_Y',
+  'FIRST_ORDER',
+  'BIRTHDAY',
+  'REACTIVATION',
 ];
+
+/** Per-line discount types (each line takes the single best match). */
+const LINE_TYPES: CampaignType[] = [
+  'PRODUCT_DISCOUNT',
+  'CATEGORY_DISCOUNT',
+  'FLASH_SALE',
+  'HAPPY_HOUR',
+];
+
+/** Order-level (customer-targeted) types — best single one applies. */
+const ORDER_TYPES: CampaignType[] = ['FIRST_ORDER', 'BIRTHDAY', 'REACTIVATION'];
 
 export interface CartLine {
   productId: string;
@@ -31,19 +46,33 @@ export interface PromoResult {
   applied: AppliedCampaign[];
 }
 
+interface CustomerContext {
+  orderCount: number;
+  lastOrderAt: Date | null;
+  birthday: Date | null;
+}
+
 @Injectable()
 export class PromotionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Evaluate active automatic-discount campaigns against a cart. Pure read —
-   * the caller subtracts the returned discount. Each line gets at most the
-   * single best matching campaign (no double-discount on one product); the
-   * totals per campaign are summed for display/reporting.
+   * Evaluate active campaigns against a cart + customer. Pure read — the
+   * caller subtracts the returned discount (and caps it at the subtotal).
+   *
+   * Stacking model:
+   *  - line types (product/category/flash/happy-hour): each line gets its
+   *    single best matching campaign (no double-discount on one product);
+   *  - BUY_X_GET_Y: cart-level, cheapest qualifying units discounted;
+   *  - order types (first-order/birthday/re-activation): the single best
+   *    customer-targeted campaign, off the gross subtotal.
+   * These three buckets sum; the caller caps the total at the subtotal.
    */
   async evaluate(input: {
     lines: CartLine[];
     storeId: string;
+    subtotalVnd: number;
+    customerId?: string;
     now?: Date;
   }): Promise<PromoResult> {
     const now = input.now ?? new Date();
@@ -72,12 +101,25 @@ export class PromotionsService {
     if (live.length === 0) return { discountVnd: 0, applied: [] };
 
     const applied = new Map<string, AppliedCampaign>();
+    const add = (c: Campaign, amount: number) => {
+      if (amount <= 0) return;
+      const prev = applied.get(c.id);
+      applied.set(c.id, {
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        discountVnd: (prev?.discountVnd ?? 0) + amount,
+      });
+    };
     let total = 0;
+
+    // 1. Per-line best discount (PRODUCT/CATEGORY/FLASH/HAPPY_HOUR).
+    const lineCampaigns = live.filter((c) => LINE_TYPES.includes(c.type));
     for (const line of input.lines) {
       const cat = catOf.get(line.productId) ?? null;
       let bestDiscount = 0;
       let best: Campaign | null = null;
-      for (const c of live) {
+      for (const c of lineCampaigns) {
         if (!this.matchesLine(c, line.productId, cat)) continue;
         const d = this.lineDiscount(c, line.lineTotalVnd);
         if (d > bestDiscount) {
@@ -85,17 +127,41 @@ export class PromotionsService {
           best = c;
         }
       }
-      if (best && bestDiscount > 0) {
+      if (best) {
         total += bestDiscount;
-        const prev = applied.get(best.id);
-        applied.set(best.id, {
-          id: best.id,
-          name: best.name,
-          type: best.type,
-          discountVnd: (prev?.discountVnd ?? 0) + bestDiscount,
-        });
+        add(best, bestDiscount);
       }
     }
+
+    // 2. Buy X Get Y (cart-level).
+    for (const c of live.filter((c) => c.type === 'BUY_X_GET_Y')) {
+      const d = this.bxgyDiscount(c, input.lines, catOf);
+      if (d > 0) {
+        total += d;
+        add(c, d);
+      }
+    }
+
+    // 3. Order-level customer-targeted (best single one).
+    const orderCampaigns = live.filter((c) => ORDER_TYPES.includes(c.type));
+    if (orderCampaigns.length > 0 && input.customerId) {
+      const ctx = await this.customerContext(input.customerId);
+      let bestDiscount = 0;
+      let best: Campaign | null = null;
+      for (const c of orderCampaigns) {
+        if (!this.orderApplies(c, ctx, now)) continue;
+        const d = this.orderDiscount(c, input.subtotalVnd);
+        if (d > bestDiscount) {
+          bestDiscount = d;
+          best = c;
+        }
+      }
+      if (best) {
+        total += bestDiscount;
+        add(best, bestDiscount);
+      }
+    }
+
     return { discountVnd: total, applied: [...applied.values()] };
   }
 
@@ -123,35 +189,130 @@ export class PromotionsService {
     productId: string,
     categoryId: string | null,
   ): boolean {
-    const cfg = (c.config ?? {}) as Record<string, unknown>;
-    const pids = Array.isArray(cfg.productIds) ? (cfg.productIds as string[]) : [];
-    const cids = Array.isArray(cfg.categoryIds)
-      ? (cfg.categoryIds as string[])
-      : [];
     switch (c.type) {
-      case 'PRODUCT_DISCOUNT':
+      case 'PRODUCT_DISCOUNT': {
+        const cfg = (c.config ?? {}) as Record<string, unknown>;
+        const pids = asStrArray(cfg.productIds);
         return pids.includes(productId);
-      case 'CATEGORY_DISCOUNT':
+      }
+      case 'CATEGORY_DISCOUNT': {
+        const cfg = (c.config ?? {}) as Record<string, unknown>;
+        const cids = asStrArray(cfg.categoryIds);
         return categoryId != null && cids.includes(categoryId);
+      }
       case 'FLASH_SALE':
       case 'HAPPY_HOUR':
-        if (pids.length === 0 && cids.length === 0) return true; // whole menu
-        if (pids.includes(productId)) return true;
-        return categoryId != null && cids.includes(categoryId);
+        return this.scopeMatches(c, productId, categoryId);
       default:
         return false;
     }
+  }
+
+  /** Scope match for whole-menu-capable types (empty scope = whole menu). */
+  private scopeMatches(
+    c: Campaign,
+    productId: string,
+    categoryId: string | null,
+  ): boolean {
+    const cfg = (c.config ?? {}) as Record<string, unknown>;
+    const pids = asStrArray(cfg.productIds);
+    const cids = asStrArray(cfg.categoryIds);
+    if (pids.length === 0 && cids.length === 0) return true;
+    if (pids.includes(productId)) return true;
+    return categoryId != null && cids.includes(categoryId);
   }
 
   private lineDiscount(c: Campaign, lineTotalVnd: number): number {
     const cfg = (c.config ?? {}) as Record<string, unknown>;
     const value = Number(cfg.value) || 0;
     if (value <= 0) return 0;
-    if (cfg.kind === 'FIXED') {
-      return Math.min(Math.round(value), lineTotalVnd);
-    }
-    // PERCENT (default)
+    if (cfg.kind === 'FIXED') return Math.min(Math.round(value), lineTotalVnd);
     return Math.min(lineTotalVnd, Math.round((lineTotalVnd * value) / 100));
+  }
+
+  /** Buy X Get Y: every (buyQty+getQty) qualifying units yields getQty
+   *  discounted units (cheapest first), at getDiscountPct% off (default 100). */
+  private bxgyDiscount(
+    c: Campaign,
+    lines: CartLine[],
+    catOf: Map<string, string | null>,
+  ): number {
+    const cfg = (c.config ?? {}) as Record<string, unknown>;
+    const buyQty = Math.floor(Number(cfg.buyQty) || 0);
+    const getQty = Math.floor(Number(cfg.getQty) || 0);
+    if (buyQty <= 0 || getQty <= 0) return 0;
+    const getPct =
+      cfg.getDiscountPct != null ? Number(cfg.getDiscountPct) : 100;
+    if (getPct <= 0) return 0;
+
+    const units: number[] = [];
+    for (const line of lines) {
+      const cat = catOf.get(line.productId) ?? null;
+      if (!this.scopeMatches(c, line.productId, cat)) continue;
+      if (line.quantity <= 0) continue;
+      const unit = line.lineTotalVnd / line.quantity;
+      for (let i = 0; i < line.quantity; i++) units.push(unit);
+    }
+    const bundle = buyQty + getQty;
+    if (units.length < bundle) return 0;
+    const freeCount = Math.floor(units.length / bundle) * getQty;
+    units.sort((a, b) => a - b); // cheapest units get the discount
+    let d = 0;
+    for (let i = 0; i < freeCount && i < units.length; i++) {
+      d += (units[i] * getPct) / 100;
+    }
+    return Math.round(d);
+  }
+
+  private orderApplies(c: Campaign, ctx: CustomerContext, now: Date): boolean {
+    const cfg = (c.config ?? {}) as Record<string, unknown>;
+    switch (c.type) {
+      case 'FIRST_ORDER':
+        return ctx.orderCount === 0;
+      case 'BIRTHDAY': {
+        if (!ctx.birthday) return false;
+        const windowDays =
+          cfg.windowDays != null ? Number(cfg.windowDays) : 7;
+        return withinBirthday(ctx.birthday, now, windowDays);
+      }
+      case 'REACTIVATION': {
+        if (!ctx.lastOrderAt) return false; // never ordered → not re-activation
+        const inactiveDays = Number(cfg.inactiveDays) || 60;
+        const elapsed = now.getTime() - ctx.lastOrderAt.getTime();
+        return elapsed > inactiveDays * 86_400_000;
+      }
+      default:
+        return false;
+    }
+  }
+
+  private orderDiscount(c: Campaign, subtotalVnd: number): number {
+    const cfg = (c.config ?? {}) as Record<string, unknown>;
+    const value = Number(cfg.value) || 0;
+    if (value <= 0) return 0;
+    const minSub = Number(cfg.minSubtotal) || 0;
+    if (subtotalVnd < minSub) return 0;
+    if (cfg.kind === 'FIXED') return Math.min(Math.round(value), subtotalVnd);
+    return Math.min(subtotalVnd, Math.round((subtotalVnd * value) / 100));
+  }
+
+  private async customerContext(customerId: string): Promise<CustomerContext> {
+    const [user, agg] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: customerId },
+        select: { birthday: true },
+      }),
+      this.prisma.order.aggregate({
+        where: { customerId },
+        _count: { _all: true },
+        _max: { createdAt: true },
+      }),
+    ]);
+    return {
+      orderCount: agg._count._all,
+      lastOrderAt: agg._max.createdAt ?? null,
+      birthday: user?.birthday ?? null,
+    };
   }
 
   // ── Admin CRUD ────────────────────────────────────────────────────────────
@@ -215,9 +376,16 @@ export class PromotionsService {
   }
 }
 
+function asStrArray(v: unknown): string[] {
+  return Array.isArray(v) ? (v as string[]) : [];
+}
+
 function vnNow(now: Date): { minutes: number; day: number } {
   const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000); // UTC+7
-  return { minutes: vn.getUTCHours() * 60 + vn.getUTCMinutes(), day: vn.getUTCDay() };
+  return {
+    minutes: vn.getUTCHours() * 60 + vn.getUTCMinutes(),
+    day: vn.getUTCDay(),
+  };
 }
 
 function parseHHMM(s: unknown): number | null {
@@ -228,4 +396,24 @@ function parseHHMM(s: unknown): number | null {
   const min = Number(m[2]);
   if (h > 23 || min > 59) return null;
   return h * 60 + min;
+}
+
+/** True when `now` (VN date) falls within ±windowDays of the birthday's
+ *  month/day, ignoring the year (handles the Dec↔Jan wrap-around). */
+function withinBirthday(birthday: Date, now: Date, windowDays: number): boolean {
+  const vnNowDate = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const dayOfYear = (d: Date): number => {
+    const start = Date.UTC(d.getUTCFullYear(), 0, 1);
+    const cur = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    return Math.floor((cur - start) / 86_400_000);
+  };
+  const bdayUtc = new Date(
+    Date.UTC(2020, birthday.getUTCMonth(), birthday.getUTCDate()),
+  );
+  const nowRef = new Date(
+    Date.UTC(2020, vnNowDate.getUTCMonth(), vnNowDate.getUTCDate()),
+  );
+  let diff = Math.abs(dayOfYear(nowRef) - dayOfYear(bdayUtc));
+  if (diff > 182) diff = 365 - diff; // wrap-around
+  return diff <= windowDays;
 }
