@@ -8,9 +8,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/alert_sound.dart';
-import '../cart/cart_controller.dart';
 import 'order_status_visuals.dart';
 import 'orders_list_screen.dart';
+import 'reorder_helper.dart';
 
 final _orderProvider =
     FutureProvider.autoDispose.family<Order, String>((ref, id) async {
@@ -92,38 +92,6 @@ class _Body extends ConsumerWidget {
 
   final Order order;
   final NumberFormat fmt;
-
-  /// Adds every line from this order back to the cart, then jumps to /cart.
-  /// Items already in the cart get their quantity bumped instead of
-  /// duplicated (handled by CartController.add → merge by key).
-  void _reorder(BuildContext context, WidgetRef ref) {
-    final added = ref.read(cartControllerProvider.notifier).reorder(
-          items: [
-            for (final i in order.items)
-              (
-                productId: i.productId,
-                variantId: i.variantId,
-                productName: i.productName,
-                variantLabel: i.variantLabel,
-                unitPrice: i.unitPrice,
-                quantity: i.quantity,
-                customMessage: i.customMessage,
-                personalization: i.personalization,
-              ),
-          ],
-        );
-    // Clear pending snackbars before navigating so the message doesn't
-    // tail the customer into the cart screen.
-    ScaffoldMessenger.of(context)
-      ..removeCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Đã thêm $added món vào giỏ hàng.'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    context.push('/cart');
-  }
 
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {
     final s = ref.read(stringsProvider);
@@ -311,7 +279,7 @@ class _Body extends ConsumerWidget {
                 FilledButton.icon(
                   icon: const Icon(Icons.refresh_outlined),
                   label: const Text('Đặt lại đơn này'),
-                  onPressed: () => _reorder(context, ref),
+                  onPressed: () => reorderOrder(context, ref, order),
                 ),
                 const SizedBox(height: BananSpacing.md),
                 // Always offer a clear next-action. The customer arrived

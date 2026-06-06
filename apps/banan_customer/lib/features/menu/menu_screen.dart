@@ -20,6 +20,7 @@ import '../checkout/fulfillment_preference.dart';
 // Pulling the import up here keeps all imports grouped at the top.
 import '../locations/locations_screen.dart' show storesListProvider;
 import '../notifications/notifications_controller.dart';
+import '../orders/reorder_helper.dart';
 import '../wishlist/wishlist_controller.dart';
 import '../bundles/bundle_strip.dart';
 import 'banan_brand.dart';
@@ -1108,6 +1109,7 @@ class _BodyState extends ConsumerState<_Body> {
             )
           else ...[
             if (showHomeContent) ...[
+              const SliverToBoxAdapter(child: _OrderAgainStrip()),
               SliverToBoxAdapter(child: _ThreadsStrip()),
               const SliverToBoxAdapter(child: BundleStrip()),
               SliverToBoxAdapter(child: _PinnedCollections()),
@@ -1738,6 +1740,144 @@ class _ThreadCardState extends ConsumerState<_ThreadCard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// ChowNow-style "Đặt lại / Order Again" strip. Shown only to a signed-in
+/// customer who has at least one past order; collapses to nothing while
+/// loading, on error, for guests, or when there's no history. Each card
+/// re-adds that order's still-available items via the shared [reorderOrder]
+/// helper (availability-aware).
+class _OrderAgainStrip extends ConsumerWidget {
+  const _OrderAgainStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(recentOrdersProvider);
+    final orders = async.valueOrNull ?? const <Order>[];
+    if (orders.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: BananSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            overline: 'Nhanh gọn',
+            title: '🔁 Đặt lại',
+            subtitle: 'Thêm lại nhanh những món bạn đã đặt gần đây.',
+          ),
+          SizedBox(
+            height: 168,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: orders.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: BananSpacing.md),
+              itemBuilder: (context, i) =>
+                  _OrderAgainCard(order: orders[i]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One compact "order again" card: a short item summary, the order date,
+/// the total, and a prominent "Đặt lại" CTA.
+class _OrderAgainCard extends ConsumerWidget {
+  const _OrderAgainCard({required this.order});
+
+  final Order order;
+
+  /// "Bánh kem dâu" → "Bánh kem dâu +2 món khác" when the order has more
+  /// than one line.
+  String _summary() {
+    if (order.items.isEmpty) return 'Đơn ${order.code}';
+    final first = order.items.first.productName;
+    final others = order.items.length - 1;
+    return others <= 0 ? first : '$first +$others món khác';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final fmt = NumberFormat.currency(
+      locale: 'vi_VN',
+      symbol: '₫',
+      decimalDigits: 0,
+    );
+    final dateLabel = DateFormat('d MMM', 'vi_VN').format(
+      order.createdAt.toLocal(),
+    );
+
+    return SizedBox(
+      width: 240,
+      child: Container(
+        padding: const EdgeInsets.all(BananSpacing.md),
+        decoration: BoxDecoration(
+          borderRadius: BananRadii.rlg,
+          color: theme.colorScheme.surface,
+          border:
+              Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.history_rounded,
+                  size: 16,
+                  color: theme.colorScheme.outline,
+                ),
+                const SizedBox(width: BananSpacing.xs),
+                Text(
+                  dateLabel,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: BananSpacing.xs),
+            Expanded(
+              child: Text(
+                _summary(),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: BananSpacing.xs),
+            Text(
+              fmt.format(order.total),
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: BananSpacing.sm,
+                  ),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Đặt lại'),
+                onPressed: () => reorderOrder(context, ref, order),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

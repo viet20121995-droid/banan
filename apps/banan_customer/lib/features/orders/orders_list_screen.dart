@@ -7,8 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../cart/cart_controller.dart';
 import 'order_status_visuals.dart';
+import 'reorder_helper.dart';
 
 final myOrdersProvider = FutureProvider.autoDispose<List<Order>>((ref) async {
   // Refresh on any realtime event we care about — list is small enough that
@@ -186,35 +186,6 @@ class _OrderRow extends ConsumerWidget {
   final NumberFormat fmt;
   final VoidCallback onTap;
 
-  void _reorder(BuildContext context, WidgetRef ref, Order order) {
-    final added = ref.read(cartControllerProvider.notifier).reorder(
-          items: [
-            for (final i in order.items)
-              (
-                productId: i.productId,
-                variantId: i.variantId,
-                productName: i.productName,
-                variantLabel: i.variantLabel,
-                unitPrice: i.unitPrice,
-                quantity: i.quantity,
-                customMessage: i.customMessage,
-                personalization: i.personalization,
-              ),
-          ],
-        );
-    // Snackbar would otherwise linger across the navigation push and
-    // overlap the cart's bottom bar. Clear pending then go.
-    ScaffoldMessenger.of(context)
-      ..removeCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Đã thêm $added món vào giỏ hàng.'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    context.push('/cart');
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -271,7 +242,7 @@ class _OrderRow extends ConsumerWidget {
                   ),
                   icon: const Icon(Icons.refresh, size: 14),
                   label: const Text('Đặt lại', style: TextStyle(fontSize: 12)),
-                  onPressed: () => _reorder(context, ref, order),
+                  onPressed: () => reorderOrder(context, ref, order),
                 ),
               ],
             ),
