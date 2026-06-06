@@ -83,6 +83,7 @@ export class AddressesController {
       line2: a.line2,
       city: a.city,
       district: a.district,
+      wardCode: a.wardCode,
       postalCode: a.postalCode,
       isDefault: a.isDefault,
     };
