@@ -20,12 +20,16 @@ final _campaignsProvider =
 
 final _vnd = NumberFormat.decimalPattern('vi_VN');
 
-/// The four Phase-1 campaign types that ship with a full editor.
+/// The campaign types that ship with a full editor (Phase 1 + Phase 2).
 const _editableTypes = <CampaignType>[
   CampaignType.productDiscount,
   CampaignType.categoryDiscount,
   CampaignType.flashSale,
   CampaignType.happyHour,
+  CampaignType.buyXGetY,
+  CampaignType.firstOrder,
+  CampaignType.birthday,
+  CampaignType.reactivation,
 ];
 
 String _typeLabel(CampaignType t) {
@@ -41,11 +45,11 @@ String _typeLabel(CampaignType t) {
     case CampaignType.buyXGetY:
       return 'Mua X tặng Y';
     case CampaignType.firstOrder:
-      return 'Đơn đầu tiên';
+      return 'Ưu đãi đơn đầu';
     case CampaignType.birthday:
       return 'Sinh nhật';
     case CampaignType.reactivation:
-      return 'Kích hoạt lại';
+      return 'Kéo khách quay lại';
     case CampaignType.membershipBenefit:
       return 'Ưu đãi thành viên';
   }
@@ -153,16 +157,48 @@ class _CampaignCard extends ConsumerWidget {
   final Campaign campaign;
   final VoidCallback onEdit;
 
-  String _discountText() {
+  /// Formats the kind/value pair shared by the per-line and per-order types.
+  String _kindValueText() {
     final kind = campaign.config['kind'] as String?;
     final value = (campaign.config['value'] as num?)?.toDouble() ?? 0;
     if (kind == 'PERCENT') {
-      return 'Giảm ${value.toStringAsFixed(0)}%';
+      return 'giảm ${value.toStringAsFixed(0)}%';
     }
     if (kind == 'FIXED') {
-      return 'Giảm ${_vnd.format(value)}₫';
+      return 'giảm ${_vnd.format(value)}₫';
     }
     return '—';
+  }
+
+  String _discountText() {
+    final cfg = campaign.config;
+    switch (campaign.type) {
+      case CampaignType.firstOrder:
+        final extra = (cfg['minSubtotal'] as num?)?.toDouble();
+        final base = 'Đơn đầu • ${_kindValueText()}';
+        return extra != null && extra > 0
+            ? '$base (đơn từ ${_vnd.format(extra)}₫)'
+            : base;
+      case CampaignType.birthday:
+        final days = (cfg['windowDays'] as num?)?.toInt() ?? 7;
+        return 'Sinh nhật • ${_kindValueText()} (±$days ngày)';
+      case CampaignType.reactivation:
+        final days = (cfg['inactiveDays'] as num?)?.toInt() ?? 60;
+        return 'Kéo lại • ${_kindValueText()} sau $days ngày';
+      case CampaignType.buyXGetY:
+        final buy = (cfg['buyQty'] as num?)?.toInt() ?? 0;
+        final get = (cfg['getQty'] as num?)?.toInt() ?? 0;
+        final pct = (cfg['getDiscountPct'] as num?)?.toInt() ?? 100;
+        final gift = pct >= 100 ? 'tặng $get' : 'giảm $pct% cho $get';
+        return 'Mua $buy $gift';
+      case CampaignType.productDiscount:
+      case CampaignType.categoryDiscount:
+      case CampaignType.flashSale:
+      case CampaignType.happyHour:
+      case CampaignType.membershipBenefit:
+        final text = _kindValueText();
+        return text == '—' ? '—' : 'Giảm ${text.substring('giảm '.length)}';
+    }
   }
 
   String? _scheduleText() {
@@ -360,6 +396,16 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
   final _name = TextEditingController();
   final _value = TextEditingController();
 
+  // First order (optional minimum subtotal).
+  final _minSubtotal = TextEditingController();
+  // Birthday window / reactivation inactivity window.
+  final _windowDays = TextEditingController(text: '7');
+  final _inactiveDays = TextEditingController(text: '60');
+  // Buy X get Y.
+  final _buyQty = TextEditingController(text: '2');
+  final _getQty = TextEditingController(text: '1');
+  final _getDiscountPct = TextEditingController(text: '100');
+
   CampaignType _type = CampaignType.productDiscount;
   String _kind = 'PERCENT'; // PERCENT | FIXED
   bool _isActive = true;
@@ -395,7 +441,7 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
       final cfg = c.config;
       _kind = (cfg['kind'] as String?) ?? 'PERCENT';
       final v = cfg['value'];
-      if (v != null) _value.text = (v as num).toString();
+      if (v != null) _value.text = _numText(v as num);
       for (final id in (cfg['productIds'] as List?) ?? const []) {
         _productIds.add(id as String);
       }
@@ -407,13 +453,42 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
       for (final d in (cfg['daysOfWeek'] as List?) ?? const []) {
         _daysOfWeek.add((d as num).toInt());
       }
+      // Phase-2 type-specific fields.
+      final minSubtotal = cfg['minSubtotal'] as num?;
+      if (minSubtotal != null) _minSubtotal.text = _numText(minSubtotal);
+      final windowDays = cfg['windowDays'] as num?;
+      if (windowDays != null) _windowDays.text = '${windowDays.toInt()}';
+      final inactiveDays = cfg['inactiveDays'] as num?;
+      if (inactiveDays != null) _inactiveDays.text = '${inactiveDays.toInt()}';
+      final buyQty = cfg['buyQty'] as num?;
+      if (buyQty != null) _buyQty.text = '${buyQty.toInt()}';
+      final getQty = cfg['getQty'] as num?;
+      if (getQty != null) _getQty.text = '${getQty.toInt()}';
+      final getDiscountPct = cfg['getDiscountPct'] as num?;
+      if (getDiscountPct != null) {
+        _getDiscountPct.text = '${getDiscountPct.toInt()}';
+      }
     }
+  }
+
+  /// Renders a number without a trailing ".0" so the field shows "10" not
+  /// "10.0" when the backend returns an int-valued double.
+  static String _numText(num n) {
+    if (n is int) return n.toString();
+    if (n == n.roundToDouble()) return n.toInt().toString();
+    return n.toString();
   }
 
   @override
   void dispose() {
     _name.dispose();
     _value.dispose();
+    _minSubtotal.dispose();
+    _windowDays.dispose();
+    _inactiveDays.dispose();
+    _buyQty.dispose();
+    _getQty.dispose();
+    _getDiscountPct.dispose();
     super.dispose();
   }
 
@@ -433,19 +508,29 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
   bool get _wantsProductScope =>
       _type == CampaignType.productDiscount ||
       _type == CampaignType.flashSale ||
-      _type == CampaignType.happyHour;
+      _type == CampaignType.happyHour ||
+      _type == CampaignType.buyXGetY;
 
   bool get _wantsCategoryScope =>
       _type == CampaignType.categoryDiscount ||
       _type == CampaignType.flashSale ||
-      _type == CampaignType.happyHour;
+      _type == CampaignType.happyHour ||
+      _type == CampaignType.buyXGetY;
 
   bool get _productScopeRequired => _type == CampaignType.productDiscount;
   bool get _categoryScopeRequired => _type == CampaignType.categoryDiscount;
 
+  /// True for types whose primary discount is a shared kind/value pair
+  /// (percent or fixed amount). Buy X Get Y carries its own quantity-based
+  /// config and has no kind/value.
+  bool get _usesKindValue => _type != CampaignType.buyXGetY;
+
   Map<String, dynamic> _buildConfig() {
     final value = num.tryParse(_value.text.trim()) ?? 0;
-    final config = <String, dynamic>{'kind': _kind, 'value': value};
+    // Buy X Get Y has its own shape; everything else shares kind/value.
+    final config = _type == CampaignType.buyXGetY
+        ? <String, dynamic>{}
+        : <String, dynamic>{'kind': _kind, 'value': value};
     switch (_type) {
       case CampaignType.productDiscount:
         config['productIds'] = _productIds.toList();
@@ -468,12 +553,30 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
         config['startTime'] = _fmtTime(_startTime);
         config['endTime'] = _fmtTime(_endTime);
         config['daysOfWeek'] = _daysOfWeek.toList()..sort();
-      // Future-phase types have no editor; the type selector never picks
-      // them, so we just emit the kind/value pair already in [config].
-      case CampaignType.buyXGetY:
       case CampaignType.firstOrder:
+        // Order-level discount; optional minimum subtotal gate.
+        final minSubtotal = num.tryParse(_minSubtotal.text.trim());
+        if (minSubtotal != null && minSubtotal > 0) {
+          config['minSubtotal'] = minSubtotal;
+        }
       case CampaignType.birthday:
+        config['windowDays'] = int.tryParse(_windowDays.text.trim()) ?? 7;
       case CampaignType.reactivation:
+        config['inactiveDays'] = int.tryParse(_inactiveDays.text.trim()) ?? 60;
+      case CampaignType.buyXGetY:
+        config['buyQty'] = int.tryParse(_buyQty.text.trim()) ?? 0;
+        config['getQty'] = int.tryParse(_getQty.text.trim()) ?? 0;
+        config['getDiscountPct'] =
+            int.tryParse(_getDiscountPct.text.trim()) ?? 100;
+        // Optional scope (empty = whole menu).
+        if (_productIds.isNotEmpty) {
+          config['productIds'] = _productIds.toList();
+        }
+        if (_categoryIds.isNotEmpty) {
+          config['categoryIds'] = _categoryIds.toList();
+        }
+      // Membership benefit (Phase 3) has no editor; the selector never picks
+      // it, so we just preserve whatever kind/value was already present.
       case CampaignType.membershipBenefit:
         break;
     }
@@ -489,6 +592,14 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
     if (_categoryScopeRequired && _categoryIds.isEmpty) {
       setState(() => _error = 'Chọn ít nhất một danh mục.');
       return;
+    }
+    if (_type == CampaignType.buyXGetY) {
+      final buy = int.tryParse(_buyQty.text.trim()) ?? 0;
+      final get = int.tryParse(_getQty.text.trim()) ?? 0;
+      if (buy < 1 || get < 1) {
+        setState(() => _error = 'Số lượng "Mua" và "Tặng" phải từ 1 trở lên.');
+        return;
+      }
     }
     if (_type == CampaignType.flashSale) {
       if (_startsAt == null || _endsAt == null) {
@@ -619,40 +730,143 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
                   ? 'Nhập tên chương trình'
                   : null,
             ),
-            const SizedBox(height: BananSpacing.md),
-            // Kind: % or VND.
-            Text('Hình thức giảm', style: theme.textTheme.labelLarge),
-            const SizedBox(height: BananSpacing.xs),
-            Wrap(
-              spacing: BananSpacing.sm,
-              children: [
-                ChoiceChip(
-                  label: const Text('Giảm theo %'),
-                  selected: _kind == 'PERCENT',
-                  onSelected: (_) => setState(() => _kind = 'PERCENT'),
-                ),
-                ChoiceChip(
-                  label: const Text('Giảm tiền (₫)'),
-                  selected: _kind == 'FIXED',
-                  onSelected: (_) => setState(() => _kind = 'FIXED'),
-                ),
-              ],
-            ),
-            const SizedBox(height: BananSpacing.sm),
-            TextFormField(
-              controller: _value,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText:
-                    _kind == 'PERCENT' ? 'Phần trăm (1–100)' : 'Số tiền (₫)',
+            // Kind/value: shared by every type except Buy X Get Y.
+            if (_usesKindValue) ...[
+              const SizedBox(height: BananSpacing.md),
+              Text('Hình thức giảm', style: theme.textTheme.labelLarge),
+              const SizedBox(height: BananSpacing.xs),
+              Wrap(
+                spacing: BananSpacing.sm,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Giảm theo %'),
+                    selected: _kind == 'PERCENT',
+                    onSelected: (_) => setState(() => _kind = 'PERCENT'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Giảm tiền (₫)'),
+                    selected: _kind == 'FIXED',
+                    onSelected: (_) => setState(() => _kind = 'FIXED'),
+                  ),
+                ],
               ),
-              validator: (v) {
-                final n = num.tryParse(v?.trim() ?? '');
-                if (n == null || n <= 0) return 'Nhập một số';
-                if (_kind == 'PERCENT' && n > 100) return 'Tối đa 100%';
-                return null;
-              },
-            ),
+              const SizedBox(height: BananSpacing.sm),
+              TextFormField(
+                controller: _value,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText:
+                      _kind == 'PERCENT' ? 'Phần trăm (1–100)' : 'Số tiền (₫)',
+                ),
+                validator: (v) {
+                  if (!_usesKindValue) return null;
+                  final n = num.tryParse(v?.trim() ?? '');
+                  if (n == null || n <= 0) return 'Nhập một số';
+                  if (_kind == 'PERCENT' && n > 100) return 'Tối đa 100%';
+                  return null;
+                },
+              ),
+            ],
+            // First order — optional minimum subtotal gate.
+            if (_type == CampaignType.firstOrder) ...[
+              const SizedBox(height: BananSpacing.md),
+              TextFormField(
+                controller: _minSubtotal,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Đơn tối thiểu (₫) — tuỳ chọn',
+                  hintText: 'Trống = áp dụng mọi đơn đầu',
+                ),
+                validator: (v) {
+                  final t = v?.trim() ?? '';
+                  if (t.isEmpty) return null;
+                  final n = num.tryParse(t);
+                  if (n == null || n < 0) return 'Nhập một số hợp lệ';
+                  return null;
+                },
+              ),
+            ],
+            // Birthday — window of days around the birthday.
+            if (_type == CampaignType.birthday) ...[
+              const SizedBox(height: BananSpacing.md),
+              TextFormField(
+                controller: _windowDays,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Số ngày quanh sinh nhật',
+                  hintText: 'VD: 7 (áp dụng ±7 ngày)',
+                ),
+                validator: (v) {
+                  final n = int.tryParse(v?.trim() ?? '');
+                  if (n == null || n < 0) return 'Nhập số ngày';
+                  return null;
+                },
+              ),
+            ],
+            // Reactivation — inactivity threshold in days.
+            if (_type == CampaignType.reactivation) ...[
+              const SizedBox(height: BananSpacing.md),
+              TextFormField(
+                controller: _inactiveDays,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Số ngày không mua',
+                  hintText: 'VD: 60 (khách không mua 60 ngày)',
+                ),
+                validator: (v) {
+                  final n = int.tryParse(v?.trim() ?? '');
+                  if (n == null || n < 1) return 'Nhập số ngày';
+                  return null;
+                },
+              ),
+            ],
+            // Buy X Get Y — quantity-based config.
+            if (_type == CampaignType.buyXGetY) ...[
+              const SizedBox(height: BananSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _buyQty,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Mua'),
+                      validator: (v) {
+                        final n = int.tryParse(v?.trim() ?? '');
+                        if (n == null || n < 1) return '≥ 1';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: BananSpacing.sm),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _getQty,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Tặng'),
+                      validator: (v) {
+                        final n = int.tryParse(v?.trim() ?? '');
+                        if (n == null || n < 1) return '≥ 1';
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: BananSpacing.sm),
+              TextFormField(
+                controller: _getDiscountPct,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Giảm % cho phần tặng',
+                  hintText: '100 = miễn phí',
+                ),
+                validator: (v) {
+                  final n = int.tryParse(v?.trim() ?? '');
+                  if (n == null || n < 1 || n > 100) return '1–100';
+                  return null;
+                },
+              ),
+            ],
             const SizedBox(height: BananSpacing.md),
             // Scope pickers.
             if (_wantsProductScope)
