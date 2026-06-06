@@ -19,6 +19,7 @@ export class EmailService {
   private readonly client: Resend | null;
   private readonly from: string;
   private readonly customerAppUrl: string;
+  private readonly apiUrl: string;
 
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
@@ -28,6 +29,15 @@ export class EmailService {
     this.customerAppUrl =
       this.config.get<string>('CUSTOMER_APP_BASE_URL') ??
       'http://localhost:8081';
+    // Public API base for self-handled email links (newsletter confirm /
+    // unsubscribe). Prefer PUBLIC_API_URL; else derive api.<BASE_DOMAIN>.
+    const domain = this.config.get<string>('BASE_DOMAIN');
+    this.apiUrl = (
+      this.config.get<string>('PUBLIC_API_URL') ??
+      (domain
+        ? `https://api.${domain}/api/v1`
+        : 'http://localhost:3000/api/v1')
+    ).replace(/\/$/, '');
 
     if (!this.client) {
       this.logger.warn(
@@ -169,6 +179,12 @@ export class EmailService {
   /// Exposed for newsletter — built from CUSTOMER_APP_BASE_URL.
   get customerAppBaseUrl(): string {
     return this.customerAppUrl;
+  }
+
+  /// Public API base (e.g. https://api.banancakes.vn/api/v1) — for email
+  /// links the backend handles itself (newsletter confirm/unsubscribe).
+  get apiBaseUrl(): string {
+    return this.apiUrl;
   }
 }
 

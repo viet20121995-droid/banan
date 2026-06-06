@@ -192,10 +192,10 @@ export class NewsletterService {
     token: string,
   ): Promise<void> {
     const url =
-      `${this.email.customerAppBaseUrl}/newsletter/confirm?token=` +
+      `${this.email.apiBaseUrl}/newsletter/confirm?token=` +
       encodeURIComponent(token);
     const unsubscribeUrl =
-      `${this.email.customerAppBaseUrl}/newsletter/unsubscribe?token=` +
+      `${this.email.apiBaseUrl}/newsletter/unsubscribe?token=` +
       encodeURIComponent(token);
     const greeting = name ? `Xin chào ${name},` : 'Xin chào,';
     const html = `
