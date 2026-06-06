@@ -98,6 +98,44 @@ export class LoyaltyService {
     return { pointsUsed: points, vndDiscount: points * CONFIG.redemptionValueVnd };
   }
 
+  /**
+   * Tx-aware redemption: deducts `points` inside the caller's transaction so
+   * the order row + the REDEEM event + the balance update all commit
+   * atomically. The caller is responsible for capping `points` to the order
+   * value; this re-checks the balance to stay race-safe.
+   */
+  async redeemWithinTx(
+    tx: Prisma.TransactionClient,
+    args: { userId: string; orderId: string; orderCode: string; points: number },
+  ): Promise<void> {
+    if (args.points <= 0) return;
+    const user = await tx.user.findUniqueOrThrow({
+      where: { id: args.userId },
+      select: { pointsBalance: true },
+    });
+    if (args.points > user.pointsBalance) {
+      throw new BadRequestException({
+        code: 'LOYALTY_INSUFFICIENT_POINTS',
+        message: `You only have ${user.pointsBalance} Micho.`,
+      });
+    }
+    const balanceAfter = user.pointsBalance - args.points;
+    await tx.loyaltyEvent.create({
+      data: {
+        userId: args.userId,
+        orderId: args.orderId,
+        type: 'REDEEM',
+        delta: -args.points,
+        balanceAfter,
+        reason: `Redeemed against order ${args.orderCode}`,
+      },
+    });
+    await tx.user.update({
+      where: { id: args.userId },
+      data: { pointsBalance: balanceAfter, membershipTier: tierFor(balanceAfter) },
+    });
+  }
+
   /** Refunds the points if a paid order is cancelled after the redeem event. */
   async refundRedemption(orderId: string): Promise<void> {
     const redeem = await this.prisma.loyaltyEvent.findFirst({

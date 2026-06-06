@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Campaign, CampaignType, Prisma } from '@prisma/client';
+import { Campaign, CampaignType, MembershipTier, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -15,6 +15,7 @@ const AUTO_TYPES: CampaignType[] = [
   'FIRST_ORDER',
   'BIRTHDAY',
   'REACTIVATION',
+  'MEMBERSHIP_BENEFIT',
 ];
 
 /** Per-line discount types (each line takes the single best match). */
@@ -26,7 +27,12 @@ const LINE_TYPES: CampaignType[] = [
 ];
 
 /** Order-level (customer-targeted) types — best single one applies. */
-const ORDER_TYPES: CampaignType[] = ['FIRST_ORDER', 'BIRTHDAY', 'REACTIVATION'];
+const ORDER_TYPES: CampaignType[] = [
+  'FIRST_ORDER',
+  'BIRTHDAY',
+  'REACTIVATION',
+  'MEMBERSHIP_BENEFIT',
+];
 
 export interface CartLine {
   productId: string;
@@ -50,6 +56,7 @@ interface CustomerContext {
   orderCount: number;
   lastOrderAt: Date | null;
   birthday: Date | null;
+  tier: MembershipTier | null;
 }
 
 @Injectable()
@@ -150,7 +157,7 @@ export class PromotionsService {
       let best: Campaign | null = null;
       for (const c of orderCampaigns) {
         if (!this.orderApplies(c, ctx, now)) continue;
-        const d = this.orderDiscount(c, input.subtotalVnd);
+        const d = this.orderDiscount(c, input.subtotalVnd, ctx);
         if (d > bestDiscount) {
           bestDiscount = d;
           best = c;
@@ -281,14 +288,24 @@ export class PromotionsService {
         const elapsed = now.getTime() - ctx.lastOrderAt.getTime();
         return elapsed > inactiveDays * 86_400_000;
       }
+      case 'MEMBERSHIP_BENEFIT':
+        return ctx.tier != null && tierValue(cfg, ctx.tier) > 0;
       default:
         return false;
     }
   }
 
-  private orderDiscount(c: Campaign, subtotalVnd: number): number {
+  private orderDiscount(
+    c: Campaign,
+    subtotalVnd: number,
+    ctx: CustomerContext,
+  ): number {
     const cfg = (c.config ?? {}) as Record<string, unknown>;
-    const value = Number(cfg.value) || 0;
+    // MEMBERSHIP_BENEFIT reads the % (or ₫) for the customer's current tier.
+    const value =
+      c.type === 'MEMBERSHIP_BENEFIT'
+        ? (ctx.tier ? tierValue(cfg, ctx.tier) : 0)
+        : Number(cfg.value) || 0;
     if (value <= 0) return 0;
     const minSub = Number(cfg.minSubtotal) || 0;
     if (subtotalVnd < minSub) return 0;
@@ -300,7 +317,7 @@ export class PromotionsService {
     const [user, agg] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: customerId },
-        select: { birthday: true },
+        select: { birthday: true, membershipTier: true },
       }),
       this.prisma.order.aggregate({
         where: { customerId },
@@ -312,6 +329,7 @@ export class PromotionsService {
       orderCount: agg._count._all,
       lastOrderAt: agg._max.createdAt ?? null,
       birthday: user?.birthday ?? null,
+      tier: user?.membershipTier ?? null,
     };
   }
 
@@ -378,6 +396,13 @@ export class PromotionsService {
 
 function asStrArray(v: unknown): string[] {
   return Array.isArray(v) ? (v as string[]) : [];
+}
+
+/** Reads the per-tier value from a MEMBERSHIP_BENEFIT config
+ *  (`{ tierValues: { SILVER, GOLD, PLATINUM } }`). */
+function tierValue(cfg: Record<string, unknown>, tier: MembershipTier): number {
+  const tv = (cfg.tierValues ?? {}) as Record<string, unknown>;
+  return Number(tv[tier]) || 0;
 }
 
 function vnNow(now: Date): { minutes: number; day: number } {

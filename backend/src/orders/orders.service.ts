@@ -402,26 +402,34 @@ export class OrdersService {
       // run loyalty redemption inside the transaction so balance/event/order
       // are consistent — failures roll everything back.
       const couponDiscount = new Prisma.Decimal(couponDiscountVnd);
-      const subtotalAfterCoupon = Math.max(
-        0,
-        subtotalAfterCampaign - couponDiscountVnd,
-      );
 
       const totalBeforePoints = new Prisma.Decimal(
         Math.max(0, subtotalAfterCampaign - couponDiscountVnd) + deliveryFeeVnd,
       );
-      // Micho perk: a member holding more than the threshold gets an
-      // automatic % off the (post-coupon) subtotal. It does NOT burn
-      // Micho — it's a standing benefit of the balance.
-      const pointsRedeemed = 0;
+      // Loyalty redemption: the customer chooses how many Micho to spend.
+      // Capped at their balance and at the order value (never below 0). The
+      // deduction itself happens after the order row exists (below) so the
+      // REDEEM event references the order id — all inside this tx.
+      const requestedPoints = Math.max(0, Math.floor(dto.pointsToRedeem ?? 0));
+      let pointsRedeemed = 0;
       let pointsDiscount = new Prisma.Decimal(0);
-      const loyaltyUser = await tx.user.findUniqueOrThrow({
-        where: { id: customerId },
-        select: { pointsBalance: true },
-      });
-      if (loyaltyUser.pointsBalance > LOYALTY_CONFIG.michoDiscountThreshold) {
+      if (requestedPoints > 0) {
+        const lu = await tx.user.findUniqueOrThrow({
+          where: { id: customerId },
+          select: { pointsBalance: true },
+        });
+        const totalBeforePointsVnd = Math.round(
+          Number(totalBeforePoints.toString()),
+        );
+        const maxByValue = Math.floor(
+          totalBeforePointsVnd / LOYALTY_CONFIG.redemptionValueVnd,
+        );
+        pointsRedeemed = Math.max(
+          0,
+          Math.min(requestedPoints, lu.pointsBalance, maxByValue),
+        );
         pointsDiscount = new Prisma.Decimal(
-          Math.round(subtotalAfterCoupon * LOYALTY_CONFIG.michoDiscountRate),
+          pointsRedeemed * LOYALTY_CONFIG.redemptionValueVnd,
         );
       }
 
@@ -534,24 +542,11 @@ export class OrdersService {
         });
       }
       if (pointsRedeemed > 0) {
-        const user = await tx.user.findUniqueOrThrow({
-          where: { id: customerId },
-          select: { pointsBalance: true },
-        });
-        const balanceAfter = user.pointsBalance - pointsRedeemed;
-        await tx.loyaltyEvent.create({
-          data: {
-            userId: customerId,
-            orderId: order.id,
-            type: 'REDEEM',
-            delta: -pointsRedeemed,
-            balanceAfter,
-            reason: `Redeemed against order ${orderCode}`,
-          },
-        });
-        await tx.user.update({
-          where: { id: customerId },
-          data: { pointsBalance: balanceAfter },
+        await this.loyalty.redeemWithinTx(tx, {
+          userId: customerId,
+          orderId: order.id,
+          orderCode,
+          points: pointsRedeemed,
         });
       }
 
