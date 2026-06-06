@@ -39,10 +39,22 @@ async function bootstrap() {
   app.use(compression());
   app.use(cookieParser());
 
-  // Serve user-uploaded media — dev-only flow; M-later moves to S3 / R2.
+  // Serve user-uploaded media. These are public images pulled cross-origin
+  // (the customer + merchant + kitchen sites load them from api.<domain>),
+  // and Flutter's CanvasKit renderer fetches them with CORS to draw on the
+  // canvas — so they need an `Access-Control-Allow-Origin` header, not just
+  // the cross-origin CORP that helmet sets.
   const uploadDir = join(process.cwd(), 'uploads');
   mkdirSync(uploadDir, { recursive: true });
-  app.use('/uploads', express.static(uploadDir));
+  app.use(
+    '/uploads',
+    (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      next();
+    },
+    express.static(uploadDir),
+  );
 
   app.enableCors({
     origin: (config.get<string>('CORS_ORIGINS') ?? '').split(',').filter(Boolean),
