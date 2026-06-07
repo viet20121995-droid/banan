@@ -15,6 +15,7 @@ import '../features/content/about_screen.dart';
 import '../features/content/contact_screen.dart';
 import '../features/content/faq_screen.dart';
 import '../features/content/legal_screens.dart';
+import '../features/content/policy_screens.dart';
 import '../features/locations/locations_screen.dart';
 import '../features/marketing/marketing_pages.dart';
 import '../features/membership/membership_screen.dart';
@@ -53,6 +54,9 @@ const _guestAllowed = <String>{
   '/faq',
   '/about',
   '/contact',
+  '/shipping',
+  '/payment-policy',
+  '/refund-policy',
   // P2 marketing surfaces — browsable; the pages themselves gate on the
   // admin toggle + prompt login where needed (referral / rewards).
   '/referral',
@@ -136,6 +140,19 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/faq', builder: (_, __) => const FaqScreen()),
       GoRoute(path: '/about', builder: (_, __) => const AboutScreen()),
       GoRoute(path: '/contact', builder: (_, __) => const ContactScreen()),
+      // Policy pages required for the Bộ Công Thương website notification.
+      GoRoute(
+        path: '/shipping',
+        builder: (_, __) => const ShippingPolicyScreen(),
+      ),
+      GoRoute(
+        path: '/payment-policy',
+        builder: (_, __) => const PaymentPolicyScreen(),
+      ),
+      GoRoute(
+        path: '/refund-policy',
+        builder: (_, __) => const RefundPolicyScreen(),
+      ),
       // P2 — marketing programs (each gates internally on admin toggle).
       GoRoute(path: '/referral', builder: (_, __) => const ReferralScreen()),
       GoRoute(path: '/gift-cards', builder: (_, __) => const GiftCardScreen()),

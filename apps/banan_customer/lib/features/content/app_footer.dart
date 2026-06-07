@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../shared/legal_info.dart';
+
 /// Site footer — links to the trust / legal / help pages, plus any marketing
 /// programs the admin has switched on (referral, gift cards, …). Rendered at
 /// the bottom of the home menu.
@@ -17,6 +19,9 @@ class AppFooter extends ConsumerWidget {
     MapEntry('Liên hệ', '/contact'),
     MapEntry('Chính sách bảo mật', '/privacy'),
     MapEntry('Điều khoản', '/terms'),
+    MapEntry('Vận chuyển & giao nhận', '/shipping'),
+    MapEntry('Thanh toán', '/payment-policy'),
+    MapEntry('Đổi trả & hoàn tiền', '/refund-policy'),
   ];
 
   @override
@@ -65,6 +70,27 @@ class AppFooter extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: BananSpacing.md),
+          // Thông tin chủ sở hữu website — yêu cầu của Bộ Công Thương
+          // (online.gov.vn). Lấy từ LegalInfo (placeholder, chủ shop điền).
+          DefaultTextStyle.merge(
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ) ??
+                const TextStyle(),
+            child: const Column(
+              children: [
+                Text(LegalInfo.businessName),
+                Text('MST: ${LegalInfo.taxCode}'),
+                Text('ĐKKD: ${LegalInfo.bizRegNo}'),
+                Text('Địa chỉ: ${LegalInfo.address}'),
+                Text(
+                  'Hotline: ${LegalInfo.hotline} · Email: ${LegalInfo.email}',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: BananSpacing.sm),
           Text(
             '© 2026 Banan Fukuoka Saigon',
             style: theme.textTheme.bodySmall?.copyWith(
