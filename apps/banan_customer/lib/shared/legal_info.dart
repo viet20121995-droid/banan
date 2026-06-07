@@ -1,26 +1,22 @@
 /// Thông tin chủ sở hữu website / đơn vị vận hành.
 ///
 /// Đây là phần "Thông tin người sở hữu website" mà Bộ Công Thương
-/// (online.gov.vn) yêu cầu hiển thị công khai. Các giá trị dưới đây là
-/// PLACEHOLDER — vui lòng thay bằng thông tin thật từ Giấy chứng nhận
-/// đăng ký kinh doanh (ĐKKD) / đăng ký hộ kinh doanh của bạn.
+/// (online.gov.vn) yêu cầu hiển thị công khai — theo Giấy chứng nhận đăng ký
+/// doanh nghiệp của đơn vị vận hành banancakes.vn.
 class LegalInfo {
   const LegalInfo._();
 
-  // TODO(owner): điền tên doanh nghiệp / hộ kinh doanh theo ĐKKD.
-  static const businessName = '[TÊN DOANH NGHIỆP / HỘ KINH DOANH]';
+  static const businessName = 'CÔNG TY TNHH MTV DỊCH VỤ VƯỜN CHUỐI';
 
-  // TODO(owner): điền mã số thuế.
-  static const taxCode = '[MÃ SỐ THUẾ]';
+  static const taxCode = '0317041580';
 
-  // TODO(owner): điền số ĐKKD + ngày cấp + nơi cấp.
-  static const bizRegNo = '[SỐ ĐKKD] (cấp ngày … tại …)';
+  static const bizRegNo =
+      '0317041580 — cấp ngày 10/08/2025 tại Phòng Đăng ký Kinh doanh';
 
-  // TODO(owner): điền địa chỉ đăng ký kinh doanh.
-  static const address = '[ĐỊA CHỈ ĐĂNG KÝ KINH DOANH]';
+  static const address =
+      '34 Ngô Quang Huy, Phường An Khánh, Thành phố Hồ Chí Minh, Việt Nam';
 
-  // TODO(owner): điền số hotline.
-  static const hotline = '[HOTLINE]';
+  static const hotline = '0868 897 131';
 
-  static const email = 'ai@vesta-group.org';
+  static const email = 'ducnguyen@vestav.com';
 }
