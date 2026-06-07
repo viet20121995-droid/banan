@@ -30,46 +30,65 @@ class ContentPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Compact, single-column document layout — tight enough that each policy
+    // page fits in one continuous page for a clean full-page screenshot
+    // (e.g. for the Bộ Công Thương dossier), while staying readable.
+    final bodyStyle = theme.textTheme.bodySmall?.copyWith(
+      height: 1.4,
+      color: theme.colorScheme.onSurface,
+    );
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
           child: ListView(
-            padding: const EdgeInsets.all(BananSpacing.xl),
+            padding: const EdgeInsets.symmetric(
+              horizontal: BananSpacing.lg,
+              vertical: BananSpacing.md,
+            ),
             children: [
-              Text(title, style: theme.textTheme.headlineMedium),
+              Text(title, style: theme.textTheme.titleLarge),
               if (updatedLabel != null) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   updatedLabel!,
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.outline,
                   ),
                 ),
               ],
               if (intro != null) ...[
-                const SizedBox(height: BananSpacing.md),
-                Text(intro!, style: theme.textTheme.bodyLarge),
+                const SizedBox(height: BananSpacing.sm),
+                Text(intro!, style: bodyStyle),
               ],
-              const SizedBox(height: BananSpacing.lg),
+              const SizedBox(height: BananSpacing.md),
               for (final s in sections) ...[
-                Text(s.heading, style: theme.textTheme.titleLarge),
-                const SizedBox(height: BananSpacing.xs),
-                for (final p in s.paragraphs) ...[
-                  Text(
-                    p,
-                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                Text(
+                  s.heading,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.primary,
                   ),
-                  const SizedBox(height: BananSpacing.sm),
+                ),
+                const SizedBox(height: 2),
+                for (final p in s.paragraphs) ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('•  ', style: bodyStyle),
+                      Expanded(child: Text(p, style: bodyStyle)),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
                 ],
-                const SizedBox(height: BananSpacing.md),
+                const SizedBox(height: BananSpacing.sm),
               ],
               if (footer != null) ...[
-                const SizedBox(height: BananSpacing.md),
+                const SizedBox(height: BananSpacing.sm),
                 footer!,
               ],
-              const SizedBox(height: BananSpacing.xxl),
+              const SizedBox(height: BananSpacing.lg),
             ],
           ),
         ),
