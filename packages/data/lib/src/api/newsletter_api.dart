@@ -11,6 +11,27 @@ class SubscribeResult {
   final bool alreadyConfirmed;
 }
 
+/// Outcome of a newsletter campaign send — how many recipients were
+/// targeted, how many branded emails actually went out, and (when the
+/// merchant also fired an in-app broadcast) how many in-app notifications
+/// were created.
+class NewsletterSendResult {
+  const NewsletterSendResult({
+    required this.recipients,
+    required this.emailsSent,
+    required this.inApp,
+  });
+  factory NewsletterSendResult.fromJson(Map<String, dynamic> j) =>
+      NewsletterSendResult(
+        recipients: (j['recipients'] as num?)?.toInt() ?? 0,
+        emailsSent: (j['emailsSent'] as num?)?.toInt() ?? 0,
+        inApp: (j['inApp'] as num?)?.toInt() ?? 0,
+      );
+  final int recipients;
+  final int emailsSent;
+  final int inApp;
+}
+
 class NewsletterSubscriber {
   const NewsletterSubscriber({
     required this.id,
@@ -145,6 +166,37 @@ class NewsletterApi {
       final data = res.data;
       if (data == null) return Result.failure(mapHttpStatusToFailure(res));
       return Result.success(Uint8List.fromList(data));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  /// Compose + send a branded newsletter email to [audience]
+  /// (`subscribers` | `customers` | `both`). The backend wraps [body] in a
+  /// branded HTML template (newlines → <br>) and appends an unsubscribe link.
+  /// When [alsoInApp] is true it additionally fires an in-app + push
+  /// broadcast. Returns the recipient / email / in-app counts.
+  Future<Result<NewsletterSendResult, AppFailure>> sendCampaign({
+    required String subject,
+    required String body,
+    required String audience,
+    bool alsoInApp = true,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/merchant/newsletter/send',
+        data: {
+          'subject': subject,
+          'body': body,
+          'audience': audience,
+          'alsoInApp': alsoInApp,
+        },
+      );
+      final m = res.data?['data'] as Map<String, dynamic>?;
+      if (m == null) return Result.failure(mapHttpStatusToFailure(res));
+      return Result.success(NewsletterSendResult.fromJson(m));
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
     } catch (e) {

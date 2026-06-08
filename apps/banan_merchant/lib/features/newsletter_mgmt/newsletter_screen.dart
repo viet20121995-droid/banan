@@ -30,6 +30,15 @@ class _NewsletterScreenState extends ConsumerState<NewsletterScreen> {
     super.dispose();
   }
 
+  Future<void> _openCompose() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => const _ComposeNewsletterSheet(),
+    );
+  }
+
   Future<void> _downloadCsv() async {
     final res = await ref.read(newsletterApiProvider).exportCsv();
     if (!mounted) return;
@@ -67,6 +76,11 @@ class _NewsletterScreenState extends ConsumerState<NewsletterScreen> {
         icon: const Icon(Icons.download_outlined),
         tooltip: 'Xuất CSV',
         onPressed: _downloadCsv,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openCompose,
+        icon: const Icon(Icons.edit_outlined),
+        label: const Text('Soạn email'),
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -293,6 +307,221 @@ class _StatusBadge extends StatelessWidget {
       label: 'Đang nhận',
       intent: StatusIntent.success,
       dense: true,
+    );
+  }
+}
+
+// ─── Compose newsletter ─────────────────────────────────────────────────
+
+/// The three send audiences mirrored from the backend contract.
+enum _Audience { subscribers, customers, both }
+
+/// Bottom-sheet compose form: subject + body + audience + also-in-app
+/// toggle, with a confirm step before firing a real send.
+class _ComposeNewsletterSheet extends ConsumerStatefulWidget {
+  const _ComposeNewsletterSheet();
+
+  @override
+  ConsumerState<_ComposeNewsletterSheet> createState() =>
+      _ComposeNewsletterSheetState();
+}
+
+class _ComposeNewsletterSheetState
+    extends ConsumerState<_ComposeNewsletterSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _subject = TextEditingController();
+  final _body = TextEditingController();
+  _Audience _audience = _Audience.both;
+  bool _alsoInApp = true;
+  bool _sending = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Re-evaluate the "Gửi" enabled state as the user types.
+    _subject.addListener(_onChanged);
+    _body.addListener(_onChanged);
+  }
+
+  void _onChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    _subject.dispose();
+    _body.dispose();
+    super.dispose();
+  }
+
+  bool get _canSend =>
+      _subject.text.trim().isNotEmpty && _body.text.trim().isNotEmpty;
+
+  String _audienceWire(_Audience a) => switch (a) {
+        _Audience.subscribers => 'subscribers',
+        _Audience.customers => 'customers',
+        _Audience.both => 'both',
+      };
+
+  Future<void> _send() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Gửi email tới khách?'),
+        content: const Text('Hành động này gửi thật.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Huỷ'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Gửi'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+
+    final res = await ref.read(newsletterApiProvider).sendCampaign(
+          subject: _subject.text.trim(),
+          body: _body.text.trim(),
+          audience: _audienceWire(_audience),
+          alsoInApp: _alsoInApp,
+        );
+    if (!mounted) return;
+
+    res.when(
+      success: (r) {
+        Navigator.pop(context); // close the compose sheet
+        final inAppNote =
+            _alsoInApp ? ' · ${r.inApp} thông báo in-app' : '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã gửi ${r.emailsSent} email$inAppNote')),
+        );
+      },
+      failure: (f) => setState(() {
+        _sending = false;
+        _error = 'Gửi thất bại: ${authFailureMessage(f)}';
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        BananSpacing.lg,
+        0,
+        BananSpacing.lg,
+        bottom + BananSpacing.lg,
+      ),
+      child: Form(
+        key: _formKey,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Text('Soạn email', style: theme.textTheme.titleLarge),
+            const SizedBox(height: BananSpacing.md),
+            if (_error != null)
+              Container(
+                padding: const EdgeInsets.all(BananSpacing.md),
+                margin: const EdgeInsets.only(bottom: BananSpacing.md),
+                decoration: BoxDecoration(
+                  borderRadius: BananRadii.rmd,
+                  color:
+                      theme.colorScheme.errorContainer.withValues(alpha: 0.4),
+                ),
+                child: Text(_error!),
+              ),
+            TextFormField(
+              controller: _subject,
+              decoration: const InputDecoration(labelText: 'Tiêu đề'),
+              maxLength: 160,
+              textInputAction: TextInputAction.next,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Nhập tiêu đề'
+                  : null,
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            TextFormField(
+              controller: _body,
+              decoration: const InputDecoration(
+                labelText: 'Nội dung',
+                hintText: 'Nội dung email gửi tới khách…',
+                alignLabelWithHint: true,
+              ),
+              minLines: 5,
+              maxLines: 10,
+              maxLength: 5000,
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Nhập nội dung' : null,
+            ),
+            const SizedBox(height: BananSpacing.md),
+            Text('Gửi tới', style: theme.textTheme.labelLarge),
+            const SizedBox(height: BananSpacing.xs),
+            SegmentedButton<_Audience>(
+              segments: const [
+                ButtonSegment(
+                  value: _Audience.subscribers,
+                  label: Text('Người đăng ký nhận tin'),
+                ),
+                ButtonSegment(
+                  value: _Audience.customers,
+                  label: Text('Tất cả khách hàng'),
+                ),
+                ButtonSegment(
+                  value: _Audience.both,
+                  label: Text('Cả hai'),
+                ),
+              ],
+              selected: {_audience},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) =>
+                  setState(() => _audience = s.first),
+            ),
+            const SizedBox(height: BananSpacing.xs),
+            Text(
+              'Tất cả khách hàng = khách đã có tài khoản và đồng ý nhận tin '
+              '(gồm khách cũ)',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+            const SizedBox(height: BananSpacing.md),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Gửi kèm thông báo trong app'),
+              subtitle: Text(
+                'Khách cũng nhận thông báo trong ứng dụng + push',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline),
+              ),
+              value: _alsoInApp,
+              onChanged: (v) => setState(() => _alsoInApp = v),
+            ),
+            const SizedBox(height: BananSpacing.md),
+            FilledButton.icon(
+              onPressed: (_sending || !_canSend) ? null : _send,
+              icon: _sending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send_outlined),
+              label: Text(_sending ? 'Đang gửi…' : 'Gửi'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
