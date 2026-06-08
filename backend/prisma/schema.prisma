@@ -1077,3 +1077,21 @@ model NewsletterSubscriber {
   @@index([confirmedAt])
   @@index([subscribedAt])
 }
+
+/// A sent newsletter email campaign — kept as history so the merchant can
+/// review what was sent, to whom, and how many landed.
+model NewsletterCampaign {
+  id         String   @id @default(uuid())
+  subject    String
+  body       String   @db.Text
+  imageUrl   String?
+  audience   String // 'subscribers' | 'customers' | 'both'
+  alsoInApp  Boolean  @default(false)
+  recipients Int      @default(0)
+  emailsSent Int      @default(0)
+  inAppSent  Int      @default(0)
+  sentById   String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}

@@ -10,11 +10,18 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import type { Response } from 'express';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { EmailService } from '../notifications/email.service';
 
-import { ListSubscribersDto, SendCampaignDto, SubscribeDto } from './dto';
+import {
+  ListSubscribersDto,
+  SendCampaignDto,
+  SubscribeDto,
+  TestCampaignDto,
+} from './dto';
 import { NewsletterService } from './newsletter.service';
 
 @ApiTags('newsletter')
@@ -118,7 +125,19 @@ export class MerchantNewsletterController {
 
   /// Compose + send a newsletter campaign by email (+ optional in-app push).
   @Post('send')
-  send(@Body() dto: SendCampaignDto) {
-    return this.newsletter.sendCampaign(dto);
+  send(@CurrentUser() user: AuthPrincipal, @Body() dto: SendCampaignDto) {
+    return this.newsletter.sendCampaign({ ...dto, sentById: user.sub });
+  }
+
+  /// Send a single test email to one address (preview the real email).
+  @Post('test')
+  test(@Body() dto: TestCampaignDto) {
+    return this.newsletter.sendTest(dto);
+  }
+
+  /// History of sent campaigns (newest first).
+  @Get('campaigns')
+  campaigns() {
+    return this.newsletter.listCampaigns();
   }
 }

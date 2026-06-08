@@ -61,6 +61,12 @@ export class SendCampaignDto {
   @MaxLength(5000)
   body!: string;
 
+  /// Optional header image URL shown at the top of the email.
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string;
+
   /// Who to send to: confirmed newsletter subscribers, all opted-in
   /// customers, or both (deduped by email).
   @IsIn(['subscribers', 'customers', 'both'])
@@ -70,4 +76,27 @@ export class SendCampaignDto {
   @IsOptional()
   @IsBoolean()
   alsoInApp?: boolean;
+}
+
+/// Send a single test email of the campaign to one address (no history, no
+/// broadcast) — lets the merchant preview the real email in their inbox.
+export class TestCampaignDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  subject!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
+  body!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string;
+
+  @IsEmail()
+  @MaxLength(160)
+  testEmail!: string;
 }

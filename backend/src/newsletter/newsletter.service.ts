@@ -195,8 +195,10 @@ export class NewsletterService {
   async sendCampaign(input: {
     subject: string;
     body: string;
+    imageUrl?: string;
     audience: 'subscribers' | 'customers' | 'both';
     alsoInApp?: boolean;
+    sentById?: string;
   }): Promise<{ recipients: number; emailsSent: number; inApp: number }> {
     const apiBase = this.email.apiBaseUrl;
     const appBase = this.email.customerAppBaseUrl;
@@ -242,7 +244,12 @@ export class NewsletterService {
         await this.email.sendRaw({
           toEmail: email,
           subject: input.subject,
-          html: this.renderCampaign(input.subject, input.body, info.unsubscribe),
+          html: this.renderCampaign(
+            input.subject,
+            input.body,
+            info.unsubscribe,
+            input.imageUrl,
+          ),
         });
         emailsSent++;
       } catch {
@@ -260,20 +267,69 @@ export class NewsletterService {
       inApp = res.recipients;
     }
 
+    // Keep a history row so the merchant can review what was sent.
+    await this.prisma.newsletterCampaign.create({
+      data: {
+        subject: input.subject,
+        body: input.body,
+        imageUrl: input.imageUrl ?? null,
+        audience: input.audience,
+        alsoInApp: input.alsoInApp ?? false,
+        recipients: recipients.length,
+        emailsSent,
+        inAppSent: inApp,
+        sentById: input.sentById ?? null,
+      },
+    });
+
     return { recipients: recipients.length, emailsSent, inApp };
+  }
+
+  /** Send a single test email to one address — no history, no broadcast. */
+  async sendTest(input: {
+    subject: string;
+    body: string;
+    imageUrl?: string;
+    testEmail: string;
+  }): Promise<{ ok: boolean }> {
+    await this.email.sendRaw({
+      toEmail: input.testEmail,
+      subject: `[Thử] ${input.subject}`,
+      html: this.renderCampaign(
+        input.subject,
+        input.body,
+        `${this.email.customerAppBaseUrl}/profile`,
+        input.imageUrl,
+      ),
+    });
+    return { ok: true };
+  }
+
+  /** Recent sent campaigns (history) — newest first. */
+  listCampaigns(limit = 50) {
+    return this.prisma.newsletterCampaign.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(limit, 200),
+    });
   }
 
   private renderCampaign(
     subject: string,
     body: string,
     unsubscribeUrl: string,
+    imageUrl?: string,
   ): string {
     const esc = (s: string) =>
       s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const bodyHtml = esc(body).replace(/\n/g, '<br>');
+    const banner =
+      imageUrl && imageUrl.trim().length > 0
+        ? `<img src="${esc(imageUrl.trim())}" alt="" style="width:100%;max-height:280px;object-fit:cover;border-radius:10px;margin-bottom:16px;">`
+        : '';
     return `
       <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;color:#2b2a22;">
         <div style="font-family:Georgia,serif;font-size:24px;color:#C9405C;font-weight:700;margin-bottom:12px;">Banan</div>
+        ${banner}
         <h2 style="color:#1E6A35;margin:0 0 12px 0;">${esc(subject)}</h2>
         <div style="font-size:15px;line-height:1.7;">${bodyHtml}</div>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">

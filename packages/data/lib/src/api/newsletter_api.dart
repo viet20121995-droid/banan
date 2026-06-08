@@ -32,6 +32,46 @@ class NewsletterSendResult {
   final int inApp;
 }
 
+/// One previously-sent newsletter campaign, kept as history so the merchant
+/// can review what was sent, to whom, and how many landed.
+class NewsletterCampaign {
+  const NewsletterCampaign({
+    required this.id,
+    required this.subject,
+    required this.body,
+    required this.audience,
+    required this.alsoInApp,
+    required this.recipients,
+    required this.emailsSent,
+    required this.inAppSent,
+    required this.createdAt,
+    this.imageUrl,
+  });
+  factory NewsletterCampaign.fromJson(Map<String, dynamic> j) =>
+      NewsletterCampaign(
+        id: j['id'] as String,
+        subject: j['subject'] as String? ?? '',
+        body: j['body'] as String? ?? '',
+        imageUrl: j['imageUrl'] as String?,
+        audience: j['audience'] as String? ?? 'subscribers',
+        alsoInApp: j['alsoInApp'] as bool? ?? false,
+        recipients: (j['recipients'] as num?)?.toInt() ?? 0,
+        emailsSent: (j['emailsSent'] as num?)?.toInt() ?? 0,
+        inAppSent: (j['inAppSent'] as num?)?.toInt() ?? 0,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+      );
+  final String id;
+  final String subject;
+  final String body;
+  final String? imageUrl;
+  final String audience;
+  final bool alsoInApp;
+  final int recipients;
+  final int emailsSent;
+  final int inAppSent;
+  final DateTime createdAt;
+}
+
 class NewsletterSubscriber {
   const NewsletterSubscriber({
     required this.id,
@@ -182,6 +222,7 @@ class NewsletterApi {
     required String subject,
     required String body,
     required String audience,
+    String? imageUrl,
     bool alsoInApp = true,
   }) async {
     try {
@@ -191,12 +232,61 @@ class NewsletterApi {
           'subject': subject,
           'body': body,
           'audience': audience,
+          if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
           'alsoInApp': alsoInApp,
         },
       );
       final m = res.data?['data'] as Map<String, dynamic>?;
       if (m == null) return Result.failure(mapHttpStatusToFailure(res));
       return Result.success(NewsletterSendResult.fromJson(m));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  /// Send a single test email of the campaign to [testEmail] so the merchant
+  /// can preview the real branded email in their own inbox. Does not record
+  /// history or fire any broadcast.
+  Future<Result<bool, AppFailure>> sendTest({
+    required String subject,
+    required String body,
+    required String testEmail,
+    String? imageUrl,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/merchant/newsletter/test',
+        data: {
+          'subject': subject,
+          'body': body,
+          'testEmail': testEmail,
+          if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+        },
+      );
+      final m = res.data?['data'] as Map<String, dynamic>?;
+      if (m == null) return Result.failure(mapHttpStatusToFailure(res));
+      return Result.success(m['ok'] as bool? ?? true);
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  /// History of previously-sent campaigns, newest first.
+  Future<Result<List<NewsletterCampaign>, AppFailure>> listCampaigns() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/merchant/newsletter/campaigns',
+      );
+      final raw = res.data?['data'] as List? ?? const [];
+      return Result.success(
+        raw
+            .map((e) => NewsletterCampaign.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
     } catch (e) {
