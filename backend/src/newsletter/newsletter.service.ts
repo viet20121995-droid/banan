@@ -6,6 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import { EmailService } from '../notifications/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class NewsletterService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /// Double opt-in subscribe:
@@ -182,6 +184,105 @@ export class NewsletterService {
       );
     }
     return lines.join('\n');
+  }
+
+  /**
+   * Send a newsletter campaign by email to the chosen audience — confirmed
+   * newsletter subscribers, all opted-in customers, or both (deduped by
+   * email) — each with an unsubscribe/manage link. Optionally also fires the
+   * in-app + FCM broadcast. Skips a single failed send and keeps going.
+   */
+  async sendCampaign(input: {
+    subject: string;
+    body: string;
+    audience: 'subscribers' | 'customers' | 'both';
+    alsoInApp?: boolean;
+  }): Promise<{ recipients: number; emailsSent: number; inApp: number }> {
+    const apiBase = this.email.apiBaseUrl;
+    const appBase = this.email.customerAppBaseUrl;
+    const map = new Map<string, { unsubscribe: string }>();
+
+    if (input.audience === 'subscribers' || input.audience === 'both') {
+      const subs = await this.prisma.newsletterSubscriber.findMany({
+        where: { confirmedAt: { not: null }, unsubscribedAt: null },
+        select: { email: true, unsubscribeToken: true },
+      });
+      for (const s of subs) {
+        map.set(s.email.toLowerCase(), {
+          unsubscribe:
+            `${apiBase}/newsletter/unsubscribe?token=` +
+            encodeURIComponent(s.unsubscribeToken),
+        });
+      }
+    }
+    if (input.audience === 'customers' || input.audience === 'both') {
+      const custs = await this.prisma.user.findMany({
+        where: {
+          role: 'CUSTOMER',
+          marketingOptIn: true,
+          isActive: true,
+          NOT: [
+            { email: { endsWith: '@guest.banan.local' } },
+            { email: { startsWith: 'deleted-' } },
+          ],
+        },
+        select: { email: true },
+      });
+      for (const c of custs) {
+        const key = c.email.toLowerCase();
+        // Customers manage marketing emails in their account settings.
+        if (!map.has(key)) map.set(key, { unsubscribe: `${appBase}/profile` });
+      }
+    }
+
+    const recipients = [...map.entries()];
+    let emailsSent = 0;
+    for (const [email, info] of recipients) {
+      try {
+        await this.email.sendRaw({
+          toEmail: email,
+          subject: input.subject,
+          html: this.renderCampaign(input.subject, input.body, info.unsubscribe),
+        });
+        emailsSent++;
+      } catch {
+        // Skip one bad address / rate-limit hiccup; keep sending the rest.
+      }
+    }
+
+    let inApp = 0;
+    if (input.alsoInApp) {
+      const res = await this.notifications.broadcastToCustomers({
+        type: 'newsletter',
+        title: input.subject,
+        body: input.body,
+      });
+      inApp = res.recipients;
+    }
+
+    return { recipients: recipients.length, emailsSent, inApp };
+  }
+
+  private renderCampaign(
+    subject: string,
+    body: string,
+    unsubscribeUrl: string,
+  ): string {
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const bodyHtml = esc(body).replace(/\n/g, '<br>');
+    return `
+      <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;color:#2b2a22;">
+        <div style="font-family:Georgia,serif;font-size:24px;color:#C9405C;font-weight:700;margin-bottom:12px;">Banan</div>
+        <h2 style="color:#1E6A35;margin:0 0 12px 0;">${esc(subject)}</h2>
+        <div style="font-size:15px;line-height:1.7;">${bodyHtml}</div>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+        <p style="color:#9a9388;font-size:12px;">
+          Bạn nhận email này vì đã đăng ký nhận tin hoặc là khách hàng của Banan.
+          <a href="${unsubscribeUrl}" style="color:#9a9388;">Hủy nhận tin</a>.
+        </p>
+      </div>
+    `;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { EmailService } from '../notifications/email.service';
 
-import { ListSubscribersDto, SubscribeDto } from './dto';
+import { ListSubscribersDto, SendCampaignDto, SubscribeDto } from './dto';
 import { NewsletterService } from './newsletter.service';
 
 @ApiTags('newsletter')
@@ -114,5 +114,11 @@ export class MerchantNewsletterController {
     });
     // UTF-8 BOM so Excel opens it without garbled diacritics.
     res.end('﻿' + csv);
+  }
+
+  /// Compose + send a newsletter campaign by email (+ optional in-app push).
+  @Post('send')
+  send(@Body() dto: SendCampaignDto) {
+    return this.newsletter.sendCampaign(dto);
   }
 }
