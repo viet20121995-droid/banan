@@ -3,15 +3,18 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import type { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -23,6 +26,7 @@ import {
   BroadcastDto,
   IssueCouponDto,
   NotifyCustomerDto,
+  UpdateCustomerProfileDto,
   UpdateNotesDto,
 } from './dto/interactions.dto';
 import { CustomersService } from './customers.service';
@@ -57,6 +61,20 @@ export class CustomersController {
     });
   }
 
+  /// Export the (scoped) customer directory as a CSV download. Declared
+  /// before `:id` so the literal path wins over the param route.
+  @Get('export.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="banan-customers.csv"')
+  async exportCsv(
+    @CurrentUser() user: AuthPrincipal,
+    @Res() res: Response,
+    @Query('q') q?: string,
+  ): Promise<void> {
+    const csv = await this.customers.exportCsv(this.scope(user), q);
+    res.send(csv);
+  }
+
   @Post()
   create(@CurrentUser() _user: AuthPrincipal, @Body() dto: CreateCustomerDto) {
     return this.customers.createCustomer(dto);
@@ -65,6 +83,16 @@ export class CustomersController {
   @Get(':id')
   detail(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
     return this.customers.detail(this.scope(user), id);
+  }
+
+  /// Edit a customer's core profile (name / phone / email / birthday).
+  @Patch(':id')
+  updateProfile(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id') id: string,
+    @Body() dto: UpdateCustomerProfileDto,
+  ) {
+    return this.customers.updateProfile(this.scope(user), id, dto);
   }
 
   @Post('broadcast')

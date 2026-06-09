@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsEmail,
   IsEnum,
   IsInt,
   IsOptional,
@@ -65,6 +66,33 @@ export class UpdateNotesDto {
   @ArrayMaxSize(20)
   @IsString({ each: true })
   tags?: string[];
+}
+
+/// Edit a customer's core profile from the merchant side. Every field is
+/// optional — only the supplied ones are changed. Email/phone are unique, so
+/// the service surfaces a clear conflict error on a clash.
+export class UpdateCustomerProfileDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  phone?: string;
+
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(160)
+  email?: string;
+
+  /// ISO date (yyyy-mm-dd) or full ISO timestamp. Empty string clears it.
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  birthday?: string;
 }
 
 export class IssueCouponDto {

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:banan_core/banan_core.dart';
 
 import '../entities/customer_directory.dart';
@@ -22,6 +24,19 @@ abstract class CustomersRepository {
   });
 
   Future<Result<CustomerDetail, AppFailure>> detail(String id);
+
+  /// Edit a customer's core profile (name / phone / email / birthday).
+  /// Only non-null fields change; pass an empty [birthday] to clear it.
+  Future<Result<void, AppFailure>> updateProfile({
+    required String customerId,
+    String? fullName,
+    String? phone,
+    String? email,
+    String? birthday,
+  });
+
+  /// Download the (optionally searched) customer directory as CSV bytes.
+  Future<Result<Uint8List, AppFailure>> exportCsv({String? q});
 
   /// Send a free-text in-app + email message to the customer.
   Future<Result<void, AppFailure>> notify({

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/shell/merchant_shell.dart';
+import '../reports_mgmt/xlsx_download.dart';
 
 /// Current search term for the customer directory.
 final customerSearchProvider = StateProvider<String>((_) => '');
@@ -53,10 +54,20 @@ class _CustomersListScreenState extends ConsumerState<CustomersListScreen> {
     return MerchantShell(
       title: 'Khách hàng',
       onRefresh: () async => ref.invalidate(customersListProvider),
-      action: IconButton(
-        icon: const Icon(Icons.campaign_outlined),
-        tooltip: 'Gửi thông báo hàng loạt',
-        onPressed: () => _openBroadcast(context, ref),
+      action: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.download_outlined),
+            tooltip: 'Xuất danh sách (CSV)',
+            onPressed: () => _exportCsv(context, ref),
+          ),
+          IconButton(
+            icon: const Icon(Icons.campaign_outlined),
+            tooltip: 'Gửi thông báo hàng loạt',
+            onPressed: () => _openBroadcast(context, ref),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openCreate(context, ref),
@@ -122,6 +133,35 @@ class _CustomersListScreenState extends ConsumerState<CustomersListScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Download the customer directory as CSV — respects the current search.
+  Future<void> _exportCsv(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final q = ref.read(customerSearchProvider);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Đang chuẩn bị file…')),
+    );
+    final res = await ref
+        .read(customersRepositoryProvider)
+        .exportCsv(q: q.isEmpty ? null : q);
+    await res.when(
+      success: (bytes) async {
+        await saveXlsx(
+          bytes,
+          'banan-khach-hang-'
+          '${DateTime.now().toIso8601String().substring(0, 10)}.csv',
+        );
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Đã tải danh sách khách hàng (CSV).')),
+        );
+      },
+      failure: (f) async {
+        messenger.showSnackBar(
+          SnackBar(content: Text(authFailureMessage(f))),
+        );
+      },
     );
   }
 

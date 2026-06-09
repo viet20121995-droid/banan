@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:banan_core/banan_core.dart';
 import 'package:banan_domain/banan_domain.dart';
 
@@ -18,6 +20,28 @@ class CustomersRepositoryImpl implements CustomersRepository {
   @override
   Future<Result<CustomerDetail, AppFailure>> detail(String id) =>
       _api.detail(id);
+
+  @override
+  Future<Result<void, AppFailure>> updateProfile({
+    required String customerId,
+    String? fullName,
+    String? phone,
+    String? email,
+    String? birthday,
+  }) async {
+    final res = await _api.updateProfile(
+      customerId,
+      fullName: fullName,
+      phone: phone,
+      email: email,
+      birthday: birthday,
+    );
+    return res.map((_) {});
+  }
+
+  @override
+  Future<Result<Uint8List, AppFailure>> exportCsv({String? q}) =>
+      _api.exportCsv(q: q);
 
   @override
   Future<Result<void, AppFailure>> notify({

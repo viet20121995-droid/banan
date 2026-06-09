@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:banan_core/banan_core.dart';
 import 'package:banan_domain/banan_domain.dart';
 import 'package:dio/dio.dart';
@@ -93,6 +95,43 @@ class CustomersApi {
         if (email != null && email.isNotEmpty) 'email': email,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       });
+
+  /// Edit a customer's core profile. Only the supplied fields change; pass
+  /// an empty string for [birthday] to clear it.
+  Future<Result<Map<String, dynamic>, AppFailure>> updateProfile(
+    String id, {
+    String? fullName,
+    String? phone,
+    String? email,
+    String? birthday,
+  }) =>
+      patch('/merchant/customers/$id', {
+        if (fullName != null) 'fullName': fullName,
+        if (phone != null) 'phone': phone,
+        if (email != null && email.isNotEmpty) 'email': email,
+        if (birthday != null) 'birthday': birthday,
+      });
+
+  /// Download the (optionally searched) customer directory as CSV bytes.
+  Future<Result<Uint8List, AppFailure>> exportCsv({String? q}) async {
+    try {
+      final res = await _dio.get<List<int>>(
+        '/merchant/customers/export.csv',
+        queryParameters: {if (q != null && q.isNotEmpty) 'q': q},
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'Accept': 'text/csv'},
+        ),
+      );
+      final data = res.data;
+      if (data == null) return Result.failure(mapHttpStatusToFailure(res));
+      return Result.success(Uint8List.fromList(data));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
 
   Future<Result<Map<String, dynamic>, AppFailure>> post(
     String path,

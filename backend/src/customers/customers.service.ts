@@ -313,6 +313,160 @@ export class CustomersService {
     return updated;
   }
 
+  /** Edit a customer's core profile (name / phone / email / birthday). */
+  async updateProfile(
+    storeId: string | null,
+    customerId: string,
+    input: {
+      fullName?: string;
+      phone?: string;
+      email?: string;
+      birthday?: string;
+    },
+  ) {
+    await this.loadServed(storeId, customerId);
+
+    const data: Prisma.UserUpdateInput = {};
+    if (input.fullName !== undefined) {
+      const name = input.fullName.trim();
+      if (name.length < 2) {
+        throw new BadRequestException({
+          code: 'NAME_REQUIRED',
+          message: 'Tên đầy đủ tối thiểu 2 ký tự.',
+        });
+      }
+      data.fullName = name;
+    }
+    if (input.phone !== undefined) {
+      data.phone = input.phone.trim() || null;
+    }
+    if (input.email !== undefined) {
+      const email = input.email.trim().toLowerCase();
+      if (email.length > 0) data.email = email;
+    }
+    if (input.birthday !== undefined) {
+      const raw = input.birthday.trim();
+      data.birthday = raw.length === 0 ? null : new Date(raw);
+    }
+
+    try {
+      const u = await this.prisma.user.update({
+        where: { id: customerId },
+        data,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          birthday: true,
+        },
+      });
+      return {
+        id: u.id,
+        fullName: u.fullName,
+        email: u.email,
+        phone: u.phone,
+        birthday: u.birthday?.toISOString() ?? null,
+      };
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        const target = (e.meta?.target as string[] | undefined)?.join(',');
+        throw new ConflictException({
+          code: 'CUSTOMER_EXISTS',
+          message: target?.includes('phone')
+            ? 'Số điện thoại này đã được dùng cho tài khoản khác.'
+            : 'Email này đã được dùng cho tài khoản khác.',
+        });
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Export the (scoped) customer directory as a CSV string. Mirrors the
+   * list query but without pagination, capped for safety. Admin gets every
+   * customer; a store merchant gets only those they've served.
+   */
+  async exportCsv(storeId: string | null, q?: string): Promise<string> {
+    const orderScope: Prisma.OrderWhereInput | undefined = storeId
+      ? { storeId }
+      : undefined;
+    const where: Prisma.UserWhereInput = {
+      role: Role.CUSTOMER,
+      orders: orderScope ? { some: orderScope } : { some: {} },
+    };
+    const term = q?.trim();
+    if (term) {
+      where.OR = [
+        { fullName: { contains: term, mode: 'insensitive' } },
+        { email: { contains: term, mode: 'insensitive' } },
+        { phone: { contains: term } },
+      ];
+    }
+
+    const users = await this.prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 5000, // safety cap
+      include: {
+        orders: {
+          where: orderScope,
+          select: { total: true, createdAt: true },
+        },
+      },
+    });
+
+    const headers = [
+      'Họ tên',
+      'Email',
+      'Số điện thoại',
+      'Hạng',
+      'Điểm Micho',
+      'Số đơn',
+      'Tổng chi tiêu (VND)',
+      'Đơn gần nhất',
+      'Ngày sinh',
+      'Nhãn',
+      'Tham gia',
+    ];
+    const esc = (v: unknown): string => {
+      const s = v === null || v === undefined ? '' : String(v);
+      // Quote always — simplest correct CSV; double internal quotes.
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const ymd = (d: Date | null): string =>
+      d ? d.toISOString().slice(0, 10) : '';
+
+    const rows = users.map((u) => {
+      const spent = u.orders.reduce((sum, o) => sum + Number(o.total), 0);
+      const last = u.orders.reduce<Date | null>(
+        (acc, o) => (acc && acc > o.createdAt ? acc : o.createdAt),
+        null,
+      );
+      return [
+        u.fullName,
+        u.email,
+        u.phone ?? '',
+        u.membershipTier,
+        u.pointsBalance,
+        u.orders.length,
+        spent,
+        ymd(last),
+        ymd(u.birthday),
+        (u.merchantTags ?? []).join('; '),
+        ymd(u.createdAt),
+      ]
+        .map(esc)
+        .join(',');
+    });
+
+    // BOM so Excel opens UTF-8 (Vietnamese) correctly.
+    return '﻿' + [headers.map(esc).join(','), ...rows].join('\r\n');
+  }
+
   /** Issue a single-use personal coupon and notify the customer. */
   async issueCoupon(
     storeId: string | null,

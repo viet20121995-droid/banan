@@ -99,6 +99,11 @@ class _Detail extends ConsumerWidget {
           spacing: BananSpacing.sm,
           runSpacing: BananSpacing.sm,
           children: [
+            FilledButton.icon(
+              onPressed: () => _editProfile(context, ref),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Sửa thông tin'),
+            ),
             FilledButton.tonalIcon(
               onPressed: () => _sendMessage(context, ref),
               icon: const Icon(Icons.send_outlined, size: 18),
@@ -252,6 +257,98 @@ class _Detail extends ConsumerWidget {
   }
 
   // ───────────────────────── Action dialogs ─────────────────────────
+
+  Future<void> _editProfile(BuildContext context, WidgetRef ref) async {
+    final nameCtrl = TextEditingController(text: customer.fullName);
+    final phoneCtrl = TextEditingController(text: customer.phone ?? '');
+    final emailCtrl = TextEditingController(text: customer.email);
+    final birthdayFmt = DateFormat('dd/MM/yyyy');
+    var birthday = customer.birthday;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Sửa thông tin khách'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Họ tên'),
+                ),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration:
+                      const InputDecoration(labelText: 'Số điện thoại'),
+                ),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                ),
+                const SizedBox(height: BananSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        birthday == null
+                            ? 'Chưa có ngày sinh'
+                            : 'Sinh nhật: ${birthdayFmt.format(birthday!)}',
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: birthday ?? DateTime(2000),
+                          firstDate: DateTime(1920),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) setSt(() => birthday = picked);
+                      },
+                      child: const Text('Chọn'),
+                    ),
+                    if (birthday != null)
+                      IconButton(
+                        tooltip: 'Xoá ngày sinh',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => setSt(() => birthday = null),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: _dialogActions(ctx),
+        ),
+      ),
+    );
+    if (ok != true) return;
+    if (nameCtrl.text.trim().length < 2) {
+      _snack(ref, 'Họ tên tối thiểu 2 ký tự.');
+      return;
+    }
+    final res = await ref.read(customersRepositoryProvider).updateProfile(
+          customerId: customer.id,
+          fullName: nameCtrl.text.trim(),
+          phone: phoneCtrl.text.trim(),
+          email: emailCtrl.text.trim(),
+          birthday: birthday == null
+              ? ''
+              : birthday!.toIso8601String().substring(0, 10),
+        );
+    res.when(
+      success: (_) {
+        _snack(ref, 'Đã lưu thông tin khách.');
+        _refresh(ref);
+      },
+      failure: (f) => _snack(ref, authFailureMessage(f)),
+    );
+  }
 
   Future<void> _sendMessage(BuildContext context, WidgetRef ref) async {
     final titleCtrl = TextEditingController();
