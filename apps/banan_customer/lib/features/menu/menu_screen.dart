@@ -1277,6 +1277,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
       slides.add((image: null, title: 'Banan Fukuoka Saigon'));
     }
     _ensureTimer(slides.length);
+    final title = slides[_page.clamp(0, slides.length - 1)].title;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: BananSpacing.lg),
@@ -1342,29 +1343,39 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
               // Decorative wave + kanji accents removed for a cleaner
               // banner — peach-cream theme reads softer without them.
               Padding(
-                padding: const EdgeInsets.all(BananSpacing.xl),
+                // Hug the top edge so the CTA sits high on the banner rather
+                // than centred (small top inset keeps it off the very edge).
+                padding: const EdgeInsets.fromLTRB(
+                  BananSpacing.xl,
+                  BananSpacing.md,
+                  BananSpacing.xl,
+                  BananSpacing.xl,
+                ),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
-                    Text(
-                      slides[_page.clamp(0, slides.length - 1)].title,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      // Lora ships weights 400–700 only. Requesting w800 here
-                      // made Flutter web synthesize a faux-bold, which dropped
-                      // Vietnamese diacritics ("Khuyến mãi" → "Khuyen mai").
-                      // w700 is Lora's real heaviest face — full VN subset.
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        shadows: const [
-                          Shadow(blurRadius: 8, color: Colors.black54),
-                        ],
+                    if (title.isNotEmpty) ...[
+                      Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        // Lora ships weights 400–700 only. Requesting w800 here
+                        // made Flutter web synthesize a faux-bold, which dropped
+                        // Vietnamese diacritics ("Khuyến mãi" → "Khuyen mai").
+                        // w700 is Lora's real heaviest face — full VN subset.
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          shadows: const [
+                            Shadow(blurRadius: 8, color: Colors.black54),
+                          ],
+                        ),
                       ),
-                    ),
-                    if (!ctaDismissed) ...[
-                      const SizedBox(height: BananSpacing.lg),
+                      if (!ctaDismissed)
+                        const SizedBox(height: BananSpacing.md),
+                    ],
+                    if (!ctaDismissed)
                       FilledButton.icon(
                         onPressed: () {
                           ref
@@ -1375,17 +1386,24 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: theme.colorScheme.primary,
+                          // ~30% larger than the default CTA (padding + text).
                           padding: const EdgeInsets.symmetric(
-                            horizontal: BananSpacing.xl,
-                            vertical: BananSpacing.md,
+                            horizontal: BananSpacing.xl * 1.3,
+                            vertical: BananSpacing.md * 1.3,
                           ),
-                          textStyle: theme.textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
+                          textStyle: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            fontSize:
+                                (theme.textTheme.titleMedium?.fontSize ?? 16) *
+                                    1.3,
+                          ),
                         ),
-                        icon: const Icon(Icons.expand_more_rounded),
+                        icon: const Icon(
+                          Icons.expand_more_rounded,
+                          size: 31,
+                        ),
                         label: Text(s.orderNow),
                       ),
-                    ],
                   ],
                 ),
               ),
