@@ -422,47 +422,111 @@ class _SavedAddressTile extends StatelessWidget {
   }
 }
 
-/// "As soon as possible" vs "Schedule for later" toggle. When the customer
-/// picks a future date+time, [onChanged] fires with the chosen DateTime.
-/// Same picker for pickup or delivery — the parent screen relabels above it.
+/// The soonest valid slot given a required [lead] from now, rounded up to the
+/// next 15-minute boundary so the default looks tidy.
+DateTime earliestScheduleSlot(Duration lead) {
+  final t = DateTime.now().add(lead);
+  final base = DateTime(t.year, t.month, t.day, t.hour);
+  final slot = (t.minute / 15).ceil() * 15;
+  return base.add(Duration(minutes: slot));
+}
+
+/// Builds the "needs preparation time" notice, or null when nothing in the
+/// cart requires advance notice. [names] are the cakes that need lead time.
+String? prepLeadNote({required int leadHours, required List<String> names}) {
+  if (leadHours <= 0) return null;
+  final span = (leadHours >= 24 && leadHours % 24 == 0)
+      ? '${leadHours ~/ 24} ngày'
+      : '$leadHours giờ';
+  final who = names.isEmpty
+      ? 'Một số bánh'
+      : (names.length <= 2
+          ? names.join(', ')
+          : '${names.take(2).join(', ')} và ${names.length - 2} món khác');
+  return '$who cần đặt trước $span để chuẩn bị. Chúng tôi đã chọn sẵn '
+      'thời gian nhận sớm nhất — bạn có thể đổi sang giờ muộn hơn.';
+}
+
+/// Wraps [ScheduleSection] with cart-driven lead-time awareness. When the cart
+/// has items needing advance notice ([leadHours] > 0) it shows the [leadNote]
+/// banner and, once, defaults the schedule to the earliest valid slot so the
+/// customer never submits an order the backend would reject for lead time.
+class LeadAwareSchedule extends StatefulWidget {
+  const LeadAwareSchedule({
+    required this.value,
+    required this.onChanged,
+    required this.leadHours,
+    this.leadNote,
+    super.key,
+  });
+
+  final DateTime? value;
+  final ValueChanged<DateTime?> onChanged;
+  final int leadHours;
+  final String? leadNote;
+
+  @override
+  State<LeadAwareSchedule> createState() => _LeadAwareScheduleState();
+}
+
+class _LeadAwareScheduleState extends State<LeadAwareSchedule> {
+  @override
+  void initState() {
+    super.initState();
+    // One-shot: if prep is required and the customer hasn't chosen a time yet,
+    // pre-fill the soonest valid slot.
+    if (widget.leadHours > 0 && widget.value == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.value == null) {
+          widget.onChanged(
+            earliestScheduleSlot(Duration(hours: widget.leadHours)),
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScheduleSection(
+      value: widget.value,
+      onChanged: widget.onChanged,
+      minLead: widget.leadHours > 0
+          ? Duration(hours: widget.leadHours)
+          : const Duration(minutes: 30),
+      leadNote: widget.leadNote,
+    );
+  }
+}
+
+/// "Soonest" vs "Pick a time" toggle with a friendly day-chip + time-slot
+/// picker (replaces the stacked OS date+time dialogs). [minLead] is the
+/// soonest valid moment from now; [leadNote] shows an info banner when set.
 class ScheduleSection extends ConsumerWidget {
   const ScheduleSection({
     required this.value,
     required this.onChanged,
+    this.minLead = const Duration(minutes: 30),
+    this.leadNote,
     super.key,
   });
   final DateTime? value;
   final ValueChanged<DateTime?> onChanged;
-
-  static const _minLeadMinutes = 30;
+  final Duration minLead;
+  final String? leadNote;
 
   Future<void> _pick(BuildContext context) async {
-    final now = DateTime.now();
-    final initialDate = value ?? now.add(const Duration(hours: 3));
-    final date = await showDatePicker(
+    final earliest = earliestScheduleSlot(minLead);
+    final initial =
+        (value != null && value!.isAfter(earliest)) ? value : earliest;
+    final picked = await showModalBottomSheet<DateTime>(
       context: context,
-      initialDate: initialDate,
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 60)),
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) =>
+          _SchedulePickerSheet(earliest: earliest, initial: initial),
     );
-    if (date == null || !context.mounted) return;
-
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(initialDate),
-    );
-    if (time == null) return;
-
-    final picked = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-    // Guard rail: refuse picks too close to now — the store needs lead time.
-    final earliest = now.add(const Duration(minutes: _minLeadMinutes));
-    onChanged(picked.isBefore(earliest) ? earliest : picked);
+    if (picked != null) onChanged(picked);
   }
 
   @override
@@ -470,7 +534,8 @@ class ScheduleSection extends ConsumerWidget {
     final theme = Theme.of(context);
     final s = ref.watch(stringsProvider);
     final isScheduled = value != null;
-    final fmt = DateFormat.yMMMEd().add_jm();
+    final fmt = DateFormat('HH:mm · dd/MM');
+    final earliest = earliestScheduleSlot(minLead);
 
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -482,6 +547,10 @@ class ScheduleSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (leadNote != null) ...[
+            _LeadNoteBanner(text: leadNote!),
+            const SizedBox(height: BananSpacing.md),
+          ],
           SegmentedButton<bool>(
             segments: [
               ButtonSegment(
@@ -504,15 +573,39 @@ class ScheduleSection extends ConsumerWidget {
               }
             },
           ),
+          if (!isScheduled && leadNote != null) ...[
+            const SizedBox(height: BananSpacing.sm),
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule,
+                  size: 16,
+                  color: theme.colorScheme.outline,
+                ),
+                const SizedBox(width: BananSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Dự kiến sẵn sàng lúc ${fmt.format(earliest)}',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.outline),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (isScheduled) ...[
             const SizedBox(height: BananSpacing.md),
             InkWell(
               onTap: () => _pick(context),
               borderRadius: BananRadii.rmd,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: BananSpacing.sm,
-                  vertical: BananSpacing.sm,
+              child: Container(
+                padding: const EdgeInsets.all(BananSpacing.md),
+                decoration: BoxDecoration(
+                  borderRadius: BananRadii.rmd,
+                  color: theme.colorScheme.primary.withValues(alpha: 0.06),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -528,12 +621,19 @@ class ScheduleSection extends ConsumerWidget {
                           ),
                           Text(
                             _relativeLabel(value!, s),
-                            style: theme.textTheme.bodySmall,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.outline,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.edit_calendar_outlined),
+                    Text(
+                      'Đổi',
+                      style: theme.textTheme.labelLarge
+                          ?.copyWith(color: theme.colorScheme.primary),
+                    ),
+                    const Icon(Icons.chevron_right),
                   ],
                 ),
               ),
@@ -550,5 +650,200 @@ class ScheduleSection extends ConsumerWidget {
     if (diff.inHours < 24) return s.inHours(diff.inHours);
     final days = diff.inDays;
     return days == 1 ? s.tomorrow : s.inDays(days);
+  }
+}
+
+/// Amber "needs preparation time" banner shown above the schedule toggle.
+class _LeadNoteBanner extends StatelessWidget {
+  const _LeadNoteBanner({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(BananSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: BananColors.gold.withValues(alpha: 0.12),
+        border: Border.all(color: BananColors.gold.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.bakery_dining_outlined,
+            size: 20,
+            color: BananColors.gold,
+          ),
+          const SizedBox(width: BananSpacing.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom-sheet day + time-slot picker. Day chips across the next two weeks
+/// (Hôm nay / Ngày mai / weekday + date), then 30-minute slots from 08:00 to
+/// 20:30, with anything before [earliest] hidden. Much friendlier than the
+/// stacked OS date+time dialogs.
+class _SchedulePickerSheet extends StatefulWidget {
+  const _SchedulePickerSheet({required this.earliest, this.initial});
+  final DateTime earliest;
+  final DateTime? initial;
+  @override
+  State<_SchedulePickerSheet> createState() => _SchedulePickerSheetState();
+}
+
+class _SchedulePickerSheetState extends State<_SchedulePickerSheet> {
+  static const _openHour = 8;
+  static const _closeHour = 20; // last slot 20:30
+  late DateTime _day;
+  DateTime? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    final init = widget.initial ?? widget.earliest;
+    _day = DateTime(init.year, init.month, init.day);
+    _selected = init;
+  }
+
+  List<DateTime> get _days {
+    final start = DateTime(
+      widget.earliest.year,
+      widget.earliest.month,
+      widget.earliest.day,
+    );
+    return List.generate(14, (i) => start.add(Duration(days: i)));
+  }
+
+  List<DateTime> _slotsFor(DateTime day) {
+    final out = <DateTime>[];
+    for (var h = _openHour; h <= _closeHour; h++) {
+      for (final m in const [0, 30]) {
+        final dt = DateTime(day.year, day.month, day.day, h, m);
+        if (!dt.isBefore(widget.earliest)) out.add(dt);
+      }
+    }
+    return out;
+  }
+
+  String _dayLabel(DateTime d) {
+    final now = DateTime.now();
+    final t0 = DateTime(now.year, now.month, now.day);
+    final diff = DateTime(d.year, d.month, d.day).difference(t0).inDays;
+    if (diff == 0) return 'Hôm nay';
+    if (diff == 1) return 'Ngày mai';
+    const wd = {1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7', 7: 'CN'};
+    return '${wd[d.weekday]} ${DateFormat('dd/MM').format(d)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final slots = _slotsFor(_day);
+    final hm = DateFormat('HH:mm');
+    final full = DateFormat('HH:mm · dd/MM');
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          BananSpacing.lg,
+          0,
+          BananSpacing.lg,
+          BananSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Chọn giờ nhận', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Sớm nhất: ${full.format(widget.earliest)}',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+            const SizedBox(height: BananSpacing.md),
+            SizedBox(
+              height: 40,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _days.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(width: BananSpacing.sm),
+                itemBuilder: (_, i) {
+                  final d = _days[i];
+                  final sel = d.year == _day.year &&
+                      d.month == _day.month &&
+                      d.day == _day.day;
+                  return ChoiceChip(
+                    label: Text(_dayLabel(d)),
+                    selected: sel,
+                    onSelected: (_) => setState(() {
+                      _day = DateTime(d.year, d.month, d.day);
+                      if (_selected != null &&
+                          (_selected!.year != d.year ||
+                              _selected!.month != d.month ||
+                              _selected!.day != d.day)) {
+                        _selected = null;
+                      }
+                    }),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: BananSpacing.md),
+            Text('Giờ nhận', style: theme.textTheme.labelLarge),
+            const SizedBox(height: BananSpacing.sm),
+            if (slots.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: BananSpacing.md),
+                child: Text(
+                  'Hết khung giờ nhận trong ngày này. Vui lòng chọn ngày khác.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: SingleChildScrollView(
+                  child: Wrap(
+                    spacing: BananSpacing.sm,
+                    runSpacing: BananSpacing.sm,
+                    children: [
+                      for (final slot in slots)
+                        ChoiceChip(
+                          label: Text(hm.format(slot)),
+                          selected: _selected != null &&
+                              _selected!.isAtSameMomentAs(slot),
+                          onSelected: (_) =>
+                              setState(() => _selected = slot),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: BananSpacing.lg),
+            FilledButton.icon(
+              onPressed: _selected == null
+                  ? null
+                  : () => Navigator.pop(context, _selected),
+              icon: const Icon(Icons.check),
+              label: Text(
+                _selected == null
+                    ? 'Chọn giờ nhận'
+                    : 'Xác nhận ${full.format(_selected!)}',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

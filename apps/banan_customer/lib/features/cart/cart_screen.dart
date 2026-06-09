@@ -180,9 +180,14 @@ class CartScreen extends ConsumerWidget {
                     style: theme.textTheme.titleLarge,
                   ),
                   const SizedBox(height: BananSpacing.md),
-                  ScheduleSection(
+                  LeadAwareSchedule(
                     value: draft.scheduledFor,
                     onChanged: draftCtrl.setScheduledFor,
+                    leadHours: cart.maxLeadHours,
+                    leadNote: prepLeadNote(
+                      leadHours: cart.maxLeadHours,
+                      names: cart.leadProductNames,
+                    ),
                   ),
 
                   // ── Items ───────────────────────────────────────────────
@@ -343,6 +348,7 @@ class _CrossSellCard extends ConsumerWidget {
             unitPrice: product.priceFor(cheapest),
             quantity: 1,
             isBirthdayCake: product.isBirthdayCake,
+            leadTimeHours: product.leadTimeHours,
           ),
         );
     final s = ref.read(stringsProvider);

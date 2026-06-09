@@ -14,6 +14,7 @@ class CartItem {
     this.customMessage,
     this.personalization,
     this.isBirthdayCake = false,
+    this.leadTimeHours,
   });
 
   final String productId;
@@ -24,6 +25,13 @@ class CartItem {
   final double unitPrice;
   final int quantity;
   final String? customMessage;
+
+  /// Advance-notice (in hours) this product needs before it can be picked up
+  /// / delivered — mirrors `Product.leadTimeHours`. Null / 0 = available
+  /// right away. The cart uses the max across all lines to warn the customer
+  /// and default the schedule to the earliest valid time, matching the
+  /// backend's PRODUCT_LEAD_TIME guard so they never hit a rejected order.
+  final int? leadTimeHours;
 
   /// Cake personalization payload from the customer wizard (text on
   /// cake, candle count, reference image URL, note). Null for items
@@ -62,6 +70,7 @@ class CartItem {
         customMessage: customMessage ?? this.customMessage,
         personalization: personalization,
         isBirthdayCake: isBirthdayCake,
+        leadTimeHours: leadTimeHours,
       );
 
   /// Returns a copy carrying a different personalization payload. Empty or
@@ -77,6 +86,7 @@ class CartItem {
         quantity: quantity,
         customMessage: customMessage,
         isBirthdayCake: isBirthdayCake,
+        leadTimeHours: leadTimeHours,
         personalization: (next == null || next.isEmpty) ? null : next,
       );
 }
@@ -89,6 +99,20 @@ class CartState {
   bool get isEmpty => items.isEmpty;
   int get itemCount => items.fold(0, (sum, i) => sum + i.quantity);
   double get subtotal => items.fold(0, (sum, i) => sum + i.lineTotal);
+
+  /// The largest advance-notice (in hours) any line in the cart needs before
+  /// it can be ready. 0 = everything is available right away.
+  int get maxLeadHours => items.fold(
+        0,
+        (m, i) => (i.leadTimeHours ?? 0) > m ? (i.leadTimeHours ?? 0) : m,
+      );
+
+  /// Distinct product names that need advance notice — used to tell the
+  /// customer exactly which cakes require preparation time.
+  List<String> get leadProductNames => <String>{
+        for (final i in items)
+          if ((i.leadTimeHours ?? 0) > 0) i.productName,
+      }.toList();
 }
 
 /// In-memory cart. Lost on app refresh / restart — Hive persistence lands

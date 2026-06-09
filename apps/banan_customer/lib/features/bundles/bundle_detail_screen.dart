@@ -55,6 +55,13 @@ class _BundleBody extends ConsumerWidget {
     final itemsSummary = bundle.items
         .map((it) => '${it.quantity}× ${it.product?.name ?? "Sản phẩm"}')
         .join(' + ');
+    // A combo's advance-notice requirement is the longest of its parts.
+    final bundleLead = bundle.items.fold<int>(
+      0,
+      (m, it) => (it.product?.leadTimeHours ?? 0) > m
+          ? (it.product?.leadTimeHours ?? 0)
+          : m,
+    );
     ref.read(cartControllerProvider.notifier).add(
           CartItem(
             productId: bundle.id,
@@ -64,6 +71,7 @@ class _BundleBody extends ConsumerWidget {
             unitPrice: bundle.priceVnd.toDouble(),
             quantity: 1,
             coverImage: bundle.imageUrl,
+            leadTimeHours: bundleLead > 0 ? bundleLead : null,
           ),
         );
     final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();

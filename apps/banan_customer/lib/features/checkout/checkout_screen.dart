@@ -576,10 +576,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       style: theme.textTheme.titleLarge,
                     ),
                     const SizedBox(height: BananSpacing.md),
-                    ScheduleSection(
+                    LeadAwareSchedule(
                       value: _scheduledFor,
                       onChanged: (next) =>
                           setState(() => _scheduledFor = next),
+                      leadHours: cart.maxLeadHours,
+                      leadNote: prepLeadNote(
+                        leadHours: cart.maxLeadHours,
+                        names: cart.leadProductNames,
+                      ),
                     ),
                     if (_fulfillment == FulfillmentType.delivery) ...[
                       const SizedBox(height: BananSpacing.xl),
