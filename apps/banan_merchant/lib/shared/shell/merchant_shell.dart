@@ -15,7 +15,7 @@ import 'change_password_dialog.dart';
 /// the 14-icon AppBar that every page used to redefine on its own.
 ///
 /// Usage:
-/// ```
+/// ```dart
 /// MerchantShell(
 ///   title: 'Đơn hàng',
 ///   onRefresh: controller.refresh,    // optional
@@ -197,25 +197,37 @@ class _AccountMenu extends ConsumerWidget {
 
 // ─── Sidebar ────────────────────────────────────────────────────────────
 
-class _SidebarNav extends ConsumerWidget {
+class _SidebarNav extends ConsumerStatefulWidget {
   const _SidebarNav();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SidebarNav> createState() => _SidebarNavState();
+}
+
+class _SidebarNavState extends ConsumerState<_SidebarNav> {
+  /// Labels of the currently-expanded sections. Initialised once (per shell
+  /// mount) to just the section that owns the current route, so the sidebar
+  /// opens compact — one open group, the rest collapsed to a single row.
+  final Set<String> _expanded = {};
+  bool _initialised = false;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final role = ref.watch(authSessionProvider).valueOrNull?.user.role;
     final isAdmin = role?.isAdmin ?? false;
     final isOwner = role == Role.merchantOwner;
     final currentPath = GoRouterState.of(context).matchedLocation;
 
-    // Sidebar layout. Several entries are intentionally hidden for the
-    // ADMIN role because their backend endpoints require a `storeId` and
-    // the admin user doesn't belong to a single store (they manage the
-    // chain). Showing them anyway would land the admin on a Prisma error
-    // every time — better to drop them from the menu entirely.
+    // Sidebar layout, grouped into collapsible sections. Several entries are
+    // intentionally hidden for the ADMIN role because their backend endpoints
+    // require a `storeId` and the admin user doesn't belong to a single store
+    // (they manage the chain) — showing them would land the admin on a Prisma
+    // error every time.
     final groups = <_NavGroup>[
       const _NavGroup(
         label: 'VẬN HÀNH',
+        icon: Icons.point_of_sale_outlined,
         items: [
           _NavItem(
             label: 'Đơn hàng',
@@ -233,6 +245,7 @@ class _SidebarNav extends ConsumerWidget {
       ),
       _NavGroup(
         label: 'THỰC ĐƠN',
+        icon: Icons.restaurant_menu_outlined,
         items: [
           // Catalog products live on a shared "catalog store" — works for
           // both merchant and admin.
@@ -254,16 +267,9 @@ class _SidebarNav extends ConsumerWidget {
           if (!isAdmin)
             const _NavItem(
               label: 'Combo',
-              icon: Icons.local_offer_outlined,
-              iconSelected: Icons.local_offer,
+              icon: Icons.style_outlined,
+              iconSelected: Icons.style,
               route: '/bundles',
-            ),
-          if (!isAdmin)
-            const _NavItem(
-              label: 'Bài đăng',
-              icon: Icons.forum_outlined,
-              iconSelected: Icons.forum,
-              route: '/threads',
             ),
           if (!isAdmin)
             const _NavItem(
@@ -272,25 +278,12 @@ class _SidebarNav extends ConsumerWidget {
               iconSelected: Icons.dynamic_feed,
               route: '/tools/bulk',
             ),
-            const _NavItem(
-              label: 'Banner',
-              icon: Icons.photo_library_outlined,
-              iconSelected: Icons.photo_library,
-              route: '/banners',
-            ),
         ],
       ),
       _NavGroup(
         label: 'MARKETING',
+        icon: Icons.sell_outlined,
         items: [
-          // Per-store coupons — hidden for admin.
-          if (!isAdmin)
-            const _NavItem(
-              label: 'Mã giảm giá',
-              icon: Icons.local_offer_outlined,
-              iconSelected: Icons.local_offer,
-              route: '/coupons',
-            ),
           // Promotions / campaigns — admin-managed chain-wide programs.
           // Backend gates this on the ADMIN role; owners see it too.
           if (isAdmin || isOwner)
@@ -300,12 +293,52 @@ class _SidebarNav extends ConsumerWidget {
               iconSelected: Icons.sell,
               route: '/campaigns',
             ),
+          // Per-store coupons — hidden for admin.
+          if (!isAdmin)
+            const _NavItem(
+              label: 'Mã giảm giá',
+              icon: Icons.confirmation_number_outlined,
+              iconSelected: Icons.confirmation_number,
+              route: '/coupons',
+            ),
+          const _NavItem(
+            label: 'Chương trình ưu đãi',
+            icon: Icons.redeem_outlined,
+            iconSelected: Icons.redeem,
+            route: '/marketing',
+          ),
           const _NavItem(
             label: 'Popup quảng cáo',
-            icon: Icons.campaign_outlined,
-            iconSelected: Icons.campaign,
+            icon: Icons.ad_units_outlined,
+            iconSelected: Icons.ad_units,
             route: '/admin/promo-popup',
           ),
+          const _NavItem(
+            label: 'Banner',
+            icon: Icons.photo_library_outlined,
+            iconSelected: Icons.photo_library,
+            route: '/banners',
+          ),
+          if (!isAdmin)
+            const _NavItem(
+              label: 'Bài đăng',
+              icon: Icons.forum_outlined,
+              iconSelected: Icons.forum,
+              route: '/threads',
+            ),
+        ],
+      ),
+      _NavGroup(
+        label: 'KHÁCH HÀNG',
+        icon: Icons.groups_outlined,
+        items: [
+          if (!isAdmin)
+            const _NavItem(
+              label: 'Danh sách',
+              icon: Icons.people_outline,
+              iconSelected: Icons.people,
+              route: '/customers',
+            ),
           const _NavItem(
             label: 'Đánh giá',
             icon: Icons.star_outline,
@@ -320,32 +353,15 @@ class _SidebarNav extends ConsumerWidget {
           ),
           const _NavItem(
             label: 'Thông báo',
-            icon: Icons.campaign_outlined,
-            iconSelected: Icons.campaign,
+            icon: Icons.notifications_active_outlined,
+            iconSelected: Icons.notifications_active,
             route: '/broadcast',
-          ),
-          const _NavItem(
-            label: 'Chương trình',
-            icon: Icons.redeem_outlined,
-            iconSelected: Icons.redeem,
-            route: '/marketing',
           ),
         ],
       ),
-      if (!isAdmin)
-        const _NavGroup(
-          label: 'KHÁCH HÀNG',
-          items: [
-            _NavItem(
-              label: 'Danh sách',
-              icon: Icons.people_outline,
-              iconSelected: Icons.people,
-              route: '/customers',
-            ),
-          ],
-        ),
       const _NavGroup(
         label: 'PHÂN TÍCH',
+        icon: Icons.insights_outlined,
         items: [
           _NavItem(
             label: 'Dashboard',
@@ -363,13 +379,14 @@ class _SidebarNav extends ConsumerWidget {
       ),
       _NavGroup(
         label: 'CÀI ĐẶT',
+        icon: Icons.settings_outlined,
         items: [
           // Per-store opening hours / pause toggle — hidden for admin.
           if (!isAdmin)
             const _NavItem(
               label: 'Cửa hàng',
-              icon: Icons.settings_outlined,
-              iconSelected: Icons.settings,
+              icon: Icons.storefront_outlined,
+              iconSelected: Icons.storefront,
               route: '/settings',
             ),
           if (isAdmin)
@@ -402,7 +419,25 @@ class _SidebarNav extends ConsumerWidget {
       ),
     ];
 
-    return Container(
+    // Drop empty groups (admin hides several store-scoped items).
+    final visible = groups.where((g) => g.items.isNotEmpty).toList();
+
+    bool groupActive(_NavGroup g) =>
+        g.items.any((it) => _routeMatches(currentPath, it.route));
+
+    // One-time init: open only the section that owns the current route so the
+    // sidebar starts compact. Afterwards the user's expand/collapse wins.
+    if (!_initialised) {
+      for (final g in visible) {
+        if (groupActive(g)) _expanded.add(g.label);
+      }
+      if (_expanded.isEmpty && visible.isNotEmpty) {
+        _expanded.add(visible.first.label);
+      }
+      _initialised = true;
+    }
+
+    return ColoredBox(
       color: theme.colorScheme.surface,
       child: SafeArea(
         child: Column(
@@ -446,41 +481,37 @@ class _SidebarNav extends ConsumerWidget {
                   vertical: BananSpacing.sm,
                 ),
                 children: [
-                  // Skip empty groups so admin doesn't see orphan section
-                  // headers when their items have been hidden.
-                  for (final group
-                      in groups.where((g) => g.items.isNotEmpty)) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        BananSpacing.lg,
-                        BananSpacing.md,
-                        BananSpacing.lg,
-                        4,
-                      ),
-                      child: Text(
-                        group.label,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
+                  for (final group in visible) ...[
+                    _GroupHeader(
+                      label: group.label,
+                      icon: group.icon,
+                      expanded: _expanded.contains(group.label),
+                      active: groupActive(group),
+                      onTap: () => setState(() {
+                        if (!_expanded.remove(group.label)) {
+                          _expanded.add(group.label);
+                        }
+                      }),
                     ),
-                    for (final item in group.items)
-                      _NavTile(
-                        item: item,
-                        selected: _routeMatches(currentPath, item.route),
-                        onTap: () {
-                          // Close the drawer on mobile before navigating
-                          // so the user lands on the new screen, not back
-                          // on the still-open drawer.
-                          final scaffold = Scaffold.maybeOf(context);
-                          if (scaffold?.isDrawerOpen ?? false) {
-                            Navigator.of(context).pop();
-                          }
-                          context.go(item.route);
-                        },
-                      ),
+                    if (_expanded.contains(group.label))
+                      for (final item in group.items)
+                        Padding(
+                          padding: const EdgeInsets.only(left: BananSpacing.md),
+                          child: _NavTile(
+                            item: item,
+                            selected: _routeMatches(currentPath, item.route),
+                            onTap: () {
+                              // Close the drawer on mobile before navigating
+                              // so the user lands on the new screen, not back
+                              // on the still-open drawer.
+                              final scaffold = Scaffold.maybeOf(context);
+                              if (scaffold?.isDrawerOpen ?? false) {
+                                Navigator.of(context).pop();
+                              }
+                              context.go(item.route);
+                            },
+                          ),
+                        ),
                   ],
                 ],
               ),
@@ -507,6 +538,73 @@ class _SidebarNav extends ConsumerWidget {
       return current == '/' || current.startsWith('/orders');
     }
     return current == target || current.startsWith('$target/');
+  }
+}
+
+/// Tappable section header for the collapsible sidebar. Shows the section
+/// icon + label and a chevron that flips with the expanded state. When the
+/// section owns the current route it tints to the primary colour so the
+/// merchant can still see "where they are" even while it's collapsed.
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({
+    required this.label,
+    required this.icon,
+    required this.expanded,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool expanded;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = active
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurface.withValues(alpha: 0.72);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: BananSpacing.sm,
+        vertical: 1,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            BananSpacing.md,
+            BananSpacing.sm,
+            BananSpacing.sm,
+            BananSpacing.sm,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: BananSpacing.md),
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Icon(
+                expanded ? Icons.expand_less : Icons.expand_more,
+                size: 20,
+                color: theme.colorScheme.outline,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -573,8 +671,13 @@ class _NavTile extends StatelessWidget {
 }
 
 class _NavGroup {
-  const _NavGroup({required this.label, required this.items});
+  const _NavGroup({
+    required this.label,
+    required this.icon,
+    required this.items,
+  });
   final String label;
+  final IconData icon;
   final List<_NavItem> items;
 }
 
