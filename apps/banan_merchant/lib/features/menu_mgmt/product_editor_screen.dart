@@ -396,6 +396,18 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                         label: const Text('Tải ảnh'),
                       ),
                       children: [
+                        Text(
+                          'Khuyến nghị: ảnh vuông 1200×1200px (tỉ lệ 1:1), '
+                          'bánh nằm giữa khung, nền sáng  ·  ≤ 8 MB/ảnh '
+                          '(server tối đa 20 MB)  ·  JPG / PNG / WebP / AVIF',
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                        ),
+                        const SizedBox(height: BananSpacing.sm),
                         if (_images.isEmpty)
                           const Text(
                             'Chưa có ảnh. Ảnh đầu tiên sẽ làm ảnh bìa.',
