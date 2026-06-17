@@ -1053,9 +1053,20 @@ export class OrdersService {
         message: `Cannot move kitchen status from ${order.kitchenStatus ?? 'null'} to ${toKitchenStatus}.`,
       });
     }
-    const updated = await this.prisma.order.update({
-      where: { id },
+    // Status-guarded so a double-click / concurrent advance doesn't run the
+    // emit + customer notification twice. The loser sees count 0 and stops.
+    const res = await this.prisma.order.updateMany({
+      where: { id, kitchenStatus: order.kitchenStatus },
       data: { kitchenStatus: toKitchenStatus },
+    });
+    if (res.count === 0) {
+      throw new BadRequestException({
+        code: 'KITCHEN_INVALID_TRANSITION',
+        message: `Kitchen status changed concurrently; expected ${order.kitchenStatus ?? 'null'}.`,
+      });
+    }
+    const updated = await this.prisma.order.findUniqueOrThrow({
+      where: { id },
       include: ORDER_INCLUDE,
     });
     this.realtime.emit(
@@ -1110,9 +1121,20 @@ export class OrdersService {
       order.fulfillmentType === 'DELIVERY' ? 'DELIVERING' : 'READY_FOR_PICKUP';
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const next = await tx.order.update({
-        where: { id },
+      // Guard on the exact state we validated (status + READY_DISPATCH) so a
+      // double dispatch can't fire the status-changed emit/notify twice.
+      const res = await tx.order.updateMany({
+        where: { id, status: order.status, kitchenStatus: 'READY_DISPATCH' },
         data: { status: targetOrderStatus },
+      });
+      if (res.count === 0) {
+        throw new BadRequestException({
+          code: 'KITCHEN_NOT_READY',
+          message: 'Order was already dispatched or changed concurrently.',
+        });
+      }
+      const next = await tx.order.findUniqueOrThrow({
+        where: { id },
         include: ORDER_INCLUDE,
       });
       await tx.orderStatusEvent.create({

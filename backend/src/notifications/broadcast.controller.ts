@@ -26,9 +26,12 @@ class BroadcastDto {
 }
 
 @ApiBearerAuth()
-@ApiTags('merchant.broadcast')
+@ApiTags('admin.broadcast')
+// Chain-wide: pushes to EVERY opted-in customer's inbox, so it's admin-only —
+// not a per-store action a merchant owner should trigger. (Path kept as
+// /merchant/broadcast so the existing admin app route is unchanged.)
 @Controller({ path: 'merchant/broadcast', version: '1' })
-@Roles(Role.MERCHANT_OWNER, Role.ADMIN)
+@Roles(Role.ADMIN)
 export class BroadcastController {
   constructor(private readonly notifications: NotificationsService) {}
 

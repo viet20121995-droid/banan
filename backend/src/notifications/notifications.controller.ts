@@ -34,10 +34,12 @@ export class NotificationsController {
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
   ) {
+    // Clamp pagination — an authenticated user could otherwise request a huge
+    // perPage and force an unbounded read.
     return this.notifications.listForUser(
       user.sub,
-      Number(page) || 1,
-      Number(perPage) || 30,
+      Math.max(Number(page) || 1, 1),
+      Math.min(Math.max(Number(perPage) || 30, 1), 100),
     );
   }
 

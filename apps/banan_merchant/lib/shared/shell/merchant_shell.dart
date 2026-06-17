@@ -345,18 +345,23 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
             iconSelected: Icons.star,
             route: '/reviews',
           ),
-          const _NavItem(
-            label: 'Newsletter',
-            icon: Icons.mail_outline,
-            iconSelected: Icons.mail,
-            route: '/newsletter',
-          ),
-          const _NavItem(
-            label: 'Thông báo',
-            icon: Icons.notifications_active_outlined,
-            iconSelected: Icons.notifications_active,
-            route: '/broadcast',
-          ),
+          // Newsletter + system broadcast are chain-wide marketing → admin-only
+          // (the backend enforces ADMIN on these routes; hide them for owners/
+          // staff so they don't tap into a 403).
+          if (isAdmin)
+            const _NavItem(
+              label: 'Newsletter',
+              icon: Icons.mail_outline,
+              iconSelected: Icons.mail,
+              route: '/newsletter',
+            ),
+          if (isAdmin)
+            const _NavItem(
+              label: 'Thông báo',
+              icon: Icons.notifications_active_outlined,
+              iconSelected: Icons.notifications_active,
+              route: '/broadcast',
+            ),
         ],
       ),
       const _NavGroup(

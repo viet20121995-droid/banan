@@ -316,22 +316,25 @@ export class NewsletterService {
     });
   }
 
+  // Escapes the 5 HTML-significant chars (incl. both quotes, for attribute
+  // contexts). Shared by every place that injects user-provided text into an
+  // outbound email (campaign body/subject/image + the verify-email greeting).
+  private escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   private renderCampaign(
     subject: string,
     body: string,
     unsubscribeUrl: string,
     imageUrl?: string,
   ): string {
-    // Escape quotes too — `imageUrl` lands in an HTML attribute, so without
-    // escaping `"` a value like `x.png" onerror=...` would break out of the
-    // src attribute (stored injection into the outbound campaign email).
-    const esc = (s: string) =>
-      s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+    const esc = (s: string) => this.escapeHtml(s);
     const bodyHtml = esc(body).replace(/\n/g, '<br>');
     // Only embed an http(s) image — never a javascript:/data: URL.
     const safeImage =
@@ -367,7 +370,11 @@ export class NewsletterService {
     const unsubscribeUrl =
       `${this.email.apiBaseUrl}/newsletter/unsubscribe?token=` +
       encodeURIComponent(token);
-    const greeting = name ? `Xin chào ${name},` : 'Xin chào,';
+    // `name` comes from the public subscribe form — escape it before it lands
+    // in the email HTML (the campaign path escapes; this one must too).
+    const greeting = name
+      ? `Xin chào ${this.escapeHtml(name)},`
+      : 'Xin chào,';
     const html = `
       <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2b2a22;">
         <h2 style="color:#1E6A35;margin:0 0 12px 0">Cảm ơn bạn đã đăng ký!</h2>

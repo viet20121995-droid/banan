@@ -98,9 +98,13 @@ export class NewsletterController {
 }
 
 @ApiBearerAuth()
-@ApiTags('merchant.newsletter')
+@ApiTags('admin.newsletter')
+// Chain-wide marketing: the full subscriber list, CSV export and campaign
+// sends are system-level, so admin-only — a merchant owner shouldn't see/export
+// every subscriber or email the whole base. (Path kept so the admin app route
+// is unchanged.)
 @Controller({ path: 'merchant/newsletter', version: '1' })
-@Roles(Role.MERCHANT_OWNER, Role.ADMIN)
+@Roles(Role.ADMIN)
 export class MerchantNewsletterController {
   constructor(private readonly newsletter: NewsletterService) {}
 
