@@ -914,7 +914,9 @@ export class OrdersService {
         code: order.code,
         fromStatus: order.status,
         toStatus: 'SENT_TO_KITCHEN',
-        kitchenStatus: 'PREPARING',
+        // Mirror what we persisted (PENDING_ACK) so listeners don't show the
+        // order in the wrong kitchen column until the next refetch.
+        kitchenStatus: updated.kitchenStatus,
         at: new Date().toISOString(),
       },
     );

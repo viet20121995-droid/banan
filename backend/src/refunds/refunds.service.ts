@@ -74,12 +74,19 @@ export class RefundsService {
     return refund;
   }
 
-  async findOne(id: string): Promise<Refund & { order: Order; payment: Payment | null }> {
+  async findOne(
+    id: string,
+    actor?: ActorContext,
+  ): Promise<Refund & { order: Order; payment: Payment | null }> {
     const refund = await this.prisma.refund.findUnique({
       where: { id },
       include: { order: true, payment: true },
     });
     if (!refund) throw new NotFoundException({ code: 'REFUND_NOT_FOUND' });
+    // Scope reads: a merchant/staff may only see their own store's refund
+    // (it bundles full order + payment data). Without this, any valid refund
+    // UUID would leak another store's payment details.
+    if (actor) this.assertCanRead(refund.order, actor);
     return refund;
   }
 
@@ -201,6 +208,18 @@ export class RefundsService {
   private assertCanApprove(order: { storeId: string }, actor: ActorContext) {
     if (actor.role === 'ADMIN') return;
     if (actor.role === 'MERCHANT_OWNER' && actor.storeId === order.storeId) return;
+    throw new ForbiddenException({ code: 'AUTH_FORBIDDEN' });
+  }
+
+  /** Read scope: admin, or owner/staff of the refund's own store. */
+  private assertCanRead(order: { storeId: string }, actor: ActorContext) {
+    if (actor.role === 'ADMIN') return;
+    if (
+      (actor.role === 'MERCHANT_OWNER' || actor.role === 'MERCHANT_STAFF') &&
+      actor.storeId === order.storeId
+    ) {
+      return;
+    }
     throw new ForbiddenException({ code: 'AUTH_FORBIDDEN' });
   }
 

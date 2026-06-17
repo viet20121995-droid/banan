@@ -42,8 +42,8 @@ export class RefundsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.refunds.findOne(id);
+  findOne(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
+    return this.refunds.findOne(id, user);
   }
 
   @Roles(Role.MERCHANT_OWNER, Role.ADMIN)

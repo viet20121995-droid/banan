@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -324,7 +325,22 @@ export class CustomersService {
       birthday?: string;
     },
   ) {
-    await this.loadServed(storeId, customerId);
+    const { user } = await this.loadServed(storeId, customerId);
+
+    // A merchant/staff (store-scoped) must NOT change the login identity
+    // (email/phone) of a CLAIMED account: changing email would let them point
+    // password-reset at an address they control and take the account over.
+    // Only admin (storeId === null) or unclaimed CRM/guest stubs may change it;
+    // a claimed customer changes email via the self-service confirmation flow.
+    const guardIdentity = () => {
+      if (user.claimed && storeId !== null) {
+        throw new ForbiddenException({
+          code: 'CANNOT_EDIT_VERIFIED_IDENTITY',
+          message:
+            'Tài khoản đã xác thực — email/số điện thoại chỉ chủ tài khoản tự đổi trong ứng dụng.',
+        });
+      }
+    };
 
     const data: Prisma.UserUpdateInput = {};
     if (input.fullName !== undefined) {
@@ -338,11 +354,18 @@ export class CustomersService {
       data.fullName = name;
     }
     if (input.phone !== undefined) {
-      data.phone = input.phone.trim() || null;
+      const phone = input.phone.trim() || null;
+      if (phone !== user.phone) {
+        guardIdentity();
+        data.phone = phone;
+      }
     }
     if (input.email !== undefined) {
       const email = input.email.trim().toLowerCase();
-      if (email.length > 0) data.email = email;
+      if (email.length > 0 && email !== user.email) {
+        guardIdentity();
+        data.email = email;
+      }
     }
     if (input.birthday !== undefined) {
       const raw = input.birthday.trim();

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Query,
@@ -27,6 +28,14 @@ export class ReportsController {
     user: AuthPrincipal,
     q: { from?: string; to?: string; storeId?: string },
   ) {
+    // A non-admin with no store would otherwise fall through to a null
+    // (chain-wide) scope and see every store's figures — refuse it.
+    if (user.role !== Role.ADMIN && !user.storeId) {
+      throw new BadRequestException({
+        code: 'NO_STORE_ASSIGNED',
+        message: 'Tài khoản chưa được gán cửa hàng.',
+      });
+    }
     const scopedStore =
       user.role === Role.ADMIN
         ? q.storeId
