@@ -1,0 +1,66 @@
+<svg viewBox="0 0 680 462" xmlns="http://www.w3.org/2000/svg"><defs><marker id="a2" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#6E6A60"/></marker><style>
+text{font-family:Arial,sans-serif;}
+.h{font-family:Arial,sans-serif;font-weight:700;fill:#2B2A22;}
+.sub{fill:#6E6A60;}
+.tag{fill:#6E6A60;font-weight:700;letter-spacing:1.1px;}
+.box{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.25;}
+.bt{fill:#2B2A22;font-weight:700;}
+.bs{fill:#6E6A60;}
+.chip{fill:#FFFFFF;stroke:#E7E4DC;stroke-width:1;}
+.ct{fill:#2B2A22;font-weight:600;}
+.edge{stroke:#6E6A60;stroke-width:1.4;fill:none;}
+.edged{stroke:#6E6A60;stroke-width:1.2;fill:none;stroke-dasharray:5 4;}
+.lbl{fill:#6E6A60;}
+.act{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.25;}
+.an{fill:#2B2A22;font-weight:700;}
+.life{stroke:#E7E4DC;stroke-width:1.2;stroke-dasharray:3 4;}
+.fwd{stroke:#6E6A60;stroke-width:1.4;fill:none;}
+.ret{stroke:#6E6A60;stroke-width:1.2;fill:none;stroke-dasharray:5 4;}
+.ml{fill:#2B2A22;}
+.note{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1;}
+.nt{fill:#6E6A60;font-style:italic;}
+.ent{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.25;}
+.det{fill:#FFFFFF;stroke:#E7E4DC;stroke-width:1;stroke-dasharray:5 4;}
+.en{fill:#2B2A22;font-weight:700;}
+.fld{fill:#6E6A60;font-family:Consolas,monospace;}
+.div{stroke:#E7E4DC;stroke-width:1;}
+.rel{stroke:#6E6A60;stroke-width:1.4;fill:none;}
+.reld{stroke:#6E6A60;stroke-width:1.2;fill:none;stroke-dasharray:5 4;}
+.card{fill:#2B2A22;font-weight:700;}
+.cap{fill:#6E6A60;}
+.st{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.4;}
+.done{fill:#FFFFFF;stroke:#1E7A3E;stroke-width:1.6;}
+.term{fill:#FFFFFF;stroke:#E7E4DC;stroke-width:1.2;stroke-dasharray:5 4;}
+.sl{fill:#2B2A22;font-weight:700;}
+.eng{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.4;}
+.step{fill:#2B2A22;font-weight:600;}
+.tot{fill:#2B2A22;font-weight:700;}
+.hd{fill:#6E6A60;font-weight:700;}
+.rl{fill:#2B2A22;font-weight:600;}
+.grid{stroke:#E7E4DC;stroke-width:1;}
+.app{fill:#2B2A22;font-weight:600;}
+.no{fill:#6E6A60;}
+</style></defs><rect x="0" y="0" width="680" height="462" fill="#FFFFFF"/>
+<text class="h" x="24" y="24" font-size="18">Luồng đặt hàng</text>
+<g font-size="11.5">
+<rect class="act" x="12" y="36" width="116" height="32" rx="7"/><text class="an" x="70" y="56" text-anchor="middle">Khách</text>
+<rect class="act" x="192" y="36" width="116" height="32" rx="7"/><text class="an" x="250" y="56" text-anchor="middle">API NestJS</text>
+<rect class="act" x="372" y="36" width="116" height="32" rx="7"/><text class="an" x="430" y="56" text-anchor="middle">PostgreSQL</text>
+<rect class="act" x="540" y="36" width="120" height="32" rx="7"/><text class="an" x="600" y="56" text-anchor="middle">Bếp / Cửa hàng</text>
+</g>
+<line class="life" x1="70" y1="68" x2="70" y2="424"/><line class="life" x1="250" y1="68" x2="250" y2="424"/><line class="life" x1="430" y1="68" x2="430" y2="424"/><line class="life" x1="600" y1="68" x2="600" y2="424"/>
+<g font-size="10">
+<line class="fwd" x1="70" y1="98" x2="250" y2="98" marker-end="url(#a2)"/><text class="ml" x="78" y="92">GET /products · duyệt menu</text>
+<line class="fwd" x1="250" y1="126" x2="430" y2="126" marker-end="url(#a2)"/><text class="ml" x="258" y="120">truy vấn catalog</text>
+<line class="ret" x1="430" y1="154" x2="250" y2="154" marker-end="url(#a2)"/><text class="ml" x="258" y="148">danh sách món</text>
+<rect class="note" x="78" y="172" width="168" height="20" rx="5"/><text class="nt" x="86" y="186">Thêm giỏ · chọn lịch (lead-time)</text>
+<line class="fwd" x1="70" y1="214" x2="250" y2="214" marker-end="url(#a2)"/><text class="ml" x="78" y="208">POST /orders {coupon·điểm·giftcard}</text>
+<rect class="note" x="258" y="232" width="170" height="20" rx="5"/><text class="nt" x="266" y="246">Promotions.evaluate -&gt; giá cuối</text>
+<line class="fwd" x1="250" y1="274" x2="430" y2="274" marker-end="url(#a2)"/><text class="ml" x="258" y="268">tạo Order + giảm tồn (transaction)</text>
+<line class="ret" x1="430" y1="302" x2="250" y2="302" marker-end="url(#a2)"/><text class="ml" x="360" y="296">OK</text>
+<line class="fwd" x1="250" y1="330" x2="600" y2="330" marker-end="url(#a2)"/><text class="ml" x="258" y="324">WebSocket + FCM đơn mới</text>
+<line class="ret" x1="250" y1="358" x2="70" y2="358" marker-end="url(#a2)"/><text class="ml" x="78" y="352">201 · mã đơn · email (Resend)</text>
+<line class="fwd" x1="600" y1="386" x2="250" y2="386" marker-end="url(#a2)"/><text class="ml" x="300" y="380">PATCH trạng thái (đang làm -&gt; sẵn sàng)</text>
+<line class="fwd" x1="250" y1="414" x2="70" y2="414" marker-end="url(#a2)"/><text class="ml" x="78" y="408">WebSocket · đơn cập nhật</text>
+</g>
+<text class="sub" x="24" y="446" font-size="9.5">Nét liền = yêu cầu/sự kiện · nét đứt = phản hồi.  Realtime qua Socket.IO · email qua Resend · push qua Firebase FCM.</text></svg>

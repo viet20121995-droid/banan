@@ -775,25 +775,55 @@ class _CategoryChips extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Wrap (not a horizontal scroller) so every collection is visible at
-    // once — chips flow onto as many rows as needed at any screen width.
-    return Wrap(
-      spacing: BananSpacing.sm,
-      runSpacing: BananSpacing.sm,
-      children: [
-        _Chip(
-          label: ref.watch(stringsProvider).all,
-          selected: selectedId == null,
-          onTap: () => onSelect(null),
+    // Capped at THREE rows that scroll horizontally together — keeps the
+    // category bar tidy on tablet / mobile (where a plain Wrap spilled onto
+    // many rows and pushed the menu down). Chips are distributed round-robin
+    // across the 3 rows so the rows stay balanced; the whole block scrolls as
+    // one. On wide screens it simply doesn't need to scroll.
+    final chips = <Widget>[
+      _Chip(
+        label: ref.watch(stringsProvider).all,
+        selected: selectedId == null,
+        onTap: () => onSelect(null),
+      ),
+      ...categories.map(
+        (c) => _Chip(
+          label: c.name,
+          selected: selectedId == c.id,
+          onTap: () => onSelect(c.id),
         ),
-        ...categories.map(
-          (c) => _Chip(
-            label: c.name,
-            selected: selectedId == c.id,
-            onTap: () => onSelect(c.id),
-          ),
-        ),
-      ],
+      ),
+    ];
+    final rows = <List<Widget>>[[], [], []];
+    for (var i = 0; i < chips.length; i++) {
+      rows[i % 3].add(chips[i]);
+    }
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.zero,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var ri = 0; ri < rows.length; ri++)
+            if (rows[ri].isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: ri < rows.length - 1 ? BananSpacing.sm : 0,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final chip in rows[ri])
+                      Padding(
+                        padding: const EdgeInsets.only(right: BananSpacing.sm),
+                        child: chip,
+                      ),
+                  ],
+                ),
+              ),
+        ],
+      ),
     );
   }
 }
@@ -815,6 +845,8 @@ class _Chip extends StatelessWidget {
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 }

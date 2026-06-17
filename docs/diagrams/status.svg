@@ -1,0 +1,67 @@
+<svg viewBox="0 0 680 372" xmlns="http://www.w3.org/2000/svg"><defs><marker id="a4" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#6E6A60"/></marker><style>
+text{font-family:Arial,sans-serif;}
+.h{font-family:Arial,sans-serif;font-weight:700;fill:#2B2A22;}
+.sub{fill:#6E6A60;}
+.tag{fill:#6E6A60;font-weight:700;letter-spacing:1.1px;}
+.box{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.25;}
+.bt{fill:#2B2A22;font-weight:700;}
+.bs{fill:#6E6A60;}
+.chip{fill:#FFFFFF;stroke:#E7E4DC;stroke-width:1;}
+.ct{fill:#2B2A22;font-weight:600;}
+.edge{stroke:#6E6A60;stroke-width:1.4;fill:none;}
+.edged{stroke:#6E6A60;stroke-width:1.2;fill:none;stroke-dasharray:5 4;}
+.lbl{fill:#6E6A60;}
+.act{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.25;}
+.an{fill:#2B2A22;font-weight:700;}
+.life{stroke:#E7E4DC;stroke-width:1.2;stroke-dasharray:3 4;}
+.fwd{stroke:#6E6A60;stroke-width:1.4;fill:none;}
+.ret{stroke:#6E6A60;stroke-width:1.2;fill:none;stroke-dasharray:5 4;}
+.ml{fill:#2B2A22;}
+.note{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1;}
+.nt{fill:#6E6A60;font-style:italic;}
+.ent{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.25;}
+.det{fill:#FFFFFF;stroke:#E7E4DC;stroke-width:1;stroke-dasharray:5 4;}
+.en{fill:#2B2A22;font-weight:700;}
+.fld{fill:#6E6A60;font-family:Consolas,monospace;}
+.div{stroke:#E7E4DC;stroke-width:1;}
+.rel{stroke:#6E6A60;stroke-width:1.4;fill:none;}
+.reld{stroke:#6E6A60;stroke-width:1.2;fill:none;stroke-dasharray:5 4;}
+.card{fill:#2B2A22;font-weight:700;}
+.cap{fill:#6E6A60;}
+.st{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.4;}
+.done{fill:#FFFFFF;stroke:#1E7A3E;stroke-width:1.6;}
+.term{fill:#FFFFFF;stroke:#E7E4DC;stroke-width:1.2;stroke-dasharray:5 4;}
+.sl{fill:#2B2A22;font-weight:700;}
+.eng{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.4;}
+.step{fill:#2B2A22;font-weight:600;}
+.tot{fill:#2B2A22;font-weight:700;}
+.hd{fill:#6E6A60;font-weight:700;}
+.rl{fill:#2B2A22;font-weight:600;}
+.grid{stroke:#E7E4DC;stroke-width:1;}
+.app{fill:#2B2A22;font-weight:600;}
+.no{fill:#6E6A60;}
+</style></defs><rect x="0" y="0" width="680" height="372" fill="#FFFFFF"/>
+<text class="h" x="24" y="24" font-size="18">Vòng đời trạng thái đơn</text>
+<g font-size="10" text-anchor="middle">
+<rect class="st" x="24" y="58" width="130" height="36" rx="8"/><text class="sl" x="89" y="80">PENDING</text>
+<rect class="st" x="190" y="58" width="130" height="36" rx="8"/><text class="sl" x="255" y="80">ACCEPTED</text>
+<rect class="st" x="356" y="58" width="140" height="36" rx="8"/><text class="sl" x="426" y="80">IN_PREPARATION</text>
+<rect class="st" x="520" y="58" width="136" height="36" rx="8"/><text class="sl" x="588" y="76">SENT_TO</text><text class="sl" x="588" y="88">_KITCHEN</text>
+</g>
+<line class="edge" x1="154" y1="76" x2="188" y2="76" marker-end="url(#a4)"/><line class="edge" x1="320" y1="76" x2="354" y2="76" marker-end="url(#a4)"/><line class="edge" x1="496" y1="76" x2="518" y2="76" marker-end="url(#a4)"/>
+<text class="nt" x="520" y="112" font-size="9">Bếp: PENDING_ACK -&gt; PREPARING -&gt; READY_DISPATCH</text>
+<path class="edge" d="M588,94 L588,126 L89,126 L89,150" marker-end="url(#a4)"/>
+<g font-size="10" text-anchor="middle">
+<rect class="st" x="24" y="152" width="150" height="36" rx="8"/><text class="sl" x="99" y="170">READY_FOR</text><text class="sl" x="99" y="182">_PICKUP</text>
+<rect class="st" x="266" y="152" width="130" height="36" rx="8"/><text class="sl" x="331" y="174">DELIVERING</text>
+<rect class="done" x="486" y="152" width="150" height="36" rx="8"/><text class="sl" x="561" y="174">COMPLETED</text>
+</g>
+<line class="edge" x1="174" y1="170" x2="264" y2="170" marker-end="url(#a4)"/><text class="lbl" x="180" y="164" font-size="9">giao hàng</text>
+<line class="edge" x1="396" y1="170" x2="484" y2="170" marker-end="url(#a4)"/>
+<path class="edge" d="M99,152 L99,134 L561,134 L561,150" marker-end="url(#a4)"/><text class="lbl" x="300" y="129" font-size="9">nhận tại quầy</text>
+<rect class="term" x="24" y="252" width="150" height="34" rx="8"/><text class="sl" x="99" y="273" font-size="10" text-anchor="middle">CANCELLED</text>
+<rect class="term" x="486" y="252" width="150" height="34" rx="8"/><text class="sl" x="561" y="273" font-size="10" text-anchor="middle">REFUNDED</text>
+<path class="edged" d="M255,94 L255,230 L99,230 L99,250" marker-end="url(#a4)"/><text class="lbl" x="150" y="224" font-size="9">huỷ khi PENDING / ACCEPTED</text>
+<line class="edged" x1="561" y1="188" x2="561" y2="250" marker-end="url(#a4)"/><text class="lbl" x="568" y="224" font-size="9">hoàn tiền</text>
+<text class="sub" x="24" y="316" font-size="9.5">Viền xanh = kết thúc thành công · nét đứt = nhánh huỷ/hoàn.</text>
+<text class="sub" x="24" y="332" font-size="9.5">SENT_TO_KITCHEN chỉ xuất hiện với đơn cần bếp trung tâm; đơn làm tại quầy đi thẳng IN_PREPARATION -&gt; READY_FOR_PICKUP.</text></svg>

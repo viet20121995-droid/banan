@@ -1,0 +1,88 @@
+<svg viewBox="0 0 680 652" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ar" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#6E6A60"/></marker><style>
+text{font-family:Arial,sans-serif;}
+.h{font-family:Arial,sans-serif;font-weight:700;fill:#2B2A22;}
+.sub{fill:#6E6A60;}
+.tag{fill:#6E6A60;font-weight:700;letter-spacing:1.1px;}
+.box{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.25;}
+.bt{fill:#2B2A22;font-weight:700;}
+.bs{fill:#6E6A60;}
+.chip{fill:#FFFFFF;stroke:#E7E4DC;stroke-width:1;}
+.ct{fill:#2B2A22;font-weight:600;}
+.edge{stroke:#6E6A60;stroke-width:1.4;fill:none;}
+.edged{stroke:#6E6A60;stroke-width:1.2;fill:none;stroke-dasharray:5 4;}
+.lbl{fill:#6E6A60;}
+.act{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.25;}
+.an{fill:#2B2A22;font-weight:700;}
+.life{stroke:#E7E4DC;stroke-width:1.2;stroke-dasharray:3 4;}
+.fwd{stroke:#6E6A60;stroke-width:1.4;fill:none;}
+.ret{stroke:#6E6A60;stroke-width:1.2;fill:none;stroke-dasharray:5 4;}
+.ml{fill:#2B2A22;}
+.note{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1;}
+.nt{fill:#6E6A60;font-style:italic;}
+.ent{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.25;}
+.det{fill:#FFFFFF;stroke:#E7E4DC;stroke-width:1;stroke-dasharray:5 4;}
+.en{fill:#2B2A22;font-weight:700;}
+.fld{fill:#6E6A60;font-family:Consolas,monospace;}
+.div{stroke:#E7E4DC;stroke-width:1;}
+.rel{stroke:#6E6A60;stroke-width:1.4;fill:none;}
+.reld{stroke:#6E6A60;stroke-width:1.2;fill:none;stroke-dasharray:5 4;}
+.card{fill:#2B2A22;font-weight:700;}
+.cap{fill:#6E6A60;}
+.st{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.4;}
+.done{fill:#FFFFFF;stroke:#1E7A3E;stroke-width:1.6;}
+.term{fill:#FFFFFF;stroke:#E7E4DC;stroke-width:1.2;stroke-dasharray:5 4;}
+.sl{fill:#2B2A22;font-weight:700;}
+.eng{fill:#FFFFFF;stroke:#D8D5CC;stroke-width:1.4;}
+.step{fill:#2B2A22;font-weight:600;}
+.tot{fill:#2B2A22;font-weight:700;}
+.hd{fill:#6E6A60;font-weight:700;}
+.rl{fill:#2B2A22;font-weight:600;}
+.grid{stroke:#E7E4DC;stroke-width:1;}
+.app{fill:#2B2A22;font-weight:600;}
+.no{fill:#6E6A60;}
+</style></defs><rect x="0" y="0" width="680" height="652" fill="#FFFFFF"/>
+<text class="h" x="24" y="25" font-size="19">Banan — Sơ đồ hệ thống</text>
+<text class="sub" x="24" y="44" font-size="11">Nền tảng đặt bánh kissaten · 3 app Flutter Web + API NestJS · banancakes.vn</text>
+<text class="tag" x="24" y="73" font-size="10">ỨNG DỤNG — FLUTTER WEB · Riverpod · go_router · Dio</text>
+<rect class="box" x="24" y="82" width="196" height="66" rx="8"/><rect x="31" y="94" width="3" height="42" rx="1.5" fill="#C9405C"/><text class="bt" x="42" y="110" font-size="13">Khách hàng</text><text class="bs" x="42" y="130" font-size="10.5">banancakes.vn</text>
+<rect class="box" x="242" y="82" width="196" height="66" rx="8"/><rect x="249" y="94" width="3" height="42" rx="1.5" fill="#C9405C"/><text class="bt" x="260" y="110" font-size="13">Cửa hàng · Admin</text><text class="bs" x="260" y="130" font-size="10.5">merchant.banancakes.vn</text>
+<rect class="box" x="460" y="82" width="196" height="66" rx="8"/><rect x="467" y="94" width="3" height="42" rx="1.5" fill="#C9405C"/><text class="bt" x="478" y="110" font-size="13">Bếp</text><text class="bs" x="478" y="130" font-size="10.5">kitchen.banancakes.vn</text>
+<line class="edge" x1="340" y1="150" x2="340" y2="187" marker-end="url(#ar)"/><text class="lbl" x="348" y="172" font-size="10">HTTPS · JSON</text>
+<rect class="box" x="24" y="190" width="632" height="46" rx="8"/><rect x="31" y="200" width="3" height="26" rx="1.5" fill="#C99A3C"/><text class="bt" x="42" y="210" font-size="12.5">Caddy 2 — Cổng vào (Edge)</text><text class="bs" x="42" y="227" font-size="10.5">Reverse proxy · HTTPS tự động (Let's Encrypt) · phục vụ web tĩnh</text>
+<line class="edge" x1="259" y1="236" x2="259" y2="277" marker-end="url(#ar)"/><text class="lbl" x="267" y="260" font-size="10">REST /api/v1 · WebSocket</text>
+<rect class="box" x="24" y="280" width="470" height="200" rx="8"/><rect x="31" y="292" width="3" height="176" rx="1.5" fill="#1E7A3E"/>
+<text class="bt" x="42" y="302" font-size="13">NestJS 10 · REST API  /api/v1</text>
+<text class="bs" x="42" y="319" font-size="10">+ Realtime Gateway (Socket.IO) · Prisma ORM · Scheduler (cron)</text>
+<text class="bs" x="42" y="338" font-size="10">JWT · RBAC 6 vai trò · Envelope {data} · Throttler · Resend/FCM</text>
+<g font-size="10.5">
+<rect class="chip" x="42" y="350" width="138" height="24" rx="6"/><text class="ct" x="51" y="366">Auth · RBAC</text>
+<rect class="chip" x="190" y="350" width="138" height="24" rx="6"/><text class="ct" x="199" y="366">Đơn hàng</text>
+<rect class="chip" x="338" y="350" width="138" height="24" rx="6"/><text class="ct" x="347" y="366">Sản phẩm · Danh mục</text>
+<rect class="chip" x="42" y="382" width="138" height="24" rx="6"/><text class="ct" x="51" y="398">Combo · Bộ sưu tập</text>
+<rect class="chip" x="190" y="382" width="138" height="24" rx="6"/><text class="ct" x="199" y="398">Khuyến mãi</text>
+<rect class="chip" x="338" y="382" width="138" height="24" rx="6"/><text class="ct" x="347" y="398">Loyalty · Micho</text>
+<rect class="chip" x="42" y="414" width="138" height="24" rx="6"/><text class="ct" x="51" y="430">Coupon · Gift card</text>
+<rect class="chip" x="190" y="414" width="138" height="24" rx="6"/><text class="ct" x="199" y="430">Khách hàng · CRM</text>
+<rect class="chip" x="338" y="414" width="138" height="24" rx="6"/><text class="ct" x="347" y="430">Newsletter · Thông báo</text>
+<rect class="chip" x="42" y="446" width="138" height="24" rx="6"/><text class="ct" x="51" y="462">Đánh giá</text>
+<rect class="chip" x="190" y="446" width="138" height="24" rx="6"/><text class="ct" x="199" y="462">Báo cáo · Analytics</text>
+<rect class="chip" x="338" y="446" width="138" height="24" rx="6"/><text class="ct" x="347" y="462">Uploads · Thanh toán</text>
+</g>
+<text class="tag" x="512" y="293" font-size="10">DỊCH VỤ NGOÀI</text>
+<rect class="box" x="512" y="300" width="144" height="72" rx="8"/><rect x="519" y="312" width="3" height="48" rx="1.5" fill="#7A4FA3"/><text class="bt" x="530" y="332" font-size="12.5">Resend</text><text class="bs" x="530" y="351" font-size="10">Email + newsletter</text>
+<rect class="box" x="512" y="384" width="144" height="72" rx="8"/><rect x="519" y="396" width="3" height="48" rx="1.5" fill="#7A4FA3"/><text class="bt" x="530" y="416" font-size="12.5">Firebase FCM</text><text class="bs" x="530" y="435" font-size="10">Web push -&gt; app</text>
+<line class="edge" x1="494" y1="336" x2="510" y2="336" marker-end="url(#ar)"/><line class="edge" x1="494" y1="420" x2="510" y2="420" marker-end="url(#ar)"/>
+<line class="edge" x1="259" y1="480" x2="259" y2="507" marker-end="url(#ar)"/><text class="lbl" x="267" y="497" font-size="10">đọc / ghi</text>
+<text class="tag" x="24" y="502" font-size="10">DỮ LIỆU &amp; LƯU TRỮ</text>
+<rect class="box" x="24" y="510" width="200" height="56" rx="8"/><rect x="31" y="520" width="3" height="36" rx="1.5" fill="#2A6F97"/><text class="bt" x="42" y="534" font-size="12.5">PostgreSQL 16</text><text class="bs" x="42" y="551" font-size="10">Dữ liệu · Prisma migrations</text>
+<rect class="box" x="240" y="510" width="200" height="56" rx="8"/><rect x="247" y="520" width="3" height="36" rx="1.5" fill="#2A6F97"/><text class="bt" x="258" y="534" font-size="12.5">Redis 7</text><text class="bs" x="258" y="551" font-size="10">Cache · throttle · realtime</text>
+<rect class="box" x="456" y="510" width="200" height="56" rx="8"/><rect x="463" y="520" width="3" height="36" rx="1.5" fill="#2A6F97"/><text class="bt" x="474" y="534" font-size="12.5">Uploads (volume)</text><text class="bs" x="474" y="551" font-size="10">Ảnh /uploads · CORS</text>
+<text class="sub" x="24" y="590" font-size="9.5">Triển khai: Docker Compose trên 1 VPS (PA Vietnam, Ubuntu) — Caddy + Backend + PostgreSQL + Redis cùng mạng nội bộ.</text>
+<text class="sub" x="24" y="604" font-size="9.5">Cập nhật: build Flutter web (dart-define API) -&gt; tar/scp -&gt; Caddy phục vụ tĩnh · Backend: git pull -&gt; docker build -&gt; prisma migrate deploy.</text>
+<g font-size="9.5">
+<rect x="24" y="623" width="11" height="11" rx="2" fill="#C9405C"/><text class="lbl" x="40" y="632">Ứng dụng</text>
+<rect x="150" y="623" width="11" height="11" rx="2" fill="#C99A3C"/><text class="lbl" x="166" y="632">Edge/Proxy</text>
+<rect x="290" y="623" width="11" height="11" rx="2" fill="#1E7A3E"/><text class="lbl" x="306" y="632">Backend</text>
+<rect x="420" y="623" width="11" height="11" rx="2" fill="#2A6F97"/><text class="lbl" x="436" y="632">Dữ liệu</text>
+<rect x="535" y="623" width="11" height="11" rx="2" fill="#7A4FA3"/><text class="lbl" x="551" y="632">Dịch vụ ngoài</text>
+</g></svg>

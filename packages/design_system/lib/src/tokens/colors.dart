@@ -27,10 +27,11 @@ class BananColors {
   static const Color gold = Color(0xFFD4B14B);
   static const Color goldLight = Color(0xFFEAD589);
 
-  // ── Neutrals — warm cream backdrop. Slightly less peach than before so
-  // it harmonises with the green+red brand without fighting it.
-  static const Color cream = Color(0xFFF7EBC8);       // logo cream-segment tone
-  static const Color surface = Color(0xFFFCF6E2);     // page background
+  // ── Neutrals — soft PEACH backdrop (reverted from the tan/golden tone,
+  // which read a bit dark). Warmer + lighter so the page feels airy under
+  // the green+red brand accents.
+  static const Color cream = Color(0xFFFCEBDF);       // peach-cream page backdrop
+  static const Color surface = Color(0xFFFFF7F0);     // card surface (lighter peach)
   static const Color surfaceDim = Color(0xFFEEDFAE);  // kraft / dim surface
   static const Color cocoa = Color(0xFF2B2A22);       // sumi ink — body text
   static const Color cocoaSoft = Color(0xFF5E5848);   // secondary text
