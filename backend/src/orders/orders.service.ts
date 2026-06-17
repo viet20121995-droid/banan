@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { KitchenStatus, OrderStatus, Payment, Prisma, Role } from '@prisma/client';
+import { KitchenStatus, OrderStatus, Prisma, Refund, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'node:crypto';
 
@@ -802,13 +802,13 @@ export class OrdersService {
       // blocked any retry. External effects (refund-request rows, realtime,
       // push) stay after the commit; they don't corrupt money state if they
       // fail and are independently retryable/idempotent.
-      let captured: Payment[] = [];
+      const createdRefunds: Refund[] = [];
       if (toStatus === 'COMPLETED') {
         await this.payments.onOrderCompleted(id, tx);
         await this.loyalty.earnFor(order, tx);
       } else if (toStatus === 'CANCELLED') {
         await this.loyalty.refundRedemption(id, tx);
-        captured = (await this.payments.onOrderCancelled(id, tx)).capturedPayments;
+        const { capturedPayments } = await this.payments.onOrderCancelled(id, tx);
         await this.restoreInventory(id, tx);
         await this.restoreGiftCard(id, tx);
         // Release coupon + campaign usage so a cancelled order doesn't burn the
@@ -816,27 +816,34 @@ export class OrdersService {
         // gift card being restored above).
         await this.coupons.reverseRedemption(id, tx);
         await this.promotions.reverseUsage(id, tx);
+        // Open a refund row for each already-captured payment INSIDE this tx,
+        // so a cancelled order can never be left without its refund row (which
+        // the status guard would then block a retry from creating). Realtime
+        // emit is deferred until after commit.
+        for (const payment of capturedPayments) {
+          const { refund, created } = await this.refunds.createRequestTx(tx, {
+            order,
+            payment,
+            reason: note ?? 'Order cancelled',
+            requestedById: actor.sub,
+            inInteractiveTx: true,
+          });
+          if (created) createdRefunds.push(refund);
+        }
       }
 
       const next = await tx.order.findUniqueOrThrow({
         where: { id },
         include: ORDER_INCLUDE,
       });
-      return { order: next, capturedPayments: captured };
+      return { order: next, createdRefunds };
     }, { timeout: 15_000 });
     const updated = txResult.order;
 
-    // Post-commit, external/best-effort: open refund requests for any payment
-    // that was already CAPTURED (rare; online payments are not live yet). Kept
-    // out of the tx because it also emits realtime + drives a provider call;
-    // createRequest is idempotent on (orderId, paymentId).
-    for (const payment of txResult.capturedPayments) {
-      await this.refunds.createRequest({
-        order,
-        payment,
-        reason: note ?? 'Order cancelled',
-        requestedById: actor.sub,
-      });
+    // Post-commit: emit realtime for refund rows created inside the tx (the
+    // emit is a side-channel, kept out of the transaction).
+    for (const refund of txResult.createdRefunds) {
+      this.refunds.notifyCreated(refund);
     }
 
     const rooms = [

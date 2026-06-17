@@ -122,21 +122,40 @@ export class PaymentsService {
         where: { orderId: order.id, paymentId: payment.id },
       });
       if (!already) {
-        await this.prisma.refund.create({
-          data: {
-            orderId: order.id,
-            paymentId: payment.id,
-            amount: payment.amount,
-            reason: `Auto: payment captured after order ${order.status}`,
-            status: 'REQUESTED',
-            requestedById: 'system',
-          },
-        });
-        this.realtime.emit([`store:${order.storeId}`], 'refund.auto_requested', {
-          orderId: order.id,
-          paymentId: payment.id,
-          at: new Date().toISOString(),
-        });
+        try {
+          await this.prisma.refund.create({
+            data: {
+              orderId: order.id,
+              paymentId: payment.id,
+              amount: payment.amount,
+              reason: `Auto: payment captured after order ${order.status}`,
+              status: 'REQUESTED',
+              requestedById: 'system',
+            },
+          });
+          this.realtime.emit(
+            [`store:${order.storeId}`],
+            'refund.auto_requested',
+            {
+              orderId: order.id,
+              paymentId: payment.id,
+              at: new Date().toISOString(),
+            },
+          );
+        } catch (e) {
+          // The cancel path's refund row won the race (partial unique index on
+          // (orderId, paymentId) for non-REJECTED). That refund already covers
+          // this payment, so the duplicate is a no-op. Standalone create (not
+          // an interactive tx), so catching is safe.
+          if (
+            !(
+              e instanceof Prisma.PrismaClientKnownRequestError &&
+              e.code === 'P2002'
+            )
+          ) {
+            throw e;
+          }
+        }
       }
       return;
     }

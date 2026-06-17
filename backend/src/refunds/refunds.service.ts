@@ -40,6 +40,76 @@ export class RefundsService {
    * Caller must have already verified scope (the order belongs to the actor's
    * store, etc.). Idempotent on `(orderId, paymentId)` for an in-flight refund.
    */
+  /**
+   * DB-only refund-request creation, runnable inside the caller's transaction
+   * (`db`) so the refund row commits atomically with e.g. an order's CANCELLED
+   * status. Idempotent: returns any in-flight/COMPLETED refund for
+   * (orderId, paymentId). Does NOT emit — the caller emits AFTER its tx
+   * commits (via notifyCreated). Returns whether a new row was created.
+   *
+   * Catches the partial-unique P2002 ONLY when not inside an interactive
+   * transaction (a caught error would otherwise poison the tx). The cancel
+   * path passes its tx but is the sole inserter at that point (the status
+   * guard blocks a second concurrent cancel, and the late-capture auto-refund
+   * only runs once the order is already CANCELLED), so no violation occurs
+   * there; the auto-refund path runs standalone and relies on the catch.
+   */
+  async createRequestTx(
+    db: Prisma.TransactionClient,
+    args: {
+      order: Order;
+      payment: Payment;
+      amount?: Prisma.Decimal | number;
+      reason: string;
+      requestedById: string;
+      inInteractiveTx?: boolean;
+    },
+  ): Promise<{ refund: Refund; created: boolean }> {
+    const findActive = () =>
+      db.refund.findFirst({
+        where: {
+          orderId: args.order.id,
+          paymentId: args.payment.id,
+          status: { in: ['REQUESTED', 'APPROVED', 'PROCESSING', 'COMPLETED'] },
+        },
+      });
+    const existing = await findActive();
+    if (existing) return { refund: existing, created: false };
+
+    const amount = args.amount
+      ? new Prisma.Decimal(args.amount.toString())
+      : args.payment.amount;
+    const data = {
+      orderId: args.order.id,
+      paymentId: args.payment.id,
+      amount,
+      reason: args.reason,
+      status: 'REQUESTED' as RefundStatus,
+      requestedById: args.requestedById,
+    };
+
+    if (args.inInteractiveTx) {
+      // Inside a tx we must NOT catch a unique violation (it aborts the tx);
+      // by construction there is no concurrent inserter here.
+      const refund = await db.refund.create({ data });
+      return { refund, created: true };
+    }
+    try {
+      const refund = await db.refund.create({ data });
+      return { refund, created: true };
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        const winner = await findActive();
+        if (winner) return { refund: winner, created: false };
+      }
+      throw e;
+    }
+  }
+
+  /** Standalone refund-request (own connection) — emits when a row is created. */
   async createRequest(args: {
     order: Order;
     payment: Payment;
@@ -47,34 +117,15 @@ export class RefundsService {
     reason: string;
     requestedById: string;
   }): Promise<Refund> {
-    // Idempotency: return any in-flight refund, and never open a second
-    // refund against a payment that already settled one (guards against a
-    // double refund from concurrent cancels or a re-fired webhook).
-    const existing = await this.prisma.refund.findFirst({
-      where: {
-        orderId: args.order.id,
-        paymentId: args.payment.id,
-        status: { in: ['REQUESTED', 'APPROVED', 'PROCESSING', 'COMPLETED'] },
-      },
-    });
-    if (existing) return existing;
-
-    const amount = args.amount
-      ? new Prisma.Decimal(args.amount.toString())
-      : args.payment.amount;
-
-    const refund = await this.prisma.refund.create({
-      data: {
-        orderId: args.order.id,
-        paymentId: args.payment.id,
-        amount,
-        reason: args.reason,
-        status: 'REQUESTED',
-        requestedById: args.requestedById,
-      },
-    });
-    this.emit(refund);
+    const { refund, created } = await this.createRequestTx(this.prisma, args);
+    if (created) this.emit(refund);
     return refund;
+  }
+
+  /** Emit the realtime event for a refund created inside someone else's tx,
+   *  called by that caller AFTER the tx commits. */
+  notifyCreated(refund: Refund): void {
+    this.emit(refund);
   }
 
   async findOne(
