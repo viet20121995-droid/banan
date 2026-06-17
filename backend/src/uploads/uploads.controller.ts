@@ -11,54 +11,16 @@ import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import type { Request } from 'express';
-import { closeSync, openSync, readSync, unlinkSync } from 'node:fs';
+import { unlinkSync } from 'node:fs';
 import { diskStorage } from 'multer';
 
 import { Roles } from '../auth/decorators/roles.decorator';
 
-// Extension is derived from the (server-detected) MIME — never from the
-// client-supplied filename — so an attacker can't keep a `.html`/`.svg`
-// extension on a file served under the API domain.
-const MIME_EXT: Record<string, string> = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
-  'image/avif': '.avif',
-};
-const ACCEPT = new Set(Object.keys(MIME_EXT));
-
-/** Reads the first bytes of the saved file and confirms it really is one of
- *  the allowed raster image formats (magic-byte sniffing). Defends against a
- *  spoofed Content-Type — the declared MIME is not trusted on its own. */
-function looksLikeAllowedImage(absPath: string): boolean {
-  let fd: number | undefined;
-  try {
-    fd = openSync(absPath, 'r');
-    const buf = Buffer.alloc(16);
-    const n = readSync(fd, buf, 0, 16, 0);
-    if (n < 12) return false;
-    // JPEG: FF D8 FF
-    if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;
-    // PNG: 89 50 4E 47
-    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
-      return true;
-    }
-    // WEBP: "RIFF"...."WEBP"
-    if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
-      return true;
-    }
-    // AVIF / HEIF family: "....ftyp" + brand avif/avis/mif1/miaf
-    if (buf.toString('ascii', 4, 8) === 'ftyp') {
-      const brand = buf.toString('ascii', 8, 12);
-      if (['avif', 'avis', 'mif1', 'miaf'].includes(brand)) return true;
-    }
-    return false;
-  } catch {
-    return false;
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
-}
+import {
+  ACCEPTED_IMAGE_MIMES,
+  extForMime,
+  fileLooksLikeImage,
+} from './image-validation';
 
 @ApiTags('uploads')
 @Controller({ path: 'uploads', version: '1' })
@@ -82,8 +44,7 @@ export class UploadsController {
           const stamp = Date.now().toString(36);
           const rand = Math.random().toString(36).slice(2, 8);
           // Extension from the accepted MIME, NOT the client filename.
-          const ext = MIME_EXT[file.mimetype] ?? '.bin';
-          cb(null, `${stamp}-${rand}${ext}`);
+          cb(null, `${stamp}-${rand}${extForMime(file.mimetype)}`);
         },
       }),
       // Hard server limit. Modern phone photos easily hit 6-12 MB, and
@@ -93,7 +54,7 @@ export class UploadsController {
       // value are accepted.
       limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
       fileFilter: (_req, file, cb) => {
-        cb(null, ACCEPT.has(file.mimetype));
+        cb(null, ACCEPTED_IMAGE_MIMES.has(file.mimetype));
       },
     }),
   )
@@ -102,7 +63,7 @@ export class UploadsController {
     // Magic-byte check on the bytes actually written — reject (and delete) a
     // file whose real content isn't an allowed image, regardless of the
     // declared Content-Type.
-    if (!looksLikeAllowedImage(file.path)) {
+    if (!fileLooksLikeImage(file.path)) {
       try {
         unlinkSync(file.path);
       } catch {

@@ -69,13 +69,15 @@ export class PayOSPaymentService {
     const cancelUrl =
       this.config.get<string>('PAYOS_CANCEL_URL') ?? returnUrl;
 
-    // PayOS requires a NUMERIC, per-merchant-unique orderCode. Millisecond
-    // timestamps alone collide for two checkouts in the same ms (and our
-    // Payment.[provider, providerRef] unique index would then reject the
-    // second). Widen to (ms × 1000 + 3 random digits) → 1000 slots per ms,
-    // still well under Number.MAX_SAFE_INTEGER. We keep the order mapping via
-    // providerRef so the webhook can locate the Payment row.
-    const orderCode = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    // PayOS requires a NUMERIC, per-merchant-unique orderCode. A Postgres
+    // sequence makes it collision-proof (vs timestamp codes that clash for
+    // two checkouts in the same millisecond and would trip the
+    // Payment.[provider, providerRef] unique index). We keep the order mapping
+    // via providerRef so the webhook can locate the Payment row.
+    const seq = await this.prisma.$queryRaw<Array<{ orderCode: bigint }>>`
+      SELECT nextval('payos_order_code_seq') AS "orderCode"
+    `;
+    const orderCode = Number(seq[0].orderCode);
     const amount = Math.round(Number(args.amount)); // PayOS amount is plain VND
     const description = `Banan ${args.orderCode}`.slice(0, 25);
 
