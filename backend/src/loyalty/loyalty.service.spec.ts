@@ -2,20 +2,31 @@ import { BadRequestException } from '@nestjs/common';
 
 import { LoyaltyService } from './loyalty.service';
 
-function makeService(balance: number) {
+// Stateful mock: the balance mutates as updates apply, and reads return the
+// current value — so the atomic-increment / guarded-decrement flow in
+// recordEvent (update/updateMany then re-read) behaves like the real DB.
+function makeService(balance: number, opts: { decrementBlocked?: boolean } = {}) {
+  let current = balance;
   const tx = {
     user: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({
-        pointsBalance: balance,
-      }),
-      // Mirrors the atomic increment: the balance-mutating update returns the
-      // new pointsBalance; the tier-only update returns nothing of interest.
-      update: jest.fn().mockImplementation(({ data }) => {
+      findUniqueOrThrow: jest.fn(() => Promise.resolve({ pointsBalance: current })),
+      update: jest.fn(({ data }: { data: { pointsBalance?: { increment?: number } } }) => {
         const inc = data?.pointsBalance?.increment;
-        return Promise.resolve(
-          inc !== undefined ? { pointsBalance: balance + inc } : {},
-        );
+        if (inc !== undefined) current += inc;
+        return Promise.resolve({ pointsBalance: current });
       }),
+      // Guarded decrement: applies only when the balance covers it (gte).
+      updateMany: jest.fn(
+        ({ where, data }: { where: { pointsBalance?: { gte?: number } }; data: { pointsBalance?: { increment?: number } } }) => {
+          const gte = where?.pointsBalance?.gte;
+          if (opts.decrementBlocked || (gte !== undefined && current < gte)) {
+            return Promise.resolve({ count: 0 });
+          }
+          const inc = data?.pointsBalance?.increment;
+          if (inc !== undefined) current += inc;
+          return Promise.resolve({ count: 1 });
+        },
+      ),
     },
     loyaltyEvent: {
       create: jest
@@ -27,9 +38,7 @@ function makeService(balance: number) {
   };
   const prisma = {
     user: {
-      findUniqueOrThrow: jest
-        .fn()
-        .mockResolvedValue({ pointsBalance: balance }),
+      findUniqueOrThrow: jest.fn(() => Promise.resolve({ pointsBalance: current })),
     },
     $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
   };
@@ -67,6 +76,22 @@ describe('LoyaltyService.adminAdjust', () => {
     expect(tx.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ pointsBalance: { increment: 25 } }),
+      }),
+    );
+  });
+
+  it('negative adjust uses a guarded decrement — throws if the balance no longer covers it (race)', async () => {
+    // Pre-check passes (balance 100 + (-10) >= 0), but the atomic conditional
+    // decrement fails (simulating a concurrent drain) → must reject, not go
+    // negative.
+    const { svc, tx } = makeService(100, { decrementBlocked: true });
+    await expect(
+      svc.adminAdjust({ userId: 'u1', delta: -10, reason: 'goodwill clawback' }),
+    ).rejects.toMatchObject({ response: { code: 'LOYALTY_NEGATIVE_BALANCE' } });
+    // Used the guarded updateMany, not an unconditional update.
+    expect(tx.user.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ pointsBalance: { gte: 10 } }),
       }),
     );
   });

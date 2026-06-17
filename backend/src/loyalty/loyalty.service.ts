@@ -209,14 +209,32 @@ export class LoyaltyService {
     reason: string;
   }): Promise<LoyaltyEvent> {
     return this.prisma.$transaction(async (tx) => {
-      // Atomic increment so concurrent mutations on the same user's balance
-      // can't lose this update (the prior read-then-absolute-write could).
-      const updated = await tx.user.update({
+      // Atomic balance mutation (no lost-update). For a NEGATIVE delta use a
+      // guarded conditional decrement so two concurrent negative adjustments
+      // can't both pass a pre-check and drive the balance below zero
+      // (adminAdjust's pre-check alone is racy).
+      if (args.delta < 0) {
+        const res = await tx.user.updateMany({
+          where: { id: args.userId, pointsBalance: { gte: -args.delta } },
+          data: { pointsBalance: { increment: args.delta } },
+        });
+        if (res.count === 0) {
+          throw new BadRequestException({
+            code: 'LOYALTY_NEGATIVE_BALANCE',
+            message: 'Số dư điểm không đủ.',
+          });
+        }
+      } else {
+        await tx.user.update({
+          where: { id: args.userId },
+          data: { pointsBalance: { increment: args.delta } },
+        });
+      }
+      const refreshed = await tx.user.findUniqueOrThrow({
         where: { id: args.userId },
-        data: { pointsBalance: { increment: args.delta } },
         select: { pointsBalance: true },
       });
-      const balanceAfter = updated.pointsBalance;
+      const balanceAfter = refreshed.pointsBalance;
       const event = await tx.loyaltyEvent.create({
         data: {
           userId: args.userId,

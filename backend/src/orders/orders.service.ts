@@ -619,6 +619,8 @@ export class OrdersService {
       await this.loyalty.refundRedemption(created.id);
       await this.restoreInventory(created.id);
       await this.restoreGiftCard(created.id);
+      await this.coupons.reverseRedemption(created.id);
+      await this.promotions.reverseUsage(created.id);
       await this.payments.onOrderCancelled(created.id);
       await this.prisma.order.update({
         where: { id: created.id },
@@ -797,6 +799,11 @@ export class OrdersService {
       }
       await this.restoreInventory(id);
       await this.restoreGiftCard(id);
+      // Release coupon + campaign usage so a cancelled order doesn't burn the
+      // customer's coupon or a campaign's allowance (mirrors points/stock/gift
+      // card being restored above).
+      await this.coupons.reverseRedemption(id);
+      await this.promotions.reverseUsage(id);
     }
 
     const rooms = [

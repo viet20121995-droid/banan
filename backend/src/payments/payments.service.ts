@@ -245,9 +245,30 @@ export class PaymentsService {
     );
   }
 
-  /** Validates the chosen method against the fulfillment type and config. */
+  /** Validates the chosen method against the fulfillment type and config.
+   *  Called BEFORE the order transaction, so an online provider that isn't
+   *  configured is rejected up-front — otherwise `initiate()` would return a
+   *  configurationError only AFTER the order committed (stock / coupon /
+   *  campaign / gift-card already consumed on an unpayable PENDING order). */
   validate(method: PaymentProvider, fulfillment: 'PICKUP' | 'DELIVERY'): void {
-    if (method === 'CASH') this.cash.validateAllowed(fulfillment);
+    if (method === 'CASH') {
+      this.cash.validateAllowed(fulfillment);
+      return;
+    }
+    const enabled =
+      method === 'STRIPE'
+        ? this.stripe.enabled
+        : method === 'PAYOS'
+          ? this.payos.enabled
+          : method === 'MOMO'
+            ? this.momo.enabled
+            : false;
+    if (!enabled) {
+      throw new BadRequestException({
+        code: 'PAYMENT_PROVIDER_UNAVAILABLE',
+        message: 'Phương thức thanh toán này hiện chưa khả dụng.',
+      });
+    }
   }
 
   async initiate(args: InitiateArgs): Promise<PaymentInstructions> {

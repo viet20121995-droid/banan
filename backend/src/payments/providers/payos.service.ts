@@ -169,19 +169,19 @@ export class PayOSPaymentService {
       this.logger.warn('PayOS webhook signature mismatch');
       return { ok: false };
     }
-    // Replay guard (fail-open): PayOS stamps each event with
-    // `transactionDateTime`. If present and clearly stale (>15 min), reject —
-    // stops a captured/old payload being replayed to flip payment state later.
-    // If the field is missing/unparseable we proceed (don't risk dropping a
-    // legitimate webhook); the capture status-guard remains the backstop.
+    // Note staleness, but do NOT drop the webhook: PayOS can retry/deliver a
+    // legitimate first PAID webhook minutes-to-hours late (or after backend
+    // downtime), and rejecting it would strand the payment at INITIATED.
+    // Replay safety is already provided downstream by applyCapture's status +
+    // amount guards (a CAPTURED/terminal payment is never re-captured), so we
+    // only log here and let those guards decide.
     const txTime = data['transactionDateTime'];
     if (typeof txTime === 'string') {
       const t = Date.parse(txTime);
       if (!Number.isNaN(t) && Date.now() - t > 15 * 60_000) {
         this.logger.warn(
-          `PayOS webhook rejected as stale (transactionDateTime=${txTime})`,
+          `PayOS webhook is stale (transactionDateTime=${txTime}) — processing anyway; status/amount guards apply`,
         );
-        return { ok: false };
       }
     }
     return {

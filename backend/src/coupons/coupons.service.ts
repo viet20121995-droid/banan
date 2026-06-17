@@ -164,6 +164,28 @@ export class CouponsService {
     });
   }
 
+  /** Reverses any coupon redemption recorded for an order — deletes the
+   *  redemption row(s) and decrements the coupon counter. Used when an order
+   *  is cancelled or its payment can't be initiated, so the coupon use isn't
+   *  burned on an order that never went through. Each row maps to exactly one
+   *  prior increment, so the decrement stays balanced. */
+  async reverseRedemption(orderId: string): Promise<void> {
+    const rows = await this.prisma.couponRedemption.findMany({
+      where: { orderId },
+      select: { id: true, couponId: true },
+    });
+    if (rows.length === 0) return;
+    await this.prisma.$transaction([
+      this.prisma.couponRedemption.deleteMany({ where: { orderId } }),
+      ...rows.map((r) =>
+        this.prisma.coupon.update({
+          where: { id: r.couponId },
+          data: { redemptions: { decrement: 1 } },
+        }),
+      ),
+    ]);
+  }
+
   /** Voucher wallet for a customer — active coupons grouped into
    *  available / used / expired. Coupons are shared codes (not assigned), so
    *  "available" = active + in-window + not exhausted (globally or per user). */

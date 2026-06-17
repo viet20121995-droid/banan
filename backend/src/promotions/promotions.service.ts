@@ -256,6 +256,27 @@ export class PromotionsService {
     }
   }
 
+  /** Reverses any campaign usage recorded for an order — deletes the
+   *  redemption row(s) and decrements usedCount. Used when an order is
+   *  cancelled or its payment can't be initiated, so a campaign's per-user /
+   *  global allowance isn't burned on an order that never completed. */
+  async reverseUsage(orderId: string): Promise<void> {
+    const rows = await this.prisma.campaignRedemption.findMany({
+      where: { orderId },
+      select: { id: true, campaignId: true },
+    });
+    if (rows.length === 0) return;
+    await this.prisma.$transaction([
+      this.prisma.campaignRedemption.deleteMany({ where: { orderId } }),
+      ...rows.map((r) =>
+        this.prisma.campaign.update({
+          where: { id: r.campaignId },
+          data: { usedCount: { decrement: 1 } },
+        }),
+      ),
+    ]);
+  }
+
   /** HAPPY_HOUR only runs inside its daily time + weekday window (VN time). */
   private isLiveNow(c: Campaign, now: Date): boolean {
     if (c.type !== 'HAPPY_HOUR') return true;

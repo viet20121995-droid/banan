@@ -311,3 +311,42 @@ describe('PaymentsService.applyRefundSettled', () => {
     expect(m.realtime.emit).toHaveBeenCalledTimes(1);
   });
 });
+
+function validateSvc(enabled: { stripe?: boolean; payos?: boolean; momo?: boolean }) {
+  const noop = {} as never;
+  return new PaymentsService(
+    noop, // prisma
+    { validateAllowed: jest.fn() } as never, // cash
+    { enabled: enabled.stripe ?? false } as never,
+    { enabled: enabled.payos ?? false } as never,
+    { enabled: enabled.momo ?? false } as never,
+    noop, // realtime
+    noop, // notifications
+  );
+}
+
+describe('PaymentsService.validate (provider availability — blocks before order creation)', () => {
+  it('throws PAYMENT_PROVIDER_UNAVAILABLE for an online provider that is not configured', () => {
+    const svc = validateSvc({ payos: false });
+    expect(() => svc.validate('PAYOS' as never, 'PICKUP')).toThrow();
+    try {
+      svc.validate('PAYOS' as never, 'PICKUP');
+    } catch (e) {
+      expect((e as { response?: { code?: string } }).response?.code).toBe(
+        'PAYMENT_PROVIDER_UNAVAILABLE',
+      );
+    }
+  });
+
+  it('allows a configured online provider', () => {
+    expect(() =>
+      validateSvc({ stripe: true }).validate('STRIPE' as never, 'PICKUP'),
+    ).not.toThrow();
+  });
+
+  it('CASH is always allowed (delegates to cash policy, no enabled check)', () => {
+    expect(() =>
+      validateSvc({}).validate('CASH' as never, 'PICKUP'),
+    ).not.toThrow();
+  });
+});
