@@ -122,7 +122,7 @@ export class CustomersService {
     // can later request a reset link if they want to log into the customer
     // app themselves.
     const tempPassword = randomBytes(12).toString('base64url');
-    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    const passwordHash = await bcrypt.hash(tempPassword, 12);
     try {
       const user = await this.prisma.user.create({
         data: {

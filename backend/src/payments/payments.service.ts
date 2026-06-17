@@ -90,6 +90,42 @@ export class PaymentsService {
       data: { status: 'CAPTURED', rawPayload: args.payload },
     });
     if (res.count === 0) return; // lost a race to a concurrent webhook
+
+    // A late webhook can capture a payment on an order the customer already
+    // cancelled (the cancel ran first and saw no captured payment to refund).
+    // The money is now at the provider against a cancelled order, so auto-open
+    // a refund for staff to process instead of leaving a stranded CAPTURED
+    // payment, and skip the celebratory "payment captured" customer ping.
+    const order = await this.prisma.order.findUnique({
+      where: { id: payment.orderId },
+      select: { id: true, status: true, storeId: true },
+    });
+    if (order && (order.status === 'CANCELLED' || order.status === 'REFUNDED')) {
+      this.logger.error(
+        `Captured ${args.provider} payment ${payment.id} on ${order.status} order ${order.id} — opening auto-refund`,
+      );
+      const already = await this.prisma.refund.findFirst({
+        where: { orderId: order.id, paymentId: payment.id },
+      });
+      if (!already) {
+        await this.prisma.refund.create({
+          data: {
+            orderId: order.id,
+            paymentId: payment.id,
+            amount: payment.amount,
+            reason: `Auto: payment captured after order ${order.status}`,
+            status: 'REQUESTED',
+            requestedById: 'system',
+          },
+        });
+        this.realtime.emit([`store:${order.storeId}`], 'refund.auto_requested', {
+          orderId: order.id,
+          paymentId: payment.id,
+          at: new Date().toISOString(),
+        });
+      }
+      return;
+    }
     await this.onCaptured(payment.orderId);
   }
 

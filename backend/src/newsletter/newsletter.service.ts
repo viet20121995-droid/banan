@@ -322,13 +322,23 @@ export class NewsletterService {
     unsubscribeUrl: string,
     imageUrl?: string,
   ): string {
+    // Escape quotes too — `imageUrl` lands in an HTML attribute, so without
+    // escaping `"` a value like `x.png" onerror=...` would break out of the
+    // src attribute (stored injection into the outbound campaign email).
     const esc = (s: string) =>
-      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     const bodyHtml = esc(body).replace(/\n/g, '<br>');
-    const banner =
-      imageUrl && imageUrl.trim().length > 0
-        ? `<img src="${esc(imageUrl.trim())}" alt="" style="width:100%;max-height:280px;object-fit:cover;border-radius:10px;margin-bottom:16px;">`
-        : '';
+    // Only embed an http(s) image — never a javascript:/data: URL.
+    const safeImage =
+      imageUrl && /^https?:\/\//i.test(imageUrl.trim()) ? imageUrl.trim() : '';
+    const banner = safeImage
+      ? `<img src="${esc(safeImage)}" alt="" style="width:100%;max-height:280px;object-fit:cover;border-radius:10px;margin-bottom:16px;">`
+      : '';
     return `
       <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;color:#2b2a22;">
         <div style="font-family:Georgia,serif;font-size:24px;color:#C9405C;font-weight:700;margin-bottom:12px;">Banan</div>

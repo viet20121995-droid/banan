@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 
 import { CatalogBroadcastInterceptor } from './common/interceptors/catalog-broadcast.interceptor';
+import { validateEnv } from './config/env.validation';
 
 import { AddressesModule } from './addresses/addresses.module';
 import { AdminModule } from './admin/admin.module';
@@ -46,7 +47,7 @@ import { WishlistModule } from './wishlist/wishlist.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, cache: true }),
+    ConfigModule.forRoot({ isGlobal: true, cache: true, validate: validateEnv }),
     LoggerModule.forRoot({
       pinoHttp: {
         // Pull the id we set in RequestIdMiddleware so log lines for the

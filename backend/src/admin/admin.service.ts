@@ -240,7 +240,7 @@ export class AdminService {
   async resetUserPassword(id: string, password: string) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException({ code: 'USER_NOT_FOUND' });
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12);
     await this.prisma.$transaction([
       this.prisma.user.update({ where: { id }, data: { passwordHash } }),
       this.prisma.refreshToken.updateMany({

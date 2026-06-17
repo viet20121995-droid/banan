@@ -32,10 +32,30 @@ interface SocketData {
  * Customers additionally `order:subscribe` to a specific order to receive
  * fine-grained kitchen status updates while watching the tracking screen.
  */
+// Same allowlist the HTTP server uses (CORS_ORIGINS). Read at module load
+// because the gateway decorator runs before DI is available.
+const WS_ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 @WebSocketGateway({
   cors: {
-    origin: (origin, cb) => cb(null, true),
-    credentials: true,
+    // Allow non-browser clients (no Origin header) and configured origins
+    // only; reject everything else instead of reflecting any origin. When the
+    // allowlist is empty (local dev) we permit all for convenience. Dropped
+    // `credentials` — auth is a Bearer token in the handshake, not a cookie.
+    origin: (origin, cb) => {
+      if (
+        !origin ||
+        WS_ALLOWED_ORIGINS.length === 0 ||
+        WS_ALLOWED_ORIGINS.includes(origin)
+      ) {
+        cb(null, true);
+      } else {
+        cb(null, false);
+      }
+    },
   },
 })
 export class RealtimeGateway implements OnGatewayConnection {

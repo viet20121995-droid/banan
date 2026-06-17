@@ -54,9 +54,12 @@ function makeService(opts: {
         }
       : opts.order,
   );
+  const refundFindFirst = jest.fn().mockResolvedValue(null);
+  const refundCreate = jest.fn().mockResolvedValue({});
   const prisma = {
     payment: { findFirst, updateMany },
     order: { findUnique: orderFindUnique },
+    refund: { findFirst: refundFindFirst, create: refundCreate },
   };
   const realtime = { emit: jest.fn() };
   const notifications = { sendToUser: jest.fn().mockResolvedValue(undefined) };
@@ -71,7 +74,15 @@ function makeService(opts: {
     realtime as never,
     notifications as never,
   );
-  return { svc, findFirst, updateMany, orderFindUnique, realtime, notifications };
+  return {
+    svc,
+    findFirst,
+    updateMany,
+    orderFindUnique,
+    realtime,
+    notifications,
+    refundCreate,
+  };
 }
 
 const capture = (
@@ -169,6 +180,19 @@ describe('PaymentsService.applyCapture', () => {
     await capture(m.svc, null);
     expect(m.updateMany).toHaveBeenCalledTimes(1);
     expect(m.realtime.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('late capture on a CANCELLED order → auto-opens a refund, no "captured" notify', async () => {
+    const m = makeService({
+      payment: payment('INITIATED'),
+      order: { id: 'o1', status: 'CANCELLED', storeId: 's1' },
+    });
+    await capture(m.svc, 50000);
+    expect(m.updateMany).toHaveBeenCalledTimes(1); // payment still captured (truth)
+    expect(m.refundCreate).toHaveBeenCalledTimes(1); // auto-refund opened
+    expect(m.refundCreate.mock.calls[0][0].data.status).toBe('REQUESTED');
+    // No celebratory customer notification on a cancelled order.
+    expect(m.notifications.sendToUser).not.toHaveBeenCalled();
   });
 });
 
