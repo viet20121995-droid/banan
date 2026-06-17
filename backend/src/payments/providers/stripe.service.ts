@@ -103,10 +103,17 @@ export class StripePaymentService {
    * marks the matching Payment row as CAPTURED on `checkout.session.completed`.
    * Stripe is the authority — never trust the success_url alone.
    */
-  async handleWebhook(rawBody: Buffer, signature: string): Promise<void> {
+  async handleWebhook(
+    rawBody: Buffer,
+    signature: string,
+  ): Promise<
+    | { kind: 'captured'; providerRef: string; paidAmountVnd: number | null; payload: object }
+    | { kind: 'failed'; providerRef: string; payload: object }
+    | { kind: 'ignored' }
+  > {
     if (!this.stripe || !this.webhookSecret) {
       this.logger.warn('Stripe webhook hit but provider is not configured');
-      return;
+      return { kind: 'ignored' };
     }
     let event: Stripe.Event;
     try {
@@ -122,25 +129,22 @@ export class StripePaymentService {
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
-      await this.markCaptured(session.id, event);
+      // VND has no decimals, so amount_total IS the VND figure.
+      return {
+        kind: 'captured',
+        providerRef: session.id,
+        paidAmountVnd: session.amount_total ?? null,
+        payload: event as unknown as object,
+      };
     } else if (event.type === 'checkout.session.expired') {
       const session = event.data.object as Stripe.Checkout.Session;
-      await this.markFailed(session.id, event);
+      return {
+        kind: 'failed',
+        providerRef: session.id,
+        payload: event as unknown as object,
+      };
     }
-  }
-
-  private async markCaptured(sessionId: string, event: Stripe.Event) {
-    await this.prisma.payment.updateMany({
-      where: { provider: 'STRIPE', providerRef: sessionId },
-      data: { status: 'CAPTURED', rawPayload: event as unknown as object },
-    });
-  }
-
-  private async markFailed(sessionId: string, event: Stripe.Event) {
-    await this.prisma.payment.updateMany({
-      where: { provider: 'STRIPE', providerRef: sessionId },
-      data: { status: 'FAILED', rawPayload: event as unknown as object },
-    });
+    return { kind: 'ignored' };
   }
 
   /**

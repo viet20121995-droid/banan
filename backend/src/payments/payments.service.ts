@@ -1,7 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Order, OrderItem, Payment, PaymentProvider, Refund } from '@prisma/client';
 
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 import type { PaymentInstructions } from './dto/payment-instructions';
 import { CashPaymentService } from './providers/cash.service';
@@ -17,13 +24,118 @@ interface InitiateArgs {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cash: CashPaymentService,
     private readonly stripe: StripePaymentService,
     private readonly payos: PayOSPaymentService,
     private readonly momo: MoMoPaymentService,
+    private readonly realtime: RealtimeGateway,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /**
+   * Centralised online-capture path for all redirect providers (Stripe /
+   * PayOS / MoMo), called from their webhook/IPN handlers. Two guards the
+   * per-provider `updateMany` was missing:
+   *   1. status gate — only an INITIATED/AUTHORIZED payment can be captured,
+   *      so a replayed or late webhook can't resurrect a VOIDED/REFUNDED one;
+   *   2. amount cross-check — the provider-reported paid amount must equal
+   *      what we charged (signature stops forgery; this stops misconfig /
+   *      partial-payment edge cases).
+   * On success it emits realtime + a customer "payment captured" notification,
+   * which the raw `updateMany` did not do.
+   */
+  async applyCapture(args: {
+    provider: PaymentProvider;
+    providerRef: string;
+    paidAmountVnd?: number | null;
+    payload: object;
+  }): Promise<void> {
+    const payment = await this.prisma.payment.findFirst({
+      where: { provider: args.provider, providerRef: args.providerRef },
+    });
+    if (!payment) {
+      this.logger.warn(
+        `Capture for unknown ${args.provider} ref ${args.providerRef} — ignored`,
+      );
+      return;
+    }
+    if (payment.status !== 'INITIATED' && payment.status !== 'AUTHORIZED') {
+      this.logger.warn(
+        `Ignoring capture for payment ${payment.id} in terminal state ${payment.status}`,
+      );
+      return;
+    }
+    if (args.paidAmountVnd != null) {
+      const expected = Math.round(Number(payment.amount.toString()));
+      if (Math.round(args.paidAmountVnd) !== expected) {
+        this.logger.error(
+          `Amount mismatch on payment ${payment.id}: provider reports ${args.paidAmountVnd}, expected ${expected} — refusing to capture`,
+        );
+        return;
+      }
+    }
+    const res = await this.prisma.payment.updateMany({
+      where: { id: payment.id, status: { in: ['INITIATED', 'AUTHORIZED'] } },
+      data: { status: 'CAPTURED', rawPayload: args.payload },
+    });
+    if (res.count === 0) return; // lost a race to a concurrent webhook
+    await this.onCaptured(payment.orderId);
+  }
+
+  /** Marks a still-open payment FAILED (expired / declined webhook). */
+  async applyFailure(args: {
+    provider: PaymentProvider;
+    providerRef: string;
+    payload: object;
+  }): Promise<void> {
+    await this.prisma.payment.updateMany({
+      where: {
+        provider: args.provider,
+        providerRef: args.providerRef,
+        status: { in: ['INITIATED', 'AUTHORIZED'] },
+      },
+      data: { status: 'FAILED', rawPayload: args.payload },
+    });
+  }
+
+  /** Emits realtime + notifies the customer that an online payment landed. */
+  private async onCaptured(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        code: true,
+        customerId: true,
+        storeId: true,
+        kitchenId: true,
+      },
+    });
+    if (!order) return;
+    const rooms = [
+      `order:${order.id}`,
+      `user:${order.customerId}`,
+      `store:${order.storeId}`,
+    ];
+    if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
+    this.realtime.emit(rooms, 'order.payment_captured', {
+      orderId: order.id,
+      code: order.code,
+      at: new Date().toISOString(),
+    });
+    await this.notifications.sendToUser(
+      order.customerId,
+      {
+        type: 'payment.captured',
+        title: 'Thanh toán thành công 🎉',
+        body: `Đơn ${order.code} đã được thanh toán. Cảm ơn bạn!`,
+      },
+      { orderId: order.id, code: order.code },
+    );
+  }
 
   /** Validates the chosen method against the fulfillment type and config. */
   validate(method: PaymentProvider, fulfillment: 'PICKUP' | 'DELIVERY'): void {

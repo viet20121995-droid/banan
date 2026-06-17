@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 
+import { NotificationsModule } from '../notifications/notifications.module';
+import { RealtimeModule } from '../realtime/realtime.module';
+
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { CashPaymentService } from './providers/cash.service';
@@ -8,6 +11,7 @@ import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
 
 @Module({
+  imports: [RealtimeModule, NotificationsModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,

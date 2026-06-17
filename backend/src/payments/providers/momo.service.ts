@@ -139,6 +139,7 @@ export class MoMoPaymentService {
     ok: boolean;
     momoOrderId?: string;
     resultCode?: number;
+    amountVnd?: number;
   } {
     if (!this.enabled) return { ok: false };
     const accessKey = this.config.get<string>('MOMO_ACCESS_KEY')!;
@@ -169,21 +170,8 @@ export class MoMoPaymentService {
       ok: true,
       momoOrderId: body['orderId'] as string,
       resultCode: Number(body['resultCode']),
+      amountVnd: Number(body['amount'] ?? 0),
     };
-  }
-
-  async markCaptured(momoOrderId: string, payload: object): Promise<void> {
-    await this.prisma.payment.updateMany({
-      where: { provider: 'MOMO', providerRef: momoOrderId },
-      data: { status: 'CAPTURED', rawPayload: payload },
-    });
-  }
-
-  async markFailed(momoOrderId: string, payload: object): Promise<void> {
-    await this.prisma.payment.updateMany({
-      where: { provider: 'MOMO', providerRef: momoOrderId },
-      data: { status: 'FAILED', rawPayload: payload },
-    });
   }
 
   /**

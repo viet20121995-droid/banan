@@ -12,6 +12,7 @@ import {
 import type { Server, Socket } from 'socket.io';
 
 import type { JwtPayload } from '../auth/types/jwt-payload';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface SocketData {
   userId: string;
@@ -46,6 +47,7 @@ export class RealtimeGateway implements OnGatewayConnection {
   constructor(
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -108,10 +110,33 @@ export class RealtimeGateway implements OnGatewayConnection {
   ) {
     const orderId = body?.orderId;
     if (!orderId) return;
-    // Trust + scope: customer subscribes to their own active order. The
-    // server only emits to this room on events the customer is allowed to
-    // see (their own orders), so cross-tenant leaks are impossible even if
-    // a malicious client subscribes blindly.
+    // Authorise BEFORE joining: a socket may only watch an order it owns or
+    // serves. (An anonymous socket has no identity, so it can't subscribe to
+    // any order room.) Without this, any client could join `order:<uuid>` and
+    // receive that order's status events — mitigated only by UUID guessing.
+    const data = client.data as SocketData | undefined;
+    if (!data?.userId) return;
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { customerId: true, storeId: true, kitchenId: true },
+    });
+    if (!order) return;
+    const role = data.role;
+    const allowed =
+      role === 'ADMIN' ||
+      order.customerId === data.userId ||
+      ((role === 'MERCHANT_OWNER' || role === 'MERCHANT_STAFF') &&
+        !!data.storeId &&
+        data.storeId === order.storeId) ||
+      ((role === 'KITCHEN_MANAGER' || role === 'KITCHEN_STAFF') &&
+        !!order.kitchenId &&
+        data.kitchenId === order.kitchenId);
+    if (!allowed) {
+      this.logger.warn(
+        `socket ${client.id} (${data.userId}) denied order:subscribe ${orderId}`,
+      );
+      return;
+    }
     await client.join(`order:${orderId}`);
   }
 

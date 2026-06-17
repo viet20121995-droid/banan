@@ -115,6 +115,12 @@ export class OrdersService {
     // on file; otherwise creates a new CUSTOMER user with a random password.
     let customerId: string;
     let freshGuestUserId: string | null = null;
+    // True when an UNAUTHENTICATED guest checkout resolved (by phone) to an
+    // already-existing account. We must not let an anonymous shopper spend
+    // that account's stored value (loyalty points), consume its per-user
+    // coupons, or claim its membership/birthday/first-order benefits — the
+    // phone was never verified (no OTP), so this could be account takeover.
+    let guestBoundToExisting = false;
     if (authedCustomerId) {
       customerId = authedCustomerId;
     } else {
@@ -130,7 +136,11 @@ export class OrdersService {
         email: dto.guestEmail,
       });
       customerId = guest.userId;
-      if (guest.createdNew) freshGuestUserId = guest.userId;
+      if (guest.createdNew) {
+        freshGuestUserId = guest.userId;
+      } else {
+        guestBoundToExisting = true;
+      }
     }
 
     const productIds = [...new Set(dto.items.map((i) => i.productId))];
@@ -340,14 +350,16 @@ export class OrdersService {
       })),
       storeId,
       subtotalVnd,
-      customerId,
+      // Skip customer-targeted campaigns (membership / birthday / first-order /
+      // re-activation) for a guest order bound to a pre-existing account.
+      customerId: guestBoundToExisting ? undefined : customerId,
     });
     const campaignDiscountVnd = Math.min(promo.discountVnd, subtotalVnd);
     const subtotalAfterCampaign = subtotalVnd - campaignDiscountVnd;
 
     let couponDiscountVnd = 0;
     let couponId: string | null = null;
-    if (dto.couponCode) {
+    if (dto.couponCode && !guestBoundToExisting) {
       const v = await this.coupons.validate({
         code: dto.couponCode,
         subtotalVnd: subtotalAfterCampaign,
@@ -410,7 +422,11 @@ export class OrdersService {
       // Capped at their balance and at the order value (never below 0). The
       // deduction itself happens after the order row exists (below) so the
       // REDEEM event references the order id — all inside this tx.
-      const requestedPoints = Math.max(0, Math.floor(dto.pointsToRedeem ?? 0));
+      // Never spend a pre-existing account's points on an unverified guest
+      // order that merely matched its phone number.
+      const requestedPoints = guestBoundToExisting
+          ? 0
+          : Math.max(0, Math.floor(dto.pointsToRedeem ?? 0));
       let pointsRedeemed = 0;
       let pointsDiscount = new Prisma.Decimal(0);
       if (requestedPoints > 0) {

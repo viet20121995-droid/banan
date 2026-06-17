@@ -143,7 +143,7 @@ export class PayOSPaymentService {
     success?: boolean;
     data?: Record<string, unknown>;
     signature?: string;
-  }): { ok: boolean; orderCode?: string; paid?: boolean } {
+  }): { ok: boolean; orderCode?: string; paid?: boolean; amountVnd?: number } {
     if (!this.enabled) return { ok: false };
     const data = body?.data;
     const provided = body?.signature;
@@ -169,21 +169,8 @@ export class PayOSPaymentService {
       orderCode: String(data['orderCode'] ?? ''),
       // PayOS marks a paid transaction with data.code === '00'.
       paid: body.code === '00' && String(data['code'] ?? '') === '00',
+      amountVnd: Number(data['amount'] ?? 0),
     };
-  }
-
-  async markCaptured(orderCode: string, payload: object): Promise<void> {
-    await this.prisma.payment.updateMany({
-      where: { provider: 'PAYOS', providerRef: orderCode },
-      data: { status: 'CAPTURED', rawPayload: payload },
-    });
-  }
-
-  async markFailed(orderCode: string, payload: object): Promise<void> {
-    await this.prisma.payment.updateMany({
-      where: { provider: 'PAYOS', providerRef: orderCode },
-      data: { status: 'FAILED', rawPayload: payload },
-    });
   }
 
   /**

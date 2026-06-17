@@ -25,7 +25,7 @@ interface IssuedTokens {
 
 @Injectable()
 export class AuthService {
-  private static readonly BCRYPT_ROUNDS = 10;
+  private static readonly BCRYPT_ROUNDS = 12;
   private static readonly REFRESH_TTL_DAYS = 30;
   private static readonly RESET_TTL_MINUTES = 60;
   private static readonly EMAIL_CHANGE_TTL_MINUTES = 60;

@@ -19,6 +19,7 @@ import type { Request, Response } from 'express';
 
 import { Public } from '../auth/decorators/public.decorator';
 
+import { PaymentsService } from './payments.service';
 import { MoMoPaymentService } from './providers/momo.service';
 import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
@@ -36,6 +37,7 @@ export class PaymentsController {
     private readonly stripe: StripePaymentService,
     private readonly payos: PayOSPaymentService,
     private readonly momo: MoMoPaymentService,
+    private readonly payments: PaymentsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -51,7 +53,21 @@ export class PaymentsController {
       this.logger.warn('Stripe webhook missing raw body');
       return { received: true };
     }
-    await this.stripe.handleWebhook(req.rawBody, signature);
+    const r = await this.stripe.handleWebhook(req.rawBody, signature);
+    if (r.kind === 'captured') {
+      await this.payments.applyCapture({
+        provider: 'STRIPE',
+        providerRef: r.providerRef,
+        paidAmountVnd: r.paidAmountVnd,
+        payload: r.payload,
+      });
+    } else if (r.kind === 'failed') {
+      await this.payments.applyFailure({
+        provider: 'STRIPE',
+        providerRef: r.providerRef,
+        payload: r.payload,
+      });
+    }
     return { received: true };
   }
 
@@ -88,9 +104,18 @@ export class PaymentsController {
       return { success: true };
     }
     if (verified.paid) {
-      await this.payos.markCaptured(verified.orderCode, body);
+      await this.payments.applyCapture({
+        provider: 'PAYOS',
+        providerRef: verified.orderCode,
+        paidAmountVnd: verified.amountVnd,
+        payload: body,
+      });
     } else {
-      await this.payos.markFailed(verified.orderCode, body);
+      await this.payments.applyFailure({
+        provider: 'PAYOS',
+        providerRef: verified.orderCode,
+        payload: body,
+      });
     }
     return { success: true };
   }
@@ -101,11 +126,20 @@ export class PaymentsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async momoIpn(@Body() body: Record<string, unknown>): Promise<void> {
     const verified = this.momo.verifyIpn(body);
-    if (!verified.ok) return;
+    if (!verified.ok || !verified.momoOrderId) return;
     if (verified.resultCode === 0) {
-      await this.momo.markCaptured(verified.momoOrderId!, body);
+      await this.payments.applyCapture({
+        provider: 'MOMO',
+        providerRef: verified.momoOrderId,
+        paidAmountVnd: verified.amountVnd,
+        payload: body,
+      });
     } else {
-      await this.momo.markFailed(verified.momoOrderId!, body);
+      await this.payments.applyFailure({
+        provider: 'MOMO',
+        providerRef: verified.momoOrderId,
+        payload: body,
+      });
     }
   }
 }
