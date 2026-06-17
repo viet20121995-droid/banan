@@ -18,6 +18,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
+import { merchantStoreScope } from '../common/merchant-scope';
 
 import { CreateThreadDto, UpdateThreadDto } from './dto/thread.dto';
 import { ThreadsService } from './threads.service';
@@ -75,7 +76,7 @@ export class MerchantThreadsController {
   findOne(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
     return this.threads.findOne(
       id,
-      user.role === Role.ADMIN ? null : (user.storeId ?? null),
+      merchantStoreScope(user),
     );
   }
 
@@ -95,7 +96,7 @@ export class MerchantThreadsController {
   ) {
     return this.threads.update(
       id,
-      user.role === Role.ADMIN ? null : (user.storeId ?? null),
+      merchantStoreScope(user),
       dto,
     );
   }
@@ -106,7 +107,7 @@ export class MerchantThreadsController {
   remove(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
     return this.threads.remove(
       id,
-      user.role === Role.ADMIN ? null : (user.storeId ?? null),
+      merchantStoreScope(user),
     );
   }
 }

@@ -42,8 +42,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         };
       }
     } else if (exception instanceof Error) {
+      // Log the full error server-side, but never leak internal details
+      // (Prisma/provider/runtime messages) to the client — keep the generic
+      // INTERNAL body initialised above.
       this.logger.error(exception.message, exception.stack);
-      body = { error: { code: 'INTERNAL', message: exception.message } };
     } else {
       this.logger.error('Unknown exception type', String(exception));
     }

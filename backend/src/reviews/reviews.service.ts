@@ -187,12 +187,18 @@ export class ReviewsService {
 
   // ── Merchant moderation ─────────────────────────────────────────────
 
-  async findAllForMerchant(filters: ListReviewsDto & { status?: ReviewStatus }) {
+  async findAllForMerchant(
+    filters: ListReviewsDto & { status?: ReviewStatus },
+    storeId: string | null,
+  ) {
     const page = filters.page ?? 1;
     const perPage = filters.perPage ?? 30;
     const where: Prisma.ReviewWhereInput = {
       ...(filters.productId && { productId: filters.productId }),
       ...(filters.status && { status: filters.status }),
+      // Scope a merchant/staff to their own store's products; admin (null)
+      // sees every store's reviews.
+      ...(storeId && { product: { storeId } }),
     };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.review.findMany({
@@ -207,10 +213,23 @@ export class ReviewsService {
     return { items, meta: { page, perPage, total } };
   }
 
-  async moderate(id: string, dto: ModerateReviewDto, actorId: string) {
-    const existing = await this.prisma.review.findUnique({ where: { id } });
+  async moderate(
+    id: string,
+    dto: ModerateReviewDto,
+    actorId: string,
+    storeId: string | null,
+  ) {
+    const existing = await this.prisma.review.findUnique({
+      where: { id },
+      select: { id: true, product: { select: { storeId: true } } },
+    });
     if (!existing) {
       throw new NotFoundException({ code: 'REVIEW_NOT_FOUND' });
+    }
+    // A merchant/staff may only moderate reviews of their own store's
+    // products; admin (null) may moderate any.
+    if (storeId && existing.product.storeId !== storeId) {
+      throw new ForbiddenException({ code: 'AUTH_FORBIDDEN' });
     }
     const review = await this.prisma.review.update({
       where: { id },

@@ -17,6 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
+import { merchantStoreScope } from '../common/merchant-scope';
 
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ListReviewsDto } from './dto/list-reviews.dto';
@@ -92,11 +93,14 @@ export class MerchantReviewsController {
 
   @Get()
   findAll(
-    @CurrentUser() _user: AuthPrincipal,
+    @CurrentUser() user: AuthPrincipal,
     @Query() q: ListReviewsDto,
     @Query('status') status?: ReviewStatus,
   ) {
-    return this.reviews.findAllForMerchant({ ...q, status });
+    return this.reviews.findAllForMerchant(
+      { ...q, status },
+      merchantStoreScope(user),
+    );
   }
 
   @Patch(':id/moderate')
@@ -105,6 +109,6 @@ export class MerchantReviewsController {
     @Param('id') id: string,
     @Body() dto: ModerateReviewDto,
   ) {
-    return this.reviews.moderate(id, dto, user.sub);
+    return this.reviews.moderate(id, dto, user.sub, merchantStoreScope(user));
   }
 }

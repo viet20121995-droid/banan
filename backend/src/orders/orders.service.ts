@@ -1412,6 +1412,9 @@ export class OrdersService {
         passwordHash,
         fullName: args.fullName,
         role: 'CUSTOMER',
+        // A guest never opted into marketing — don't sweep them into campaign
+        // audiences (esp. when the email is the synthetic guest+…@banan.local).
+        marketingOptIn: false,
       },
       select: { id: true },
     });

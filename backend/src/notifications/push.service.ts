@@ -97,8 +97,13 @@ export class PushService {
     template: NotificationTemplate,
     data?: Record<string, unknown>,
   ): Promise<void> {
+    // Mirror the in-app broadcast audience: only opted-in, active customers.
+    // (Without this, customers who turned off marketing — or are disabled —
+    // would still receive the campaign push.)
     const devices = await this.prisma.deviceToken.findMany({
-      where: { user: { role: 'CUSTOMER' } },
+      where: {
+        user: { role: 'CUSTOMER', marketingOptIn: true, isActive: true },
+      },
       select: { token: true },
     });
     await this.sendToTokens(

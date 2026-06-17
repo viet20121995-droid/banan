@@ -224,7 +224,10 @@ export class NewsletterService {
           marketingOptIn: true,
           isActive: true,
           NOT: [
-            { email: { endsWith: '@guest.banan.local' } },
+            // Exclude ALL synthetic/internal addresses, not just
+            // '@guest.banan.local' — guest checkout also mints
+            // 'guest+<hex>@banan.local'.
+            { email: { endsWith: '@banan.local' } },
             { email: { startsWith: 'deleted-' } },
           ],
         },

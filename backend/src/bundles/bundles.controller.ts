@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
+import { merchantStoreScope } from '../common/merchant-scope';
 
 import { BundlesService } from './bundles.service';
 import { CreateBundleDto, UpdateBundleDto } from './dto';
@@ -55,10 +56,11 @@ export class BundlesController {
 export class MerchantBundlesController {
   constructor(private readonly bundles: BundlesService) {}
 
-  /// Admin scope = chain-wide (storeIdScope null); merchants scope to
-  /// their own store. Same pattern as products / collections.
+  /// Admin scope = chain-wide (null); merchants scope to their own store; a
+  /// merchant with no store is rejected (NO_STORE_ASSIGNED) rather than
+  /// silently getting the chain-wide branch.
   private scope(user: AuthPrincipal): string | null {
-    return user.role === Role.ADMIN ? null : (user.storeId ?? null);
+    return merchantStoreScope(user);
   }
 
   @Get()

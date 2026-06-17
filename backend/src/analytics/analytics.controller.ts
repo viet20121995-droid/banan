@@ -44,11 +44,23 @@ export class KitchenAnalyticsController {
   summary(
     @CurrentUser() user: AuthPrincipal,
     @Query('range') rangeRaw?: string,
+    @Query('kitchenId') kitchenIdParam?: string,
   ) {
-    if (!user.kitchenId && user.role !== Role.ADMIN) {
-      throw new BadRequestException({ code: 'NO_KITCHEN_ASSIGNED' });
+    // Admin must name the kitchen via ?kitchenId=; staff are pinned to theirs.
+    // Never pass an undefined kitchenId to the query (it would silently read
+    // every kitchen's orders).
+    const kitchenId =
+      user.role === Role.ADMIN ? kitchenIdParam : user.kitchenId;
+    if (!kitchenId) {
+      throw new BadRequestException({
+        code: 'NO_KITCHEN_ASSIGNED',
+        message:
+          user.role === Role.ADMIN
+            ? 'Admin cần truyền ?kitchenId= để xem báo cáo một bếp.'
+            : 'Tài khoản chưa được gán bếp.',
+      });
     }
     const range = this.analytics.parseRange(rangeRaw);
-    return this.analytics.kitchenSummary(user.kitchenId!, range);
+    return this.analytics.kitchenSummary(kitchenId, range);
   }
 }
