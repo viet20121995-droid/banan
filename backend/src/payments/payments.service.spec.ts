@@ -20,6 +20,7 @@ type PaymentRow = {
   provider: string;
   providerRef: string;
   amount: number | string;
+  currency: string;
   status: string;
 };
 
@@ -30,6 +31,7 @@ function payment(status: string, amount: number | string = 50000): PaymentRow {
     provider: 'PAYOS',
     providerRef: 'PR-1',
     amount,
+    currency: 'VND',
     status,
   };
 }
@@ -192,6 +194,20 @@ describe('PaymentsService.applyCapture', () => {
     expect(m.refundCreate).toHaveBeenCalledTimes(1); // auto-refund opened
     expect(m.refundCreate.mock.calls[0][0].data.status).toBe('REQUESTED');
     // No celebratory customer notification on a cancelled order.
+    expect(m.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('currency mismatch → no capture (refuses), even with matching amount', async () => {
+    const m = makeService({ payment: payment('INITIATED') }); // currency VND
+    await m.svc.applyCapture({
+      provider: 'STRIPE' as never,
+      providerRef: 'PR-1',
+      paidAmountVnd: 50000,
+      currency: 'usd',
+      payload: {},
+    });
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.realtime.emit).not.toHaveBeenCalled();
     expect(m.notifications.sendToUser).not.toHaveBeenCalled();
   });
 });

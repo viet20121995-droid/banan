@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { PrismaService } from '../prisma/prisma.service';
 
 import type { CreateThreadDto, UpdateThreadDto } from './dto/thread.dto';
@@ -74,15 +75,25 @@ export class ThreadsService {
     return thread;
   }
 
-  /** Public by-id — only a PUBLISHED thread. The merchant `findOne` above is
-   *  unfiltered (drafts are visible to their own store); this guards the
-   *  @Public endpoint so a guessed id can't surface an unpublished draft. */
-  async findOnePublished(id: string) {
-    const thread = await this.prisma.thread.findFirst({
-      where: { id, publishedAt: { not: null } },
+  /** Public by-id. A published thread is visible to anyone. An unpublished
+   *  draft is returned only to an admin or the owning store's staff — the
+   *  @Public route is optional-auth, so the merchant editor (which loads
+   *  drafts by id with its token) still works, while an anonymous/guessed id
+   *  can't surface another store's draft. */
+  async findOnePublic(id: string, viewer?: AuthPrincipal) {
+    const thread = await this.prisma.thread.findUnique({
+      where: { id },
       include: THREAD_INCLUDE,
     });
     if (!thread) throw new NotFoundException({ code: 'THREAD_NOT_FOUND' });
+    if (thread.publishedAt) return thread;
+    const canSeeDraft =
+      !!viewer &&
+      (viewer.role === 'ADMIN' ||
+        ((viewer.role === 'MERCHANT_OWNER' ||
+          viewer.role === 'MERCHANT_STAFF') &&
+          viewer.storeId === thread.storeId));
+    if (!canSeeDraft) throw new NotFoundException({ code: 'THREAD_NOT_FOUND' });
     return thread;
   }
 

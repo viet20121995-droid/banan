@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { PrismaService } from '../prisma/prisma.service';
 import { birthdayCakeProductIds } from '../products/birthday-cake.util';
 
@@ -95,15 +96,26 @@ export class CollectionsService {
     return decorated;
   }
 
-  /** Public by-id — only an ACTIVE collection. The merchant `findOne` above
-   *  serves deactivated collections to their own store; this guards the
-   *  @Public endpoint so a deactivated collection isn't reachable by id. */
-  async findOneActive(id: string) {
-    const collection = await this.prisma.collection.findFirst({
-      where: { id, isActive: true },
+  /** Public by-id. An active collection is visible to anyone; a deactivated
+   *  one is returned only to an admin or the owning store's staff. The @Public
+   *  route is optional-auth, so the merchant editor (which loads inactive
+   *  collections by id with its token) works, while the public can't reach a
+   *  deactivated collection by id. */
+  async findOnePublic(id: string, viewer?: AuthPrincipal) {
+    const collection = await this.prisma.collection.findUnique({
+      where: { id },
       include: COLLECTION_INCLUDE,
     });
     if (!collection) {
+      throw new NotFoundException({ code: 'COLLECTION_NOT_FOUND' });
+    }
+    const canSeeInactive =
+      !!viewer &&
+      (viewer.role === 'ADMIN' ||
+        ((viewer.role === 'MERCHANT_OWNER' ||
+          viewer.role === 'MERCHANT_STAFF') &&
+          viewer.storeId === collection.storeId));
+    if (!collection.isActive && !canSeeInactive) {
       throw new NotFoundException({ code: 'COLLECTION_NOT_FOUND' });
     }
     const [decorated] = await this.applyBirthdayFlag([collection]);

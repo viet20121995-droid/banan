@@ -34,7 +34,11 @@ export class UpdateProfileDto {
   gender?: Gender;
 
   @IsOptional()
-  @IsUrl({ require_tld: false })
+  // Must be an http(s) URL (avatars are produced by the upload endpoint, which
+  // returns an absolute https URL) — rejects javascript:/data: and other
+  // schemes outright. require_tld:false keeps the api.<domain> / localhost dev
+  // hosts valid.
+  @IsUrl({ require_tld: false, require_protocol: true, protocols: ['http', 'https'] })
   @MaxLength(500)
   avatarUrl?: string;
 

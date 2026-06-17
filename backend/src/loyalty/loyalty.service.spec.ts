@@ -8,7 +8,14 @@ function makeService(balance: number) {
       findUniqueOrThrow: jest.fn().mockResolvedValue({
         pointsBalance: balance,
       }),
-      update: jest.fn().mockResolvedValue({}),
+      // Mirrors the atomic increment: the balance-mutating update returns the
+      // new pointsBalance; the tier-only update returns nothing of interest.
+      update: jest.fn().mockImplementation(({ data }) => {
+        const inc = data?.pointsBalance?.increment;
+        return Promise.resolve(
+          inc !== undefined ? { pointsBalance: balance + inc } : {},
+        );
+      }),
     },
     loyaltyEvent: {
       create: jest
@@ -56,9 +63,10 @@ describe('LoyaltyService.adminAdjust', () => {
     expect(ev.delta).toBe(25);
     expect(ev.balanceAfter).toBe(125);
     expect(ev.type).toBe('ADJUSTMENT');
+    // Balance is applied as an atomic increment (not an absolute write).
     expect(tx.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ pointsBalance: 125 }),
+        data: expect.objectContaining({ pointsBalance: { increment: 25 } }),
       }),
     );
   });

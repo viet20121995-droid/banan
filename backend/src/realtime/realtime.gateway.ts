@@ -38,19 +38,20 @@ const WS_ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? '')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+// Allow-all only as a LOCAL-DEV convenience when no allowlist is set. In
+// production an empty/unset CORS_ORIGINS fails CLOSED for browser origins —
+// matching the HTTP layer (main.ts), which treats an empty allowlist as
+// "deny all cross-origin". This keeps the WS boundary consistent with HTTP.
+const WS_ALLOW_ALL =
+  WS_ALLOWED_ORIGINS.length === 0 && process.env.NODE_ENV !== 'production';
 
 @WebSocketGateway({
   cors: {
-    // Allow non-browser clients (no Origin header) and configured origins
-    // only; reject everything else instead of reflecting any origin. When the
-    // allowlist is empty (local dev) we permit all for convenience. Dropped
-    // `credentials` — auth is a Bearer token in the handshake, not a cookie.
+    // Non-browser clients (no Origin header) are always allowed; otherwise the
+    // origin must be on the allowlist. Reflecting any origin is never done.
+    // Dropped `credentials` — auth is a Bearer token in the handshake.
     origin: (origin, cb) => {
-      if (
-        !origin ||
-        WS_ALLOWED_ORIGINS.length === 0 ||
-        WS_ALLOWED_ORIGINS.includes(origin)
-      ) {
+      if (!origin || WS_ALLOW_ALL || WS_ALLOWED_ORIGINS.includes(origin)) {
         cb(null, true);
       } else {
         cb(null, false);

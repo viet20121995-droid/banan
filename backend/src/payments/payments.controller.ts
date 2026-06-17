@@ -59,6 +59,7 @@ export class PaymentsController {
         provider: 'STRIPE',
         providerRef: r.providerRef,
         paidAmountVnd: r.paidAmountVnd,
+        currency: r.currency,
         payload: r.payload,
       });
     } else if (r.kind === 'failed') {

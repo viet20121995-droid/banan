@@ -59,6 +59,7 @@ export class PaymentsService {
     provider: PaymentProvider;
     providerRef: string;
     paidAmountVnd?: number | null;
+    currency?: string;
     payload: object;
   }): Promise<void> {
     const payment = await this.prisma.payment.findFirst({
@@ -73,6 +74,18 @@ export class PaymentsService {
     if (payment.status !== 'INITIATED' && payment.status !== 'AUTHORIZED') {
       this.logger.warn(
         `Ignoring capture for payment ${payment.id} in terminal state ${payment.status}`,
+      );
+      return;
+    }
+    // Currency cross-check (defense-in-depth alongside the amount check, which
+    // is currency-blind). All orders are VND today, so a mismatch means a
+    // misconfigured provider account / unexpected settlement currency.
+    if (
+      args.currency &&
+      args.currency.toUpperCase() !== payment.currency.toUpperCase()
+    ) {
+      this.logger.error(
+        `Currency mismatch on payment ${payment.id}: provider reports ${args.currency}, expected ${payment.currency} — refusing to capture`,
       );
       return;
     }

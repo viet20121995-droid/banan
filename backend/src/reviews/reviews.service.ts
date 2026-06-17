@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { OrderStatus, Prisma, ReviewStatus } from '@prisma/client';
@@ -28,6 +29,8 @@ const REVIEW_ELIGIBLE_STATUSES: OrderStatus[] = [
 
 @Injectable()
 export class ReviewsService {
+  private readonly logger = new Logger(ReviewsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
@@ -221,7 +224,7 @@ export class ReviewsService {
   ) {
     const existing = await this.prisma.review.findUnique({
       where: { id },
-      select: { id: true, product: { select: { storeId: true } } },
+      select: { id: true, status: true, product: { select: { storeId: true } } },
     });
     if (!existing) {
       throw new NotFoundException({ code: 'REVIEW_NOT_FOUND' });
@@ -244,7 +247,13 @@ export class ReviewsService {
       productId: review.productId,
       status: review.status,
     });
-    void actorId; // reserved — moderation audit log lives in a future log model.
+    // Audit trail: who changed which review's visibility, from → to. Emitted
+    // as a structured log line (greppable / shippable to a log aggregator)
+    // until a dedicated moderation-log table is warranted.
+    this.logger.log(
+      `review.moderate review=${review.id} by=${actorId} ${existing.status}->${review.status}` +
+        (dto.moderationNote ? ` note=${JSON.stringify(dto.moderationNote)}` : ''),
+    );
     return review;
   }
 }

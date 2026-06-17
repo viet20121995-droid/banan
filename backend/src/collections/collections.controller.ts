@@ -37,8 +37,10 @@ export class CollectionsController {
 
   @Public()
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.collections.findOneActive(id);
+  findOne(@Param('id') id: string, @CurrentUser() user?: AuthPrincipal) {
+    // Optional-auth: owning-store staff/admin can load an inactive collection
+    // (the merchant editor uses this route); the public only gets active ones.
+    return this.collections.findOnePublic(id, user);
   }
 }
 

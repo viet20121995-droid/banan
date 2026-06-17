@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -132,14 +132,18 @@ export class ProductsService {
     return { items, meta: { page, perPage, total } };
   }
 
-  // Public product detail. Only an available (non-archived) product is
-  // served — `remove()` archives sold-out/discontinued SKUs by setting
-  // isAvailable=false and `findAll` hides them, so the by-id path must hide
-  // them too (otherwise a stale deep-link exposes a discontinued item and can
-  // re-add it to a cart). Merchant editing uses the merchant list + restore.
-  async findOne(id: string) {
+  // Product detail by id. The customer/public view only sees available
+  // products (archived/discontinued SKUs are hidden — `remove()` sets
+  // isAvailable=false). Staff (merchant/admin) see any product, because the
+  // merchant editor loads details by id through this same endpoint; the route
+  // is @Public + optional-auth, so a merchant's token populates `viewerRole`.
+  async findOne(id: string, viewerRole?: Role) {
+    const privileged =
+      viewerRole === Role.MERCHANT_OWNER ||
+      viewerRole === Role.MERCHANT_STAFF ||
+      viewerRole === Role.ADMIN;
     const product = await this.prisma.product.findFirst({
-      where: { id, isAvailable: true },
+      where: privileged ? { id } : { id, isAvailable: true },
       include: PRODUCT_INCLUDE,
     });
     if (!product) throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND' });

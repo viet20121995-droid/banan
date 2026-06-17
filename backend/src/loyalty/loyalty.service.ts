@@ -53,11 +53,14 @@ export class LoyaltyService {
       });
       if (existing) return existing;
 
-      const user = await tx.user.findUniqueOrThrow({
+      // Atomic increment (not read-then-absolute-write) so a concurrent
+      // earn/redeem/adjust on the SAME user can't lose this update.
+      const updated = await tx.user.update({
         where: { id: order.customerId },
+        data: { pointsBalance: { increment: points } },
         select: { pointsBalance: true },
       });
-      const balanceAfter = user.pointsBalance + points;
+      const balanceAfter = updated.pointsBalance;
       const event = await tx.loyaltyEvent.create({
         data: {
           userId: order.customerId,
@@ -70,52 +73,10 @@ export class LoyaltyService {
       });
       await tx.user.update({
         where: { id: order.customerId },
-        data: { pointsBalance: balanceAfter, membershipTier: tierFor(balanceAfter) },
+        data: { membershipTier: tierFor(balanceAfter) },
       });
       return event;
     });
-  }
-
-  /**
-   * Records a redemption for `pointsToRedeem` against a freshly-placed order.
-   * Validates balance + non-negative subtotal. Returns the VND value redeemed.
-   */
-  async redeemForOrder(args: {
-    userId: string;
-    orderId: string;
-    orderCode: string;
-    pointsToRedeem: number;
-    subtotalVnd: number;
-  }): Promise<{ pointsUsed: number; vndDiscount: number }> {
-    if (args.pointsToRedeem <= 0) {
-      return { pointsUsed: 0, vndDiscount: 0 };
-    }
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: args.userId },
-      select: { pointsBalance: true },
-    });
-    if (args.pointsToRedeem > user.pointsBalance) {
-      throw new BadRequestException({
-        code: 'LOYALTY_INSUFFICIENT_POINTS',
-        message: `You only have ${user.pointsBalance} Micho.`,
-      });
-    }
-    // Cap at the subtotal — redemptions can never make subtotal negative.
-    const maxByValue = Math.floor(args.subtotalVnd / CONFIG.redemptionValueVnd);
-    const points = Math.min(args.pointsToRedeem, maxByValue);
-    if (points <= 0) {
-      return { pointsUsed: 0, vndDiscount: 0 };
-    }
-
-    await this.recordEvent({
-      userId: args.userId,
-      orderId: args.orderId,
-      type: 'REDEEM',
-      delta: -points,
-      reason: `Redeemed against order ${args.orderCode}`,
-    });
-
-    return { pointsUsed: points, vndDiscount: points * CONFIG.redemptionValueVnd };
   }
 
   /**
@@ -129,17 +90,25 @@ export class LoyaltyService {
     args: { userId: string; orderId: string; orderCode: string; points: number },
   ): Promise<void> {
     if (args.points <= 0) return;
+    // Atomic guarded decrement: only deduct if the balance still covers it.
+    // A conditional updateMany serialises against concurrent redeems on the
+    // same user (Postgres re-checks the predicate under the row lock), so the
+    // balance can never be overdrawn or lost-updated.
+    const res = await tx.user.updateMany({
+      where: { id: args.userId, pointsBalance: { gte: args.points } },
+      data: { pointsBalance: { decrement: args.points } },
+    });
+    if (res.count === 0) {
+      throw new BadRequestException({
+        code: 'LOYALTY_INSUFFICIENT_POINTS',
+        message: 'Bạn không có đủ điểm Micho.',
+      });
+    }
     const user = await tx.user.findUniqueOrThrow({
       where: { id: args.userId },
       select: { pointsBalance: true },
     });
-    if (args.points > user.pointsBalance) {
-      throw new BadRequestException({
-        code: 'LOYALTY_INSUFFICIENT_POINTS',
-        message: `You only have ${user.pointsBalance} Micho.`,
-      });
-    }
-    const balanceAfter = user.pointsBalance - args.points;
+    const balanceAfter = user.pointsBalance;
     await tx.loyaltyEvent.create({
       data: {
         userId: args.userId,
@@ -152,7 +121,7 @@ export class LoyaltyService {
     });
     await tx.user.update({
       where: { id: args.userId },
-      data: { pointsBalance: balanceAfter, membershipTier: tierFor(balanceAfter) },
+      data: { membershipTier: tierFor(balanceAfter) },
     });
   }
 
@@ -240,11 +209,14 @@ export class LoyaltyService {
     reason: string;
   }): Promise<LoyaltyEvent> {
     return this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUniqueOrThrow({
+      // Atomic increment so concurrent mutations on the same user's balance
+      // can't lose this update (the prior read-then-absolute-write could).
+      const updated = await tx.user.update({
         where: { id: args.userId },
+        data: { pointsBalance: { increment: args.delta } },
         select: { pointsBalance: true },
       });
-      const balanceAfter = user.pointsBalance + args.delta;
+      const balanceAfter = updated.pointsBalance;
       const event = await tx.loyaltyEvent.create({
         data: {
           userId: args.userId,
@@ -257,10 +229,7 @@ export class LoyaltyService {
       });
       await tx.user.update({
         where: { id: args.userId },
-        data: {
-          pointsBalance: balanceAfter,
-          membershipTier: tierFor(balanceAfter),
-        },
+        data: { membershipTier: tierFor(balanceAfter) },
       });
       return event;
     });

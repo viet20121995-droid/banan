@@ -45,8 +45,10 @@ export class ThreadsController {
 
   @Public()
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.threads.findOnePublished(id);
+  findOne(@Param('id') id: string, @CurrentUser() user?: AuthPrincipal) {
+    // Optional-auth: the owning store's staff/admin can load a draft here
+    // (the merchant editor uses this route); the public only gets published.
+    return this.threads.findOnePublic(id, user);
   }
 
   /** Public — fire-and-forget impression tracking from the customer feed. */

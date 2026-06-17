@@ -101,8 +101,9 @@ export class StoresController {
 }
 
 /// Merchant-facing controls over the cửa hàng's operating rules.
-/// All endpoints scope to the caller's store unless ADMIN, in which case
-/// the path :storeId param is honored (`/merchant/store/{storeId}/...`).
+/// Every endpoint scopes to the caller's own `user.storeId`; an admin with no
+/// store assigned is rejected (NO_STORE_ASSIGNED) — there is no store-targeting
+/// path param, so admin must act through a store-owner account.
 @ApiBearerAuth()
 @ApiTags('merchant.store')
 @Controller({ path: 'merchant/store', version: '1' })

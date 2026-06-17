@@ -41,8 +41,10 @@ export class ProductsController {
 
   @Public()
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.products.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user?: AuthPrincipal) {
+    // @Public but optional-auth: a merchant/admin token lets the editor load
+    // an archived product; anonymous/customers only see available ones.
+    return this.products.findOne(id, user?.role);
   }
 
   /// "Khách cũng mua" recommendations — public so the product detail

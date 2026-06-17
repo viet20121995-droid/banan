@@ -1,10 +1,15 @@
 import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 
 import { Public } from '../auth/decorators/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
+// Liveness/uptime probes + the Flutter splash poll this frequently; with the
+// global ThrottlerGuard now active it must be exempt or shared-egress callers
+// could be 429'd and treated as "down".
+@SkipThrottle()
 @ApiTags('health')
 @Public()
 @Controller({ path: 'health', version: '1' })

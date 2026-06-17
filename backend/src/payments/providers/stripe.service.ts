@@ -118,7 +118,13 @@ export class StripePaymentService {
     rawBody: Buffer,
     signature: string,
   ): Promise<
-    | { kind: 'captured'; providerRef: string; paidAmountVnd: number | null; payload: object }
+    | {
+        kind: 'captured';
+        providerRef: string;
+        paidAmountVnd: number | null;
+        currency: string;
+        payload: object;
+      }
     | { kind: 'failed'; providerRef: string; payload: object }
     | { kind: 'refunded'; providerRef: string; payload: object }
     | { kind: 'ignored' }
@@ -141,11 +147,14 @@ export class StripePaymentService {
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
-      // VND has no decimals, so amount_total IS the VND figure.
+      // VND has no decimals, so amount_total IS the VND figure. We also pass
+      // the session currency so applyCapture can cross-check it against the
+      // order's currency (the amount comparison alone is currency-blind).
       return {
         kind: 'captured',
         providerRef: session.id,
         paidAmountVnd: session.amount_total ?? null,
+        currency: session.currency ?? '',
         payload: event as unknown as object,
       };
     } else if (event.type === 'checkout.session.expired') {
