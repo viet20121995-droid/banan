@@ -763,11 +763,21 @@ export class OrdersService {
       });
     }
     const updated = await this.prisma.$transaction(async (tx) => {
-      const next = await tx.order.update({
-        where: { id },
+      // Status-GUARDED update: only transition if the order is still in the
+      // exact status we validated against. Two concurrent transitions (e.g. a
+      // double cancel) would otherwise both pass isAllowedTransition and both
+      // run the side-effects below (double refund/restock/reverse). The loser
+      // sees count 0, throws, rolls back, and never reaches side-effects.
+      const res = await tx.order.updateMany({
+        where: { id, status: order.status },
         data: { status: toStatus },
-        include: ORDER_INCLUDE,
       });
+      if (res.count === 0) {
+        throw new BadRequestException({
+          code: 'ORDER_INVALID_TRANSITION',
+          message: `Order is no longer in ${order.status}.`,
+        });
+      }
       await tx.orderStatusEvent.create({
         data: {
           orderId: id,
@@ -777,7 +787,10 @@ export class OrdersService {
           note,
         },
       });
-      return next;
+      return tx.order.findUniqueOrThrow({
+        where: { id },
+        include: ORDER_INCLUDE,
+      });
     });
 
     // Side-effects: cash gets captured on completion; uncaptured payments

@@ -170,20 +170,24 @@ export class CouponsService {
    *  burned on an order that never went through. Each row maps to exactly one
    *  prior increment, so the decrement stays balanced. */
   async reverseRedemption(orderId: string): Promise<void> {
-    const rows = await this.prisma.couponRedemption.findMany({
-      where: { orderId },
-      select: { id: true, couponId: true },
-    });
-    if (rows.length === 0) return;
-    await this.prisma.$transaction([
-      this.prisma.couponRedemption.deleteMany({ where: { orderId } }),
-      ...rows.map((r) =>
-        this.prisma.coupon.update({
+    await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.couponRedemption.findMany({
+        where: { orderId },
+        select: { couponId: true },
+      });
+      if (rows.length === 0) return;
+      // Delete first; the deleteMany takes row locks, so a concurrent reverse
+      // (e.g. a double-cancel race) finds nothing and gets count 0 — we then
+      // skip the decrement, so the counter can never drop twice for one row.
+      const del = await tx.couponRedemption.deleteMany({ where: { orderId } });
+      if (del.count === 0) return;
+      for (const r of rows) {
+        await tx.coupon.update({
           where: { id: r.couponId },
           data: { redemptions: { decrement: 1 } },
-        }),
-      ),
-    ]);
+        });
+      }
+    });
   }
 
   /** Voucher wallet for a customer — active coupons grouped into

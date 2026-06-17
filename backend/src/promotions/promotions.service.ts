@@ -261,20 +261,24 @@ export class PromotionsService {
    *  cancelled or its payment can't be initiated, so a campaign's per-user /
    *  global allowance isn't burned on an order that never completed. */
   async reverseUsage(orderId: string): Promise<void> {
-    const rows = await this.prisma.campaignRedemption.findMany({
-      where: { orderId },
-      select: { id: true, campaignId: true },
-    });
-    if (rows.length === 0) return;
-    await this.prisma.$transaction([
-      this.prisma.campaignRedemption.deleteMany({ where: { orderId } }),
-      ...rows.map((r) =>
-        this.prisma.campaign.update({
+    await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.campaignRedemption.findMany({
+        where: { orderId },
+        select: { campaignId: true },
+      });
+      if (rows.length === 0) return;
+      // Delete first; a concurrent reverse (double-cancel race) gets count 0
+      // from the row-locked deleteMany and skips the decrement, so usedCount
+      // can never drop twice for one row.
+      const del = await tx.campaignRedemption.deleteMany({ where: { orderId } });
+      if (del.count === 0) return;
+      for (const r of rows) {
+        await tx.campaign.update({
           where: { id: r.campaignId },
           data: { usedCount: { decrement: 1 } },
-        }),
-      ),
-    ]);
+        });
+      }
+    });
   }
 
   /** HAPPY_HOUR only runs inside its daily time + weekday window (VN time). */

@@ -166,3 +166,84 @@ describe('OrdersService.upsertGuestCustomer (anti-takeover)', () => {
     expect(data.email).toMatch(/^guest\+[0-9a-f]+@banan\.local$/);
   });
 });
+
+/**
+ * The status-guarded transition: a concurrent (lost-race) cancel must NOT run
+ * the cancellation side-effects (refund points / restock / reverse coupon +
+ * campaign), or they'd double-apply.
+ */
+describe('OrdersService.transition (status-guarded)', () => {
+  const ADMIN = { sub: 'a1', role: 'ADMIN' as const };
+  const order = {
+    id: 'o1',
+    status: 'PENDING',
+    customerId: 'c1',
+    storeId: 's1',
+    kitchenId: null,
+  };
+
+  function makeTxService(updateManyCount: number) {
+    const loyalty = {
+      refundRedemption: jest.fn().mockResolvedValue(undefined),
+      earnFor: jest.fn().mockResolvedValue(undefined),
+    };
+    const payments = {
+      onOrderCancelled: jest.fn().mockResolvedValue({ capturedPayments: [] }),
+      onOrderCompleted: jest.fn().mockResolvedValue(undefined),
+    };
+    const coupons = {
+      reverseRedemption: jest.fn().mockResolvedValue(undefined),
+    };
+    const promotions = { reverseUsage: jest.fn().mockResolvedValue(undefined) };
+    const tx = {
+      order: {
+        updateMany: jest.fn().mockResolvedValue({ count: updateManyCount }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(order),
+      },
+      orderStatusEvent: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(order) },
+      orderItem: { findMany: jest.fn().mockResolvedValue([]) },
+      giftCard: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
+    };
+    const noop = {} as never;
+    const svc = new OrdersService(
+      prisma as never,
+      { emit: jest.fn() } as never, // realtime
+      payments as never,
+      noop, // refunds
+      loyalty as never,
+      coupons as never,
+      { sendToUser: jest.fn() } as never, // notifications
+      noop, // auth
+      noop, // storeRouter
+      noop, // deliveryConfig
+      promotions as never,
+    );
+    return { svc, tx, loyalty, payments, coupons, promotions };
+  }
+
+  it('lost race (status-guard count 0) → throws, runs NO side-effects', async () => {
+    const m = makeTxService(0);
+    await expect(
+      m.svc.transition('o1', 'CANCELLED', ADMIN),
+    ).rejects.toMatchObject({ response: { code: 'ORDER_INVALID_TRANSITION' } });
+    expect(m.tx.order.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'o1', status: 'PENDING' } }),
+    );
+    expect(m.loyalty.refundRedemption).not.toHaveBeenCalled();
+    expect(m.payments.onOrderCancelled).not.toHaveBeenCalled();
+    expect(m.coupons.reverseRedemption).not.toHaveBeenCalled();
+    expect(m.promotions.reverseUsage).not.toHaveBeenCalled();
+  });
+
+  it('won race (count 1) → reverses coupon + campaign exactly once', async () => {
+    const m = makeTxService(1);
+    await m.svc.transition('o1', 'CANCELLED', ADMIN);
+    expect(m.loyalty.refundRedemption).toHaveBeenCalledTimes(1);
+    expect(m.coupons.reverseRedemption).toHaveBeenCalledTimes(1);
+    expect(m.promotions.reverseUsage).toHaveBeenCalledTimes(1);
+  });
+});
