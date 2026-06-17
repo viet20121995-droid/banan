@@ -131,6 +131,15 @@ describe('PaymentsService.applyCapture', () => {
     expect(m.realtime.emit).not.toHaveBeenCalled();
   });
 
+  it('CAPTURED (replayed webhook) + correct amount → no update, no emit, no notify', async () => {
+    const m = makeService({ payment: payment('CAPTURED') });
+    await capture(m.svc, 50000);
+    // Idempotency: a duplicate/late webhook must not re-emit or re-notify.
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.realtime.emit).not.toHaveBeenCalled();
+    expect(m.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
   it('INITIATED + WRONG amount → no update, no emit, no notify', async () => {
     const m = makeService({ payment: payment('INITIATED', 50000) });
     await capture(m.svc, 9999);
