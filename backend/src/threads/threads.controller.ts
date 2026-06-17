@@ -64,6 +64,11 @@ export class ThreadsController {
 export class MerchantThreadsController {
   constructor(private readonly threads: ThreadsService) {}
 
+  // Threads (store editorial posts) are scoped to a single store, and
+  // listForStore has no chain-wide mode — so this is a store-staff
+  // operation; admin (no storeId) is excluded rather than 400-ing with a
+  // misleading "no store assigned".
+  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF)
   @Get()
   list(@CurrentUser() user: AuthPrincipal) {
     if (!user.storeId) {
@@ -80,6 +85,7 @@ export class MerchantThreadsController {
     );
   }
 
+  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF)
   @Post()
   create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateThreadDto) {
     if (!user.storeId) {

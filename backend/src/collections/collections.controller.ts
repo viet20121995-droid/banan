@@ -68,6 +68,10 @@ export class MerchantCollectionsController {
     );
   }
 
+  // A collection belongs to one store; create has no chain-wide mode, so
+  // it's a store-staff operation. Admin can still list (chain-wide above)
+  // and delete, but creating requires a concrete store.
+  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF)
   @Post()
   create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateCollectionDto) {
     if (!user.storeId) {

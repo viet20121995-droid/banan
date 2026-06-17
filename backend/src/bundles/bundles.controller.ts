@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -73,19 +74,20 @@ export class MerchantBundlesController {
     return this.bundles.findOneForMerchant(id, this.scope(user));
   }
 
+  // A combo belongs to exactly one store, so creation is a store-owner
+  // operation — admin (no implicit store) is excluded here rather than
+  // crashing with a 500 when it lacks a storeId. The merchant UI already
+  // hides Combo management from admin.
+  @Roles(Role.MERCHANT_OWNER)
   @Post()
   create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateBundleDto) {
-    // Admin creating a bundle has no implicit store — they need to be
-    // a merchant of that store. Keep this simple: admin creates against
-    // the catalog store (same one products live in) for now.
-    const storeId = user.storeId;
-    if (!storeId) {
-      // For ADMIN we'd need a `storeId` query param, but for now reuse
-      // the merchant who owns the catalog. The seed always has at least
-      // one merchant tied to the LTT store.
-      throw new Error('Admin chưa hỗ trợ tạo bundle qua API — login với merchant owner.');
+    if (!user.storeId) {
+      throw new BadRequestException({
+        code: 'NO_STORE_ASSIGNED',
+        message: 'Tài khoản chưa được gán cửa hàng — combo phải thuộc một cửa hàng cụ thể.',
+      });
     }
-    return this.bundles.create(storeId, dto);
+    return this.bundles.create(user.storeId, dto);
   }
 
   @Patch(':id')
