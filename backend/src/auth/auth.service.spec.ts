@@ -18,10 +18,18 @@ function makeService(overrides: {
   };
   const jwt = { signAsync: jest.fn().mockResolvedValue('access.jwt') };
   const config = { get: jest.fn().mockReturnValue('secret') };
+  // register()/login() don't send mail, but the constructor now requires an
+  // EmailService — supply an inert mock so the suite compiles + runs.
+  const email = {
+    sendWelcome: jest.fn().mockResolvedValue(undefined),
+    sendRaw: jest.fn().mockResolvedValue(undefined),
+    sendPasswordReset: jest.fn().mockResolvedValue(undefined),
+  };
   const svc = new AuthService(
     prisma as never,
     jwt as never,
     config as never,
+    email as never,
   );
   return { svc, prisma, jwt };
 }
@@ -90,6 +98,7 @@ describe('AuthService', () => {
         role: 'CUSTOMER',
         storeId: null,
         kitchenId: null,
+        isActive: true,
       }),
     });
     await expect(
@@ -107,6 +116,7 @@ describe('AuthService', () => {
         role: 'CUSTOMER',
         storeId: null,
         kitchenId: null,
+        isActive: true,
       }),
     });
     const out = await svc.login({

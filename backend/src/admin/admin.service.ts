@@ -61,7 +61,7 @@ export class AdminService {
       }
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const passwordHash = await bcrypt.hash(dto.password, 12);
     try {
       const user = await this.prisma.user.create({
         data: {
@@ -72,6 +72,9 @@ export class AdminService {
           role: dto.role as Role,
           storeId: isMerchant ? dto.storeId : null,
           kitchenId: isKitchen ? dto.kitchenId : null,
+          // Admin-provisioned, login-capable account → owner-controlled, so it
+          // must never be silently reused as a guest-checkout target.
+          claimed: true,
         },
       });
       return AdminService.view(user);

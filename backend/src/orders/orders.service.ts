@@ -1370,14 +1370,15 @@ export class OrdersService {
   }): Promise<{ userId: string; createdNew: boolean }> {
     const existing = await this.prisma.user.findUnique({
       where: { phone: args.phone },
-      select: { id: true, claimed: true },
+      select: { id: true, claimed: true, role: true },
     });
     if (existing) {
-      // Anti-takeover: never bind a guest order to a CLAIMED (owner-controlled)
-      // account — the phone wasn't verified here. Force the shopper to log in.
-      // Unclaimed stubs (prior guest / merchant-created) are safe to reuse so
-      // a returning guest's orders still aggregate under one record.
-      if (existing.claimed) {
+      // Anti-takeover: only an UNCLAIMED, CUSTOMER-role stub (a prior guest or
+      // a merchant-created phone customer) is safe to reuse, so a returning
+      // guest's orders still aggregate. A claimed account, or any staff /
+      // kitchen / admin account, must never be bound to an unverified guest
+      // order — force the shopper to log in instead.
+      if (existing.claimed || existing.role !== 'CUSTOMER') {
         throw new BadRequestException({
           code: 'PHONE_HAS_ACCOUNT',
           message:
