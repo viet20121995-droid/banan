@@ -5,7 +5,7 @@ import 'package:equatable/equatable.dart';
 enum PaymentMethod {
   cash,
   stripe,
-  vnpay,
+  payos,
   momo;
 
   static PaymentMethod fromWire(String value) {
@@ -14,8 +14,9 @@ enum PaymentMethod {
         return PaymentMethod.cash;
       case 'STRIPE':
         return PaymentMethod.stripe;
-      case 'VNPAY':
-        return PaymentMethod.vnpay;
+      case 'PAYOS':
+      case 'VNPAY': // legacy rows (VNPay was replaced by PayOS)
+        return PaymentMethod.payos;
       case 'MOMO':
         return PaymentMethod.momo;
       default:
@@ -29,8 +30,8 @@ enum PaymentMethod {
         return 'CASH';
       case PaymentMethod.stripe:
         return 'STRIPE';
-      case PaymentMethod.vnpay:
-        return 'VNPAY';
+      case PaymentMethod.payos:
+        return 'PAYOS';
       case PaymentMethod.momo:
         return 'MOMO';
     }
@@ -42,8 +43,8 @@ enum PaymentMethod {
         return 'Tiền mặt khi nhận hàng';
       case PaymentMethod.stripe:
         return 'Thẻ quốc tế · Stripe';
-      case PaymentMethod.vnpay:
-        return 'VNPay';
+      case PaymentMethod.payos:
+        return 'PayOS · QR / Chuyển khoản';
       case PaymentMethod.momo:
         return 'MoMo';
     }

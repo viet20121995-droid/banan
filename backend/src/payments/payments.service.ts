@@ -6,8 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { PaymentInstructions } from './dto/payment-instructions';
 import { CashPaymentService } from './providers/cash.service';
 import { MoMoPaymentService } from './providers/momo.service';
+import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
-import { VNPayPaymentService } from './providers/vnpay.service';
 
 interface InitiateArgs {
   order: Order & { items: OrderItem[] };
@@ -21,7 +21,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly cash: CashPaymentService,
     private readonly stripe: StripePaymentService,
-    private readonly vnpay: VNPayPaymentService,
+    private readonly payos: PayOSPaymentService,
     private readonly momo: MoMoPaymentService,
   ) {}
 
@@ -70,23 +70,22 @@ export class PaymentsService {
           redirectUrl: result.redirectUrl,
         };
       }
-      case 'VNPAY': {
-        const result = await this.vnpay.initiate({
+      case 'PAYOS': {
+        const result = await this.payos.initiate({
           orderId: order.id,
           orderCode: order.code,
           amount,
           currency,
-          customerIp: args.customerIp,
         });
         if ('configurationError' in result) {
           return {
-            provider: 'VNPAY',
+            provider: 'PAYOS',
             paymentId: '',
             configurationError: result.configurationError,
           };
         }
         return {
-          provider: 'VNPAY',
+          provider: 'PAYOS',
           paymentId: result.paymentId,
           redirectUrl: result.redirectUrl,
         };
@@ -134,13 +133,13 @@ export class PaymentsService {
     await this.prisma.payment.updateMany({
       where: {
         orderId,
-        provider: { in: ['STRIPE', 'VNPAY', 'MOMO'] },
+        provider: { in: ['STRIPE', 'PAYOS', 'MOMO'] },
         status: 'INITIATED',
       },
       data: { status: 'VOIDED' },
     });
 
-    // Anything still CAPTURED (Stripe/VNPay/MoMo, or CASH after collection)
+    // Anything still CAPTURED (Stripe/PayOS/MoMo, or CASH after collection)
     // needs a refund — return so the caller can drive the Refund flow.
     const capturedPayments = await this.prisma.payment.findMany({
       where: { orderId, status: 'CAPTURED' },
@@ -151,8 +150,8 @@ export class PaymentsService {
   /**
    * Executes the provider-side refund for an approved Refund. Returns
    * `{ completed: true }` for synchronous providers (CASH); `false` for
-   * async ones (Stripe/VNPay/MoMo) — caller marks the refund PROCESSING
-   * and waits for the webhook.
+   * async ones (Stripe/PayOS/MoMo) — caller marks the refund PROCESSING
+   * and waits for the webhook / manual reconciliation.
    */
   async executeRefund(refund: Refund): Promise<{ completed: boolean; providerRef?: string }> {
     if (!refund.paymentId) {
@@ -174,8 +173,8 @@ export class PaymentsService {
           paymentRawPayload: payment.rawPayload,
           amountMinorUnits: Math.round(Number(refund.amount.toString())),
         });
-      case 'VNPAY':
-        return this.vnpay.refund();
+      case 'PAYOS':
+        return this.payos.refund();
       case 'MOMO':
         return this.momo.refund();
       default:

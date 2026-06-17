@@ -472,9 +472,10 @@ model Address {
 
 enum PaymentProvider {
   STRIPE
-  VNPAY
+  VNPAY // deprecated — replaced by PAYOS; value kept so existing rows/type stay valid
   MOMO
   CASH
+  PAYOS
 }
 
 model PaymentMethod {

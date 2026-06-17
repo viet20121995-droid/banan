@@ -4,8 +4,8 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { CashPaymentService } from './providers/cash.service';
 import { MoMoPaymentService } from './providers/momo.service';
+import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
-import { VNPayPaymentService } from './providers/vnpay.service';
 
 @Module({
   controllers: [PaymentsController],
@@ -13,7 +13,7 @@ import { VNPayPaymentService } from './providers/vnpay.service';
     PaymentsService,
     CashPaymentService,
     StripePaymentService,
-    VNPayPaymentService,
+    PayOSPaymentService,
     MoMoPaymentService,
   ],
   exports: [PaymentsService],

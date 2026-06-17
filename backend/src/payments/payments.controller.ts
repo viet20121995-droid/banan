@@ -20,8 +20,8 @@ import type { Request, Response } from 'express';
 import { Public } from '../auth/decorators/public.decorator';
 
 import { MoMoPaymentService } from './providers/momo.service';
+import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
-import { VNPayPaymentService } from './providers/vnpay.service';
 
 // Webhook + IPN endpoints are called by upstream providers and can fire in
 // bursts — the global throttler would falsely rate-limit them. Skip throttling
@@ -34,7 +34,7 @@ export class PaymentsController {
 
   constructor(
     private readonly stripe: StripePaymentService,
-    private readonly vnpay: VNPayPaymentService,
+    private readonly payos: PayOSPaymentService,
     private readonly momo: MoMoPaymentService,
     private readonly config: ConfigService,
   ) {}
@@ -56,48 +56,43 @@ export class PaymentsController {
   }
 
   /**
-   * VNPay redirects the user back here after payment. We verify the hash and
-   * redirect to the customer app with a status query so the UI can update.
+   * PayOS redirects the customer's browser back here after checkout. This is
+   * UX only — we just bounce to the customer app with a status. The DB state
+   * is set authoritatively by the webhook below.
    */
   @Public()
-  @Get('vnpay/return')
-  async vnpayReturn(
-    @Query() query: Record<string, string>,
-    @Res() res: Response,
-  ) {
-    const verified = this.vnpay.verifyCallback(query);
-    if (verified.ok && verified.responseCode === '00') {
-      await this.vnpay.markCaptured(verified.txnRef!, query as object);
-    } else if (verified.ok) {
-      await this.vnpay.markFailed(verified.txnRef!, query as object);
-    }
+  @Get('payos/return')
+  payosReturn(@Query() query: Record<string, string>, @Res() res: Response) {
     const customerBase =
       this.config.get<string>('CUSTOMER_APP_BASE_URL') ??
       'http://localhost:8081';
-    const status = verified.ok && verified.responseCode === '00'
-      ? 'success'
-      : 'failed';
+    // PayOS appends e.g. ?code=00&status=PAID&cancel=false&orderCode=...
+    const cancelled = query['cancel'] === 'true' || query['status'] === 'CANCELLED';
+    const status = !cancelled && query['code'] === '00' ? 'success' : 'failed';
     res.redirect(
-      `${customerBase}/payments/return/vnpay?status=${status}&txnRef=${verified.txnRef ?? ''}`,
+      `${customerBase}/payments/return/payos?status=${status}&orderCode=${query['orderCode'] ?? ''}`,
     );
   }
 
-  /** Authoritative server-to-server callback from VNPay. */
+  /** Authoritative server-to-server webhook from PayOS (signed JSON POST). */
   @Public()
-  @Get('vnpay/ipn')
-  async vnpayIpn(
-    @Query() query: Record<string, string>,
-  ): Promise<{ RspCode: string; Message: string }> {
-    const verified = this.vnpay.verifyCallback(query);
-    if (!verified.ok) {
-      return { RspCode: '97', Message: 'Invalid signature' };
+  @Post('payos/webhook')
+  @HttpCode(HttpStatus.OK)
+  async payosWebhook(
+    @Body() body: Record<string, unknown>,
+  ): Promise<{ success: boolean }> {
+    const verified = this.payos.verifyWebhook(body);
+    if (!verified.ok || !verified.orderCode) {
+      // PayOS sends a test ping with a dummy payload when you register the
+      // webhook — acknowledge it so the dashboard accepts the URL.
+      return { success: true };
     }
-    if (verified.responseCode === '00') {
-      await this.vnpay.markCaptured(verified.txnRef!, query as object);
+    if (verified.paid) {
+      await this.payos.markCaptured(verified.orderCode, body);
     } else {
-      await this.vnpay.markFailed(verified.txnRef!, query as object);
+      await this.payos.markFailed(verified.orderCode, body);
     }
-    return { RspCode: '00', Message: 'Confirm Success' };
+    return { success: true };
   }
 
   /** MoMo authoritative IPN. */

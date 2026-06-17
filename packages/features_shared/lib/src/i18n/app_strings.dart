@@ -143,7 +143,7 @@ abstract class AppStrings {
   String get tomorrow;
   String inDays(int n);
   String get weWillText;
-  String get vnpayHint;
+  String get payosHint;
   String orderStatusLabel(OrderStatus status);
   String get orderTitle;
   String get backToMenu;
@@ -426,7 +426,7 @@ class _Vi extends AppStrings {
   @override
   String get weWillText => 'Chúng tôi sẽ nhắn cập nhật đơn vào số này.';
   @override
-  String get vnpayHint => 'Thẻ ngân hàng Việt Nam';
+  String get payosHint => 'Quét QR / chuyển khoản ngân hàng';
   @override
   String orderStatusLabel(OrderStatus status) => switch (status) {
         OrderStatus.pending => 'Chờ xác nhận',
@@ -792,7 +792,7 @@ class _En extends AppStrings {
   @override
   String get weWillText => "We'll text you order updates at this number.";
   @override
-  String get vnpayHint => 'Vietnamese bank cards';
+  String get payosHint => 'Bank QR / transfer';
   @override
   String orderStatusLabel(OrderStatus status) => switch (status) {
         OrderStatus.pending => 'Pending',

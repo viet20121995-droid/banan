@@ -69,7 +69,7 @@ class PaymentPolicyScreen extends StatelessWidget {
         ContentSection('1. Phương thức thanh toán', [
           'Tiền mặt khi nhận hàng (COD) áp dụng cho cả đơn giao hàng và đơn '
               'lấy tại quầy.',
-          'Ghi chú: thanh toán online qua VNPay / thẻ — sắp ra mắt.',
+          'Ghi chú: thanh toán online qua PayOS (quét QR / chuyển khoản) — sắp ra mắt.',
         ]),
         ContentSection('2. Đơn vị tiền tệ & giá', [
           'Toàn bộ giao dịch sử dụng đơn vị tiền tệ là VND.',

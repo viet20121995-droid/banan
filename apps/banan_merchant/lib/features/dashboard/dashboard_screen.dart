@@ -421,8 +421,10 @@ class _PaymentBreakdown extends StatelessWidget {
     switch (provider.toUpperCase()) {
       case 'CASH':
         return 'Tiền mặt';
+      case 'PAYOS':
+        return 'PayOS';
       case 'VNPAY':
-        return 'VNPay';
+        return 'VNPay'; // legacy
       default:
         return provider;
     }
@@ -432,8 +434,10 @@ class _PaymentBreakdown extends StatelessWidget {
     switch (provider.toUpperCase()) {
       case 'CASH':
         return Icons.payments_outlined;
+      case 'PAYOS':
+        return Icons.qr_code_2_outlined;
       case 'VNPAY':
-        return Icons.account_balance_outlined;
+        return Icons.account_balance_outlined; // legacy
       default:
         return Icons.credit_card_outlined;
     }

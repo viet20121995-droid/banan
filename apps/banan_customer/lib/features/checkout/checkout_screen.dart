@@ -398,7 +398,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           return;
         }
 
-        // Redirect-based payment (VNPay / MoMo / Stripe): navigate the SAME
+        // Redirect-based payment (PayOS / MoMo / Stripe): navigate the SAME
         // tab to the gateway. A new-tab popup ('_blank') gets silently
         // blocked by the browser because this runs after an `await` (no
         // longer a direct user gesture) — which looked like "nothing
@@ -1233,10 +1233,11 @@ class _PaymentSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Cash on receipt (COD) is the active method while VNPay API keys aren't
-    // configured yet. Stripe/MoMo backend providers still work too. To turn a
-    // method back on, just add its row here, e.g.:
-    //   (PaymentMethod.vnpay, Icons.account_balance_outlined, s.vnpayHint),
+    // Cash on receipt (COD) is the active method until PayOS API keys are
+    // configured. Once PAYOS_CLIENT_ID / PAYOS_API_KEY / PAYOS_CHECKSUM_KEY
+    // are set in backend/.env(.prod) and the webhook URL is registered in the
+    // PayOS dashboard, enable online pay by adding its row here:
+    //   (PaymentMethod.payos, Icons.qr_code_2_outlined, 'Quét QR / chuyển khoản (PayOS)'),
     final options = <(PaymentMethod, IconData, String)>[
       (PaymentMethod.cash, Icons.payments_outlined, 'Trả tiền mặt khi nhận hàng'),
     ];
