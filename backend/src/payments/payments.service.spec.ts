@@ -171,3 +171,103 @@ describe('PaymentsService.applyCapture', () => {
     expect(m.realtime.emit).toHaveBeenCalledTimes(1);
   });
 });
+
+type RefundRow = {
+  id: string;
+  orderId: string;
+  paymentId: string | null;
+  status: string;
+};
+
+function makeRefundService(opts: {
+  refund?: RefundRow | null;
+  refundUpdateCount?: number;
+}) {
+  const refundFindFirst = jest.fn().mockResolvedValue(opts.refund ?? null);
+  const refundUpdateMany = jest
+    .fn()
+    .mockResolvedValue({ count: opts.refundUpdateCount ?? 1 });
+  const orderUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+  const paymentUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+  const prisma = {
+    refund: { findFirst: refundFindFirst, updateMany: refundUpdateMany },
+    order: { updateMany: orderUpdateMany },
+    payment: { updateMany: paymentUpdateMany },
+  };
+  const realtime = { emit: jest.fn() };
+  const notifications = { sendToUser: jest.fn() };
+  const noop = {} as never;
+  const svc = new PaymentsService(
+    prisma as never,
+    noop,
+    noop,
+    noop,
+    noop,
+    realtime as never,
+    notifications as never,
+  );
+  return {
+    svc,
+    refundFindFirst,
+    refundUpdateMany,
+    orderUpdateMany,
+    paymentUpdateMany,
+    realtime,
+  };
+}
+
+const settle = (svc: PaymentsService) =>
+  svc.applyRefundSettled({
+    provider: 'STRIPE' as never,
+    providerRef: 're_1',
+    payload: { ok: true },
+  });
+
+describe('PaymentsService.applyRefundSettled', () => {
+  it('PROCESSING refund → COMPLETED, mirrors order + payment to REFUNDED, emits', async () => {
+    const m = makeRefundService({
+      refund: { id: 'r1', orderId: 'o1', paymentId: 'p1', status: 'PROCESSING' },
+    });
+    await settle(m.svc);
+
+    expect(m.refundUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.refundUpdateMany.mock.calls[0][0].data.status).toBe('COMPLETED');
+    expect(m.orderUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.orderUpdateMany.mock.calls[0][0].data.status).toBe('REFUNDED');
+    expect(m.paymentUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.paymentUpdateMany.mock.calls[0][0].data.status).toBe('REFUNDED');
+    expect(m.realtime.emit).toHaveBeenCalledTimes(1);
+    expect(m.realtime.emit.mock.calls[0][1]).toBe('refund.updated');
+  });
+
+  it('no in-flight refund (replay / unknown ref) → no-op', async () => {
+    const m = makeRefundService({ refund: null });
+    await settle(m.svc);
+    expect(m.refundUpdateMany).not.toHaveBeenCalled();
+    expect(m.orderUpdateMany).not.toHaveBeenCalled();
+    expect(m.paymentUpdateMany).not.toHaveBeenCalled();
+    expect(m.realtime.emit).not.toHaveBeenCalled();
+  });
+
+  it('lost race (updateMany count = 0) → no order/payment mirror, no emit', async () => {
+    const m = makeRefundService({
+      refund: { id: 'r1', orderId: 'o1', paymentId: 'p1', status: 'APPROVED' },
+      refundUpdateCount: 0,
+    });
+    await settle(m.svc);
+    expect(m.refundUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.orderUpdateMany).not.toHaveBeenCalled();
+    expect(m.paymentUpdateMany).not.toHaveBeenCalled();
+    expect(m.realtime.emit).not.toHaveBeenCalled();
+  });
+
+  it('refund without paymentId → order mirrored, payment update skipped', async () => {
+    const m = makeRefundService({
+      refund: { id: 'r1', orderId: 'o1', paymentId: null, status: 'PROCESSING' },
+    });
+    await settle(m.svc);
+    expect(m.orderUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.paymentUpdateMany).not.toHaveBeenCalled();
+    expect(m.realtime.emit).toHaveBeenCalledTimes(1);
+  });
+});

@@ -67,6 +67,12 @@ export class PaymentsController {
         providerRef: r.providerRef,
         payload: r.payload,
       });
+    } else if (r.kind === 'refunded') {
+      await this.payments.applyRefundSettled({
+        provider: 'STRIPE',
+        providerRef: r.providerRef,
+        payload: r.payload,
+      });
     }
     return { received: true };
   }

@@ -105,3 +105,74 @@ describe('CouponsService.validate', () => {
     });
   });
 });
+
+function makeTx(opts: {
+  coupon: Record<string, unknown>;
+  userCount?: number;
+}) {
+  const create = jest.fn().mockResolvedValue({});
+  const update = jest.fn().mockResolvedValue({});
+  const count = jest.fn().mockResolvedValue(opts.userCount ?? 0);
+  const findUniqueOrThrow = jest.fn().mockResolvedValue(opts.coupon);
+  const executeRaw = jest.fn().mockResolvedValue(1);
+  const tx = {
+    $executeRaw: executeRaw,
+    coupon: { findUniqueOrThrow, update },
+    couponRedemption: { count, create },
+  };
+  return { tx, create, update, count, executeRaw };
+}
+
+describe('CouponsService.recordRedemption (authoritative, race-safe)', () => {
+  const callArgs = (tx: unknown) => ({
+    couponId: 'c1',
+    userId: 'u1',
+    orderId: 'o1',
+    tx: tx as never,
+  });
+
+  it('takes a per-coupon advisory lock, then records + increments', async () => {
+    const m = makeTx({
+      coupon: { maxRedemptions: 100, perUserLimit: 1, redemptions: 5 },
+    });
+    await makeService(null).recordRedemption(callArgs(m.tx));
+    // Advisory lock acquired before the checks.
+    expect(m.executeRaw).toHaveBeenCalledTimes(1);
+    expect(m.create).toHaveBeenCalledTimes(1);
+    expect(m.update).toHaveBeenCalledWith({
+      where: { id: 'c1' },
+      data: { redemptions: { increment: 1 } },
+    });
+  });
+
+  it('throws COUPON_LIMIT_REACHED at the global cap (no create)', async () => {
+    const m = makeTx({
+      coupon: { maxRedemptions: 100, perUserLimit: 0, redemptions: 100 },
+    });
+    await expect(
+      makeService(null).recordRedemption(callArgs(m.tx)),
+    ).rejects.toMatchObject({ response: { code: 'COUPON_LIMIT_REACHED' } });
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('throws COUPON_USER_LIMIT when the per-user cap is reached (no create)', async () => {
+    const m = makeTx({
+      coupon: { maxRedemptions: null, perUserLimit: 1, redemptions: 3 },
+      userCount: 1,
+    });
+    await expect(
+      makeService(null).recordRedemption(callArgs(m.tx)),
+    ).rejects.toMatchObject({ response: { code: 'COUPON_USER_LIMIT' } });
+    expect(m.create).not.toHaveBeenCalled();
+  });
+
+  it('unlimited coupon (no caps) → always records', async () => {
+    const m = makeTx({
+      coupon: { maxRedemptions: null, perUserLimit: 0, redemptions: 999 },
+    });
+    await makeService(null).recordRedemption(callArgs(m.tx));
+    expect(m.create).toHaveBeenCalledTimes(1);
+    expect(m.update).toHaveBeenCalledTimes(1);
+  });
+});

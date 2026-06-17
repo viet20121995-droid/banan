@@ -1,8 +1,8 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 
 import { CatalogBroadcastInterceptor } from './common/interceptors/catalog-broadcast.interceptor';
@@ -104,6 +104,10 @@ import { WishlistModule } from './wishlist/wishlist.module';
     SiteContentModule,
   ],
   providers: [
+    // Global rate limiting. Without this guard the @Throttle()/@SkipThrottle()
+    // decorators sprinkled across the app (login, password-reset, uploads) are
+    // inert metadata — registering it here is what actually enforces them.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Realtime catalog sync — broadcasts catalog/config changes to clients.
     { provide: APP_INTERCEPTOR, useClass: CatalogBroadcastInterceptor },
   ],

@@ -105,13 +105,52 @@ export class CouponsService {
     };
   }
 
-  /** Records a redemption when an order is created — increments the counter. */
+  /**
+   * Records a redemption when an order is created — the AUTHORITATIVE limit
+   * check. `validate()` runs before the order transaction opens and only reads
+   * counters, so two concurrent checkouts could both pass it and overshoot the
+   * global `maxRedemptions` / per-user limit (each creates a row with a
+   * distinct orderId, so the [couponId,userId,orderId] unique never trips).
+   *
+   * We close that race with a per-coupon transaction advisory lock: all
+   * redemptions of the same coupon serialize for the duration of the order
+   * transaction (contention is limited to simultaneous uses of that one
+   * coupon), so the re-checks below see committed state and cannot be
+   * overshot. Throwing here rolls back the whole order.
+   */
   async recordRedemption(args: {
     couponId: string;
     userId: string;
     orderId: string;
     tx: Prisma.TransactionClient;
   }): Promise<void> {
+    await args.tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${args.couponId}, 0))`;
+
+    const coupon = await args.tx.coupon.findUniqueOrThrow({
+      where: { id: args.couponId },
+      select: { maxRedemptions: true, perUserLimit: true, redemptions: true },
+    });
+    if (
+      coupon.maxRedemptions !== null &&
+      coupon.redemptions >= coupon.maxRedemptions
+    ) {
+      throw new BadRequestException({
+        code: 'COUPON_LIMIT_REACHED',
+        message: 'This coupon has been fully claimed.',
+      });
+    }
+    if (coupon.perUserLimit > 0) {
+      const used = await args.tx.couponRedemption.count({
+        where: { couponId: args.couponId, userId: args.userId },
+      });
+      if (used >= coupon.perUserLimit) {
+        throw new BadRequestException({
+          code: 'COUPON_USER_LIMIT',
+          message: 'You have already used this coupon.',
+        });
+      }
+    }
+
     await args.tx.couponRedemption.create({
       data: {
         couponId: args.couponId,

@@ -47,11 +47,14 @@ export class RefundsService {
     reason: string;
     requestedById: string;
   }): Promise<Refund> {
+    // Idempotency: return any in-flight refund, and never open a second
+    // refund against a payment that already settled one (guards against a
+    // double refund from concurrent cancels or a re-fired webhook).
     const existing = await this.prisma.refund.findFirst({
       where: {
         orderId: args.order.id,
         paymentId: args.payment.id,
-        status: { in: ['REQUESTED', 'APPROVED', 'PROCESSING'] },
+        status: { in: ['REQUESTED', 'APPROVED', 'PROCESSING', 'COMPLETED'] },
       },
     });
     if (existing) return existing;

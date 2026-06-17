@@ -120,6 +120,7 @@ export class StripePaymentService {
   ): Promise<
     | { kind: 'captured'; providerRef: string; paidAmountVnd: number | null; payload: object }
     | { kind: 'failed'; providerRef: string; payload: object }
+    | { kind: 'refunded'; providerRef: string; payload: object }
     | { kind: 'ignored' }
   > {
     if (!this.stripe || !this.webhookSecret) {
@@ -152,6 +153,20 @@ export class StripePaymentService {
       return {
         kind: 'failed',
         providerRef: session.id,
+        payload: event as unknown as object,
+      };
+    } else if (event.type === 'charge.refunded') {
+      // A refund we issued has settled. The refund object's id (re_...) is
+      // what RefundsService stored as the Refund.providerRef, so we hand that
+      // back for the caller to match the in-flight Refund row and complete it.
+      const charge = event.data.object as Stripe.Charge;
+      const settled =
+        charge.refunds?.data?.find((r) => r.status === 'succeeded') ??
+        charge.refunds?.data?.[0];
+      if (!settled) return { kind: 'ignored' };
+      return {
+        kind: 'refunded',
+        providerRef: settled.id,
         payload: event as unknown as object,
       };
     }

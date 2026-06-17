@@ -4,7 +4,14 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Order, OrderItem, Payment, PaymentProvider, Refund } from '@prisma/client';
+import {
+  Order,
+  OrderItem,
+  OrderStatus,
+  Payment,
+  PaymentProvider,
+  Refund,
+} from '@prisma/client';
 
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -99,6 +106,58 @@ export class PaymentsService {
         status: { in: ['INITIATED', 'AUTHORIZED'] },
       },
       data: { status: 'FAILED', rawPayload: args.payload },
+    });
+  }
+
+  /**
+   * Settles an async provider refund when its "refund succeeded" webhook
+   * arrives (e.g. Stripe `charge.refunded`). RefundsService.process() parks
+   * such refunds in PROCESSING with the provider refund id as providerRef;
+   * here we match that row and drive it to COMPLETED, then mirror the order
+   * and payment to REFUNDED. Without this, async refunds stayed PROCESSING
+   * forever (the money left the provider but the order never showed REFUNDED).
+   *
+   * Idempotent: a replayed webhook (refund already COMPLETED, or none found)
+   * is a no-op, and the status-guarded updateMany wins at most once.
+   */
+  async applyRefundSettled(args: {
+    provider: PaymentProvider;
+    providerRef: string;
+    payload?: object;
+  }): Promise<void> {
+    const refund = await this.prisma.refund.findFirst({
+      where: {
+        providerRef: args.providerRef,
+        status: { in: ['APPROVED', 'PROCESSING'] },
+      },
+    });
+    if (!refund) {
+      this.logger.warn(
+        `Refund webhook for unknown/already-settled ${args.provider} ref ${args.providerRef} — ignored`,
+      );
+      return;
+    }
+    const res = await this.prisma.refund.updateMany({
+      where: { id: refund.id, status: { in: ['APPROVED', 'PROCESSING'] } },
+      data: { status: 'COMPLETED' },
+    });
+    if (res.count === 0) return; // lost a race to a concurrent webhook
+    // Mirror onto the order + payment so customer/merchant see REFUNDED.
+    await this.prisma.order.updateMany({
+      where: { id: refund.orderId, status: { in: ['CANCELLED', 'COMPLETED'] } },
+      data: { status: 'REFUNDED' satisfies OrderStatus },
+    });
+    if (refund.paymentId) {
+      await this.prisma.payment.updateMany({
+        where: { id: refund.paymentId, status: 'CAPTURED' },
+        data: { status: 'REFUNDED' },
+      });
+    }
+    this.realtime.emit([`order:${refund.orderId}`], 'refund.updated', {
+      refundId: refund.id,
+      orderId: refund.orderId,
+      status: 'COMPLETED',
+      at: new Date().toISOString(),
     });
   }
 
