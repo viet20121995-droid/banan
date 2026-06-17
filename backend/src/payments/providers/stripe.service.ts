@@ -62,21 +62,32 @@ export class StripePaymentService {
       this.config.get<string>('STRIPE_CANCEL_URL') ??
       'http://localhost:8081/checkout';
 
-    // Stripe expects `unit_amount` as the smallest currency unit; VND has 0
-    // decimals, so the integer VND price IS the amount in minor units.
+    // Charge the ACTUAL order total (after delivery fee, campaign/coupon/points/
+    // gift-card adjustments) as a single line item, so Stripe's amount_total
+    // equals Payment.amount (= order.total). Reconstructing line items from
+    // unit prices would charge the wrong sum and fail the capture amount-check.
+    // The itemised breakdown already lives in the app's own order view.
+    const itemSummary = args.items
+      .map((i) => `${i.quantity}× ${i.variantLabel ? `${i.name} (${i.variantLabel})` : i.name}`)
+      .join(', ')
+      .slice(0, 480);
+    // VND has 0 decimals, so the integer VND total IS the amount in minor units.
     const session = await this.stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
-      line_items: args.items.map((i) => ({
-        quantity: i.quantity,
-        price_data: {
-          currency: args.currency.toLowerCase(),
-          unit_amount: Math.round(i.unitAmount),
-          product_data: {
-            name: i.variantLabel ? `${i.name} — ${i.variantLabel}` : i.name,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: args.currency.toLowerCase(),
+            unit_amount: Math.round(Number(args.amount)),
+            product_data: {
+              name: `Đơn hàng Banan #${args.orderCode}`,
+              description: itemSummary || undefined,
+            },
           },
         },
-      })),
+      ],
       success_url:
         `${successBase}?session_id={CHECKOUT_SESSION_ID}&order_code=${args.orderCode}`,
       cancel_url: cancelUrl,

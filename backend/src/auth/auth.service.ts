@@ -48,6 +48,8 @@ export class AuthService {
           fullName: dto.fullName,
           role: 'CUSTOMER',
           birthday: dto.birthday ? new Date(dto.birthday) : null,
+          // Self-registered → a real, owner-controlled account.
+          claimed: true,
         },
       });
       return this.issueSession(user, deviceId);
@@ -253,7 +255,8 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: record.userId },
-        data: { passwordHash },
+        // Completing a reset proves control of the account → claimed.
+        data: { passwordHash, claimed: true },
       }),
       this.prisma.passwordReset.update({
         where: { id: record.id },

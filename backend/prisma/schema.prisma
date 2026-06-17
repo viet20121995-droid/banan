@@ -46,6 +46,11 @@ model User {
   role           Role           @default(CUSTOMER)
   // Disabled accounts cannot log in (soft-delete / suspension by admin).
   isActive       Boolean        @default(true)
+  /// True once the owner proved control of the account (self-registered or
+  /// completed a password reset). Guest-checkout / merchant-created stubs stay
+  /// false. Guard: an unauthenticated guest order whose phone matches a
+  /// CLAIMED account is refused (must log in) so it can't hijack a real user.
+  claimed        Boolean        @default(false)
   // Loyalty (denormalized current balance; LoyaltyEvent is the source of truth)
   membershipTier MembershipTier @default(BRONZE)
   pointsBalance  Int            @default(0)

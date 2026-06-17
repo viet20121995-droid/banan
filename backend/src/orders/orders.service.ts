@@ -1370,9 +1370,22 @@ export class OrdersService {
   }): Promise<{ userId: string; createdNew: boolean }> {
     const existing = await this.prisma.user.findUnique({
       where: { phone: args.phone },
-      select: { id: true },
+      select: { id: true, claimed: true },
     });
-    if (existing) return { userId: existing.id, createdNew: false };
+    if (existing) {
+      // Anti-takeover: never bind a guest order to a CLAIMED (owner-controlled)
+      // account — the phone wasn't verified here. Force the shopper to log in.
+      // Unclaimed stubs (prior guest / merchant-created) are safe to reuse so
+      // a returning guest's orders still aggregate under one record.
+      if (existing.claimed) {
+        throw new BadRequestException({
+          code: 'PHONE_HAS_ACCOUNT',
+          message:
+            'Số điện thoại này đã có tài khoản. Vui lòng đăng nhập để đặt hàng.',
+        });
+      }
+      return { userId: existing.id, createdNew: false };
+    }
 
     // Email may collide — synthesise a unique one when omitted or taken.
     const normalisedEmail = args.email?.toLowerCase();
