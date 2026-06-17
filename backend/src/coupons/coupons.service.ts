@@ -169,8 +169,11 @@ export class CouponsService {
    *  is cancelled or its payment can't be initiated, so the coupon use isn't
    *  burned on an order that never went through. Each row maps to exactly one
    *  prior increment, so the decrement stays balanced. */
-  async reverseRedemption(orderId: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+  async reverseRedemption(
+    orderId: string,
+    db?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const run = async (tx: Prisma.TransactionClient): Promise<void> => {
       const rows = await tx.couponRedemption.findMany({
         where: { orderId },
         select: { couponId: true },
@@ -187,7 +190,10 @@ export class CouponsService {
           data: { redemptions: { decrement: 1 } },
         });
       }
-    });
+    };
+    // Run in the caller's tx (atomic with the order's status change) when
+    // provided, otherwise in its own transaction.
+    return db ? run(db) : this.prisma.$transaction(run);
   }
 
   /** Voucher wallet for a customer — active coupons grouped into

@@ -10,6 +10,7 @@ import {
   OrderStatus,
   Payment,
   PaymentProvider,
+  Prisma,
   Refund,
 } from '@prisma/client';
 
@@ -360,8 +361,11 @@ export class PaymentsService {
   }
 
   /** Called from OrdersService when an order completes. Cash orders flip to CAPTURED. */
-  async onOrderCompleted(orderId: string): Promise<void> {
-    await this.cash.markCollected(orderId);
+  async onOrderCompleted(
+    orderId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    await this.cash.markCollected(orderId, db);
   }
 
   /**
@@ -369,9 +373,12 @@ export class PaymentsService {
    * and returns the captured payments that need refund processing — the
    * caller (orders → refunds) creates the corresponding Refund rows.
    */
-  async onOrderCancelled(orderId: string): Promise<{ capturedPayments: Payment[] }> {
-    await this.cash.voidUncollected(orderId);
-    await this.prisma.payment.updateMany({
+  async onOrderCancelled(
+    orderId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<{ capturedPayments: Payment[] }> {
+    await this.cash.voidUncollected(orderId, db);
+    await db.payment.updateMany({
       where: {
         orderId,
         provider: { in: ['STRIPE', 'PAYOS', 'MOMO'] },
@@ -382,7 +389,7 @@ export class PaymentsService {
 
     // Anything still CAPTURED (Stripe/PayOS/MoMo, or CASH after collection)
     // needs a refund — return so the caller can drive the Refund flow.
-    const capturedPayments = await this.prisma.payment.findMany({
+    const capturedPayments = await db.payment.findMany({
       where: { orderId, status: 'CAPTURED' },
     });
     return { capturedPayments };

@@ -38,16 +38,21 @@ export class LoyaltyService {
    * Awards earn-points for a completed order. Idempotent — re-completing the
    * same order won't double-award (we check for an existing EARN event).
    */
-  async earnFor(order: Order): Promise<LoyaltyEvent | null> {
+  async earnFor(
+    order: Order,
+    db?: Prisma.TransactionClient,
+  ): Promise<LoyaltyEvent | null> {
     const subtotal = Number(order.subtotal.toString());
     const points = Math.floor(subtotal / CONFIG.earnRatePerVnd);
     if (points <= 0) return null;
 
-    // The findFirst guard alone is racy: two concurrent COMPLETED transitions
-    // could both read "no EARN yet" and both award. Serialise earns for this
-    // order with a per-order advisory lock inside a tx, then re-check.
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${order.id}, 0))`;
+    const run = async (tx: Prisma.TransactionClient): Promise<LoyaltyEvent> => {
+      // When run standalone, serialise concurrent earns for this order with a
+      // per-order advisory lock + re-check. When `db` is the caller's tx, the
+      // transition is already status-guarded (runs once), so no lock needed.
+      if (!db) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${order.id}, 0))`;
+      }
       const existing = await tx.loyaltyEvent.findFirst({
         where: { orderId: order.id, type: 'EARN' },
       });
@@ -76,7 +81,8 @@ export class LoyaltyService {
         data: { membershipTier: tierFor(balanceAfter) },
       });
       return event;
-    });
+    };
+    return db ? run(db) : this.prisma.$transaction(run);
   }
 
   /**
@@ -125,19 +131,27 @@ export class LoyaltyService {
     });
   }
 
-  /** Refunds the points if a paid order is cancelled after the redeem event. */
-  async refundRedemption(orderId: string): Promise<void> {
-    const redeem = await this.prisma.loyaltyEvent.findFirst({
+  /** Refunds the points if a paid order is cancelled after the redeem event.
+   *  Accepts the caller's `db`/tx so the reversal commits atomically with the
+   *  order's status change. */
+  async refundRedemption(
+    orderId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    const redeem = await db.loyaltyEvent.findFirst({
       where: { orderId, type: 'REDEEM' },
     });
     if (!redeem) return;
-    await this.recordEvent({
-      userId: redeem.userId,
-      orderId,
-      type: 'ADJUSTMENT',
-      delta: -redeem.delta, // delta was negative, so this restores the points
-      reason: 'Reversed redemption — order cancelled',
-    });
+    await this.recordEvent(
+      {
+        userId: redeem.userId,
+        orderId,
+        type: 'ADJUSTMENT',
+        delta: -redeem.delta, // delta was negative, so this restores the points
+        reason: 'Reversed redemption — order cancelled',
+      },
+      db,
+    );
   }
 
   /**
@@ -201,14 +215,17 @@ export class LoyaltyService {
     };
   }
 
-  private async recordEvent(args: {
-    userId: string;
-    orderId?: string;
-    type: LoyaltyEventType;
-    delta: number;
-    reason: string;
-  }): Promise<LoyaltyEvent> {
-    return this.prisma.$transaction(async (tx) => {
+  private async recordEvent(
+    args: {
+      userId: string;
+      orderId?: string;
+      type: LoyaltyEventType;
+      delta: number;
+      reason: string;
+    },
+    db?: Prisma.TransactionClient,
+  ): Promise<LoyaltyEvent> {
+    const run = async (tx: Prisma.TransactionClient): Promise<LoyaltyEvent> => {
       // Atomic balance mutation (no lost-update). For a NEGATIVE delta use a
       // guarded conditional decrement so two concurrent negative adjustments
       // can't both pass a pre-check and drive the balance below zero
@@ -250,7 +267,8 @@ export class LoyaltyService {
         data: { membershipTier: tierFor(balanceAfter) },
       });
       return event;
-    });
+    };
+    return db ? run(db) : this.prisma.$transaction(run);
   }
 }
 

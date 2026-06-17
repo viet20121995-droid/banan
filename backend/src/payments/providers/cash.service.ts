@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { FulfillmentType } from '@prisma/client';
+import { FulfillmentType, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -40,15 +40,24 @@ export class CashPaymentService {
     return { paymentId: payment.id };
   }
 
-  async markCollected(orderId: string): Promise<void> {
-    await this.prisma.payment.updateMany({
+  // `db` lets the caller run this inside its transaction so the cash-payment
+  // state change commits atomically with the order status; defaults to the
+  // base client for standalone use.
+  async markCollected(
+    orderId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    await db.payment.updateMany({
       where: { orderId, provider: 'CASH', status: 'AUTHORIZED' },
       data: { status: 'CAPTURED' },
     });
   }
 
-  async voidUncollected(orderId: string): Promise<void> {
-    await this.prisma.payment.updateMany({
+  async voidUncollected(
+    orderId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    await db.payment.updateMany({
       where: { orderId, provider: 'CASH', status: { in: ['AUTHORIZED', 'INITIATED'] } },
       data: { status: 'VOIDED' },
     });

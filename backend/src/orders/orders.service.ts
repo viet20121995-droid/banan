@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { KitchenStatus, OrderStatus, Prisma, Role } from '@prisma/client';
+import { KitchenStatus, OrderStatus, Payment, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'node:crypto';
 
@@ -616,16 +616,24 @@ export class OrdersService {
         `Payment initiation failed for order ${created.id} — compensating and cancelling`,
         err as Error,
       );
-      await this.loyalty.refundRedemption(created.id);
-      await this.restoreInventory(created.id);
-      await this.restoreGiftCard(created.id);
-      await this.coupons.reverseRedemption(created.id);
-      await this.promotions.reverseUsage(created.id);
-      await this.payments.onOrderCancelled(created.id);
-      await this.prisma.order.update({
-        where: { id: created.id },
-        data: { status: 'CANCELLED' },
-      });
+      // Reverse every consumable AND flip the order to CANCELLED in ONE
+      // transaction, so we never end up with resources returned but the order
+      // still PENDING (or vice-versa).
+      await this.prisma.$transaction(
+        async (tx) => {
+          await this.loyalty.refundRedemption(created.id, tx);
+          await this.restoreInventory(created.id, tx);
+          await this.restoreGiftCard(created.id, tx);
+          await this.coupons.reverseRedemption(created.id, tx);
+          await this.promotions.reverseUsage(created.id, tx);
+          await this.payments.onOrderCancelled(created.id, tx);
+          await tx.order.update({
+            where: { id: created.id },
+            data: { status: 'CANCELLED' },
+          });
+        },
+        { timeout: 15_000 },
+      );
       throw new BadRequestException({
         code: 'PAYMENT_INIT_FAILED',
         message:
@@ -762,7 +770,7 @@ export class OrdersService {
         message: `Cannot move from ${order.status} to ${toStatus}.`,
       });
     }
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const txResult = await this.prisma.$transaction(async (tx) => {
       // Status-GUARDED update: only transition if the order is still in the
       // exact status we validated against. Two concurrent transitions (e.g. a
       // double cancel) would otherwise both pass isAllowedTransition and both
@@ -787,36 +795,48 @@ export class OrdersService {
           note,
         },
       });
-      return tx.order.findUniqueOrThrow({
+      // DB side-effects run in the SAME transaction as the status change, so
+      // the status flip and every money-state award/reversal commit (or roll
+      // back) atomically. Previously these ran AFTER commit — a failure there
+      // left the order terminal with the work half-done, and the status guard
+      // blocked any retry. External effects (refund-request rows, realtime,
+      // push) stay after the commit; they don't corrupt money state if they
+      // fail and are independently retryable/idempotent.
+      let captured: Payment[] = [];
+      if (toStatus === 'COMPLETED') {
+        await this.payments.onOrderCompleted(id, tx);
+        await this.loyalty.earnFor(order, tx);
+      } else if (toStatus === 'CANCELLED') {
+        await this.loyalty.refundRedemption(id, tx);
+        captured = (await this.payments.onOrderCancelled(id, tx)).capturedPayments;
+        await this.restoreInventory(id, tx);
+        await this.restoreGiftCard(id, tx);
+        // Release coupon + campaign usage so a cancelled order doesn't burn the
+        // customer's coupon or a campaign's allowance (mirrors points/stock/
+        // gift card being restored above).
+        await this.coupons.reverseRedemption(id, tx);
+        await this.promotions.reverseUsage(id, tx);
+      }
+
+      const next = await tx.order.findUniqueOrThrow({
         where: { id },
         include: ORDER_INCLUDE,
       });
-    });
+      return { order: next, capturedPayments: captured };
+    }, { timeout: 15_000 });
+    const updated = txResult.order;
 
-    // Side-effects: cash gets captured on completion; uncaptured payments
-    // get voided on cancellation. (Real refunds for captured Stripe/VNPay/MoMo
-    // payments arrive in M5.)
-    if (toStatus === 'COMPLETED') {
-      await this.payments.onOrderCompleted(id);
-      await this.loyalty.earnFor(order);
-    } else if (toStatus === 'CANCELLED') {
-      await this.loyalty.refundRedemption(id);
-      const { capturedPayments } = await this.payments.onOrderCancelled(id);
-      for (const payment of capturedPayments) {
-        await this.refunds.createRequest({
-          order,
-          payment,
-          reason: note ?? 'Order cancelled',
-          requestedById: actor.sub,
-        });
-      }
-      await this.restoreInventory(id);
-      await this.restoreGiftCard(id);
-      // Release coupon + campaign usage so a cancelled order doesn't burn the
-      // customer's coupon or a campaign's allowance (mirrors points/stock/gift
-      // card being restored above).
-      await this.coupons.reverseRedemption(id);
-      await this.promotions.reverseUsage(id);
+    // Post-commit, external/best-effort: open refund requests for any payment
+    // that was already CAPTURED (rare; online payments are not live yet). Kept
+    // out of the tx because it also emits realtime + drives a provider call;
+    // createRequest is idempotent on (orderId, paymentId).
+    for (const payment of txResult.capturedPayments) {
+      await this.refunds.createRequest({
+        order,
+        payment,
+        reason: note ?? 'Order cancelled',
+        requestedById: actor.sub,
+      });
     }
 
     const rooms = [
@@ -1563,8 +1583,11 @@ export class OrdersService {
   /// Cancellation reverse-step for #13 (inventory). Walks the order's
   /// LIMITED-variant lines and increments stockQty back. Best-effort —
   /// log if a variant has been deleted in the meantime.
-  private async restoreInventory(orderId: string): Promise<void> {
-    const items = await this.prisma.orderItem.findMany({
+  private async restoreInventory(
+    orderId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    const items = await db.orderItem.findMany({
       where: { orderId, variantId: { not: null } },
       include: {
         variant: { select: { id: true, stockMode: true } },
@@ -1572,7 +1595,7 @@ export class OrdersService {
     });
     for (const i of items) {
       if (!i.variant || i.variant.stockMode !== 'LIMITED') continue;
-      await this.prisma.productVariant.update({
+      await db.productVariant.update({
         where: { id: i.variant.id },
         data: { stockQty: { increment: i.quantity } },
       });
@@ -1582,13 +1605,16 @@ export class OrdersService {
   /// Cancellation reverse-step: credit a redeemed gift-card balance back.
   /// The order persists the code + amount it consumed, so we add that amount
   /// back to the card. Best-effort (the card may have been deleted).
-  private async restoreGiftCard(orderId: string): Promise<void> {
-    const order = await this.prisma.order.findUnique({
+  private async restoreGiftCard(
+    orderId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    const order = await db.order.findUnique({
       where: { id: orderId },
       select: { giftCardCode: true, giftCardAmountVnd: true },
     });
     if (!order?.giftCardCode || order.giftCardAmountVnd <= 0) return;
-    await this.prisma.giftCard.updateMany({
+    await db.giftCard.updateMany({
       where: { code: order.giftCardCode },
       data: { balanceVnd: { increment: order.giftCardAmountVnd } },
     });

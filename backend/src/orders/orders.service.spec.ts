@@ -195,18 +195,25 @@ describe('OrdersService.transition (status-guarded)', () => {
       reverseRedemption: jest.fn().mockResolvedValue(undefined),
     };
     const promotions = { reverseUsage: jest.fn().mockResolvedValue(undefined) };
+    // The tx client must expose every delegate the in-tx side-effects touch:
+    // status update + event, plus restoreInventory (orderItem/variant) and
+    // restoreGiftCard (order.findUnique/giftCard) which now run on `tx`.
     const tx = {
       order: {
         updateMany: jest.fn().mockResolvedValue({ count: updateManyCount }),
         findUniqueOrThrow: jest.fn().mockResolvedValue(order),
+        findUnique: jest.fn().mockResolvedValue(order), // no giftCardCode → no-op
       },
       orderStatusEvent: { create: jest.fn().mockResolvedValue({}) },
+      orderItem: { findMany: jest.fn().mockResolvedValue([]) },
+      productVariant: { update: jest.fn().mockResolvedValue({}) },
+      giftCard: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
     const prisma = {
       order: { findUnique: jest.fn().mockResolvedValue(order) },
-      orderItem: { findMany: jest.fn().mockResolvedValue([]) },
-      giftCard: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
+      $transaction: jest.fn(
+        (cb: (t: unknown) => unknown, _opts?: unknown) => cb(tx),
+      ),
     };
     const noop = {} as never;
     const svc = new OrdersService(
