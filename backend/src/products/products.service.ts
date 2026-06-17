@@ -132,9 +132,14 @@ export class ProductsService {
     return { items, meta: { page, perPage, total } };
   }
 
+  // Public product detail. Only an available (non-archived) product is
+  // served — `remove()` archives sold-out/discontinued SKUs by setting
+  // isAvailable=false and `findAll` hides them, so the by-id path must hide
+  // them too (otherwise a stale deep-link exposes a discontinued item and can
+  // re-add it to a cart). Merchant editing uses the merchant list + restore.
   async findOne(id: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { id },
+    const product = await this.prisma.product.findFirst({
+      where: { id, isAvailable: true },
       include: PRODUCT_INCLUDE,
     });
     if (!product) throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND' });

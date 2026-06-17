@@ -38,7 +38,7 @@ export class CollectionsController {
   @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.collections.findOne(id, null);
+    return this.collections.findOneActive(id);
   }
 }
 

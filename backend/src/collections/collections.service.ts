@@ -95,6 +95,21 @@ export class CollectionsService {
     return decorated;
   }
 
+  /** Public by-id — only an ACTIVE collection. The merchant `findOne` above
+   *  serves deactivated collections to their own store; this guards the
+   *  @Public endpoint so a deactivated collection isn't reachable by id. */
+  async findOneActive(id: string) {
+    const collection = await this.prisma.collection.findFirst({
+      where: { id, isActive: true },
+      include: COLLECTION_INCLUDE,
+    });
+    if (!collection) {
+      throw new NotFoundException({ code: 'COLLECTION_NOT_FOUND' });
+    }
+    const [decorated] = await this.applyBirthdayFlag([collection]);
+    return decorated;
+  }
+
   async create(storeId: string, dto: CreateCollectionDto) {
     if (dto.items) await this.assertProductsBelongToStore(storeId, dto.items);
     return this.prisma.collection.create({

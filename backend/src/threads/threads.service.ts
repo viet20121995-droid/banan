@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -73,6 +74,37 @@ export class ThreadsService {
     return thread;
   }
 
+  /** Public by-id — only a PUBLISHED thread. The merchant `findOne` above is
+   *  unfiltered (drafts are visible to their own store); this guards the
+   *  @Public endpoint so a guessed id can't surface an unpublished draft. */
+  async findOnePublished(id: string) {
+    const thread = await this.prisma.thread.findFirst({
+      where: { id, publishedAt: { not: null } },
+      include: THREAD_INCLUDE,
+    });
+    if (!thread) throw new NotFoundException({ code: 'THREAD_NOT_FOUND' });
+    return thread;
+  }
+
+  /** A thread may only reference a product from its own store (mirrors the
+   *  collections/bundles ownership check) — stops a merchant deep-linking
+   *  another store's catalog item into its public editorial feed. */
+  private async assertProductInStore(productId: string, storeId: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { storeId: true },
+    });
+    if (!product) {
+      throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND' });
+    }
+    if (product.storeId !== storeId) {
+      throw new BadRequestException({
+        code: 'PRODUCT_NOT_IN_STORE',
+        message: 'Cannot attach a product from another store to a thread.',
+      });
+    }
+  }
+
   /** Public — bump the impression counter (best-effort, never throws). */
   async incrementView(id: string): Promise<void> {
     try {
@@ -86,6 +118,7 @@ export class ThreadsService {
   }
 
   async create(storeId: string, authorId: string, dto: CreateThreadDto) {
+    if (dto.productId) await this.assertProductInStore(dto.productId, storeId);
     const images = dto.images ?? [];
     return this.prisma.thread.create({
       data: {
@@ -110,6 +143,7 @@ export class ThreadsService {
 
   async update(id: string, storeIdScope: string | null, dto: UpdateThreadDto) {
     const existing = await this.findOne(id, storeIdScope);
+    if (dto.productId) await this.assertProductInStore(dto.productId, existing.storeId);
     return this.prisma.thread.update({
       where: { id: existing.id },
       data: {

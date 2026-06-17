@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { KitchenStatus, OrderStatus, Prisma, Role } from '@prisma/client';
@@ -51,6 +52,8 @@ type OrderWithIncludes = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE 
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
@@ -584,11 +587,38 @@ export class OrdersService {
     // never hand VNPay/Stripe a zero amount.
     const effectiveMethod =
       Number(created.total.toString()) <= 0 ? 'CASH' : dto.paymentMethod;
-    const paymentInstructions = await this.payments.initiate({
-      order: created,
-      paymentMethod: effectiveMethod,
-      customerIp,
-    });
+    let paymentInstructions;
+    try {
+      paymentInstructions = await this.payments.initiate({
+        order: created,
+        paymentMethod: effectiveMethod,
+        customerIp,
+      });
+    } catch (err) {
+      // The order transaction already committed — gift card debited, stock
+      // decremented, points redeemed. If we can't even produce payment
+      // instructions (e.g. a gateway network error), nothing will later
+      // reverse the gift-card debit, so customer value would be lost. Roll
+      // back every consumable and cancel the stranded order before surfacing
+      // the failure.
+      this.logger.error(
+        `Payment initiation failed for order ${created.id} — compensating and cancelling`,
+        err as Error,
+      );
+      await this.loyalty.refundRedemption(created.id);
+      await this.restoreInventory(created.id);
+      await this.restoreGiftCard(created.id);
+      await this.payments.onOrderCancelled(created.id);
+      await this.prisma.order.update({
+        where: { id: created.id },
+        data: { status: 'CANCELLED' },
+      });
+      throw new BadRequestException({
+        code: 'PAYMENT_INIT_FAILED',
+        message:
+          'Không khởi tạo được thanh toán. Đơn hàng đã được huỷ, vui lòng thử lại.',
+      });
+    }
 
     // Re-fetch to include the freshly-written Payment row.
     const order = await this.prisma.order.findUniqueOrThrow({
@@ -755,6 +785,7 @@ export class OrdersService {
         });
       }
       await this.restoreInventory(id);
+      await this.restoreGiftCard(id);
     }
 
     const rooms = [
@@ -1515,5 +1546,20 @@ export class OrdersService {
         data: { stockQty: { increment: i.quantity } },
       });
     }
+  }
+
+  /// Cancellation reverse-step: credit a redeemed gift-card balance back.
+  /// The order persists the code + amount it consumed, so we add that amount
+  /// back to the card. Best-effort (the card may have been deleted).
+  private async restoreGiftCard(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { giftCardCode: true, giftCardAmountVnd: true },
+    });
+    if (!order?.giftCardCode || order.giftCardAmountVnd <= 0) return;
+    await this.prisma.giftCard.updateMany({
+      where: { code: order.giftCardCode },
+      data: { balanceVnd: { increment: order.giftCardAmountVnd } },
+    });
   }
 }

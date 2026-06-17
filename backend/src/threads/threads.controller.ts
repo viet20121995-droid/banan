@@ -46,7 +46,7 @@ export class ThreadsController {
   @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.threads.findOne(id, null);
+    return this.threads.findOnePublished(id);
   }
 
   /** Public — fire-and-forget impression tracking from the customer feed. */
