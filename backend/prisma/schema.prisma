@@ -341,6 +341,7 @@ model Product {
   reviews            Review[]
   wishlistedBy       WishlistItem[]
   bundleItems        BundleItem[]
+  productionBatches  ProductionBatch[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -367,6 +368,7 @@ model ProductVariant {
   isAvailable Boolean     @default(true)
   orderItems  OrderItem[]
   bundleItems BundleItem[]
+  productionBatches ProductionBatch[]
 
   @@unique([productId, size, flavor])
 }
@@ -554,6 +556,7 @@ model Order {
   pointsDiscount Decimal @db.Decimal(12, 2) @default(0)
   couponId       String?
   coupon         Coupon? @relation(fields: [couponId], references: [id])
+  loyaltyEvents  LoyaltyEvent[]
   couponDiscount Decimal @db.Decimal(12, 2) @default(0)
   // Automatic promotion-engine discounts (product/category/flash/happy-hour…).
   campaignDiscount Decimal @db.Decimal(12, 2) @default(0)
@@ -728,6 +731,10 @@ model LoyaltyEvent {
   userId       String
   user         User             @relation(fields: [userId], references: [id])
   orderId      String?
+  // Points are money-adjacent (they convert to a discount), so the ledger's
+  // order reference is a real FK. SetNull keeps the historical event if an
+  // order is ever removed rather than silently dangling.
+  order        Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
   type         LoyaltyEventType
   delta        Int
   balanceAfter Int
@@ -736,6 +743,7 @@ model LoyaltyEvent {
   createdAt    DateTime         @default(now())
 
   @@index([userId, createdAt])
+  @@index([orderId])
 }
 
 enum CouponType {
@@ -774,11 +782,28 @@ model Campaign {
   usageLimit   Int?
   usedCount    Int          @default(0)
   perUserLimit Int?
+  redemptions  CampaignRedemption[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
   @@index([type])
   @@index([isActive])
+}
+
+/// Per-order record that a campaign was applied. Backs per-user campaign
+/// limit enforcement (mirrors CouponRedemption) — without it `perUserLimit`
+/// and `usedCount` were unenforceable. userId/orderId are plain columns (no
+/// FK) to keep the ledger append-only and decoupled from order/user deletion.
+model CampaignRedemption {
+  id         String   @id @default(uuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     String
+  orderId    String
+  createdAt  DateTime @default(now())
+
+  @@unique([campaignId, userId, orderId])
+  @@index([campaignId, userId])
 }
 
 model Coupon {
@@ -838,7 +863,9 @@ model ProductionBatch {
   kitchenId    String
   kitchen      Kitchen     @relation(fields: [kitchenId], references: [id])
   productId    String
+  product      Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   variantId    String?
+  variant      ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   plannedQty   Int
   actualQty    Int         @default(0)
   scheduledFor DateTime
@@ -849,6 +876,7 @@ model ProductionBatch {
   updatedAt DateTime @updatedAt
 
   @@index([kitchenId, scheduledFor])
+  @@index([productId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -39,21 +39,40 @@ export class LoyaltyService {
    * same order won't double-award (we check for an existing EARN event).
    */
   async earnFor(order: Order): Promise<LoyaltyEvent | null> {
-    const existing = await this.prisma.loyaltyEvent.findFirst({
-      where: { orderId: order.id, type: 'EARN' },
-    });
-    if (existing) return existing;
-
     const subtotal = Number(order.subtotal.toString());
     const points = Math.floor(subtotal / CONFIG.earnRatePerVnd);
     if (points <= 0) return null;
 
-    return this.recordEvent({
-      userId: order.customerId,
-      orderId: order.id,
-      type: 'EARN',
-      delta: points,
-      reason: `Earned on order ${order.code}`,
+    // The findFirst guard alone is racy: two concurrent COMPLETED transitions
+    // could both read "no EARN yet" and both award. Serialise earns for this
+    // order with a per-order advisory lock inside a tx, then re-check.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${order.id}, 0))`;
+      const existing = await tx.loyaltyEvent.findFirst({
+        where: { orderId: order.id, type: 'EARN' },
+      });
+      if (existing) return existing;
+
+      const user = await tx.user.findUniqueOrThrow({
+        where: { id: order.customerId },
+        select: { pointsBalance: true },
+      });
+      const balanceAfter = user.pointsBalance + points;
+      const event = await tx.loyaltyEvent.create({
+        data: {
+          userId: order.customerId,
+          orderId: order.id,
+          type: 'EARN',
+          delta: points,
+          balanceAfter,
+          reason: `Earned on order ${order.code}`,
+        },
+      });
+      await tx.user.update({
+        where: { id: order.customerId },
+        data: { pointsBalance: balanceAfter, membershipTier: tierFor(balanceAfter) },
+      });
+      return event;
     });
   }
 

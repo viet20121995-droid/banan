@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Campaign, CampaignType, MembershipTier, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -107,6 +107,13 @@ export class PromotionsService {
     const live = campaigns.filter((c) => this.isLiveNow(c, now));
     if (live.length === 0) return { discountVnd: 0, applied: [] };
 
+    // Enforce usage caps before applying. Drop globally-exhausted campaigns,
+    // and — when the customer is known — ones the user already hit their
+    // per-user limit on. recordUsage() re-checks atomically in the order tx;
+    // this just stops exhausted campaigns from quoting a discount.
+    const eligible = await this.filterByUsage(live, input.customerId);
+    if (eligible.length === 0) return { discountVnd: 0, applied: [] };
+
     const applied = new Map<string, AppliedCampaign>();
     const add = (c: Campaign, amount: number) => {
       if (amount <= 0) return;
@@ -121,7 +128,7 @@ export class PromotionsService {
     let total = 0;
 
     // 1. Per-line best discount (PRODUCT/CATEGORY/FLASH/HAPPY_HOUR).
-    const lineCampaigns = live.filter((c) => LINE_TYPES.includes(c.type));
+    const lineCampaigns = eligible.filter((c) => LINE_TYPES.includes(c.type));
     for (const line of input.lines) {
       const cat = catOf.get(line.productId) ?? null;
       let bestDiscount = 0;
@@ -141,7 +148,7 @@ export class PromotionsService {
     }
 
     // 2. Buy X Get Y (cart-level).
-    for (const c of live.filter((c) => c.type === 'BUY_X_GET_Y')) {
+    for (const c of eligible.filter((c) => c.type === 'BUY_X_GET_Y')) {
       const d = this.bxgyDiscount(c, input.lines, catOf);
       if (d > 0) {
         total += d;
@@ -150,7 +157,7 @@ export class PromotionsService {
     }
 
     // 3. Order-level customer-targeted (best single one).
-    const orderCampaigns = live.filter((c) => ORDER_TYPES.includes(c.type));
+    const orderCampaigns = eligible.filter((c) => ORDER_TYPES.includes(c.type));
     if (orderCampaigns.length > 0 && input.customerId) {
       const ctx = await this.customerContext(input.customerId);
       let bestDiscount = 0;
@@ -170,6 +177,83 @@ export class PromotionsService {
     }
 
     return { discountVnd: total, applied: [...applied.values()] };
+  }
+
+  /** Drops campaigns that have hit their global `usageLimit`, and (when the
+   *  customer is known) ones the user has hit `perUserLimit` on. */
+  private async filterByUsage(
+    live: Campaign[],
+    customerId?: string,
+  ): Promise<Campaign[]> {
+    const underGlobal = live.filter(
+      (c) => c.usageLimit == null || c.usedCount < c.usageLimit,
+    );
+    if (!customerId) return underGlobal;
+    const limited = underGlobal.filter(
+      (c) => c.perUserLimit != null && c.perUserLimit > 0,
+    );
+    if (limited.length === 0) return underGlobal;
+    const counts = await this.prisma.campaignRedemption.groupBy({
+      by: ['campaignId'],
+      where: { userId: customerId, campaignId: { in: limited.map((c) => c.id) } },
+      _count: { campaignId: true },
+    });
+    const usedByUser = new Map(
+      counts.map((r) => [r.campaignId, r._count.campaignId]),
+    );
+    return underGlobal.filter((c) => {
+      if (c.perUserLimit == null || c.perUserLimit <= 0) return true;
+      return (usedByUser.get(c.id) ?? 0) < c.perUserLimit;
+    });
+  }
+
+  /**
+   * Records that the given campaigns were applied to an order — the
+   * AUTHORITATIVE limit check (mirrors CouponsService.recordRedemption).
+   * `evaluate` only reads counters, so concurrent checkouts could both quote
+   * an exhausted campaign; a per-campaign advisory lock serialises redemptions
+   * of the same campaign within the order tx, re-checks both caps, and throws
+   * (rolling back the order) before incrementing usedCount.
+   */
+  async recordUsage(args: {
+    campaignIds: string[];
+    userId: string;
+    orderId: string;
+    tx: Prisma.TransactionClient;
+  }): Promise<void> {
+    for (const campaignId of args.campaignIds) {
+      await args.tx
+        .$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${campaignId}, 0))`;
+      const c = await args.tx.campaign.findUnique({
+        where: { id: campaignId },
+        select: { usageLimit: true, perUserLimit: true, usedCount: true },
+      });
+      if (!c) continue;
+      if (c.usageLimit != null && c.usedCount >= c.usageLimit) {
+        throw new BadRequestException({
+          code: 'CAMPAIGN_LIMIT_REACHED',
+          message: 'Khuyến mãi đã hết lượt.',
+        });
+      }
+      if (c.perUserLimit != null && c.perUserLimit > 0) {
+        const used = await args.tx.campaignRedemption.count({
+          where: { campaignId, userId: args.userId },
+        });
+        if (used >= c.perUserLimit) {
+          throw new BadRequestException({
+            code: 'CAMPAIGN_USER_LIMIT',
+            message: 'Bạn đã dùng hết lượt khuyến mãi này.',
+          });
+        }
+      }
+      await args.tx.campaignRedemption.create({
+        data: { campaignId, userId: args.userId, orderId: args.orderId },
+      });
+      await args.tx.campaign.update({
+        where: { id: campaignId },
+        data: { usedCount: { increment: 1 } },
+      });
+    }
   }
 
   /** HAPPY_HOUR only runs inside its daily time + weekday window (VN time). */

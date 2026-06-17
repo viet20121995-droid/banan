@@ -578,6 +578,17 @@ export class OrdersService {
           points: pointsRedeemed,
         });
       }
+      // Record campaign usage (enforces per-user / global caps atomically).
+      // Skipped for a guest order bound to a pre-existing account so it can't
+      // burn that account's campaign allowances.
+      if (!guestBoundToExisting && promo.applied.length > 0) {
+        await this.promotions.recordUsage({
+          campaignIds: promo.applied.map((c) => c.id),
+          userId: customerId,
+          orderId: order.id,
+          tx,
+        });
+      }
 
       return order;
     });
