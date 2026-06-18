@@ -123,7 +123,7 @@ export class CollectionsService {
   }
 
   async create(storeId: string, dto: CreateCollectionDto) {
-    if (dto.items) await this.assertProductsBelongToStore(storeId, dto.items);
+    if (dto.items) await this.assertProductsExist(dto.items);
     return this.prisma.collection.create({
       data: {
         storeId,
@@ -150,7 +150,7 @@ export class CollectionsService {
   async update(id: string, storeIdScope: string | null, dto: UpdateCollectionDto) {
     const existing = await this.findOne(id, storeIdScope);
     if (dto.items) {
-      await this.assertProductsBelongToStore(existing.storeId, dto.items);
+      await this.assertProductsExist(dto.items);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -204,32 +204,61 @@ export class CollectionsService {
     });
   }
 
+  /** Appends products to a collection — used by the "add to collection" flow
+   *  from the menu list. Idempotent: products already in the collection are
+   *  skipped; new ones go after the current max sortOrder. Scope-checked via
+   *  findOne so a merchant can only add to their own store's collection. */
+  async addItems(
+    id: string,
+    storeIdScope: string | null,
+    productIds: string[],
+  ) {
+    await this.findOne(id, storeIdScope);
+    const ids = [...new Set(productIds)];
+    if (ids.length === 0) return this.findOne(id, storeIdScope);
+    await this.assertProductsExist(ids.map((productId) => ({ productId })));
+
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.collectionItem.findMany({
+        where: { collectionId: id },
+        select: { productId: true, sortOrder: true },
+      });
+      const have = new Set(existing.map((e) => e.productId));
+      let next =
+        existing.reduce((m, e) => Math.max(m, e.sortOrder), -1) + 1;
+      for (const productId of ids) {
+        if (have.has(productId)) continue;
+        await tx.collectionItem.create({
+          data: { collectionId: id, productId, sortOrder: next++ },
+        });
+      }
+      return tx.collection.findUniqueOrThrow({
+        where: { id },
+        include: COLLECTION_INCLUDE,
+      });
+    });
+  }
+
   async remove(id: string, storeIdScope: string | null): Promise<void> {
     await this.findOne(id, storeIdScope);
     await this.prisma.collection.delete({ where: { id } });
   }
 
-  private async assertProductsBelongToStore(
-    storeId: string,
-    items: CollectionItemInputDto[],
-  ) {
+  /// Products are a single chain-wide catalog (all owned by the catalog
+  /// store), so ANY collection — at any branch — may curate ANY catalog
+  /// product. We therefore only verify the referenced products still exist,
+  /// not that they share the collection's store (the old same-store check
+  /// rejected every product for non-catalog-store merchants).
+  private async assertProductsExist(items: CollectionItemInputDto[]) {
     if (items.length === 0) return;
-    const ids = items.map((i) => i.productId);
-    const products = await this.prisma.product.findMany({
+    const ids = [...new Set(items.map((i) => i.productId))];
+    const found = await this.prisma.product.count({
       where: { id: { in: ids } },
-      select: { id: true, storeId: true },
     });
-    const wrongStore = products.find((p) => p.storeId !== storeId);
-    if (wrongStore) {
-      throw new BadRequestException({
-        code: 'PRODUCT_NOT_IN_STORE',
-        message: 'Cannot add a product from another store to a collection.',
-      });
-    }
-    if (products.length !== new Set(ids).size) {
+    if (found !== ids.length) {
       throw new BadRequestException({
         code: 'PRODUCT_NOT_FOUND',
-        message: 'One or more products in the collection no longer exist.',
+        message: 'One or more products no longer exist.',
       });
     }
   }

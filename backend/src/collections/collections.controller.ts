@@ -21,7 +21,11 @@ import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { merchantStoreScope } from '../common/merchant-scope';
 
 import { CollectionsService } from './collections.service';
-import { CreateCollectionDto, UpdateCollectionDto } from './dto/collection.dto';
+import {
+  AddCollectionItemsDto,
+  CreateCollectionDto,
+  UpdateCollectionDto,
+} from './dto/collection.dto';
 
 @ApiTags('collections')
 @Controller({ path: 'collections', version: '1' })
@@ -93,6 +97,18 @@ export class MerchantCollectionsController {
       merchantStoreScope(user),
       dto,
     );
+  }
+
+  // Append products to an existing collection (the "Add to collection" flow
+  // from the menu list). Store-staff op, scoped to their own collection.
+  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF)
+  @Post(':id/items')
+  addItems(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id') id: string,
+    @Body() dto: AddCollectionItemsDto,
+  ) {
+    return this.collections.addItems(id, merchantStoreScope(user), dto.productIds);
   }
 
   @Roles(Role.MERCHANT_OWNER, Role.ADMIN)

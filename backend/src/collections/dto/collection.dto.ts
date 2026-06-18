@@ -64,6 +64,15 @@ export class CreateCollectionDto {
   items?: CollectionItemInputDto[];
 }
 
+/** Append products to a collection (the "add to collection" flow from the
+ *  menu list). Already-present products are skipped server-side. */
+export class AddCollectionItemsDto {
+  @IsArray()
+  @ArrayMaxSize(60)
+  @IsUUID('all', { each: true })
+  productIds!: string[];
+}
+
 export class UpdateCollectionDto {
   @IsOptional()
   @IsString()

@@ -97,22 +97,16 @@ export class ThreadsService {
     return thread;
   }
 
-  /** A thread may only reference a product from its own store (mirrors the
-   *  collections/bundles ownership check) — stops a merchant deep-linking
-   *  another store's catalog item into its public editorial feed. */
-  private async assertProductInStore(productId: string, storeId: string) {
+  /** A thread may reference any product from the chain-wide catalog — just
+   *  verify it exists. (Products are a single shared catalog; the old
+   *  same-store check rejected every product for non-catalog-store merchants.) */
+  private async assertProductExists(productId: string) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      select: { storeId: true },
+      select: { id: true },
     });
     if (!product) {
       throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND' });
-    }
-    if (product.storeId !== storeId) {
-      throw new BadRequestException({
-        code: 'PRODUCT_NOT_IN_STORE',
-        message: 'Cannot attach a product from another store to a thread.',
-      });
     }
   }
 
@@ -129,7 +123,7 @@ export class ThreadsService {
   }
 
   async create(storeId: string, authorId: string, dto: CreateThreadDto) {
-    if (dto.productId) await this.assertProductInStore(dto.productId, storeId);
+    if (dto.productId) await this.assertProductExists(dto.productId);
     const images = dto.images ?? [];
     return this.prisma.thread.create({
       data: {
@@ -154,7 +148,7 @@ export class ThreadsService {
 
   async update(id: string, storeIdScope: string | null, dto: UpdateThreadDto) {
     const existing = await this.findOne(id, storeIdScope);
-    if (dto.productId) await this.assertProductInStore(dto.productId, existing.storeId);
+    if (dto.productId) await this.assertProductExists(dto.productId);
     return this.prisma.thread.update({
       where: { id: existing.id },
       data: {

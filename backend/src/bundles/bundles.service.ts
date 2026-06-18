@@ -93,7 +93,7 @@ export class BundlesService {
   }
 
   async create(storeId: string, dto: CreateBundleDto) {
-    await this.assertItemsBelongToStore(storeId, dto.items);
+    await this.assertItemsExist(dto.items);
     try {
       const bundle = await this.prisma.bundle.create({
         data: {
@@ -132,7 +132,7 @@ export class BundlesService {
   async update(id: string, storeIdScope: string | null, dto: UpdateBundleDto) {
     const existing = await this.findOneForMerchant(id, storeIdScope);
     if (dto.items) {
-      await this.assertItemsBelongToStore(existing.storeId, dto.items);
+      await this.assertItemsExist(dto.items);
     }
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -213,26 +213,18 @@ export class BundlesService {
     return Array.from(merged.values());
   }
 
-  private async assertItemsBelongToStore(
-    storeId: string,
-    items: BundleItemInputDto[],
-  ): Promise<void> {
+  /// Products are a single chain-wide catalog, so a bundle (at any branch) may
+  /// include any catalog product — only verify they exist (the old same-store
+  /// check rejected every product for non-catalog-store merchants).
+  private async assertItemsExist(items: BundleItemInputDto[]): Promise<void> {
     const ids = Array.from(new Set(items.map((i) => i.productId)));
-    const products = await this.prisma.product.findMany({
+    const found = await this.prisma.product.count({
       where: { id: { in: ids } },
-      select: { id: true, storeId: true },
     });
-    if (products.length !== ids.length) {
+    if (found !== ids.length) {
       throw new BadRequestException({
         code: 'PRODUCT_NOT_FOUND',
         message: 'Một số sản phẩm không tồn tại.',
-      });
-    }
-    const wrong = products.find((p) => p.storeId !== storeId);
-    if (wrong) {
-      throw new BadRequestException({
-        code: 'PRODUCT_NOT_IN_STORE',
-        message: 'Sản phẩm không thuộc cửa hàng này.',
       });
     }
   }
