@@ -576,3 +576,94 @@ describe('OrdersService.expandLineInputs (combo expansion + pricing)', () => {
     );
   });
 });
+
+/**
+ * Product.dailyMaxQuantity — a per-product cap on units ordered for one
+ * fulfilment date, across all customers (combo-expanded units count too). The
+ * check is private and runs inside the order tx; we invoke it via the prototype
+ * with a mock tx (advisory lock + aggregate).
+ */
+describe('OrdersService.assertDailyCaps (per-product daily order cap)', () => {
+  type DailyProduct = {
+    id: string;
+    name: string;
+    dailyMaxQuantity: number | null;
+  };
+  function txWith(existing: number) {
+    return {
+      $executeRaw: jest.fn().mockResolvedValue(0),
+      orderItem: {
+        aggregate: jest
+          .fn()
+          .mockResolvedValue({ _sum: { quantity: existing } }),
+      },
+    };
+  }
+  const call = (
+    tx: unknown,
+    products: DailyProduct[],
+    qty: Map<string, number>,
+    targetAt: Date,
+  ): Promise<void> =>
+    (
+      OrdersService.prototype as unknown as {
+        assertDailyCaps(
+          t: unknown,
+          p: DailyProduct[],
+          q: Map<string, number>,
+          a: Date,
+        ): Promise<void>;
+      }
+    ).assertDailyCaps.call({}, tx, products, qty, targetAt);
+
+  const DAY = new Date('2026-06-20T03:00:00Z');
+
+  it('rejects when existing + requested exceeds the cap (locks first)', async () => {
+    const tx = txWith(8); // 8 already ordered for the day
+    await expect(
+      call(
+        tx,
+        [{ id: 'p1', name: 'Chiffon', dailyMaxQuantity: 10 }],
+        new Map([['p1', 5]]), // 8 + 5 = 13 > 10
+        DAY,
+      ),
+    ).rejects.toMatchObject({ response: { code: 'DAILY_LIMIT_EXCEEDED' } });
+    // The per-(product,date) advisory lock is taken before counting.
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows within the cap and skips uncapped products entirely', async () => {
+    const tx = txWith(3);
+    await expect(
+      call(
+        tx,
+        [
+          { id: 'p1', name: 'Chiffon', dailyMaxQuantity: 10 }, // 3 + 5 = 8 ≤ 10
+          { id: 'p2', name: 'Tart', dailyMaxQuantity: null }, // uncapped → skip
+        ],
+        new Map([
+          ['p1', 5],
+          ['p2', 99],
+        ]),
+        DAY,
+      ),
+    ).resolves.toBeUndefined();
+    // Only the capped product is locked + aggregated.
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(tx.orderItem.aggregate).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op (no lock, no query) when nothing in the order is capped', async () => {
+    const tx = txWith(0);
+    await expect(
+      call(
+        tx,
+        [{ id: 'p1', name: 'Tart', dailyMaxQuantity: null }],
+        new Map([['p1', 5]]),
+        DAY,
+      ),
+    ).resolves.toBeUndefined();
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
+    expect(tx.orderItem.aggregate).not.toHaveBeenCalled();
+  });
+});

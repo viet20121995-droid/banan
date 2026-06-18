@@ -166,4 +166,41 @@ export class RealtimeGateway implements OnGatewayConnection {
     if (!this.server) return;
     for (const r of rooms) this.server.to(r).emit(event, payload);
   }
+
+  /**
+   * Re-authorise an order room after the order changed kitchens. A kitchen
+   * staff socket joins `order:{id}` while the order is at THEIR kitchen
+   * (onOrderSubscribe authorises on the current kitchenId). That check is
+   * point-in-time: when a merchant later transfers the order to another
+   * kitchen, the old kitchen's socket stays in the room and would keep
+   * receiving the new kitchen's `kitchen_status_changed` events. Socket.IO has
+   * no automatic revocation, so we evict any kitchen-staff socket whose kitchen
+   * no longer matches. Best-effort and idempotent — works across nodes via the
+   * adapter. Customer/merchant subscribers are untouched (a transfer doesn't
+   * change the order's customer or store).
+   */
+  async evictStaleKitchenSubscribers(
+    orderId: string,
+    currentKitchenId: string | null,
+  ): Promise<void> {
+    if (!this.server) return;
+    const room = `order:${orderId}`;
+    try {
+      const sockets = await this.server.in(room).fetchSockets();
+      for (const socket of sockets) {
+        const data = socket.data as SocketData | undefined;
+        if (
+          data &&
+          (data.role === 'KITCHEN_MANAGER' || data.role === 'KITCHEN_STAFF') &&
+          data.kitchenId !== currentKitchenId
+        ) {
+          socket.leave(room);
+        }
+      }
+    } catch (err) {
+      this.logger.warn(
+        `evictStaleKitchenSubscribers(${orderId}) failed: ${String(err)}`,
+      );
+    }
+  }
 }

@@ -500,7 +500,28 @@ export class OrdersService {
     // Order code generated up-front so loyalty messages reference the same code.
     const orderCode = generateOrderCode();
 
+    // Per-product quantity in THIS order (combo-expanded lines folded in), so a
+    // combo's constituents count against the product's daily cap just like a
+    // direct order would.
+    const qtyByProduct = new Map<string, number>();
+    for (const l of expandedLines) {
+      qtyByProduct.set(
+        l.productId,
+        (qtyByProduct.get(l.productId) ?? 0) + l.quantity,
+      );
+    }
+
     const created = await this.prisma.$transaction(async (tx) => {
+      // Daily order cap (Product.dailyMaxQuantity). Enforced first, inside the
+      // tx with a per-(product, fulfilment-date) advisory lock, so concurrent
+      // checkouts can't both slip past the cap. No-op for uncapped products.
+      await this.assertDailyCaps(
+        tx,
+        [...productById.values()],
+        qtyByProduct,
+        targetAt,
+      );
+
       let addressId: string | undefined;
       if (dto.address) {
         const addr = await tx.address.create({
@@ -1164,6 +1185,12 @@ export class OrdersService {
         at: new Date().toISOString(),
       },
     );
+
+    // The order may have moved off a previous kitchen — evict that kitchen's
+    // stale `order:{id}` subscribers so they stop receiving the new kitchen's
+    // kanban events. Fire-and-forget; the new kitchen's staff (joined via
+    // kitchen:{id}) and the customer/store are unaffected.
+    void this.realtime.evictStaleKitchenSubscribers(id, kitchenId);
 
     await this.notifications.sendToUser(
       order.customerId,
@@ -1839,6 +1866,67 @@ export class OrdersService {
       select: { id: true },
     });
     return { userId: user.id, createdNew: true };
+  }
+
+  /**
+   * Enforces Product.dailyMaxQuantity — a per-product cap on units ordered for
+   * a single fulfilment date, across ALL customers. The cap counts a scheduled
+   * order against its `scheduledFor` date and an ASAP order against the day it
+   * was placed; cancelled orders don't count. Must run inside the order
+   * transaction: it takes a per-(product, date) advisory lock so two concurrent
+   * checkouts can't both read an under-cap total and both commit past it.
+   * Uncapped products (`dailyMaxQuantity = null`) and products not in this
+   * order are skipped, so the common path costs nothing.
+   */
+  private async assertDailyCaps(
+    tx: Prisma.TransactionClient,
+    products: Array<{ id: string; name: string; dailyMaxQuantity: number | null }>,
+    qtyByProduct: Map<string, number>,
+    targetAt: Date,
+  ): Promise<void> {
+    const capped = products.filter(
+      (p) => p.dailyMaxQuantity != null && (qtyByProduct.get(p.id) ?? 0) > 0,
+    );
+    if (capped.length === 0) return;
+
+    // Fulfilment-day window in server-local time.
+    const dayStart = new Date(targetAt);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const dayKey = dayStart.toISOString().slice(0, 10); // YYYY-MM-DD
+
+    for (const p of capped) {
+      const requested = qtyByProduct.get(p.id) ?? 0;
+      // Serialise concurrent orders for the same product+date. Released at tx end.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`daily:${p.id}:${dayKey}`}, 0))`;
+      const agg = await tx.orderItem.aggregate({
+        _sum: { quantity: true },
+        where: {
+          productId: p.id,
+          order: {
+            status: { not: 'CANCELLED' },
+            OR: [
+              { scheduledFor: { gte: dayStart, lt: dayEnd } },
+              { scheduledFor: null, createdAt: { gte: dayStart, lt: dayEnd } },
+            ],
+          },
+        },
+      });
+      const existing = agg._sum.quantity ?? 0;
+      const cap = p.dailyMaxQuantity!;
+      if (existing + requested > cap) {
+        const remaining = Math.max(0, cap - existing);
+        throw new BadRequestException({
+          code: 'DAILY_LIMIT_EXCEEDED',
+          message:
+            remaining <= 0
+              ? `"${p.name}" đã hết suất đặt cho ngày này — vui lòng chọn ngày khác.`
+              : `"${p.name}" chỉ còn ${remaining} suất cho ngày đã chọn — vui lòng giảm số lượng.`,
+          details: { productId: p.id, remaining, dailyMax: cap },
+        });
+      }
+    }
   }
 
   private assertKitchenScope(
