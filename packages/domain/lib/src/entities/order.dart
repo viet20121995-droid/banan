@@ -102,6 +102,7 @@ class Order extends Equatable {
     this.invoiceIssuedAt,
     this.invoiceFileUrl,
     this.campaignDiscount = 0,
+    this.bundleDiscount = 0,
     this.campaignInfo,
     this.couponDiscount = 0,
     this.giftCardAmountVnd = 0,
@@ -131,6 +132,11 @@ class Order extends Equatable {
   /// Total promotion (campaign) discount applied to this order, in VND.
   /// 0 when no campaign matched. Drives the "Khuyến mãi −{amount}₫" line.
   final int campaignDiscount;
+
+  /// Combo savings recorded as a single "Giảm combo" discount line, in VND.
+  /// 0 when the order has no combo. The combo's constituent products appear
+  /// as normal line items at their regular price.
+  final int bundleDiscount;
 
   /// Optional breakdown of which campaigns applied — each entry is
   /// `{id, name, type, discountVnd}`. Null when the API omits it.
@@ -221,6 +227,7 @@ class Order extends Equatable {
         invoiceIssuedAt,
         invoiceFileUrl,
         campaignDiscount,
+        bundleDiscount,
         campaignInfo,
         couponDiscount,
         giftCardAmountVnd,

@@ -39,6 +39,35 @@ import {
 /// source once a ward is resolved.
 const DELIVERY_FEE_FALLBACK = 0;
 
+/// A bundle shaped just enough to price its expansion — structurally satisfied
+/// by the Prisma bundle when fetched with items.product.variants + items.variant.
+type BundleForExpansion = {
+  name: string;
+  priceVnd: number;
+  items: ReadonlyArray<{
+    quantity: number;
+    product:
+      | {
+          id: string;
+          basePrice: Prisma.Decimal;
+          variants: ReadonlyArray<{ id: string; priceDelta: Prisma.Decimal }>;
+        }
+      | null;
+    variant: { id: string; priceDelta: Prisma.Decimal } | null;
+  }>;
+};
+
+/// One product line input fed to the order line-build loop — either a plain
+/// cart line or a combo-expanded constituent (`fromBundle` true).
+type ExpandedLineInput = {
+  productId: string;
+  variantId?: string | null;
+  quantity: number;
+  customMessage?: string | null;
+  personalization?: Record<string, unknown> | null;
+  fromBundle: boolean;
+};
+
 const ORDER_INCLUDE = {
   items: true,
   address: true,
@@ -146,19 +175,59 @@ export class OrdersService {
       }
     }
 
-    const productIds = [...new Set(dto.items.map((i) => i.productId))];
+    // An item references either a Product directly or a Bundle (combo). Fetch
+    // both: products carry leadTimeHours/availableDaysOfWeek (scalars `include`
+    // brings in automatically) for the timeline check; bundles bring their
+    // constituent products+variants so we can expand a combo into real product
+    // line items (OrderItem has a hard FK to Product, so a combo can't be a
+    // single line).
+    const requestedIds = [...new Set(dto.items.map((i) => i.productId))];
     const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { id: { in: requestedIds } },
       include: { variants: true },
-      // leadTimeHours + availableDaysOfWeek are needed by assertProducts…().
-      // They're regular scalar columns, so `include` already brings them in.
     });
-    if (products.length !== productIds.length) {
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    const bundleIds = requestedIds.filter((id) => !productById.has(id));
+    const bundles = bundleIds.length
+      ? await this.prisma.bundle.findMany({
+          where: { id: { in: bundleIds }, isActive: true },
+          include: {
+            items: {
+              include: {
+                product: { include: { variants: true } },
+                variant: true,
+              },
+            },
+          },
+        })
+      : [];
+    const bundleById = new Map(bundles.map((b) => [b.id, b]));
+
+    // Anything that's neither a product nor an active bundle is unknown.
+    if (requestedIds.some((id) => !productById.has(id) && !bundleById.has(id))) {
       throw new BadRequestException({ code: 'PRODUCT_NOT_FOUND' });
     }
 
-    const productById = new Map(products.map((p) => [p.id, p]));
-    const productStoreIds = new Set(products.map((p) => p.storeId));
+    // Merge each bundle's constituent products into productById so the
+    // multi-store + timeline checks, stock decrement and the line loop all
+    // treat them as ordinary products.
+    for (const b of bundles) {
+      for (const it of b.items) {
+        if (it.product) productById.set(it.product.id, it.product);
+      }
+    }
+
+    // Expand combos into product line inputs at REGULAR prices + the combo
+    // savings (see expandLineInputs). Plain product lines pass through.
+    const { lines: expandedLines, bundleDiscount } = this.expandLineInputs(
+      dto.items,
+      bundleById,
+    );
+
+    const productStoreIds = new Set(
+      [...productById.values()].map((p) => p.storeId),
+    );
     if (productStoreIds.size !== 1) {
       throw new BadRequestException({
         code: 'CART_MULTI_STORE',
@@ -226,8 +295,10 @@ export class OrdersService {
     );
 
     // Per-product availability rules: days-of-week + advance-notice override.
+    // Runs on every REAL product being ordered, including the ones a combo
+    // expands into (productById was merged with bundle constituents above).
     await this.assertProductsAcceptingOrder(
-      products,
+      [...productById.values()],
       targetAt,
       placedAt,
       !!dto.scheduledFor,
@@ -235,8 +306,11 @@ export class OrdersService {
 
     let subtotal = new Prisma.Decimal(0);
     const lineCreates: Prisma.OrderItemCreateManyOrderInput[] = [];
+    // Parallel to lineCreates: marks which lines came from a combo expansion,
+    // so auto-promotions don't stack on top of the combo deal.
+    const lineFromBundle: boolean[] = [];
 
-    for (const input of dto.items) {
+    for (const input of expandedLines) {
       const product = productById.get(input.productId)!;
       if (!product.isAvailable) {
         throw new BadRequestException({
@@ -323,14 +397,20 @@ export class OrdersService {
             : Prisma.JsonNull,
         lineTotal,
       });
+      lineFromBundle.push(input.fromBundle);
     }
 
+    // Delivery fee keys off the REAL products in the order (combo-expanded
+    // included) — e.g. the birthday-cake tier — so resolve from the line set.
+    const orderedProductIds = [
+      ...new Set(lineCreates.map((l) => l.productId)),
+    ];
     const deliveryFeeVndRaw =
       dto.fulfillmentType === 'DELIVERY'
         ? await this.computeDeliveryFee(
             storeId,
             dto.address?.wardCode,
-            productIds,
+            orderedProductIds,
           )
         : 0;
     const deliveryFee = new Prisma.Decimal(deliveryFeeVndRaw);
@@ -338,27 +418,39 @@ export class OrdersService {
     // ── Coupon validation (no DB write yet — that happens in the tx below).
     const subtotalVnd = Number(subtotal.toString());
     const deliveryFeeVnd = Number(deliveryFee.toString());
+    const bundleDiscountVnd = Math.round(Number(bundleDiscount.toString()));
+    // Goods total the customer actually owes once the combo deal is applied —
+    // combos drop to their flat price, everything else stays at menu price.
+    const subtotalAfterBundleVnd = Math.max(0, subtotalVnd - bundleDiscountVnd);
 
-    // Enforce store's minimum order subtotal (set in store settings).
-    await this.assertMinOrder(storeId, subtotalVnd);
+    // Enforce store's minimum order subtotal (set in store settings) against
+    // the post-combo goods total.
+    await this.assertMinOrder(storeId, subtotalAfterBundleVnd);
 
-    // Automatic promotion-engine discounts (product/category/flash/happy-hour).
-    // Applied to the subtotal before the coupon so the coupon stacks on the
-    // already-discounted amount.
+    // Automatic promotion-engine discounts. ALL lines are passed (combo lines
+    // flagged) so order-level customer campaigns (first-order / birthday /
+    // membership / reactivation) still apply to a combo-only order; the engine
+    // skips combo lines for LINE + BUY_X_GET_Y promos (a combo is already a
+    // discount, so we don't stack on its parts). The base is the post-combo
+    // goods total, and it's applied before the coupon so the coupon stacks on
+    // the already-discounted amount.
     const promo = await this.promotions.evaluate({
-      lines: lineCreates.map((l) => ({
+      lines: lineCreates.map((l, i) => ({
         productId: l.productId,
         quantity: l.quantity,
         lineTotalVnd: Number(l.lineTotal.toString()),
+        comboLine: lineFromBundle[i],
       })),
       storeId,
-      subtotalVnd,
+      subtotalVnd: subtotalAfterBundleVnd,
       // Skip customer-targeted campaigns (membership / birthday / first-order /
       // re-activation) for a guest order bound to a pre-existing account.
       customerId: guestBoundToExisting ? undefined : customerId,
     });
-    const campaignDiscountVnd = Math.min(promo.discountVnd, subtotalVnd);
-    const subtotalAfterCampaign = subtotalVnd - campaignDiscountVnd;
+    const campaignDiscountVnd = Math.min(promo.discountVnd, subtotalAfterBundleVnd);
+    // Subtotal after BOTH the combo discount and the auto-promo discount.
+    const subtotalAfterCampaign =
+      subtotalAfterBundleVnd - campaignDiscountVnd;
 
     let couponDiscountVnd = 0;
     let couponId: string | null = null;
@@ -524,6 +616,7 @@ export class OrdersService {
           couponId,
           couponDiscount,
           campaignDiscount: new Prisma.Decimal(campaignDiscountVnd),
+          bundleDiscount: new Prisma.Decimal(bundleDiscountVnd),
           campaignInfo:
             promo.applied.length > 0
               ? (promo.applied as unknown as Prisma.InputJsonValue)
@@ -1400,6 +1493,72 @@ export class OrdersService {
         ? `${subject}. Mở cửa lại: ${nextLabel}. Mẹo: dùng "Đặt trước theo lịch" để hẹn giờ.`
         : `${subject}.`,
     });
+  }
+
+  /**
+   * Expands combo (Bundle) cart lines into their constituent product line
+   * inputs at REGULAR prices, returning the per-order combo savings (the
+   * difference between the regular total and the bundle's flat `priceVnd`,
+   * times the combo quantity). Plain product lines pass through unchanged.
+   *
+   * Keeping the constituents at regular price means each OrderItem holds its
+   * true menu price (correct for VAT invoices / reports), and the discount is
+   * recorded once on the order as `bundleDiscount` ("Giảm combo"). Pure — no DB
+   * access — so it's unit-tested directly.
+   */
+  private expandLineInputs(
+    items: CreateOrderDto['items'],
+    bundleById: ReadonlyMap<string, BundleForExpansion>,
+  ): { lines: ExpandedLineInput[]; bundleDiscount: Prisma.Decimal } {
+    const lines: ExpandedLineInput[] = [];
+    let bundleDiscount = new Prisma.Decimal(0);
+
+    for (const input of items) {
+      const bundle = bundleById.get(input.productId);
+      if (!bundle) {
+        lines.push({
+          productId: input.productId,
+          variantId: input.variantId,
+          quantity: input.quantity,
+          customMessage: input.customMessage,
+          personalization: input.personalization,
+          fromBundle: false,
+        });
+        continue;
+      }
+
+      const comboQty = input.quantity;
+      let regularTotal = new Prisma.Decimal(0);
+      for (const bi of bundle.items) {
+        const prod = bi.product;
+        if (!prod) throw new BadRequestException({ code: 'PRODUCT_NOT_FOUND' });
+        const variant = bi.variant ?? prod.variants[0];
+        if (!variant) {
+          throw new BadRequestException({
+            code: 'VARIANT_UNAVAILABLE',
+            message: `Combo "${bundle.name}" có món thiếu lựa chọn hợp lệ.`,
+          });
+        }
+        const qty = bi.quantity * comboQty;
+        regularTotal = regularTotal.plus(
+          new Prisma.Decimal(prod.basePrice).plus(variant.priceDelta).times(qty),
+        );
+        lines.push({
+          productId: prod.id,
+          variantId: variant.id,
+          quantity: qty,
+          customMessage: `Combo: ${bundle.name}`,
+          personalization: null,
+          fromBundle: true,
+        });
+      }
+      const saving = regularTotal.minus(
+        new Prisma.Decimal(bundle.priceVnd).times(comboQty),
+      );
+      if (saving.greaterThan(0)) bundleDiscount = bundleDiscount.plus(saving);
+    }
+
+    return { lines, bundleDiscount };
   }
 
   /**

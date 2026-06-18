@@ -144,6 +144,7 @@ class OrderDto {
     this.invoiceIssuedAt,
     this.invoiceFileUrl,
     this.campaignDiscount = 0,
+    this.bundleDiscount = 0,
     this.campaignInfo,
     this.couponDiscount = 0,
     this.giftCardAmountVnd = 0,
@@ -198,6 +199,7 @@ class OrderDto {
       invoiceIssuedAt: json['invoiceIssuedAt'] as String?,
       invoiceFileUrl: json['invoiceFileUrl'] as String?,
       campaignDiscount: _toIntVnd(json['campaignDiscount']),
+      bundleDiscount: _toIntVnd(json['bundleDiscount']),
       campaignInfo: campaignInfoRaw
           ?.map((e) => (e as Map).cast<String, dynamic>())
           .toList(),
@@ -244,6 +246,7 @@ class OrderDto {
   final String? invoiceIssuedAt;
   final String? invoiceFileUrl;
   final int campaignDiscount;
+  final int bundleDiscount;
   final List<Map<String, dynamic>>? campaignInfo;
   final int couponDiscount;
   final int giftCardAmountVnd;
@@ -289,6 +292,7 @@ class OrderDto {
             invoiceIssuedAt == null ? null : DateTime.tryParse(invoiceIssuedAt!),
         invoiceFileUrl: invoiceFileUrl,
         campaignDiscount: campaignDiscount,
+        bundleDiscount: bundleDiscount,
         campaignInfo: campaignInfo,
         couponDiscount: couponDiscount,
         giftCardAmountVnd: giftCardAmountVnd,

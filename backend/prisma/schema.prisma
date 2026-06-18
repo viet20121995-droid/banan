@@ -562,6 +562,11 @@ model Order {
   campaignDiscount Decimal @db.Decimal(12, 2) @default(0)
   // [{ id, name, type, discountVnd }] of campaigns applied to this order.
   campaignInfo   Json?
+  // Combo savings: when a cart line is a Bundle, it's expanded into its
+  // constituent products at REGULAR prices (so each OrderItem keeps its true
+  // menu price for VAT/reports), and the difference vs the bundle's flat
+  // priceVnd is recorded here as a single "Giảm combo" discount line.
+  bundleDiscount Decimal @db.Decimal(12, 2) @default(0)
   // Gift-card redemption applied to this order (balance-based; one card may
   // span several orders). `giftCardCode` is the code used; the amount is the
   // VND deducted from this order's total.

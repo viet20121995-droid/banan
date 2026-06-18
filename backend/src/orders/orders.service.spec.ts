@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 // `nanoid` is ESM-only and is pulled in transitively (orders → payments →
 // momo). Replace it with a CJS stub so Jest can load the module graph. It's
@@ -387,5 +388,122 @@ describe('OrdersService.assertProductsAcceptingOrder (aggregated timeline)', () 
         true,
       ),
     ).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Combo (Bundle) lines must expand into their constituent products at REGULAR
+ * prices, with the combo savings reported once as bundleDiscount. Pure helper,
+ * invoked via the prototype.
+ */
+describe('OrdersService.expandLineInputs (combo expansion + pricing)', () => {
+  const dec = (n: number) => new Prisma.Decimal(n);
+  const expand = (
+    items: Array<{
+      productId: string;
+      variantId?: string | null;
+      quantity: number;
+      customMessage?: string | null;
+      personalization?: Record<string, unknown> | null;
+    }>,
+    bundleById: Map<string, unknown>,
+  ): { lines: Array<Record<string, unknown>>; bundleDiscount: Prisma.Decimal } =>
+    (
+      OrdersService.prototype as unknown as {
+        expandLineInputs(i: unknown, b: unknown): {
+          lines: Array<Record<string, unknown>>;
+          bundleDiscount: Prisma.Decimal;
+        };
+      }
+    ).expandLineInputs.call({}, items, bundleById);
+
+  // Bundle with two parts, each one variant. basePrice + priceDelta = unit.
+  const comboAB = {
+    name: 'Combo A+B',
+    priceVnd: 100000,
+    items: [
+      { quantity: 1, product: { id: 'p1', basePrice: dec(60000), variants: [{ id: 'p1v', priceDelta: dec(0) }] }, variant: null },
+      { quantity: 1, product: { id: 'p2', basePrice: dec(60000), variants: [{ id: 'p2v', priceDelta: dec(0) }] }, variant: null },
+    ],
+  };
+
+  it('passes plain product lines through untouched (fromBundle false, no discount)', () => {
+    const { lines, bundleDiscount } = expand(
+      [{ productId: 'x', variantId: 'xv', quantity: 3 }],
+      new Map(),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ productId: 'x', variantId: 'xv', quantity: 3, fromBundle: false });
+    expect(bundleDiscount.toNumber()).toBe(0);
+  });
+
+  it('expands a combo into its parts at regular price + records the savings', () => {
+    const { lines, bundleDiscount } = expand(
+      [{ productId: 'cAB', quantity: 1 }],
+      new Map([['cAB', comboAB]]),
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines.every((l) => l.fromBundle === true)).toBe(true);
+    expect(lines.map((l) => l.productId).sort()).toEqual(['p1', 'p2']);
+    expect(lines.map((l) => l.quantity)).toEqual([1, 1]);
+    // regular 120k − combo 100k = 20k saved.
+    expect(bundleDiscount.toNumber()).toBe(20000);
+  });
+
+  it('scales quantities and savings by the combo quantity', () => {
+    const { lines, bundleDiscount } = expand(
+      [{ productId: 'cAB', quantity: 2 }],
+      new Map([['cAB', comboAB]]),
+    );
+    expect(lines.map((l) => l.quantity)).toEqual([2, 2]);
+    expect(bundleDiscount.toNumber()).toBe(40000); // (120k − 100k) × 2
+  });
+
+  it('uses the bundle item variant when set, else the product first variant', () => {
+    const combo = {
+      name: 'C',
+      priceVnd: 50000,
+      items: [
+        {
+          quantity: 1,
+          product: { id: 'p', basePrice: dec(40000), variants: [{ id: 'small', priceDelta: dec(0) }, { id: 'big', priceDelta: dec(20000) }] },
+          variant: { id: 'big', priceDelta: dec(20000) }, // explicit → 60k
+        },
+      ],
+    };
+    const { lines, bundleDiscount } = expand([{ productId: 'c', quantity: 1 }], new Map([['c', combo]]));
+    expect(lines[0]).toMatchObject({ productId: 'p', variantId: 'big', quantity: 1 });
+    expect(bundleDiscount.toNumber()).toBe(10000); // 60k − 50k
+  });
+
+  it('never produces a negative discount when the bundle price exceeds the regular sum', () => {
+    const overpriced = { ...comboAB, priceVnd: 200000 }; // > 120k regular
+    const { bundleDiscount } = expand([{ productId: 'cAB', quantity: 1 }], new Map([['cAB', overpriced]]));
+    expect(bundleDiscount.toNumber()).toBe(0);
+  });
+
+  it('handles a mix of a plain product and a combo', () => {
+    const { lines, bundleDiscount } = expand(
+      [
+        { productId: 'x', variantId: 'xv', quantity: 1 },
+        { productId: 'cAB', quantity: 1 },
+      ],
+      new Map([['cAB', comboAB]]),
+    );
+    expect(lines).toHaveLength(3);
+    expect(lines.filter((l) => l.fromBundle).length).toBe(2);
+    expect(lines.filter((l) => !l.fromBundle).length).toBe(1);
+    expect(bundleDiscount.toNumber()).toBe(20000);
+  });
+
+  it('rejects a combo whose item has no usable variant', () => {
+    const broken = {
+      name: 'Broken',
+      priceVnd: 10000,
+      items: [{ quantity: 1, product: { id: 'p', basePrice: dec(10000), variants: [] }, variant: null }],
+    };
+    expect(() => expand([{ productId: 'b', quantity: 1 }], new Map([['b', broken]]))).toThrow(
+      BadRequestException,
+    );
   });
 });

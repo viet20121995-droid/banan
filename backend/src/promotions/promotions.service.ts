@@ -38,6 +38,12 @@ export interface CartLine {
   productId: string;
   quantity: number;
   lineTotalVnd: number;
+  /// True when this line came from expanding a combo/bundle. Such lines are
+  /// EXCLUDED from line-level + BUY_X_GET_Y auto-promos (a combo is already a
+  /// discount, so we don't stack on its parts) but still count toward the
+  /// subtotal that order-level customer campaigns (first-order / birthday /
+  /// membership / reactivation) discount.
+  comboLine?: boolean;
 }
 
 export interface AppliedCampaign {
@@ -127,9 +133,11 @@ export class PromotionsService {
     };
     let total = 0;
 
-    // 1. Per-line best discount (PRODUCT/CATEGORY/FLASH/HAPPY_HOUR).
+    // 1. Per-line best discount (PRODUCT/CATEGORY/FLASH/HAPPY_HOUR). Combo
+    //    lines are skipped — the combo price is already the deal.
     const lineCampaigns = eligible.filter((c) => LINE_TYPES.includes(c.type));
     for (const line of input.lines) {
+      if (line.comboLine) continue;
       const cat = catOf.get(line.productId) ?? null;
       let bestDiscount = 0;
       let best: Campaign | null = null;
@@ -147,9 +155,10 @@ export class PromotionsService {
       }
     }
 
-    // 2. Buy X Get Y (cart-level).
+    // 2. Buy X Get Y (cart-level) — combo lines excluded.
+    const bxgyLines = input.lines.filter((l) => !l.comboLine);
     for (const c of eligible.filter((c) => c.type === 'BUY_X_GET_Y')) {
-      const d = this.bxgyDiscount(c, input.lines, catOf);
+      const d = this.bxgyDiscount(c, bxgyLines, catOf);
       if (d > 0) {
         total += d;
         add(c, d);

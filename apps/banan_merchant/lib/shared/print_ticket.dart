@@ -163,6 +163,10 @@ void printReceipt(Order order) {
       ..write('<h2></h2>')
       ..write(
           '<div class="row"><span>Tạm tính</span><span>${_fmt.format(order.subtotal)}</span></div>');
+    if (order.bundleDiscount > 0) {
+      b.write(
+          '<div class="row"><span>Giảm combo</span><span>−${_fmt.format(order.bundleDiscount)}</span></div>');
+    }
     if (order.campaignDiscount > 0) {
       b.write(
           '<div class="row"><span>Khuyến mãi</span><span>−${_fmt.format(order.campaignDiscount)}</span></div>');
