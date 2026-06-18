@@ -84,6 +84,14 @@ class _BundleBody extends ConsumerWidget {
             coverImage: bundle.imageUrl,
             leadTimeHours: bundleLead > 0 ? bundleLead : null,
             availableDaysOfWeek: bundleDays.length == 7 ? const [] : bundleDays,
+            isBundle: true,
+            // Real constituent product ids — so the delivery quote sees what's
+            // inside, and checkout sends variantId:null (the synthetic id is
+            // for the cart key only; the backend expands the bundle).
+            bundleProductIds: [
+              for (final it in bundle.items)
+                if (it.product != null) it.product!.id,
+            ],
           ),
         );
     final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();

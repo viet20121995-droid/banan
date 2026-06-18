@@ -312,7 +312,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           .map(
             (i) => NewOrderItem(
               productId: i.productId,
-              variantId: i.variantId,
+              // Combo lines carry a synthetic `bundle:<id>` variantId for the
+              // cart key only — it isn't a real variant UUID. Send null so the
+              // backend's UUID validation passes and it expands the bundle.
+              variantId: i.isBundle ? null : i.variantId,
               quantity: i.quantity,
               customMessage: i.customMessage,
               personalization: i.personalization,
@@ -338,8 +341,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           ? ref
               .read(_deliveryQuoteProvider((
                 wardCode: _wardCode,
-                productIdsCsv:
-                    cart.items.map((i) => i.productId).join(','),
+                productIdsCsv: cart.orderedProductIds.join(','),
               )))
               .valueOrNull
               ?.store
@@ -517,7 +519,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     // the backend will charge. Backend auto-routes to the nearest open
     // branch from the ward, applies the right tier (birthday cake vs.
     // standard) from the admin's DeliveryConfig, and returns the final fee.
-    final productIdsCsv = cart.items.map((i) => i.productId).join(',');
+    // Expand combos into their real products so the quoted delivery fee uses
+    // the same product set the backend charges against (e.g. birthday tier).
+    final productIdsCsv = cart.orderedProductIds.join(',');
     final quoteKey = (
       wardCode: _wardCode,
       productIdsCsv: productIdsCsv,
@@ -734,8 +738,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       // birthday-cake tier when applicable) before submit.
                       _DeliveryQuoteBox(
                         wardCode: _wardCode,
-                        productIds:
-                            cart.items.map((i) => i.productId).toList(),
+                        productIds: cart.orderedProductIds,
                       ),
                     ],
                     const SizedBox(height: BananSpacing.xl),

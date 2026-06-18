@@ -91,6 +91,7 @@ export class AnalyticsService {
           fulfillmentType: true,
           couponDiscount: true,
           campaignDiscount: true,
+          bundleDiscount: true,
           pointsDiscount: true,
           giftCardAmountVnd: true,
           payments: { select: { provider: true } },
@@ -156,6 +157,7 @@ export class AnalyticsService {
         discountsGiven +=
           Number(o.couponDiscount.toString()) +
           Number(o.campaignDiscount.toString()) +
+          Number(o.bundleDiscount.toString()) +
           Number(o.pointsDiscount.toString()) +
           o.giftCardAmountVnd;
       } else if (o.status === 'CANCELLED') {

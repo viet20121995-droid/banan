@@ -14,7 +14,7 @@ import { CollectionsService } from './collections.service';
 describe('CollectionsService.addItems', () => {
   let prisma: {
     collection: { findUnique: jest.Mock; findUniqueOrThrow: jest.Mock };
-    collectionItem: { findMany: jest.Mock; create: jest.Mock };
+    collectionItem: { findMany: jest.Mock; createMany: jest.Mock };
     product: { count: jest.Mock };
     deliveryConfig: { findUnique: jest.Mock };
     $transaction: jest.Mock;
@@ -29,7 +29,7 @@ describe('CollectionsService.addItems', () => {
       },
       collectionItem: {
         findMany: jest.fn(),
-        create: jest.fn().mockResolvedValue({}),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       product: { count: jest.fn() },
       deliveryConfig: { findUnique: jest.fn().mockResolvedValue(null) },
@@ -56,13 +56,15 @@ describe('CollectionsService.addItems', () => {
 
     await service.addItems('c1', 's1', ['p1', 'p2', 'p3']);
 
-    // p1 already present → skipped; p2/p3 appended at 1 and 2.
-    expect(prisma.collectionItem.create).toHaveBeenCalledTimes(2);
-    expect(prisma.collectionItem.create).toHaveBeenCalledWith({
-      data: { collectionId: 'c1', productId: 'p2', sortOrder: 1 },
-    });
-    expect(prisma.collectionItem.create).toHaveBeenCalledWith({
-      data: { collectionId: 'c1', productId: 'p3', sortOrder: 2 },
+    // p1 already present → skipped; p2/p3 appended at 1 and 2 in one
+    // race-safe createMany (skipDuplicates).
+    expect(prisma.collectionItem.createMany).toHaveBeenCalledTimes(1);
+    expect(prisma.collectionItem.createMany).toHaveBeenCalledWith({
+      data: [
+        { collectionId: 'c1', productId: 'p2', sortOrder: 1 },
+        { collectionId: 'c1', productId: 'p3', sortOrder: 2 },
+      ],
+      skipDuplicates: true,
     });
   });
 
@@ -84,9 +86,9 @@ describe('CollectionsService.addItems', () => {
     expect(prisma.product.count).toHaveBeenCalledWith({
       where: { id: { in: ['p9'] } },
     });
-    expect(prisma.collectionItem.create).toHaveBeenCalledTimes(1);
-    expect(prisma.collectionItem.create).toHaveBeenCalledWith({
-      data: { collectionId: 'c1', productId: 'p9', sortOrder: 0 },
+    expect(prisma.collectionItem.createMany).toHaveBeenCalledWith({
+      data: [{ collectionId: 'c1', productId: 'p9', sortOrder: 0 }],
+      skipDuplicates: true,
     });
   });
 

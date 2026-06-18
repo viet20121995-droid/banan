@@ -16,6 +16,8 @@ class CartItem {
     this.isBirthdayCake = false,
     this.leadTimeHours,
     this.availableDaysOfWeek = const [],
+    this.isBundle = false,
+    this.bundleProductIds = const [],
   });
 
   final String productId;
@@ -51,6 +53,17 @@ class CartItem {
   /// the customer added it quickly without customising. Defaults false.
   final bool isBirthdayCake;
 
+  /// True when this line is a combo/bundle. The line's [productId] is the
+  /// bundle id (not a real Product), so checkout must send `variantId: null`
+  /// (the synthetic `bundle:<id>` is for cart-key uniqueness only) and the
+  /// backend expands it into its parts.
+  final bool isBundle;
+
+  /// For a combo line: the real constituent product ids. Used so the delivery
+  /// quote keys off the actual products inside (e.g. birthday-cake tier) and so
+  /// "remove the cakes that don't fit" can match a combo by its component ids.
+  final List<String> bundleProductIds;
+
   /// Cart-key must vary by personalization so two configurations of the
   /// same product don't collapse into one line.
   String get key {
@@ -80,6 +93,8 @@ class CartItem {
         isBirthdayCake: isBirthdayCake,
         leadTimeHours: leadTimeHours,
         availableDaysOfWeek: availableDaysOfWeek,
+        isBundle: isBundle,
+        bundleProductIds: bundleProductIds,
       );
 
   /// Returns a copy carrying a different personalization payload. Empty or
@@ -97,6 +112,8 @@ class CartItem {
         isBirthdayCake: isBirthdayCake,
         leadTimeHours: leadTimeHours,
         availableDaysOfWeek: availableDaysOfWeek,
+        isBundle: isBundle,
+        bundleProductIds: bundleProductIds,
         personalization: (next == null || next.isEmpty) ? null : next,
       );
 }
@@ -109,6 +126,15 @@ class CartState {
   bool get isEmpty => items.isEmpty;
   int get itemCount => items.fold(0, (sum, i) => sum + i.quantity);
   double get subtotal => items.fold(0, (sum, i) => sum + i.lineTotal);
+
+  /// The REAL product ids in the cart, expanding combos into their parts.
+  /// Used for the delivery quote so the birthday-cake tier (and any
+  /// product-keyed pricing) sees what's actually inside a combo — otherwise the
+  /// quote keys off the bundle id and can under-quote vs the charged fee.
+  List<String> get orderedProductIds => <String>{
+        for (final i in items)
+          if (i.isBundle) ...i.bundleProductIds else i.productId,
+      }.toList();
 
   /// The largest advance-notice (in hours) any line in the cart needs before
   /// it can be ready. 0 = everything is available right away.
@@ -198,11 +224,16 @@ class CartController extends StateNotifier<CartState> {
   }
 
   /// Removes every line for any of [productIds] — used by checkout's "remove
-  /// the cakes that don't fit the timeline" action. No-op for ids not in cart.
+  /// the cakes that don't fit the timeline" action. The backend reports the
+  /// offending REAL product ids, so a combo line (whose own productId is the
+  /// bundle id) is matched by its constituent bundleProductIds too. No-op for
+  /// ids not in cart.
   void removeProducts(Set<String> productIds) {
+    bool offending(CartItem i) =>
+        productIds.contains(i.productId) ||
+        (i.isBundle && i.bundleProductIds.any(productIds.contains));
     state = CartState(
-      items:
-          state.items.where((i) => !productIds.contains(i.productId)).toList(),
+      items: state.items.where((i) => !offending(i)).toList(),
     );
   }
 

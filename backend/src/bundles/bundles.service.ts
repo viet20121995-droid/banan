@@ -99,7 +99,7 @@ export class BundlesService {
   }
 
   async create(storeId: string, dto: CreateBundleDto) {
-    await this.assertItemsExist(dto.items);
+    await this.assertItemsValid(dto.items, dto.priceVnd);
     try {
       const bundle = await this.prisma.bundle.create({
         data: {
@@ -137,8 +137,21 @@ export class BundlesService {
 
   async update(id: string, storeIdScope: string | null, dto: UpdateBundleDto) {
     const existing = await this.findOneForMerchant(id, storeIdScope);
-    if (dto.items) {
-      await this.assertItemsExist(dto.items);
+    // Validate the EFFECTIVE item set + price (merge with existing when the
+    // update omits one side) so a price-only edit can't push the combo above
+    // the à-la-carte sum, and new items keep valid variants.
+    if (dto.items || dto.priceVnd !== undefined) {
+      const itemsForCheck =
+        dto.items ??
+        existing.items.map((it) => ({
+          productId: it.productId,
+          variantId: it.variantId ?? undefined,
+          quantity: it.quantity,
+        }));
+      await this.assertItemsValid(
+        itemsForCheck,
+        dto.priceVnd ?? existing.priceVnd,
+      );
     }
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -219,18 +232,53 @@ export class BundlesService {
     return Array.from(merged.values());
   }
 
-  /// Products are a single chain-wide catalog, so a bundle (at any branch) may
-  /// include any catalog product — only verify they exist (the old same-store
-  /// check rejected every product for non-catalog-store merchants).
-  private async assertItemsExist(items: BundleItemInputDto[]): Promise<void> {
+  /// Validates a bundle's items + price. Products are a chain-wide catalog so
+  /// any product may be included, but we verify: every product exists, each
+  /// item's variant actually belongs to its product (or the product has a
+  /// default variant), and the flat combo price never EXCEEDS the à-la-carte
+  /// sum — a combo is a deal, not a markup; otherwise order creation would
+  /// silently charge the higher regular sum (the discount clamps at 0).
+  private async assertItemsValid(
+    items: BundleItemInputDto[],
+    priceVnd: number,
+  ): Promise<void> {
     const ids = Array.from(new Set(items.map((i) => i.productId)));
-    const found = await this.prisma.product.count({
+    const products = await this.prisma.product.findMany({
       where: { id: { in: ids } },
+      include: { variants: true },
     });
-    if (found !== ids.length) {
+    const byId = new Map(products.map((p) => [p.id, p]));
+    if (byId.size !== ids.length) {
       throw new BadRequestException({
         code: 'PRODUCT_NOT_FOUND',
         message: 'Một số sản phẩm không tồn tại.',
+      });
+    }
+    let regular = new Prisma.Decimal(0);
+    for (const it of items) {
+      const product = byId.get(it.productId)!;
+      const variant = it.variantId
+        ? product.variants.find((v) => v.id === it.variantId)
+        : product.variants[0];
+      if (!variant) {
+        throw new BadRequestException({
+          code: it.variantId ? 'VARIANT_NOT_IN_PRODUCT' : 'PRODUCT_NO_VARIANT',
+          message: `Lựa chọn không hợp lệ cho "${product.name}".`,
+        });
+      }
+      regular = regular.plus(
+        new Prisma.Decimal(product.basePrice)
+          .plus(variant.priceDelta)
+          .times(it.quantity),
+      );
+    }
+    const regularVnd = Number(regular.toString());
+    if (priceVnd > regularVnd) {
+      throw new BadRequestException({
+        code: 'BUNDLE_PRICE_ABOVE_SUM',
+        message:
+          `Giá combo (${priceVnd}đ) không được cao hơn tổng giá lẻ ` +
+          `(${regularVnd}đ) — combo phải là giá ưu đãi.`,
       });
     }
   }

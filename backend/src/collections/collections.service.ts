@@ -233,10 +233,17 @@ export class CollectionsService {
       const have = new Set(existing.map((e) => e.productId));
       let next =
         existing.reduce((m, e) => Math.max(m, e.sortOrder), -1) + 1;
-      for (const productId of ids) {
-        if (have.has(productId)) continue;
-        await tx.collectionItem.create({
-          data: { collectionId: id, productId, sortOrder: next++ },
+      const toAdd = ids
+        .filter((productId) => !have.has(productId))
+        .map((productId) => ({ collectionId: id, productId, sortOrder: next++ }));
+      // createMany + skipDuplicates is idempotent and race-safe: two concurrent
+      // "add this product" calls can't both pass the in-memory `have` check and
+      // then collide on the (collectionId, productId) unique index — the loser's
+      // row is silently skipped instead of throwing P2002.
+      if (toAdd.length > 0) {
+        await tx.collectionItem.createMany({
+          data: toAdd,
+          skipDuplicates: true,
         });
       }
       return tx.collection.findUniqueOrThrow({

@@ -347,7 +347,14 @@ export class OrdersService {
       // `personalization.flavors` ({ "Jasmine": 3, "Lemon": 2 }). Validate
       // it sums to exactly N × quantity and every flavour is a known
       // option — defence-in-depth on top of the frontend gating.
-      if (product.flavorPickCount && product.flavorPickCount > 0) {
+      // Combo-expanded lines carry no personalization (the combo fixes its
+      // contents), so skip the flavour-composition check for them — otherwise a
+      // combo containing a flavour-pick product would always fail.
+      if (
+        !input.fromBundle &&
+        product.flavorPickCount &&
+        product.flavorPickCount > 0
+      ) {
         const flavors = (input.personalization?.flavors ?? {}) as Record<
           string,
           number
