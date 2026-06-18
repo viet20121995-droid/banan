@@ -40,10 +40,10 @@ export class ReviewsController {
     // Clamp perPage — this @Public endpoint bypasses the DTO, so an
     // unauthenticated `?perPage=1000000` would otherwise force an unbounded
     // row + join read (DoS amplification). Mirror the merchant DTO's max of 50.
-    const safePerPage = Math.min(Math.max(Number(perPage) || 20, 1), 50);
+    const safePerPage = Math.min(Math.max(Math.floor(Number(perPage)) || 20, 1), 50);
     return this.reviews.findPublicForProduct(
       productId,
-      Math.max(Number(page) || 1, 1),
+      Math.max(Math.floor(Number(page)) || 1, 1),
       safePerPage,
     );
   }

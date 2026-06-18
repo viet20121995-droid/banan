@@ -106,17 +106,21 @@ export class EmailService {
   /// Send an arbitrary email — used by the newsletter module for the
   /// confirm + welcome message. Same dry-run / log fallback as
   /// [sendOrderStatusEmail] when no API key is configured.
+  /// Returns true ONLY when the email was actually accepted by the provider —
+  /// false for a skipped/synthetic address, dry-run (no API key), provider
+  /// error, or a thrown exception. Callers (e.g. campaign send) use this to
+  /// count real sends instead of inflating the figure on failures/dry-runs.
   async sendRaw(args: {
     toEmail: string;
     subject: string;
     html: string;
-  }): Promise<void> {
-    if (!isRealEmail(args.toEmail)) return;
+  }): Promise<boolean> {
+    if (!isRealEmail(args.toEmail)) return false;
     if (!this.client) {
       this.logger.log(
         `[email dry-run] to=${args.toEmail} subject="${args.subject}"`,
       );
-      return;
+      return false;
     }
     try {
       const result = await this.client.emails.send({
@@ -129,11 +133,14 @@ export class EmailService {
         this.logger.warn(
           `Resend error to ${args.toEmail}: ${result.error.message}`,
         );
+        return false;
       }
+      return true;
     } catch (err) {
       this.logger.warn(
         `Failed sending to ${args.toEmail}: ${(err as Error).message}`,
       );
+      return false;
     }
   }
 

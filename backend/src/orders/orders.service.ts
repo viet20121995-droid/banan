@@ -1047,16 +1047,29 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
     this.assertKitchenScope(order, actor);
+    // Kitchen kanban only advances while the order is live at the kitchen —
+    // never on a cancelled/completed order that still carries a kitchenStatus.
+    if (order.status !== 'SENT_TO_KITCHEN') {
+      throw new BadRequestException({
+        code: 'KITCHEN_INVALID_TRANSITION',
+        message: `Order is not at the kitchen (status ${order.status}).`,
+      });
+    }
     if (!isAllowedKitchenTransition(order.kitchenStatus, toKitchenStatus)) {
       throw new BadRequestException({
         code: 'KITCHEN_INVALID_TRANSITION',
         message: `Cannot move kitchen status from ${order.kitchenStatus ?? 'null'} to ${toKitchenStatus}.`,
       });
     }
-    // Status-guarded so a double-click / concurrent advance doesn't run the
-    // emit + customer notification twice. The loser sees count 0 and stops.
+    // Status-guarded (incl. SENT_TO_KITCHEN) so a double-click / concurrent
+    // advance — or a cancel landing mid-flight — doesn't run the emit +
+    // customer notification twice or advance a no-longer-live order.
     const res = await this.prisma.order.updateMany({
-      where: { id, kitchenStatus: order.kitchenStatus },
+      where: {
+        id,
+        status: 'SENT_TO_KITCHEN',
+        kitchenStatus: order.kitchenStatus,
+      },
       data: { kitchenStatus: toKitchenStatus },
     });
     if (res.count === 0) {
@@ -1111,20 +1124,31 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
     this.assertKitchenScope(order, actor);
-    if (order.kitchenStatus !== 'READY_DISPATCH') {
+    // Must still be live at the kitchen. Guarding on the *actual* SENT_TO_KITCHEN
+    // status (not order.status) prevents resurrecting an order that was
+    // cancelled while it still carried kitchenStatus=READY_DISPATCH.
+    if (
+      order.status !== 'SENT_TO_KITCHEN' ||
+      order.kitchenStatus !== 'READY_DISPATCH'
+    ) {
       throw new BadRequestException({
         code: 'KITCHEN_NOT_READY',
-        message: 'Order is not at READY_DISPATCH yet.',
+        message: 'Order is not a live SENT_TO_KITCHEN card at READY_DISPATCH.',
       });
     }
     const targetOrderStatus: OrderStatus =
       order.fulfillmentType === 'DELIVERY' ? 'DELIVERING' : 'READY_FOR_PICKUP';
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      // Guard on the exact state we validated (status + READY_DISPATCH) so a
-      // double dispatch can't fire the status-changed emit/notify twice.
+      // Status-guarded on SENT_TO_KITCHEN (not order.status) so a concurrent
+      // cancel/dispatch can't double-fire or revive a cancelled order, and a
+      // double dispatch can't run the emit/notify twice.
       const res = await tx.order.updateMany({
-        where: { id, status: order.status, kitchenStatus: 'READY_DISPATCH' },
+        where: {
+          id,
+          status: 'SENT_TO_KITCHEN',
+          kitchenStatus: 'READY_DISPATCH',
+        },
         data: { status: targetOrderStatus },
       });
       if (res.count === 0) {

@@ -244,7 +244,10 @@ export class NewsletterService {
     let emailsSent = 0;
     for (const [email, info] of recipients) {
       try {
-        await this.email.sendRaw({
+        // Count only emails the provider actually accepted — sendRaw returns
+        // false on dry-run / skipped / provider error, so the history figure
+        // reflects real sends instead of being inflated.
+        const sent = await this.email.sendRaw({
           toEmail: email,
           subject: input.subject,
           html: this.renderCampaign(
@@ -254,7 +257,7 @@ export class NewsletterService {
             input.imageUrl,
           ),
         });
-        emailsSent++;
+        if (sent) emailsSent++;
       } catch {
         // Skip one bad address / rate-limit hiccup; keep sending the rest.
       }
@@ -400,9 +403,13 @@ export class NewsletterService {
   }
 }
 
-/// Escape a CSV cell — wrap in quotes when it contains a comma, quote or
-/// newline; double up internal quotes.
+/// Escape a CSV cell. (1) Neutralise formula injection: a value starting with
+/// = + - @ (or tab/CR) can be executed by Excel/Sheets when an admin opens the
+/// export, so prefix it with a single quote to force text. (2) Wrap in quotes
+/// when it contains a comma, quote or newline; double up internal quotes.
 function csv(v: string): string {
-  if (/[",\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
-  return v;
+  let cell = v;
+  if (/^[=+\-@\t\r]/.test(cell)) cell = `'${cell}`;
+  if (/[",\n]/.test(cell)) return `"${cell.replace(/"/g, '""')}"`;
+  return cell;
 }

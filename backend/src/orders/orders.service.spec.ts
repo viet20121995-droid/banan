@@ -254,3 +254,47 @@ describe('OrdersService.transition (status-guarded)', () => {
     expect(m.promotions.reverseUsage).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('OrdersService.dispatchFromKitchen (no resurrect of a cancelled order)', () => {
+  const ADMIN = { sub: 'a1', role: 'ADMIN' as const, kitchenId: null };
+
+  function svcWith(order: unknown) {
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(order) },
+      $transaction: jest.fn(),
+    };
+    const noop = {} as never;
+    const svc = new OrdersService(
+      prisma as never,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+    );
+    return { svc, prisma };
+  }
+
+  it('refuses a CANCELLED order even at kitchenStatus READY_DISPATCH — no status write', async () => {
+    const m = svcWith({
+      id: 'o1',
+      status: 'CANCELLED',
+      kitchenStatus: 'READY_DISPATCH',
+      kitchenId: null,
+      fulfillmentType: 'PICKUP',
+      customerId: 'c1',
+      storeId: 's1',
+    });
+    await expect(
+      m.svc.dispatchFromKitchen('o1', ADMIN),
+    ).rejects.toMatchObject({ response: { code: 'KITCHEN_NOT_READY' } });
+    // Threw before the transaction → the order is never flipped back to a live
+    // status (no resurrection).
+    expect(m.prisma.$transaction).not.toHaveBeenCalled();
+  });
+});

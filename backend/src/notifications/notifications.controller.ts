@@ -34,12 +34,13 @@ export class NotificationsController {
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
   ) {
-    // Clamp pagination — an authenticated user could otherwise request a huge
-    // perPage and force an unbounded read.
+    // Clamp + floor pagination — an authenticated user could otherwise request
+    // a huge perPage (unbounded read) or a decimal/Infinity (Prisma `take`
+    // must be an integer, else 500).
     return this.notifications.listForUser(
       user.sub,
-      Math.max(Number(page) || 1, 1),
-      Math.min(Math.max(Number(perPage) || 30, 1), 100),
+      Math.max(Math.floor(Number(page)) || 1, 1),
+      Math.min(Math.max(Math.floor(Number(perPage)) || 30, 1), 100),
     );
   }
 
