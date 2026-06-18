@@ -967,8 +967,10 @@ export class OrdersService {
       });
     }
     const updated = await this.prisma.$transaction(async (tx) => {
-      const next = await tx.order.update({
-        where: { id },
+      // Status-guarded on the validated status so a cancel winning the race
+      // can't be overwritten back to SENT_TO_KITCHEN (order resurrection).
+      const res = await tx.order.updateMany({
+        where: { id, status: order.status },
         data: {
           status: 'SENT_TO_KITCHEN',
           // Newly transferred orders sit at PENDING_ACK so kitchen staff
@@ -976,8 +978,13 @@ export class OrdersService {
           kitchenStatus: 'PENDING_ACK',
           kitchenId,
         },
-        include: ORDER_INCLUDE,
       });
+      if (res.count === 0) {
+        throw new BadRequestException({
+          code: 'ORDER_INVALID_TRANSITION',
+          message: `Order is no longer in ${order.status}.`,
+        });
+      }
       await tx.orderStatusEvent.create({
         data: {
           orderId: id,
@@ -987,7 +994,10 @@ export class OrdersService {
           note: opts.note ?? 'Transferred to central kitchen',
         },
       });
-      return next;
+      return tx.order.findUniqueOrThrow({
+        where: { id },
+        include: ORDER_INCLUDE,
+      });
     });
 
     this.realtime.emit(

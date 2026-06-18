@@ -298,7 +298,7 @@ export class NewsletterService {
     imageUrl?: string;
     testEmail: string;
   }): Promise<{ ok: boolean }> {
-    await this.email.sendRaw({
+    const sent = await this.email.sendRaw({
       toEmail: input.testEmail,
       subject: `[Thử] ${input.subject}`,
       html: this.renderCampaign(
@@ -308,6 +308,16 @@ export class NewsletterService {
         input.imageUrl,
       ),
     });
+    // Surface the real outcome — sendRaw returns false on dry-run (no provider
+    // configured) or a provider error. Throwing makes the API truthful so the
+    // UI shows failure instead of a false "sent" toast.
+    if (!sent) {
+      throw new BadRequestException({
+        code: 'EMAIL_NOT_SENT',
+        message:
+          'Email thử chưa gửi được — kiểm tra cấu hình email provider (RESEND_API_KEY) hoặc log lỗi.',
+      });
+    }
     return { ok: true };
   }
 

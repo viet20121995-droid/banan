@@ -12,6 +12,7 @@ import { ArrayMaxSize, IsArray, IsString } from 'class-validator';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 import { NotificationsService } from './notifications.service';
 
@@ -29,19 +30,11 @@ export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
   @Get()
-  list(
-    @CurrentUser() user: AuthPrincipal,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-  ) {
-    // Clamp + floor pagination — an authenticated user could otherwise request
-    // a huge perPage (unbounded read) or a decimal/Infinity (Prisma `take`
-    // must be an integer, else 500).
-    return this.notifications.listForUser(
-      user.sub,
-      Math.max(Math.floor(Number(page)) || 1, 1),
-      Math.min(Math.max(Math.floor(Number(perPage)) || 30, 1), 100),
-    );
+  list(@CurrentUser() user: AuthPrincipal, @Query() q: PaginationDto) {
+    // PaginationDto validates page/perPage as finite ints (1..100) at the
+    // boundary, so a decimal/Infinity is rejected with 400 rather than
+    // reaching Prisma and 500-ing.
+    return this.notifications.listForUser(user.sub, q.page ?? 1, q.perPage ?? 30);
   }
 
   @Post('read')

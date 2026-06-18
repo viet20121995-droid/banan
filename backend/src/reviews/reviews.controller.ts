@@ -17,6 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { merchantStoreScope } from '../common/merchant-scope';
 
 import { CreateReviewDto } from './dto/create-review.dto';
@@ -34,33 +35,23 @@ export class ReviewsController {
   @Get('product/:productId')
   findForProduct(
     @Param('productId') productId: string,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
+    @Query() q: PaginationDto,
   ) {
-    // Clamp perPage — this @Public endpoint bypasses the DTO, so an
-    // unauthenticated `?perPage=1000000` would otherwise force an unbounded
-    // row + join read (DoS amplification). Mirror the merchant DTO's max of 50.
-    const safePerPage = Math.min(Math.max(Math.floor(Number(perPage)) || 20, 1), 50);
+    // DTO already validated page/perPage as finite ints (1..100). This public
+    // endpoint additionally caps perPage at 50 (DoS amplification on an
+    // unauthenticated route with joins).
     return this.reviews.findPublicForProduct(
       productId,
-      Math.max(Math.floor(Number(page)) || 1, 1),
-      safePerPage,
+      q.page ?? 1,
+      Math.min(q.perPage ?? 20, 50),
     );
   }
 
   /// Authenticated — list MY reviews.
   @Roles(Role.CUSTOMER)
   @Get('mine')
-  findMine(
-    @CurrentUser() user: AuthPrincipal,
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-  ) {
-    return this.reviews.findMine(
-      user.sub,
-      Number(page) || 1,
-      Number(perPage) || 20,
-    );
+  findMine(@CurrentUser() user: AuthPrincipal, @Query() q: PaginationDto) {
+    return this.reviews.findMine(user.sub, q.page ?? 1, q.perPage ?? 20);
   }
 
   /// Authenticated — list my reviews against a specific order (drives the
