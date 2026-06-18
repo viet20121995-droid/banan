@@ -1,7 +1,6 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
-import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,6 +25,9 @@ class BundlesListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_bundlesListProvider);
+    // Combos are admin-managed; merchants who deep-link here see read-only.
+    final isAdmin =
+        ref.watch(authSessionProvider).valueOrNull?.user.role.isAdmin ?? false;
     final fmt = NumberFormat.currency(
       locale: 'vi_VN',
       symbol: '₫',
@@ -35,11 +37,13 @@ class BundlesListScreen extends ConsumerWidget {
     return MerchantShell(
       title: 'Combo',
       onRefresh: () async => ref.invalidate(_bundlesListProvider),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/bundles/new'),
-        icon: const Icon(Icons.add),
-        label: const Text('Combo mới'),
-      ),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push('/bundles/new'),
+              icon: const Icon(Icons.add),
+              label: const Text('Combo mới'),
+            )
+          : null,
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorState(
@@ -72,7 +76,9 @@ class BundlesListScreen extends ConsumerWidget {
               itemBuilder: (_, i) => _BundleRow(
                 bundle: bundles[i],
                 fmt: fmt,
-                onTap: () => context.push('/bundles/${bundles[i].id}'),
+                onTap: isAdmin
+                    ? () => context.push('/bundles/${bundles[i].id}')
+                    : null,
               ),
             ),
           );
@@ -90,7 +96,8 @@ class _BundleRow extends StatelessWidget {
   });
   final Bundle bundle;
   final NumberFormat fmt;
-  final VoidCallback onTap;
+  // Null for non-admin → row not tappable (read-only).
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

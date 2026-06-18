@@ -255,23 +255,24 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
             iconSelected: Icons.menu_book,
             route: '/menu',
           ),
-          // The rest below are per-store editorial content. Backends
-          // expect a merchant's storeId — hidden for admin.
-          if (!isAdmin)
+          // Catalog content (collections, combos, bulk product tools) is now
+          // chain-wide and ADMIN-managed — shown to admin, hidden from merchant
+          // branches. Products above stay visible to merchants (read-only).
+          if (isAdmin)
             const _NavItem(
               label: 'Bộ sưu tập',
               icon: Icons.collections_bookmark_outlined,
               iconSelected: Icons.collections_bookmark,
               route: '/collections',
             ),
-          if (!isAdmin)
+          if (isAdmin)
             const _NavItem(
               label: 'Combo',
               icon: Icons.style_outlined,
               iconSelected: Icons.style,
               route: '/bundles',
             ),
-          if (!isAdmin)
+          if (isAdmin)
             const _NavItem(
               label: 'Công cụ hàng loạt',
               icon: Icons.dynamic_feed_outlined,
@@ -319,7 +320,8 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
             iconSelected: Icons.photo_library,
             route: '/banners',
           ),
-          if (!isAdmin)
+          // Posts (Bài đăng) are chain-wide editorial content → ADMIN only.
+          if (isAdmin)
             const _NavItem(
               label: 'Bài đăng',
               icon: Icons.forum_outlined,

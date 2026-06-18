@@ -77,24 +77,34 @@ class ThreadsListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(threadsControllerProvider);
     final controller = ref.read(threadsControllerProvider.notifier);
+    // Posts are admin-managed; merchants who deep-link here see read-only.
+    final isAdmin =
+        ref.watch(authSessionProvider).valueOrNull?.user.role.isAdmin ?? false;
 
     return MerchantShell(
       title: 'Bài đăng',
       onRefresh: controller.refresh,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/threads/new'),
-        icon: const Icon(Icons.edit_note),
-        label: const Text('Bài đăng mới'),
-      ),
-      body: _Body(state: state, controller: controller),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push('/threads/new'),
+              icon: const Icon(Icons.edit_note),
+              label: const Text('Bài đăng mới'),
+            )
+          : null,
+      body: _Body(state: state, controller: controller, isAdmin: isAdmin),
     );
   }
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.state, required this.controller});
+  const _Body({
+    required this.state,
+    required this.controller,
+    required this.isAdmin,
+  });
   final ThreadsState state;
   final ThreadsController controller;
+  final bool isAdmin;
 
   @override
   Widget build(BuildContext context) {
@@ -126,8 +136,9 @@ class _Body extends StatelessWidget {
           final t = state.items[i];
           return _Row(
             thread: t,
-            onEdit: () => context.push('/threads/${t.id}'),
-            onDelete: () => _confirmDelete(context, controller, t),
+            onEdit: isAdmin ? () => context.push('/threads/${t.id}') : null,
+            onDelete:
+                isAdmin ? () => _confirmDelete(context, controller, t) : null,
           );
         },
       ),
@@ -175,8 +186,9 @@ class _Row extends StatelessWidget {
   });
 
   final domain.Thread thread;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  // Null for non-admin → read-only (tap inert, delete hidden).
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -255,11 +267,12 @@ class _Row extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Xoá',
-              onPressed: onDelete,
-            ),
+            if (onDelete != null)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Xoá',
+                onPressed: onDelete,
+              ),
             const Icon(Icons.chevron_right),
           ],
         ),

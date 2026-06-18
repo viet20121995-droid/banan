@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
+import { resolveCatalogStoreId } from '../common/catalog-store';
 import { PrismaService } from '../prisma/prisma.service';
 
 import type { CreateThreadDto, UpdateThreadDto } from './dto/thread.dto';
@@ -35,6 +36,11 @@ function extractHashtags(body: string): string[] {
 export class ThreadsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Chain-wide catalog store — where an admin-created post attaches. */
+  catalogStoreId(): Promise<string> {
+    return resolveCatalogStoreId(this.prisma);
+  }
+
   /** Public feed — published only, newest first, optionally filtered by
    * store and/or a single hashtag. */
   async listPublished(
@@ -54,10 +60,11 @@ export class ThreadsService {
     });
   }
 
-  /** Merchant inbox — drafts + published, newest first. */
-  async listForStore(storeId: string) {
+  /** Merchant inbox — drafts + published, newest first. `storeId` null =
+   *  admin → every store's threads (chain-wide management). */
+  async listForStore(storeId: string | null) {
     return this.prisma.thread.findMany({
-      where: { storeId },
+      where: storeId === null ? {} : { storeId },
       include: THREAD_INCLUDE,
       orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
     });

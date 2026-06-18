@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -74,22 +73,20 @@ export class MerchantBundlesController {
     return this.bundles.findOneForMerchant(id, this.scope(user));
   }
 
-  // A combo belongs to exactly one store, so creation is a store-owner
-  // operation — admin (no implicit store) is excluded here rather than
-  // crashing with a 500 when it lacks a storeId. The merchant UI already
-  // hides Combo management from admin.
-  @Roles(Role.MERCHANT_OWNER)
+  // Combos are chain-wide catalog content, managed by admin only. New ones
+  // attach to the catalog store; admin (scope null) may edit/delete any.
+  // Merchants keep read-only list/view above but the UI hides Combo entirely.
+  @Roles(Role.ADMIN)
   @Post()
-  create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateBundleDto) {
-    if (!user.storeId) {
-      throw new BadRequestException({
-        code: 'NO_STORE_ASSIGNED',
-        message: 'Tài khoản chưa được gán cửa hàng — combo phải thuộc một cửa hàng cụ thể.',
-      });
-    }
-    return this.bundles.create(user.storeId, dto);
+  async create(
+    @CurrentUser() _user: AuthPrincipal,
+    @Body() dto: CreateBundleDto,
+  ) {
+    const storeId = await this.bundles.catalogStoreId();
+    return this.bundles.create(storeId, dto);
   }
 
+  @Roles(Role.ADMIN)
   @Patch(':id')
   update(
     @CurrentUser() user: AuthPrincipal,
@@ -99,6 +96,7 @@ export class MerchantBundlesController {
     return this.bundles.update(id, this.scope(user), dto);
   }
 
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete(':id')
   async remove(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {

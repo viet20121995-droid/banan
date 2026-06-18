@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import { resolveCatalogStoreId } from '../common/catalog-store';
 import { PrismaService } from '../prisma/prisma.service';
 
 import {
@@ -31,6 +32,11 @@ const BUNDLE_INCLUDE = {
 @Injectable()
 export class BundlesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Chain-wide catalog store — where an admin-created combo attaches. */
+  catalogStoreId(): Promise<string> {
+    return resolveCatalogStoreId(this.prisma);
+  }
 
   /// Public — every active bundle, ordered by sortOrder then createdAt.
   /// Inactive bundles are hidden from the customer site entirely.

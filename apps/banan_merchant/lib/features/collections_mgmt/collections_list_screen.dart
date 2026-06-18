@@ -64,8 +64,13 @@ class CollectionsController extends StateNotifier<CollectionsState> {
   }
 }
 
+/// autoDispose so the controller is rebuilt (and the list re-fetched) every
+/// time its last listener goes away — e.g. when the "Thêm vào bộ sưu tập"
+/// bottom sheet reopens. Without this a collection created moments ago wouldn't
+/// appear in the picker until a manual refresh.
 final collectionsControllerProvider =
-    StateNotifierProvider<CollectionsController, CollectionsState>((ref) {
+    StateNotifierProvider.autoDispose<CollectionsController, CollectionsState>(
+        (ref) {
   return CollectionsController(ref.watch(collectionsRepositoryProvider));
 });
 
@@ -76,25 +81,35 @@ class CollectionsListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(collectionsControllerProvider);
     final controller = ref.read(collectionsControllerProvider.notifier);
+    // Collections are admin-managed; merchants who deep-link here see read-only.
+    final isAdmin =
+        ref.watch(authSessionProvider).valueOrNull?.user.role.isAdmin ?? false;
 
     return MerchantShell(
       title: 'Bộ sưu tập',
       onRefresh: controller.refresh,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/collections/new'),
-        icon: const Icon(Icons.add),
-        label: const Text('Tạo bộ sưu tập'),
-      ),
-      body: _Body(state: state, controller: controller),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push('/collections/new'),
+              icon: const Icon(Icons.add),
+              label: const Text('Tạo bộ sưu tập'),
+            )
+          : null,
+      body: _Body(state: state, controller: controller, isAdmin: isAdmin),
     );
   }
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.state, required this.controller});
+  const _Body({
+    required this.state,
+    required this.controller,
+    required this.isAdmin,
+  });
 
   final CollectionsState state;
   final CollectionsController controller;
+  final bool isAdmin;
 
   @override
   Widget build(BuildContext context) {
@@ -126,8 +141,9 @@ class _Body extends StatelessWidget {
           final c = state.items[i];
           return _Row(
             collection: c,
-            onEdit: () => context.push('/collections/${c.id}'),
-            onDelete: () => _confirmDelete(context, controller, c),
+            onEdit: isAdmin ? () => context.push('/collections/${c.id}') : null,
+            onDelete:
+                isAdmin ? () => _confirmDelete(context, controller, c) : null,
           );
         },
       ),
@@ -185,8 +201,9 @@ class _Row extends StatelessWidget {
   });
 
   final Collection collection;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  // Null for non-admin (read-only): tap does nothing, delete button hidden.
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -266,11 +283,12 @@ class _Row extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Xoá',
-              onPressed: onDelete,
-            ),
+            if (onDelete != null)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Xoá',
+                onPressed: onDelete,
+              ),
             const Icon(Icons.chevron_right),
           ],
         ),

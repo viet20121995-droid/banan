@@ -142,6 +142,10 @@ class _MerchantMenuListScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(merchantMenuControllerProvider);
     final controller = ref.read(merchantMenuControllerProvider.notifier);
+    // The menu is a chain-wide catalog managed by admin. Merchants see it
+    // READ-ONLY — no create / edit / delete / add-to-collection controls.
+    final isAdmin =
+        ref.watch(authSessionProvider).valueOrNull?.user.role.isAdmin ?? false;
     final fmt = NumberFormat.currency(
       locale: 'vi_VN',
       symbol: '₫',
@@ -153,12 +157,14 @@ class _MerchantMenuListScreenState
       onRefresh: controller.refresh,
       action: _selectMode
           ? TextButton(onPressed: _exitSelect, child: const Text('Xong'))
-          : IconButton(
-              icon: const Icon(Icons.playlist_add_check),
-              tooltip: 'Chọn nhiều để thêm vào bộ sưu tập',
-              onPressed: () => setState(() => _selectMode = true),
-            ),
-      floatingActionButton: _selectMode
+          : (isAdmin
+              ? IconButton(
+                  icon: const Icon(Icons.playlist_add_check),
+                  tooltip: 'Chọn nhiều để thêm vào bộ sưu tập',
+                  onPressed: () => setState(() => _selectMode = true),
+                )
+              : null),
+      floatingActionButton: (_selectMode || !isAdmin)
           ? null
           : FloatingActionButton.extended(
               onPressed: () => context.push('/menu/new'),
@@ -178,6 +184,7 @@ class _MerchantMenuListScreenState
               state: state,
               fmt: fmt,
               controller: controller,
+              isAdmin: isAdmin,
               selectMode: _selectMode,
               selectedIds: _selectedIds,
               onToggleSelect: _toggle,
@@ -199,6 +206,7 @@ class _Body extends StatelessWidget {
     required this.state,
     required this.fmt,
     required this.controller,
+    required this.isAdmin,
     required this.selectMode,
     required this.selectedIds,
     required this.onToggleSelect,
@@ -207,6 +215,7 @@ class _Body extends StatelessWidget {
   final MerchantMenuState state;
   final NumberFormat fmt;
   final MerchantMenuController controller;
+  final bool isAdmin;
   final bool selectMode;
   final Set<String> selectedIds;
   final ValueChanged<String> onToggleSelect;
@@ -240,6 +249,7 @@ class _Body extends StatelessWidget {
           return _Row(
             product: p,
             fmt: fmt,
+            isAdmin: isAdmin,
             selectMode: selectMode,
             selected: selectedIds.contains(p.id),
             onToggleSelect: () => onToggleSelect(p.id),
@@ -327,6 +337,7 @@ class _Row extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onRestore,
+    this.isAdmin = false,
     this.selectMode = false,
     this.selected = false,
     this.onToggleSelect,
@@ -337,6 +348,7 @@ class _Row extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onRestore;
+  final bool isAdmin;
   final bool selectMode;
   final bool selected;
   final VoidCallback? onToggleSelect;
@@ -345,7 +357,8 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
-      onTap: selectMode ? onToggleSelect : onEdit,
+      // Merchants get a read-only list — only admin can open the editor.
+      onTap: selectMode ? onToggleSelect : (isAdmin ? onEdit : null),
       borderRadius: BananRadii.rlg,
       child: Container(
         padding: const EdgeInsets.all(BananSpacing.md),
@@ -428,7 +441,7 @@ class _Row extends StatelessWidget {
                 ],
               ),
             ),
-            if (!selectMode) ...[
+            if (!selectMode && isAdmin) ...[
               if (product.isAvailable)
                 IconButton(
                   icon: const Icon(Icons.delete_outline),

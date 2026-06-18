@@ -74,34 +74,32 @@ export class MerchantCollectionsController {
     );
   }
 
-  // A collection belongs to one store; create has no chain-wide mode, so
-  // it's a store-staff operation. Admin can still list (chain-wide above)
-  // and delete, but creating requires a concrete store.
-  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF)
+  // Collections are chain-wide catalog content, managed by admin only. New
+  // ones attach to the catalog store (admin has no branch storeId). Merchants
+  // can still LIST/view (read-only), but not create/edit/delete.
+  @Roles(Role.ADMIN)
   @Post()
-  create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateCollectionDto) {
-    if (!user.storeId) {
-      throw new BadRequestException({ code: 'NO_STORE_ASSIGNED' });
-    }
-    return this.collections.create(user.storeId, dto);
+  async create(
+    @CurrentUser() _user: AuthPrincipal,
+    @Body() dto: CreateCollectionDto,
+  ) {
+    const storeId = await this.collections.catalogStoreId();
+    return this.collections.create(storeId, dto);
   }
 
+  @Roles(Role.ADMIN)
   @Patch(':id')
   update(
     @CurrentUser() user: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: UpdateCollectionDto,
   ) {
-    return this.collections.update(
-      id,
-      merchantStoreScope(user),
-      dto,
-    );
+    // Admin scope = null → may edit any collection.
+    return this.collections.update(id, merchantStoreScope(user), dto);
   }
 
-  // Append products to an existing collection (the "Add to collection" flow
-  // from the menu list). Store-staff op, scoped to their own collection.
-  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF)
+  // Append products to an existing collection (the "Add to collection" flow).
+  @Roles(Role.ADMIN)
   @Post(':id/items')
   addItems(
     @CurrentUser() user: AuthPrincipal,
@@ -111,13 +109,10 @@ export class MerchantCollectionsController {
     return this.collections.addItems(id, merchantStoreScope(user), dto.productIds);
   }
 
-  @Roles(Role.MERCHANT_OWNER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete(':id')
   remove(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
-    return this.collections.remove(
-      id,
-      merchantStoreScope(user),
-    );
+    return this.collections.remove(id, merchantStoreScope(user));
   }
 }

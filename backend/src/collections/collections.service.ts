@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
+import { resolveCatalogStoreId } from '../common/catalog-store';
 import { PrismaService } from '../prisma/prisma.service';
 import { birthdayCakeProductIds } from '../products/birthday-cake.util';
 
@@ -33,6 +34,12 @@ const COLLECTION_INCLUDE = {
 @Injectable()
 export class CollectionsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Chain-wide catalog store — where an admin-created collection attaches
+   *  (admin has no branch storeId). */
+  catalogStoreId(): Promise<string> {
+    return resolveCatalogStoreId(this.prisma);
+  }
 
   /** Public read — pinned + active collections shown on customer home. */
   async listForHome(storeId?: string) {

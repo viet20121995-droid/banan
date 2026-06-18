@@ -75,7 +75,7 @@ export class ProductsController {
     return this.products.findAllForStore(storeId, q);
   }
 
-  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @Post()
   async create(
     @CurrentUser() _user: AuthPrincipal,
@@ -85,7 +85,7 @@ export class ProductsController {
     return this.products.create(storeId, dto);
   }
 
-  @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @Patch(':id')
   async update(
     @CurrentUser() _user: AuthPrincipal,
@@ -97,7 +97,7 @@ export class ProductsController {
     return this.products.update(id, null, dto);
   }
 
-  @Roles(Role.MERCHANT_OWNER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @Delete(':id')
   async remove(@CurrentUser() _user: AuthPrincipal, @Param('id') id: string) {
     // Returns `{ deleted, archived }` so the UI shows the right outcome
@@ -105,7 +105,7 @@ export class ProductsController {
     return this.products.remove(id, null);
   }
 
-  @Roles(Role.MERCHANT_OWNER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @Post(':id/restore')
   async restore(@CurrentUser() _user: AuthPrincipal, @Param('id') id: string) {
     return this.products.restore(id, null);
@@ -115,7 +115,7 @@ export class ProductsController {
 
   /// CSV product import. Rows are parsed client-side; here we create-only
   /// (skip existing slugs) so re-runs are safe. Returns created/skipped/errors.
-  @Roles(Role.MERCHANT_OWNER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @Post('merchant/bulk-import')
   @HttpCode(HttpStatus.OK)
   async bulkImport(
@@ -128,7 +128,7 @@ export class ProductsController {
 
   /// Bulk price adjustment over all / a category / a collection. Supports
   /// `dryRun` for a preview before committing.
-  @Roles(Role.MERCHANT_OWNER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @Post('merchant/bulk-price')
   @HttpCode(HttpStatus.OK)
   async bulkPrice(
