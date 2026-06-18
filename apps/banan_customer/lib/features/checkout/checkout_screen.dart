@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:banan_core/banan_core.dart';
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
@@ -83,6 +84,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   int _pointsToRedeem = 0;
   bool _placing = false;
   String? _error;
+
+  /// Structured per-item timeline rejection from the backend — when set, the
+  /// checkout shows which exact cakes don't fit the chosen time plus one-tap
+  /// fixes, instead of the plain [_error] banner.
+  OrderTimelineFailure? _timeline;
 
   // Guest checkout fields — used only when there's no auth session.
   final _guestName = TextEditingController();
@@ -431,8 +437,64 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           context.go('/');
         }
       },
-      failure: (f) => setState(() => _error = authFailureMessage(f)),
+      failure: (f) => setState(() {
+        if (f is OrderTimelineFailure) {
+          // Per-item rejection — show the structured panel, not the banner.
+          _timeline = f;
+          _error = null;
+        } else {
+          _timeline = null;
+          _error = authFailureMessage(f);
+        }
+      }),
     );
+  }
+
+  /// Builds the combined "needs prep time" + "sold only on certain days" note
+  /// shown above the schedule picker, or null when the cart has no constraint.
+  String? _scheduleNote(CartState cart) {
+    final notes = [
+      prepLeadNote(leadHours: cart.maxLeadHours, names: cart.leadProductNames),
+      // Conflicting day constraints (no single day works for the whole cart):
+      // warn up front instead of letting the picker show every day and only
+      // failing at checkout. Otherwise show the normal allowed-days note.
+      if (cart.hasDayConflict)
+        'Các món trong giỏ không bán cùng một ngày — vui lòng bỏ bớt món để '
+            'đặt được, hoặc tách thành nhiều đơn.'
+      else
+        dayConstraintNote(
+          allowedDays: cart.allowedDaysOfWeek,
+          names: cart.dayConstrainedNames,
+        ),
+    ].whereType<String>().toList();
+    return notes.isEmpty ? null : notes.join('\n\n');
+  }
+
+  /// "Chọn giờ sớm nhất phù hợp" — snap the schedule to the soonest moment that
+  /// satisfies every cake's lead time AND allowed days, then clear the error.
+  void _applyEarliestFeasible(CartState cart, OrderTimelineFailure f) {
+    final lead = f.earliestLeadHours ?? cart.maxLeadHours;
+    final allowed = cart.allowedDaysOfWeek;
+    final set = (allowed.isEmpty || allowed.length >= 7) ? null : allowed.toSet();
+    setState(() {
+      _scheduledFor = earliestScheduleSlot(
+        Duration(hours: lead),
+        allowedDays: set,
+      );
+      _timeline = null;
+      _error = null;
+    });
+  }
+
+  /// "Xoá các món này" — drop every offending cake from the cart so the rest
+  /// of the order can go through.
+  void _removeOffending(OrderTimelineFailure f) {
+    final ids = f.items.map((i) => i.productId).toSet();
+    ref.read(cartControllerProvider.notifier).removeProducts(ids);
+    setState(() {
+      _timeline = null;
+      _error = null;
+    });
   }
 
   @override
@@ -516,7 +578,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_error != null)
+                    if (_timeline != null)
+                      Padding(
+                        padding:
+                            const EdgeInsets.only(bottom: BananSpacing.lg),
+                        child: _TimelineErrorPanel(
+                          failure: _timeline!,
+                          onPickEarliest: () =>
+                              _applyEarliestFeasible(cart, _timeline!),
+                          onRemove: () => _removeOffending(_timeline!),
+                        ),
+                      )
+                    else if (_error != null)
                       Container(
                         padding: const EdgeInsets.all(BananSpacing.md),
                         margin:
@@ -581,10 +654,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       onChanged: (next) =>
                           setState(() => _scheduledFor = next),
                       leadHours: cart.maxLeadHours,
-                      leadNote: prepLeadNote(
-                        leadHours: cart.maxLeadHours,
-                        names: cart.leadProductNames,
-                      ),
+                      leadNote: _scheduleNote(cart),
+                      allowedDays: cart.allowedDaysOfWeek,
                     ),
                     if (_fulfillment == FulfillmentType.delivery) ...[
                       const SizedBox(height: BananSpacing.xl),
@@ -1864,3 +1935,106 @@ final _deliveryQuoteProvider = FutureProvider.autoDispose
     failure: (f) => throw Exception(f.message ?? f.code),
   );
 });
+
+/// Red panel that names every cake which doesn't fit the chosen fulfilment
+/// time, with one-tap fixes. Shown in place of the generic error banner when
+/// the backend returns a structured `ORDER_ITEMS_TIMELINE` rejection.
+class _TimelineErrorPanel extends StatelessWidget {
+  const _TimelineErrorPanel({
+    required this.failure,
+    required this.onPickEarliest,
+    required this.onRemove,
+  });
+
+  final OrderTimelineFailure failure;
+  final VoidCallback onPickEarliest;
+  final VoidCallback onRemove;
+
+  static const _wd = {
+    0: 'CN',
+    1: 'T2',
+    2: 'T3',
+    3: 'T4',
+    4: 'T5',
+    5: 'T6',
+    6: 'T7',
+  };
+
+  String _reasonText(TimelineViolation v) {
+    switch (v.reason) {
+      case TimelineReason.leadTime:
+        return 'cần đặt trước ${v.leadTimeHours ?? 0} giờ';
+      case TimelineReason.dayUnavailable:
+        final days = (v.availableDaysOfWeek.toList()..sort())
+            .map((d) => _wd[d] ?? '?$d')
+            .join(', ');
+        return 'chỉ bán $days';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(BananSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: theme.colorScheme.errorContainer.withValues(alpha: 0.35),
+        border:
+            Border.all(color: theme.colorScheme.error.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.event_busy_outlined, color: theme.colorScheme.error),
+              const SizedBox(width: BananSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Một số món không kịp thời gian bạn chọn',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: BananSpacing.sm),
+          for (final v in failure.items)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: RichText(
+                text: TextSpan(
+                  style: theme.textTheme.bodyMedium,
+                  children: [
+                    const TextSpan(text: '•  '),
+                    TextSpan(
+                      text: v.name,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    TextSpan(text: ' — ${_reasonText(v)}'),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: BananSpacing.md),
+          Wrap(
+            spacing: BananSpacing.sm,
+            runSpacing: BananSpacing.sm,
+            children: [
+              FilledButton.icon(
+                onPressed: onPickEarliest,
+                icon: const Icon(Icons.schedule, size: 18),
+                label: const Text('Chọn giờ sớm nhất phù hợp'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onRemove,
+                icon: const Icon(Icons.remove_shopping_cart_outlined, size: 18),
+                label: const Text('Xoá các món này'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

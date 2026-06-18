@@ -298,3 +298,94 @@ describe('OrdersService.dispatchFromKitchen (no resurrect of a cancelled order)'
     expect(m.prisma.$transaction).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Timeline validation must surface EVERY offending cake (not just the first),
+ * so the customer can see exactly which items don't fit their chosen time.
+ * `assertProductsAcceptingOrder` is pure (no `this`), so we invoke it via the
+ * prototype with a throwaway receiver.
+ */
+describe('OrdersService.assertProductsAcceptingOrder (aggregated timeline)', () => {
+  type P = {
+    id: string;
+    name: string;
+    leadTimeHours: number | null;
+    availableDaysOfWeek: number[];
+  };
+  const run = (products: P[], at: Date, placedAt: Date, scheduled: boolean) =>
+    (
+      OrdersService.prototype as unknown as {
+        assertProductsAcceptingOrder(
+          p: P[],
+          at: Date,
+          placedAt: Date,
+          s: boolean,
+        ): Promise<void>;
+      }
+    ).assertProductsAcceptingOrder.call({}, products, at, placedAt, scheduled);
+
+  // A Wednesday (VN) baseline. 2024-01-03T03:00:00Z = 10:00 VN, weekday 3.
+  const placedAt = new Date('2024-01-03T03:00:00Z');
+
+  it('passes when every item fits (no lead time, day allowed)', async () => {
+    await expect(
+      run(
+        [{ id: 'a', name: 'A', leadTimeHours: 0, availableDaysOfWeek: [] }],
+        placedAt,
+        placedAt,
+        false,
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('aggregates ALL offenders (lead-time + day) into one ORDER_ITEMS_TIMELINE error', async () => {
+    const products: P[] = [
+      { id: 'ok', name: 'Sẵn có', leadTimeHours: 0, availableDaysOfWeek: [] },
+      { id: 'lead', name: 'Bánh kem', leadTimeHours: 48, availableDaysOfWeek: [] },
+      // Wednesday is weekday 3; this one only sells Sat(6)/Sun(0).
+      { id: 'day', name: 'Bánh cuối tuần', leadTimeHours: 0, availableDaysOfWeek: [0, 6] },
+    ];
+    // Ordering "now" (placedAt == at) → the 48h item fails lead time.
+    const err = await run(products, placedAt, placedAt, false).catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    const body = (err as BadRequestException).getResponse() as {
+      code: string;
+      details: { items: Array<Record<string, unknown>>; earliestLeadHours?: number };
+    };
+    expect(body.code).toBe('ORDER_ITEMS_TIMELINE');
+    expect(body.details.items).toHaveLength(2); // both offenders, not just first
+    expect(body.details.items.map((i) => i.productId).sort()).toEqual(['day', 'lead']);
+    expect(body.details.earliestLeadHours).toBe(48);
+    const lead = body.details.items.find((i) => i.productId === 'lead');
+    expect(lead).toMatchObject({ reason: 'LEAD_TIME', leadTimeHours: 48 });
+    const day = body.details.items.find((i) => i.productId === 'day');
+    expect(day).toMatchObject({ reason: 'DAY_UNAVAILABLE', availableDaysOfWeek: [0, 6] });
+  });
+
+  it('reports DAY_UNAVAILABLE (not lead) when the chosen day is wrong, even if lead would also fail', async () => {
+    // Item sells only Sat/Sun and needs 48h. On a Wednesday order, the day
+    // constraint takes precedence and lead time is not double-reported.
+    const products: P[] = [
+      { id: 'x', name: 'X', leadTimeHours: 48, availableDaysOfWeek: [0, 6] },
+    ];
+    const err = await run(products, placedAt, placedAt, true).catch((e) => e);
+    const body = (err as BadRequestException).getResponse() as {
+      details: { items: Array<{ reason: string }>; earliestLeadHours?: number };
+    };
+    expect(body.details.items).toHaveLength(1);
+    expect(body.details.items[0].reason).toBe('DAY_UNAVAILABLE');
+    expect(body.details.earliestLeadHours).toBeUndefined();
+  });
+
+  it('passes lead time when scheduled far enough ahead', async () => {
+    const at = new Date(placedAt.getTime() + 50 * 3600 * 1000); // +50h, still a valid weekday set (empty)
+    await expect(
+      run(
+        [{ id: 'lead', name: 'Bánh kem', leadTimeHours: 48, availableDaysOfWeek: [] }],
+        at,
+        placedAt,
+        true,
+      ),
+    ).resolves.toBeUndefined();
+  });
+});

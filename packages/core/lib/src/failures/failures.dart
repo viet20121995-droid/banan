@@ -49,6 +49,57 @@ final class ValidationFailure extends AppFailure {
   final Map<String, String> fields;
 }
 
+/// Why a single cart item doesn't fit the customer's chosen fulfilment time.
+enum TimelineReason {
+  /// Needs more advance notice than the chosen time allows (see leadTimeHours).
+  leadTime,
+
+  /// Not sold on the chosen day of week (see availableDaysOfWeek).
+  dayUnavailable,
+}
+
+/// One offending cake in an [OrderTimelineFailure] — carries enough detail for
+/// the checkout UI to highlight the item and explain the fix.
+@immutable
+class TimelineViolation {
+  const TimelineViolation({
+    required this.productId,
+    required this.name,
+    required this.reason,
+    this.leadTimeHours,
+    this.availableDaysOfWeek = const [],
+  });
+
+  final String productId;
+  final String name;
+  final TimelineReason reason;
+
+  /// Set when [reason] is [TimelineReason.leadTime].
+  final int? leadTimeHours;
+
+  /// Days (0=Sun..6=Sat) the product IS sold — set when [reason] is
+  /// [TimelineReason.dayUnavailable].
+  final List<int> availableDaysOfWeek;
+}
+
+/// Returned when an order is rejected because one or more cakes don't fit the
+/// chosen delivery/pickup time. Unlike a plain [ValidationFailure] it carries
+/// the full list of offending [items] (and the longest [earliestLeadHours]) so
+/// the checkout screen can name each cake and offer a one-tap fix.
+final class OrderTimelineFailure extends AppFailure {
+  const OrderTimelineFailure({
+    required this.items,
+    this.earliestLeadHours,
+    super.message,
+  }) : super(code: 'ORDER_ITEMS_TIMELINE');
+
+  final List<TimelineViolation> items;
+
+  /// The largest lead-time (hours) among the lead-time offenders, so the app
+  /// can jump the schedule to the soonest time that satisfies every cake.
+  final int? earliestLeadHours;
+}
+
 /// Generic catch-all when the server returns a non-2xx with a known code.
 final class ServerFailure extends AppFailure {
   const ServerFailure({required super.code, super.message, super.cause});

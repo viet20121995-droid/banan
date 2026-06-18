@@ -1407,6 +1407,11 @@ export class OrdersService {
    * per-product `leadTimeHours` (advance notice override). Store-wide lead
    * time is checked separately in `assertStoreAcceptingOrder`; whichever is
    * larger effectively wins, since both must pass.
+   *
+   * Collects EVERY offending item rather than throwing on the first, so the
+   * customer sees the full list of cakes that don't fit their chosen time (and
+   * the app can highlight each one). On any violation it throws a single
+   * `ORDER_ITEMS_TIMELINE` error carrying machine-readable `details.items`.
    */
   private async assertProductsAcceptingOrder(
     products: { id: string; name: string; leadTimeHours: number | null; availableDaysOfWeek: number[] }[],
@@ -1417,35 +1422,77 @@ export class OrdersService {
     // VN local weekday for day-of-week comparison.
     const vn = new Date(at.getTime() + 7 * 3600 * 1000);
     const dow = vn.getUTCDay(); // 0=Sun..6=Sat
+    const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+
+    type TimelineViolation = {
+      productId: string;
+      name: string;
+      reason: 'LEAD_TIME' | 'DAY_UNAVAILABLE';
+      leadTimeHours?: number;
+      availableDaysOfWeek?: number[];
+    };
+    const violations: TimelineViolation[] = [];
 
     for (const p of products) {
+      // Day-of-week takes precedence: if the product isn't sold on the chosen
+      // day, lead time is moot for it — report the day constraint only.
       if (
         p.availableDaysOfWeek &&
         p.availableDaysOfWeek.length > 0 &&
         !p.availableDaysOfWeek.includes(dow)
       ) {
-        const names = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-        const allowed = p.availableDaysOfWeek
-          .map((d) => names[d] ?? `?${d}`)
-          .join(', ');
-        throw new BadRequestException({
-          code: 'PRODUCT_DAY_UNAVAILABLE',
-          message: `${p.name} chỉ bán vào ${allowed}. Vui lòng chọn ngày khác hoặc loại bỏ khỏi giỏ hàng.`,
+        violations.push({
+          productId: p.id,
+          name: p.name,
+          reason: 'DAY_UNAVAILABLE',
+          availableDaysOfWeek: p.availableDaysOfWeek,
         });
+        continue;
       }
 
       if (p.leadTimeHours && p.leadTimeHours > 0) {
         const minMs = p.leadTimeHours * 3600 * 1000;
         if (at.getTime() - placedAt.getTime() < minMs) {
-          throw new BadRequestException({
-            code: 'PRODUCT_LEAD_TIME',
-            message: scheduled
-              ? `${p.name} cần đặt trước ít nhất ${p.leadTimeHours} giờ. Vui lòng chọn thời gian khác.`
-              : `${p.name} cần đặt trước ${p.leadTimeHours} giờ. Hãy dùng "Đặt trước theo lịch".`,
+          violations.push({
+            productId: p.id,
+            name: p.name,
+            reason: 'LEAD_TIME',
+            leadTimeHours: p.leadTimeHours,
           });
         }
       }
     }
+
+    if (violations.length === 0) return;
+
+    // Longest lead time among the lead-time offenders — lets the app jump the
+    // schedule straight to the soonest time that satisfies every cake.
+    const earliestLeadHours = violations.reduce(
+      (m, v) => (v.reason === 'LEAD_TIME' ? Math.max(m, v.leadTimeHours ?? 0) : m),
+      0,
+    );
+
+    // Human-readable summary that names every offending cake and its rule, so
+    // even a client that only renders the message string is actionable.
+    const reasons = violations.map((v) =>
+      v.reason === 'LEAD_TIME'
+        ? `${v.name} cần đặt trước ${v.leadTimeHours} giờ`
+        : `${v.name} chỉ bán ${(v.availableDaysOfWeek ?? [])
+            .map((d) => dayNames[d] ?? `?${d}`)
+            .join(', ')}`,
+    );
+    const hint = scheduled
+      ? 'Vui lòng chọn thời gian khác hoặc bỏ các món này khỏi giỏ.'
+      : 'Hãy dùng "Đặt trước theo lịch" hoặc bỏ các món này khỏi giỏ.';
+
+    throw new BadRequestException({
+      code: 'ORDER_ITEMS_TIMELINE',
+      message: `${reasons.join('; ')}. ${hint}`,
+      details: {
+        items: violations,
+        ...(earliestLeadHours > 0 && { earliestLeadHours }),
+      },
+    });
   }
 
   /**

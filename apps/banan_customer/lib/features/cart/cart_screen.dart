@@ -349,6 +349,7 @@ class _CrossSellCard extends ConsumerWidget {
             quantity: 1,
             isBirthdayCake: product.isBirthdayCake,
             leadTimeHours: product.leadTimeHours,
+            availableDaysOfWeek: product.availableDaysOfWeek,
           ),
         );
     final s = ref.read(stringsProvider);
@@ -531,6 +532,27 @@ class _Row extends ConsumerWidget {
                         color: theme.colorScheme.primary,
                       ),
                     ),
+                    if ((item.leadTimeHours ?? 0) > 0 ||
+                        item.availableDaysOfWeek.isNotEmpty) ...[
+                      const SizedBox(height: BananSpacing.xs),
+                      Wrap(
+                        spacing: BananSpacing.xs,
+                        runSpacing: BananSpacing.xs,
+                        children: [
+                          if ((item.leadTimeHours ?? 0) > 0)
+                            _ConstraintChip(
+                              icon: Icons.schedule,
+                              label: 'Đặt trước ${item.leadTimeHours}h',
+                            ),
+                          if (item.availableDaysOfWeek.isNotEmpty)
+                            _ConstraintChip(
+                              icon: Icons.event_outlined,
+                              label:
+                                  'Chỉ bán ${_cartDaysLabel(item.availableDaysOfWeek)}',
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -604,6 +626,46 @@ class _Row extends ConsumerWidget {
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Weekday ints (0=Sun..6=Sat) → short VN labels, sorted, e.g. "T7, CN".
+String _cartDaysLabel(List<int> days) {
+  const wd = {0: 'CN', 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7'};
+  return (days.toList()..sort()).map((d) => wd[d] ?? '?$d').join(', ');
+}
+
+/// Small amber pill on a cart line flagging a per-item timeline constraint
+/// (advance notice or sold-only-on-certain-days), so the customer sees the
+/// requirement before reaching checkout.
+class _ConstraintChip extends StatelessWidget {
+  const _ConstraintChip({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: BananSpacing.sm, vertical: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        color: BananColors.gold.withValues(alpha: 0.14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: BananColors.gold),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall
+                ?.copyWith(color: theme.colorScheme.onSurface),
+          ),
         ],
       ),
     );

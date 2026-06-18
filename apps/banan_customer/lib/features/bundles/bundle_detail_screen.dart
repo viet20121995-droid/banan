@@ -62,6 +62,17 @@ class _BundleBody extends ConsumerWidget {
           ? (it.product?.leadTimeHours ?? 0)
           : m,
     );
+    // A combo can only be ordered on a day EVERY part is sold (intersection;
+    // parts with no day constraint don't narrow it). All-7 collapses to "no
+    // constraint" so the picker isn't needlessly restricted.
+    final bundleDays = <int>[
+      for (var d = 0; d <= 6; d++)
+        if (bundle.items.every((it) {
+          final days = it.product?.availableDaysOfWeek ?? const <int>[];
+          return days.isEmpty || days.contains(d);
+        }))
+          d,
+    ];
     ref.read(cartControllerProvider.notifier).add(
           CartItem(
             productId: bundle.id,
@@ -72,6 +83,7 @@ class _BundleBody extends ConsumerWidget {
             quantity: 1,
             coverImage: bundle.imageUrl,
             leadTimeHours: bundleLead > 0 ? bundleLead : null,
+            availableDaysOfWeek: bundleDays.length == 7 ? const [] : bundleDays,
           ),
         );
     final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();

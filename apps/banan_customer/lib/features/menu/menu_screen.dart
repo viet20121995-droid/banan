@@ -2089,6 +2089,7 @@ void _confirmAddToCart({
                   : personalization,
           isBirthdayCake: isBirthdayCake,
           leadTimeHours: product.leadTimeHours,
+          availableDaysOfWeek: product.availableDaysOfWeek,
         ),
       );
   // Replace any existing snackbar instead of stacking — repeated quick

@@ -423,12 +423,48 @@ class _SavedAddressTile extends StatelessWidget {
 }
 
 /// The soonest valid slot given a required [lead] from now, rounded up to the
-/// next 15-minute boundary so the default looks tidy.
-DateTime earliestScheduleSlot(Duration lead) {
+/// next 15-minute boundary so the default looks tidy. When [allowedDays] is set
+/// (weekdays 0=Sun..6=Sat the cart can be fulfilled), the slot is advanced to
+/// the first allowed day — opening at [openHour] on any day after today — so
+/// the default never lands on a day the order would be rejected.
+DateTime earliestScheduleSlot(
+  Duration lead, {
+  Set<int>? allowedDays,
+  int openHour = 8,
+}) {
   final t = DateTime.now().add(lead);
   final base = DateTime(t.year, t.month, t.day, t.hour);
   final slot = (t.minute / 15).ceil() * 15;
-  return base.add(Duration(minutes: slot));
+  var earliest = base.add(Duration(minutes: slot));
+  if (allowedDays == null || allowedDays.isEmpty || allowedDays.length >= 7) {
+    return earliest;
+  }
+  for (var i = 0; i < 14; i++) {
+    if (allowedDays.contains(earliest.weekday % 7)) return earliest;
+    final next = DateTime(earliest.year, earliest.month, earliest.day)
+        .add(const Duration(days: 1));
+    earliest = DateTime(next.year, next.month, next.day, openHour);
+  }
+  return earliest; // no allowed day within two weeks — fall back gracefully
+}
+
+/// Builds the "sold only on certain days" notice, or null when the cart isn't
+/// day-restricted. [allowedDays] are weekdays 0=Sun..6=Sat; [names] are the
+/// cakes that drive the restriction.
+String? dayConstraintNote({
+  required List<int> allowedDays,
+  required List<String> names,
+}) {
+  if (allowedDays.isEmpty || allowedDays.length >= 7) return null;
+  const wd = {0: 'CN', 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7'};
+  final days =
+      (allowedDays.toList()..sort()).map((d) => wd[d] ?? '?$d').join(', ');
+  final who = names.isEmpty
+      ? 'Một số bánh'
+      : (names.length <= 2
+          ? names.join(', ')
+          : '${names.take(2).join(', ')} và ${names.length - 2} món khác');
+  return '$who chỉ bán vào $days — lịch nhận chỉ hiện các ngày này.';
 }
 
 /// Builds the "needs preparation time" notice, or null when nothing in the
@@ -457,6 +493,7 @@ class LeadAwareSchedule extends StatefulWidget {
     required this.onChanged,
     required this.leadHours,
     this.leadNote,
+    this.allowedDays = const [],
     super.key,
   });
 
@@ -465,21 +502,34 @@ class LeadAwareSchedule extends StatefulWidget {
   final int leadHours;
   final String? leadNote;
 
+  /// Weekdays (0=Sun..6=Sat) the whole cart can be fulfilled on. Empty / all =
+  /// no restriction. Drives both the pre-filled default and the picker.
+  final List<int> allowedDays;
+
   @override
   State<LeadAwareSchedule> createState() => _LeadAwareScheduleState();
 }
 
 class _LeadAwareScheduleState extends State<LeadAwareSchedule> {
+  Set<int>? get _allowed {
+    final a = widget.allowedDays;
+    return (a.isEmpty || a.length >= 7) ? null : a.toSet();
+  }
+
   @override
   void initState() {
     super.initState();
-    // One-shot: if prep is required and the customer hasn't chosen a time yet,
-    // pre-fill the soonest valid slot.
-    if (widget.leadHours > 0 && widget.value == null) {
+    // One-shot: if prep time or a day restriction applies and the customer
+    // hasn't chosen a time yet, pre-fill the soonest valid slot.
+    final constrained = widget.leadHours > 0 || _allowed != null;
+    if (constrained && widget.value == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && widget.value == null) {
           widget.onChanged(
-            earliestScheduleSlot(Duration(hours: widget.leadHours)),
+            earliestScheduleSlot(
+              Duration(hours: widget.leadHours),
+              allowedDays: _allowed,
+            ),
           );
         }
       });
@@ -495,6 +545,7 @@ class _LeadAwareScheduleState extends State<LeadAwareSchedule> {
           ? Duration(hours: widget.leadHours)
           : const Duration(minutes: 30),
       leadNote: widget.leadNote,
+      allowedDays: widget.allowedDays,
     );
   }
 }
@@ -508,6 +559,7 @@ class ScheduleSection extends ConsumerWidget {
     required this.onChanged,
     this.minLead = const Duration(minutes: 30),
     this.leadNote,
+    this.allowedDays = const [],
     super.key,
   });
   final DateTime? value;
@@ -515,16 +567,26 @@ class ScheduleSection extends ConsumerWidget {
   final Duration minLead;
   final String? leadNote;
 
+  /// Weekdays (0=Sun..6=Sat) the cart can be fulfilled on. Empty / all = no
+  /// restriction; otherwise the picker hides disallowed days.
+  final List<int> allowedDays;
+
+  Set<int>? get _allowed =>
+      (allowedDays.isEmpty || allowedDays.length >= 7) ? null : allowedDays.toSet();
+
   Future<void> _pick(BuildContext context) async {
-    final earliest = earliestScheduleSlot(minLead);
+    final earliest = earliestScheduleSlot(minLead, allowedDays: _allowed);
     final initial =
         (value != null && value!.isAfter(earliest)) ? value : earliest;
     final picked = await showModalBottomSheet<DateTime>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) =>
-          _SchedulePickerSheet(earliest: earliest, initial: initial),
+      builder: (_) => _SchedulePickerSheet(
+        earliest: earliest,
+        initial: initial,
+        allowedDays: _allowed,
+      ),
     );
     if (picked != null) onChanged(picked);
   }
@@ -535,7 +597,7 @@ class ScheduleSection extends ConsumerWidget {
     final s = ref.watch(stringsProvider);
     final isScheduled = value != null;
     final fmt = DateFormat('HH:mm · dd/MM');
-    final earliest = earliestScheduleSlot(minLead);
+    final earliest = earliestScheduleSlot(minLead, allowedDays: _allowed);
 
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -693,9 +755,16 @@ class _LeadNoteBanner extends StatelessWidget {
 /// 20:30, with anything before [earliest] hidden. Much friendlier than the
 /// stacked OS date+time dialogs.
 class _SchedulePickerSheet extends StatefulWidget {
-  const _SchedulePickerSheet({required this.earliest, this.initial});
+  const _SchedulePickerSheet({
+    required this.earliest,
+    this.initial,
+    this.allowedDays,
+  });
   final DateTime earliest;
   final DateTime? initial;
+
+  /// Weekdays (0=Sun..6=Sat) to keep. Null = every day.
+  final Set<int>? allowedDays;
   @override
   State<_SchedulePickerSheet> createState() => _SchedulePickerSheetState();
 }
@@ -706,12 +775,18 @@ class _SchedulePickerSheetState extends State<_SchedulePickerSheet> {
   late DateTime _day;
   DateTime? _selected;
 
+  bool _isAllowedDay(DateTime d) =>
+      widget.allowedDays == null || widget.allowedDays!.contains(d.weekday % 7);
+
   @override
   void initState() {
     super.initState();
-    final init = widget.initial ?? widget.earliest;
+    final candidate = widget.initial ?? widget.earliest;
+    // A stale selection on a now-disallowed day falls back to earliest (which
+    // the caller already snapped onto an allowed day).
+    final init = _isAllowedDay(candidate) ? candidate : widget.earliest;
     _day = DateTime(init.year, init.month, init.day);
-    _selected = init;
+    _selected = _isAllowedDay(init) ? init : null;
   }
 
   List<DateTime> get _days {
@@ -720,7 +795,9 @@ class _SchedulePickerSheetState extends State<_SchedulePickerSheet> {
       widget.earliest.month,
       widget.earliest.day,
     );
-    return List.generate(14, (i) => start.add(Duration(days: i)));
+    final all = List.generate(14, (i) => start.add(Duration(days: i)));
+    if (widget.allowedDays == null) return all;
+    return all.where(_isAllowedDay).toList();
   }
 
   List<DateTime> _slotsFor(DateTime day) {

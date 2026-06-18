@@ -15,6 +15,7 @@ class CartItem {
     this.personalization,
     this.isBirthdayCake = false,
     this.leadTimeHours,
+    this.availableDaysOfWeek = const [],
   });
 
   final String productId;
@@ -32,6 +33,13 @@ class CartItem {
   /// and default the schedule to the earliest valid time, matching the
   /// backend's PRODUCT_LEAD_TIME guard so they never hit a rejected order.
   final int? leadTimeHours;
+
+  /// Days of week (0=Sun..6=Sat) this product is sold — mirrors
+  /// `Product.availableDaysOfWeek`. Empty = sold every day. The cart
+  /// intersects these across all lines so the schedule picker can disable
+  /// days the order can't be fulfilled, matching the backend's
+  /// ORDER_ITEMS_TIMELINE (DAY_UNAVAILABLE) guard.
+  final List<int> availableDaysOfWeek;
 
   /// Cake personalization payload from the customer wizard (text on
   /// cake, candle count, reference image URL, note). Null for items
@@ -71,6 +79,7 @@ class CartItem {
         personalization: personalization,
         isBirthdayCake: isBirthdayCake,
         leadTimeHours: leadTimeHours,
+        availableDaysOfWeek: availableDaysOfWeek,
       );
 
   /// Returns a copy carrying a different personalization payload. Empty or
@@ -87,6 +96,7 @@ class CartItem {
         customMessage: customMessage,
         isBirthdayCake: isBirthdayCake,
         leadTimeHours: leadTimeHours,
+        availableDaysOfWeek: availableDaysOfWeek,
         personalization: (next == null || next.isEmpty) ? null : next,
       );
 }
@@ -113,6 +123,42 @@ class CartState {
         for (final i in items)
           if ((i.leadTimeHours ?? 0) > 0) i.productName,
       }.toList();
+
+  /// Days of week (0=Sun..6=Sat) on which the WHOLE cart can be fulfilled —
+  /// the intersection of every line's day constraint. Unconstrained lines
+  /// (empty list) don't narrow it. Returns all 7 days when nothing is
+  /// constrained. May be empty when constraints conflict (no single day works
+  /// for every cake) — callers should treat empty as "don't restrict" and let
+  /// the per-line badges + backend guard surface the conflict.
+  List<int> get allowedDaysOfWeek {
+    final constrained = [
+      for (final i in items)
+        if (i.availableDaysOfWeek.isNotEmpty) i.availableDaysOfWeek,
+    ];
+    if (constrained.isEmpty) return const [0, 1, 2, 3, 4, 5, 6];
+    return [
+      for (var d = 0; d <= 6; d++)
+        if (constrained.every((days) => days.contains(d))) d,
+    ];
+  }
+
+  /// Distinct names of cakes that are only sold on certain days — used to tell
+  /// the customer which items drive the day restriction.
+  List<String> get dayConstrainedNames => <String>{
+        for (final i in items)
+          if (i.availableDaysOfWeek.isNotEmpty) i.productName,
+      }.toList();
+
+  /// True when day constraints CONFLICT — some items are day-restricted yet no
+  /// single day works for all of them ([allowedDaysOfWeek] is empty). The order
+  /// can't be fulfilled in one go; the customer must drop some items. Distinct
+  /// from "unconstrained" (which yields all 7 days), so the UI can warn instead
+  /// of silently treating it as "any day".
+  bool get hasDayConflict {
+    final anyConstrained =
+        items.any((i) => i.availableDaysOfWeek.isNotEmpty);
+    return anyConstrained && allowedDaysOfWeek.isEmpty;
+  }
 }
 
 /// In-memory cart. Lost on app refresh / restart — Hive persistence lands
@@ -148,6 +194,15 @@ class CartController extends StateNotifier<CartState> {
   void remove(String key) {
     state = CartState(
       items: state.items.where((i) => i.key != key).toList(),
+    );
+  }
+
+  /// Removes every line for any of [productIds] — used by checkout's "remove
+  /// the cakes that don't fit the timeline" action. No-op for ids not in cart.
+  void removeProducts(Set<String> productIds) {
+    state = CartState(
+      items:
+          state.items.where((i) => !productIds.contains(i.productId)).toList(),
     );
   }
 

@@ -164,6 +164,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                     pers.isEmpty ? null : pers,
                                 isBirthdayCake: product.isBirthdayCake,
                                 leadTimeHours: product.leadTimeHours,
+                                availableDaysOfWeek: product.availableDaysOfWeek,
                               ),
                             );
                         // Surface a "View cart" shortcut directly in the

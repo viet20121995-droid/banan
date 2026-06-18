@@ -10,12 +10,22 @@ AppFailure mapHttpStatusToFailure(Response<dynamic> res) {
 
   String? code;
   String? message;
+  Map<String, dynamic>? details;
   if (body is Map<String, dynamic>) {
     final err = body['error'];
     if (err is Map<String, dynamic>) {
       code = err['code'] as String?;
       message = err['message'] as String?;
+      final d = err['details'];
+      if (d is Map<String, dynamic>) details = d;
     }
+  }
+
+  // Structured per-item timeline rejection — preserve the offending cakes so
+  // the checkout UI can highlight each one and offer a fix, instead of
+  // collapsing to a single opaque message.
+  if (code == 'ORDER_ITEMS_TIMELINE') {
+    return _orderTimelineFailure(message, details);
   }
 
   if (status == 401) {
@@ -33,6 +43,43 @@ AppFailure mapHttpStatusToFailure(Response<dynamic> res) {
   return ServerFailure(
     code: code ?? 'HTTP_$status',
     message: message ?? 'Request failed ($status).',
+  );
+}
+
+/// Parses the `{ items, earliestLeadHours }` payload of an
+/// `ORDER_ITEMS_TIMELINE` error into a typed [OrderTimelineFailure]. Falls back
+/// to an item-less failure (still carrying the message) if details are absent.
+OrderTimelineFailure _orderTimelineFailure(
+  String? message,
+  Map<String, dynamic>? details,
+) {
+  final items = <TimelineViolation>[];
+  final raw = details?['items'];
+  if (raw is List) {
+    for (final r in raw) {
+      if (r is! Map) continue;
+      final m = r.cast<String, dynamic>();
+      items.add(
+        TimelineViolation(
+          productId: m['productId'] as String? ?? '',
+          name: m['name'] as String? ?? '',
+          reason: m['reason'] == 'DAY_UNAVAILABLE'
+              ? TimelineReason.dayUnavailable
+              : TimelineReason.leadTime,
+          leadTimeHours: (m['leadTimeHours'] as num?)?.toInt(),
+          availableDaysOfWeek: (m['availableDaysOfWeek'] as List?)
+                  ?.whereType<num>()
+                  .map((e) => e.toInt())
+                  .toList() ??
+              const [],
+        ),
+      );
+    }
+  }
+  return OrderTimelineFailure(
+    items: items,
+    earliestLeadHours: (details?['earliestLeadHours'] as num?)?.toInt(),
+    message: message,
   );
 }
 
