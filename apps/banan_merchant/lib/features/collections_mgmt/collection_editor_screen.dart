@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
@@ -8,7 +10,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/cover_image_picker.dart';
-import '../menu_mgmt/menu_list_screen.dart';
 import 'collections_list_screen.dart';
 
 final _editorCollectionProvider =
@@ -19,6 +20,20 @@ final _editorCollectionProvider =
     success: (c) => c,
     failure: (f) => throw Exception(f.message ?? f.code),
   );
+});
+
+/// Search the chain-wide catalog for the product picker. Querying server-side
+/// (perPage 50) means the picker isn't limited to a stale first page and can
+/// find any product by name — fixing the old chip list that only showed the
+/// menu controller's first page.
+final _pickerResultsProvider =
+    FutureProvider.autoDispose.family<List<Product>, String>((ref, query) async {
+  final repo = ref.watch(catalogRepositoryProvider);
+  final res = await repo.merchantProducts(
+    q: query.trim().isEmpty ? null : query.trim(),
+    perPage: 50,
+  );
+  return res.when(success: (page) => page.items, failure: (_) => <Product>[]);
 });
 
 class CollectionEditorScreen extends ConsumerStatefulWidget {
@@ -43,6 +58,11 @@ class _CollectionEditorScreenState
   bool _isActive = true;
   int _sortOrder = 0;
   final List<String> _selectedProductIds = [];
+  // Product details (image/name/price) for rendering the selected rows, seeded
+  // from the loaded collection's items and augmented as the merchant picks
+  // products from search — so a selected row renders even when it's not in the
+  // current search results.
+  final Map<String, Product> _productById = {};
 
   bool _saving = false;
   bool _initialized = false;
@@ -69,6 +89,10 @@ class _CollectionEditorScreenState
     _selectedProductIds
       ..clear()
       ..addAll(c.items.map((i) => i.productId));
+    _productById.clear();
+    for (final i in c.items) {
+      if (i.product != null) _productById[i.productId] = i.product!;
+    }
     setState(() {});
   }
 
@@ -274,10 +298,24 @@ class _CollectionEditorScreenState
                     ),
                     _ProductsPicker(
                       selectedIds: _selectedProductIds,
-                      onChanged: (ids) =>
-                          setState(() => _selectedProductIds
-                            ..clear()
-                            ..addAll(ids),),
+                      productById: _productById,
+                      onToggle: (p) => setState(() {
+                        if (_selectedProductIds.contains(p.id)) {
+                          _selectedProductIds.remove(p.id);
+                        } else {
+                          _selectedProductIds.add(p.id);
+                          _productById[p.id] = p;
+                        }
+                      }),
+                      onReorder: (oldIndex, newIndex) => setState(() {
+                        final id = _selectedProductIds.removeAt(oldIndex);
+                        _selectedProductIds.insert(
+                          newIndex > oldIndex ? newIndex - 1 : newIndex,
+                          id,
+                        );
+                      }),
+                      onRemove: (id) =>
+                          setState(() => _selectedProductIds.remove(id)),
                     ),
                     const SizedBox(height: BananSpacing.huge),
                   ],
@@ -317,99 +355,216 @@ class _Section extends StatelessWidget {
   }
 }
 
-class _ProductsPicker extends ConsumerWidget {
+/// Searchable product picker. The merchant types in a search box (server-side
+/// search via [_pickerResultsProvider]); tapping a result toggles it in/out of
+/// the collection. Selected products show as a reorderable list above the
+/// search so order is editable without hunting through every product.
+class _ProductsPicker extends ConsumerStatefulWidget {
   const _ProductsPicker({
     required this.selectedIds,
-    required this.onChanged,
+    required this.productById,
+    required this.onToggle,
+    required this.onReorder,
+    required this.onRemove,
   });
 
   final List<String> selectedIds;
-  final ValueChanged<List<String>> onChanged;
+  final Map<String, Product> productById;
+  final ValueChanged<Product> onToggle;
+  final void Function(int oldIndex, int newIndex) onReorder;
+  final ValueChanged<String> onRemove;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(merchantMenuControllerProvider);
+  ConsumerState<_ProductsPicker> createState() => _ProductsPickerState();
+}
+
+class _ProductsPickerState extends ConsumerState<_ProductsPicker> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _query = value);
+    });
+  }
+
+  Product _placeholder(String id) => Product(
+        id: id,
+        storeId: '',
+        categoryId: '',
+        name: '(sản phẩm đã xoá)',
+        slug: '',
+        description: '',
+        basePrice: 0,
+        images: const [],
+        variants: const [],
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final fmt = NumberFormat.currency(
       locale: 'vi_VN',
       symbol: '₫',
       decimalDigits: 0,
     );
-    final theme = Theme.of(context);
+    final results = ref.watch(_pickerResultsProvider(_query));
 
     return _Section(
       title: 'Sản phẩm trong bộ sưu tập',
       children: [
-        if (state.loading && state.products.isEmpty)
-          const Center(child: CircularProgressIndicator())
-        else if (state.products.isEmpty)
-          const Text('Bạn chưa tạo sản phẩm nào.')
-        else ...[
+        if (widget.selectedIds.isNotEmpty) ...[
           Text(
-            'Đã chọn ${selectedIds.length} · chạm để bật/tắt, kéo tay cầm để sắp xếp.',
+            'Đã chọn ${widget.selectedIds.length} · kéo tay cầm để sắp xếp.',
             style: theme.textTheme.bodySmall,
           ),
-          const SizedBox(height: BananSpacing.md),
-          if (selectedIds.isNotEmpty) ...[
-            ReorderableListView(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              buildDefaultDragHandles: true,
-              onReorder: (oldIndex, newIndex) {
-                final ids = [...selectedIds];
-                final item = ids.removeAt(oldIndex);
-                ids.insert(newIndex > oldIndex ? newIndex - 1 : newIndex, item);
-                onChanged(ids);
-              },
-              children: [
-                for (final id in selectedIds)
-                  _SelectedRow(
-                    key: ValueKey(id),
-                    product: state.products.firstWhere(
-                      (p) => p.id == id,
-                      orElse: () => Product(
-                        id: id,
-                        storeId: '',
-                        categoryId: '',
-                        name: '(sản phẩm đã xoá)',
-                        slug: '',
-                        description: '',
-                        basePrice: 0,
-                        images: const [],
-                        variants: const [],
-                      ),
-                    ),
-                    fmt: fmt,
-                    onRemove: () =>
-                        onChanged(selectedIds.where((x) => x != id).toList()),
-                  ),
-              ],
-            ),
-            const Divider(height: BananSpacing.xl),
-          ],
-          Text('Sản phẩm khả dụng', style: theme.textTheme.titleSmall),
           const SizedBox(height: BananSpacing.sm),
-          Wrap(
-            spacing: BananSpacing.sm,
-            runSpacing: BananSpacing.sm,
+          ReorderableListView(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            onReorder: widget.onReorder,
             children: [
-              for (final p in state.products)
-                FilterChip(
-                  label: Text(p.name),
-                  selected: selectedIds.contains(p.id),
-                  onSelected: (s) {
-                    final next = [...selectedIds];
-                    if (s) {
-                      if (!next.contains(p.id)) next.add(p.id);
-                    } else {
-                      next.remove(p.id);
-                    }
-                    onChanged(next);
-                  },
+              for (final id in widget.selectedIds)
+                _SelectedRow(
+                  key: ValueKey(id),
+                  product: widget.productById[id] ?? _placeholder(id),
+                  fmt: fmt,
+                  onRemove: () => widget.onRemove(id),
                 ),
             ],
           ),
+          const Divider(height: BananSpacing.xl),
         ],
+        TextField(
+          controller: _searchCtrl,
+          onChanged: _onSearchChanged,
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
+            hintText: 'Tìm món để thêm…',
+            suffixIcon: _searchCtrl.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    tooltip: 'Xoá tìm kiếm',
+                    onPressed: () {
+                      _debounce?.cancel();
+                      _searchCtrl.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+          ),
+        ),
+        const SizedBox(height: BananSpacing.md),
+        results.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.all(BananSpacing.lg),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (_, __) => Text(
+            'Không tải được danh sách món.',
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+          data: (products) {
+            if (products.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: BananSpacing.md),
+                child: Text(
+                  _query.trim().isEmpty
+                      ? 'Chưa có sản phẩm nào.'
+                      : 'Không tìm thấy “${_query.trim()}”.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              );
+            }
+            return Column(
+              children: [
+                for (final p in products)
+                  _ResultRow(
+                    product: p,
+                    fmt: fmt,
+                    selected: widget.selectedIds.contains(p.id),
+                    onTap: () => widget.onToggle(p),
+                  ),
+              ],
+            );
+          },
+        ),
       ],
+    );
+  }
+}
+
+/// A single search-result row: thumbnail + name + price, with a trailing
+/// add/added toggle. Tapping anywhere toggles membership.
+class _ResultRow extends StatelessWidget {
+  const _ResultRow({
+    required this.product,
+    required this.fmt,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Product product;
+  final NumberFormat fmt;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: _Thumb(url: product.coverImage),
+      title: Text(
+        product.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text('từ ${fmt.format(product.minPrice)}'),
+      trailing: Icon(
+        selected ? Icons.check_circle : Icons.add_circle_outline,
+        color: selected ? theme.colorScheme.primary : theme.colorScheme.outline,
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+/// 44×44 rounded thumbnail with graceful fallbacks for missing/broken images.
+class _Thumb extends StatelessWidget {
+  const _Thumb({this.url});
+
+  final String? url;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final fallback = ColoredBox(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: const Icon(Icons.cake_outlined, size: 20),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: url == null || url!.isEmpty
+            ? fallback
+            : Image.network(
+                url!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => fallback,
+              ),
+      ),
     );
   }
 }
@@ -444,6 +599,8 @@ class _SelectedRow extends StatelessWidget {
         child: Row(
           children: [
             const Icon(Icons.drag_handle),
+            const SizedBox(width: BananSpacing.sm),
+            _Thumb(url: product.coverImage),
             const SizedBox(width: BananSpacing.sm),
             Expanded(
               child: Column(

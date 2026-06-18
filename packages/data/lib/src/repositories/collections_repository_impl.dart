@@ -43,5 +43,14 @@ class CollectionsRepositoryImpl implements CollectionsRepository {
   }
 
   @override
+  Future<Result<Collection, AppFailure>> addItems(
+    String id,
+    List<String> productIds,
+  ) async {
+    final res = await _api.addItems(id, productIds);
+    return res.map((d) => d.toDomain());
+  }
+
+  @override
   Future<Result<void, AppFailure>> delete(String id) => _api.delete(id);
 }

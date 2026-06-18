@@ -32,6 +32,14 @@ class CollectionsApi {
   ) =>
       _post('/merchant/collections', body);
 
+  /// Append products to an existing collection — the "add to collection"
+  /// flow from the menu list. Server skips products already present.
+  Future<Result<CollectionDto, AppFailure>> addItems(
+    String id,
+    List<String> productIds,
+  ) =>
+      _post('/merchant/collections/$id/items', {'productIds': productIds});
+
   Future<Result<CollectionDto, AppFailure>> update(
     String id,
     Map<String, dynamic> body,

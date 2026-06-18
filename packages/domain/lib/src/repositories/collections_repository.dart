@@ -66,5 +66,13 @@ abstract class CollectionsRepository {
     CollectionDraft draft,
   );
 
+  /// Appends [productIds] to an existing collection (the "add to collection"
+  /// flow from the menu list). Products already in the collection are skipped
+  /// server-side. Returns the updated collection.
+  Future<Result<Collection, AppFailure>> addItems(
+    String id,
+    List<String> productIds,
+  );
+
   Future<Result<void, AppFailure>> delete(String id);
 }
