@@ -48,3 +48,6 @@ backend/secrets/
 
 # Fly.io
 .fly/
+
+# Build artifacts / deploy tarballs (never commit)
+*.tgz
