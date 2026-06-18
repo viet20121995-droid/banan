@@ -885,7 +885,15 @@ export class OrdersService {
       // sees count 0, throws, rolls back, and never reaches side-effects.
       const res = await tx.order.updateMany({
         where: { id, status: order.status },
-        data: { status: toStatus },
+        data: {
+          status: toStatus,
+          // A cancel can land while the order is still live at the kitchen
+          // (SENT_TO_KITCHEN, kitchenStatus=PREPARING/…). Clear the kitchen
+          // status here so a cancelled order never carries an orphaned live
+          // kanban state — preserving the invariant the kitchen-transition
+          // guards rely on ("only SENT_TO_KITCHEN orders carry kitchenStatus").
+          ...(toStatus === 'CANCELLED' && { kitchenStatus: null }),
+        },
       });
       if (res.count === 0) {
         throw new BadRequestException({
@@ -1073,6 +1081,36 @@ export class OrdersService {
         message: 'No kitchen specified and the store has no default kitchen.',
       });
     }
+    // Kitchen routing authz + integrity. Kitchens are CENTRAL — one kitchen
+    // serves many stores via Store.defaultKitchenId, so there is no per-kitchen
+    // storeId to scope against. When an explicit kitchenId is supplied:
+    //   • a store merchant may only target THEIR store's own kitchen, and
+    //   • only an admin (chain operator) may direct an order elsewhere.
+    // Without this a merchant could pass any kitchen's UUID and leak the order —
+    // customer name, phone, address and items — onto an unrelated store's
+    // kitchen board (assertCanWrite above only checks order ownership, not the
+    // target kitchen). The common merchant path passes no kitchenId and falls
+    // back to the store default, so this adds zero overhead for it.
+    if (opts.kitchenId) {
+      if (
+        actor.role !== Role.ADMIN &&
+        opts.kitchenId !== order.store.defaultKitchenId
+      ) {
+        throw new ForbiddenException({
+          code: 'KITCHEN_NOT_ALLOWED',
+          message: 'Bạn chỉ có thể chuyển đơn tới bếp của cửa hàng mình.',
+        });
+      }
+      const exists = await this.prisma.kitchen.count({
+        where: { id: opts.kitchenId },
+      });
+      if (exists === 0) {
+        throw new BadRequestException({
+          code: 'KITCHEN_NOT_FOUND',
+          message: 'Bếp không tồn tại.',
+        });
+      }
+    }
     const updated = await this.prisma.$transaction(async (tx) => {
       // Status-guarded on the validated status so a cancel winning the race
       // can't be overwritten back to SENT_TO_KITCHEN (order resurrection).
@@ -1186,6 +1224,11 @@ export class OrdersService {
         id,
         status: 'SENT_TO_KITCHEN',
         kitchenStatus: order.kitchenStatus,
+        // Re-check the kitchen at write time: if the order was reassigned to a
+        // different kitchen between the scope check above and here, count comes
+        // back 0 and we abort rather than advancing an order this kitchen no
+        // longer owns.
+        kitchenId: order.kitchenId,
       },
       data: { kitchenStatus: toKitchenStatus },
     });
@@ -1199,22 +1242,19 @@ export class OrdersService {
       where: { id },
       include: ORDER_INCLUDE,
     });
-    this.realtime.emit(
-      [
-        `order:${id}`,
-        `user:${order.customerId}`,
-        `store:${order.storeId}`,
-        `kitchen:${order.kitchenId!}`,
-      ],
-      'order.kitchen_status_changed',
-      {
-        orderId: id,
-        code: order.code,
-        fromKitchenStatus: order.kitchenStatus,
-        toKitchenStatus,
-        at: new Date().toISOString(),
-      },
-    );
+    const rooms = [
+      `order:${id}`,
+      `user:${order.customerId}`,
+      `store:${order.storeId}`,
+    ];
+    if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
+    this.realtime.emit(rooms, 'order.kitchen_status_changed', {
+      orderId: id,
+      code: order.code,
+      fromKitchenStatus: order.kitchenStatus,
+      toKitchenStatus,
+      at: new Date().toISOString(),
+    });
 
     await this.notifications.sendToUser(
       order.customerId,
@@ -1265,6 +1305,10 @@ export class OrdersService {
           id,
           status: 'SENT_TO_KITCHEN',
           kitchenStatus: 'READY_DISPATCH',
+          // Re-check ownership at write time (see transitionKitchen): a
+          // concurrent reassignment to another kitchen makes count 0 and aborts
+          // the dispatch instead of acting on an order this kitchen lost.
+          kitchenId: order.kitchenId,
         },
         data: { status: targetOrderStatus },
       });

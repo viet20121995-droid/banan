@@ -301,6 +301,74 @@ describe('OrdersService.dispatchFromKitchen (no resurrect of a cancelled order)'
 });
 
 /**
+ * Kitchen routing authz. Kitchens are CENTRAL (one kitchen serves many stores
+ * via Store.defaultKitchenId), so there is no per-kitchen storeId to scope
+ * against. A store merchant must therefore be confined to their own store's
+ * kitchen — otherwise they could hand-craft a transfer to another store's
+ * kitchen and leak the order (customer name/phone/address/items) onto its
+ * board. Only an admin (chain operator) may direct an order to another kitchen,
+ * and even then the kitchen must exist.
+ */
+describe('OrdersService.transferToKitchen (kitchen routing authz)', () => {
+  function svcWith(opts: { kitchenCount?: number }) {
+    const order = {
+      id: 'o1',
+      status: 'ACCEPTED',
+      code: 'BN-1',
+      customerId: 'c1',
+      storeId: 's1',
+      kitchenId: null,
+      items: [],
+      store: { id: 's1', name: 'S1', slug: 's1', defaultKitchenId: 'k1' },
+    };
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(order) },
+      kitchen: { count: jest.fn().mockResolvedValue(opts.kitchenCount ?? 1) },
+      $transaction: jest.fn(),
+    };
+    const noop = {} as never;
+    const svc = new OrdersService(
+      prisma as never,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+    );
+    return { svc, prisma };
+  }
+
+  it('rejects a merchant routing to a kitchen that is not their store default', async () => {
+    const m = svcWith({});
+    const MERCHANT = {
+      sub: 'm1',
+      role: 'MERCHANT_OWNER' as const,
+      storeId: 's1',
+    };
+    await expect(
+      m.svc.transferToKitchen('o1', MERCHANT, { kitchenId: 'k2' }),
+    ).rejects.toMatchObject({ response: { code: 'KITCHEN_NOT_ALLOWED' } });
+    // Rejected before any DB write — and before we even probe kitchen existence.
+    expect(m.prisma.$transaction).not.toHaveBeenCalled();
+    expect(m.prisma.kitchen.count).not.toHaveBeenCalled();
+  });
+
+  it('rejects an admin routing to a non-existent kitchen', async () => {
+    const m = svcWith({ kitchenCount: 0 });
+    const ADMIN = { sub: 'a1', role: 'ADMIN' as const, storeId: null };
+    await expect(
+      m.svc.transferToKitchen('o1', ADMIN, { kitchenId: 'ghost' }),
+    ).rejects.toMatchObject({ response: { code: 'KITCHEN_NOT_FOUND' } });
+    expect(m.prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+/**
  * Timeline validation must surface EVERY offending cake (not just the first),
  * so the customer can see exactly which items don't fit their chosen time.
  * `assertProductsAcceptingOrder` is pure (no `this`), so we invoke it via the
