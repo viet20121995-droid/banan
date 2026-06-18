@@ -245,7 +245,10 @@ export class BundlesService {
     const ids = Array.from(new Set(items.map((i) => i.productId)));
     const products = await this.prisma.product.findMany({
       where: { id: { in: ids } },
-      include: { variants: true },
+      // Canonical variant ordering — must match the bundle-detail API and the
+      // order-side default so `variants[0]` resolves to the SAME variant the
+      // customer saw and is charged for.
+      include: { variants: { orderBy: [{ size: 'asc' }, { flavor: 'asc' }] } },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
     if (byId.size !== ids.length) {
@@ -255,8 +258,18 @@ export class BundlesService {
       });
     }
     let regular = new Prisma.Decimal(0);
+    const dayConstrained: number[][] = [];
     for (const it of items) {
       const product = byId.get(it.productId)!;
+      // A "pick-your-flavours" product can't live in a combo: the combo fixes
+      // its contents, so no flavour composition is captured and the kitchen
+      // wouldn't know what to make. Block it at configuration time.
+      if (product.flavorPickCount && product.flavorPickCount > 0) {
+        throw new BadRequestException({
+          code: 'BUNDLE_FLAVOR_PRODUCT',
+          message: `"${product.name}" cần chọn vị nên chưa thể đưa vào combo.`,
+        });
+      }
       const variant = it.variantId
         ? product.variants.find((v) => v.id === it.variantId)
         : product.variants[0];
@@ -266,11 +279,29 @@ export class BundlesService {
           message: `Lựa chọn không hợp lệ cho "${product.name}".`,
         });
       }
+      if (product.availableDaysOfWeek.length > 0) {
+        dayConstrained.push(product.availableDaysOfWeek);
+      }
       regular = regular.plus(
         new Prisma.Decimal(product.basePrice)
           .plus(variant.priceDelta)
           .times(it.quantity),
       );
+    }
+    // A combo whose parts share NO common selling day can never be fulfilled
+    // on a single date — reject it rather than letting it look "any day".
+    if (dayConstrained.length > 0) {
+      const common = [0, 1, 2, 3, 4, 5, 6].filter((d) =>
+        dayConstrained.every((days) => days.includes(d)),
+      );
+      if (common.length === 0) {
+        throw new BadRequestException({
+          code: 'BUNDLE_DAY_CONFLICT',
+          message:
+            'Các món trong combo không có ngày bán chung — combo sẽ không đặt ' +
+            'được. Vui lòng đổi thành phần.',
+        });
+      }
     }
     const regularVnd = Number(regular.toString());
     if (priceVnd > regularVnd) {

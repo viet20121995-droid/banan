@@ -182,9 +182,12 @@ export class OrdersService {
     // line items (OrderItem has a hard FK to Product, so a combo can't be a
     // single line).
     const requestedIds = [...new Set(dto.items.map((i) => i.productId))];
+    // Canonical variant ordering (size, flavor) — so a line's default variant
+    // (`variants[0]`, used for combo parts without an explicit variantId)
+    // resolves to the SAME variant the customer saw in the bundle detail.
     const products = await this.prisma.product.findMany({
       where: { id: { in: requestedIds } },
-      include: { variants: true },
+      include: { variants: { orderBy: [{ size: 'asc' }, { flavor: 'asc' }] } },
     });
     const productById = new Map(products.map((p) => [p.id, p]));
 
@@ -195,7 +198,11 @@ export class OrdersService {
           include: {
             items: {
               include: {
-                product: { include: { variants: true } },
+                product: {
+                  include: {
+                    variants: { orderBy: [{ size: 'asc' }, { flavor: 'asc' }] },
+                  },
+                },
                 variant: true,
               },
             },
@@ -1559,9 +1566,20 @@ export class OrdersService {
           fromBundle: true,
         });
       }
-      const saving = regularTotal.minus(
-        new Prisma.Decimal(bundle.priceVnd).times(comboQty),
-      );
+      const comboPrice = new Prisma.Decimal(bundle.priceVnd).times(comboQty);
+      const saving = regularTotal.minus(comboPrice);
+      // Re-validated at order time, not just at combo create: if component
+      // prices have since dropped below the flat combo price, the combo is no
+      // longer a deal. Reject rather than silently charging the lower à-la-carte
+      // sum (which would undercut the displayed combo price).
+      if (saving.lessThan(0)) {
+        throw new BadRequestException({
+          code: 'BUNDLE_PRICE_ABOVE_SUM',
+          message:
+            `Combo "${bundle.name}" tạm thời không áp dụng được ` +
+            `(giá thành phần đã thay đổi). Vui lòng thử lại sau.`,
+        });
+      }
       if (saving.greaterThan(0)) bundleDiscount = bundleDiscount.plus(saving);
     }
 

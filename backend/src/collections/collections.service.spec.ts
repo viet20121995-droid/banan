@@ -17,6 +17,7 @@ describe('CollectionsService.addItems', () => {
     collectionItem: { findMany: jest.Mock; createMany: jest.Mock };
     product: { count: jest.Mock };
     deliveryConfig: { findUnique: jest.Mock };
+    $executeRaw: jest.Mock;
     $transaction: jest.Mock;
   };
   let service: CollectionsService;
@@ -33,6 +34,8 @@ describe('CollectionsService.addItems', () => {
       },
       product: { count: jest.fn() },
       deliveryConfig: { findUnique: jest.fn().mockResolvedValue(null) },
+      // Per-collection advisory lock taken inside addItems' transaction.
+      $executeRaw: jest.fn().mockResolvedValue(0),
       // Interactive transaction — run the callback against the same mock.
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };

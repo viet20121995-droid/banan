@@ -476,10 +476,11 @@ describe('OrdersService.expandLineInputs (combo expansion + pricing)', () => {
     expect(bundleDiscount.toNumber()).toBe(10000); // 60k − 50k
   });
 
-  it('never produces a negative discount when the bundle price exceeds the regular sum', () => {
+  it('rejects at order time when the combo price now exceeds the regular sum (component prices dropped)', () => {
     const overpriced = { ...comboAB, priceVnd: 200000 }; // > 120k regular
-    const { bundleDiscount } = expand([{ productId: 'cAB', quantity: 1 }], new Map([['cAB', overpriced]]));
-    expect(bundleDiscount.toNumber()).toBe(0);
+    expect(() =>
+      expand([{ productId: 'cAB', quantity: 1 }], new Map([['cAB', overpriced]])),
+    ).toThrow(BadRequestException);
   });
 
   it('handles a mix of a plain product and a combo', () => {

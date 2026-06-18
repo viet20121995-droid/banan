@@ -226,6 +226,11 @@ export class CollectionsService {
     await this.assertProductsExist(ids.map((productId) => ({ productId })));
 
     return this.prisma.$transaction(async (tx) => {
+      // Serialize concurrent appends to THIS collection so two requests adding
+      // different products can't both read the same max sortOrder and assign a
+      // duplicate (which would make ordering non-deterministic). The lock is
+      // released at transaction end.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
       const existing = await tx.collectionItem.findMany({
         where: { collectionId: id },
         select: { productId: true, sortOrder: true },
