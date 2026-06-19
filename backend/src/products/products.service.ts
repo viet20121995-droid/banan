@@ -394,6 +394,26 @@ export class ProductsService {
       .map((v) => v.id);
 
     if (toDelete.length > 0) {
+      // A combo (BundleItem) can pin a specific variant. The DB FK is
+      // ON DELETE SET NULL, so deleting a pinned variant would SILENTLY null
+      // the pin — and at order time the combo would re-resolve to the product's
+      // canonical-first variant, shipping the wrong item at the wrong price and
+      // mis-computing the combo discount. Fail loudly instead: the admin must
+      // detach the variant from the combo first.
+      const pinned = await tx.bundleItem.findMany({
+        where: { variantId: { in: toDelete } },
+        select: { bundle: { select: { name: true } } },
+      });
+      if (pinned.length > 0) {
+        const names = [...new Set(pinned.map((p) => p.bundle.name))];
+        throw new BadRequestException({
+          code: 'VARIANT_PINNED_BY_BUNDLE',
+          message:
+            `Không thể xoá biến thể đang được combo sử dụng: ${names.join(', ')}. ` +
+            `Hãy gỡ biến thể khỏi combo trước khi xoá.`,
+          details: { bundles: names },
+        });
+      }
       await tx.productVariant.deleteMany({ where: { id: { in: toDelete } } });
     }
 

@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import type { PrismaService } from '../prisma/prisma.service';
 
@@ -133,5 +138,70 @@ describe('CollectionsService.addItems', () => {
 
     expect(prisma.product.count).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * findOnePublic must not show a customer a cake the storefront can't sell
+ * (checkout rejects unavailable products), but privileged staff load the full
+ * set for the editor. `deliveryConfig.findUnique` resolves null so the
+ * birthday-cake decorator short-circuits after one query.
+ */
+describe('CollectionsService.findOnePublic (customer availability filter)', () => {
+  function svcWith() {
+    const prisma = {
+      collection: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'c1',
+          storeId: 's1',
+          isActive: true,
+          items: [
+            { product: { id: 'p1', isAvailable: true } },
+            { product: { id: 'p2', isAvailable: false } },
+          ],
+        }),
+      },
+      deliveryConfig: { findUnique: jest.fn().mockResolvedValue(null) },
+    };
+    return new CollectionsService(prisma as unknown as PrismaService);
+  }
+
+  it('hides unavailable products from an anonymous customer', async () => {
+    const res = await svcWith().findOnePublic('c1', undefined);
+    expect(res.items.map((i: { product: { id: string } }) => i.product.id)).toEqual(['p1']);
+  });
+
+  it('keeps every item for an admin (editor view)', async () => {
+    const res = await svcWith().findOnePublic('c1', {
+      role: 'ADMIN',
+      sub: 'a1',
+      storeId: null,
+    } as never);
+    expect(res.items.map((i: { product: { id: string } }) => i.product.id)).toEqual([
+      'p1',
+      'p2',
+    ]);
+  });
+});
+
+/**
+ * Every collection lives on the single catalog store, so @@unique([storeId,
+ * slug]) is effectively a global slug rule. A duplicate must surface as a clean
+ * 409, not an opaque Prisma 500.
+ */
+describe('CollectionsService slug-conflict mapping', () => {
+  const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+    code: 'P2002',
+    clientVersion: 'test',
+  });
+
+  it('maps a duplicate slug to ConflictException on create', async () => {
+    const prisma = {
+      collection: { create: jest.fn().mockRejectedValue(p2002) },
+    };
+    const service = new CollectionsService(prisma as unknown as PrismaService);
+    await expect(
+      service.create('s1', { name: 'X', slug: 'dup' } as never),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

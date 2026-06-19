@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -17,6 +18,9 @@ import type {
   UpdateCollectionDto,
 } from './dto/collection.dto';
 
+// Merchant/admin view — every item, even unavailable ones, so staff can
+// curate. `createdAt` is a deterministic tiebreaker so two items sharing a
+// sortOrder don't reorder between identical reads.
 const COLLECTION_INCLUDE = {
   items: {
     include: {
@@ -27,7 +31,26 @@ const COLLECTION_INCLUDE = {
         },
       },
     },
-    orderBy: { sortOrder: 'asc' },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+  },
+} satisfies Prisma.CollectionInclude;
+
+// Customer-facing view — hide items whose product is unavailable so the home
+// strip / collection page never shows a cake that checkout would reject with
+// PRODUCT_UNAVAILABLE (and never fires the quick-add wizard on an unorderable
+// product).
+const PUBLIC_COLLECTION_INCLUDE = {
+  items: {
+    where: { product: { isAvailable: true } },
+    include: {
+      product: {
+        include: {
+          variants: { orderBy: [{ size: 'asc' }, { flavor: 'asc' }] },
+          category: true,
+        },
+      },
+    },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
   },
 } satisfies Prisma.CollectionInclude;
 
@@ -51,7 +74,7 @@ export class CollectionsService {
         // Items must be present and the product still available.
         items: { some: { product: { isAvailable: true } } },
       },
-      include: COLLECTION_INCLUDE,
+      include: PUBLIC_COLLECTION_INCLUDE,
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
     return this.applyBirthdayFlag(collections);
@@ -116,99 +139,138 @@ export class CollectionsService {
     if (!collection) {
       throw new NotFoundException({ code: 'COLLECTION_NOT_FOUND' });
     }
-    const canSeeInactive =
+    // Privileged = admin or owning-store staff, who load the full item set for
+    // the editor (incl. inactive collections + unavailable products).
+    const privileged =
       !!viewer &&
       (viewer.role === 'ADMIN' ||
         ((viewer.role === 'MERCHANT_OWNER' ||
           viewer.role === 'MERCHANT_STAFF') &&
           viewer.storeId === collection.storeId));
-    if (!collection.isActive && !canSeeInactive) {
+    if (!collection.isActive && !privileged) {
       throw new NotFoundException({ code: 'COLLECTION_NOT_FOUND' });
+    }
+    // Customers never see a cake the storefront can't sell (checkout would
+    // reject it with PRODUCT_UNAVAILABLE); privileged staff keep the full set.
+    if (!privileged) {
+      collection.items = collection.items.filter((it) => it.product.isAvailable);
     }
     const [decorated] = await this.applyBirthdayFlag([collection]);
     return decorated;
   }
 
+  /** Maps a Prisma unique-constraint violation on slug to a clean 409. All
+   *  collections share the catalog store, so @@unique([storeId, slug]) behaves
+   *  as a global slug-uniqueness rule; without this it surfaces as a 500. */
+  private rethrowSlugConflict(e: unknown): never {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw new ConflictException({
+        code: 'COLLECTION_SLUG_TAKEN',
+        message: 'Slug bộ sưu tập đã tồn tại — vui lòng chọn slug khác.',
+      });
+    }
+    throw e;
+  }
+
   async create(storeId: string, dto: CreateCollectionDto) {
     if (dto.items) await this.assertProductsExist(dto.items);
-    return this.prisma.collection.create({
-      data: {
-        storeId,
-        name: dto.name,
-        slug: dto.slug,
-        description: dto.description,
-        imageUrl: dto.imageUrl,
-        isPinnedToHome: dto.isPinnedToHome ?? false,
-        sortOrder: dto.sortOrder ?? 0,
-        isActive: dto.isActive ?? true,
-        items: dto.items
-          ? {
-              create: dto.items.map((it, idx) => ({
-                productId: it.productId,
-                sortOrder: it.sortOrder ?? idx,
-              })),
-            }
-          : undefined,
-      },
-      include: COLLECTION_INCLUDE,
-    });
+    try {
+      return await this.prisma.collection.create({
+        data: {
+          storeId,
+          name: dto.name,
+          slug: dto.slug,
+          description: dto.description,
+          imageUrl: dto.imageUrl,
+          isPinnedToHome: dto.isPinnedToHome ?? false,
+          sortOrder: dto.sortOrder ?? 0,
+          isActive: dto.isActive ?? true,
+          items: dto.items
+            ? {
+                create: dto.items.map((it, idx) => ({
+                  productId: it.productId,
+                  sortOrder: it.sortOrder ?? idx,
+                })),
+              }
+            : undefined,
+        },
+        include: COLLECTION_INCLUDE,
+      });
+    } catch (e) {
+      this.rethrowSlugConflict(e);
+    }
   }
 
   async update(id: string, storeIdScope: string | null, dto: UpdateCollectionDto) {
-    const existing = await this.findOne(id, storeIdScope);
+    await this.findOne(id, storeIdScope);
     if (dto.items) {
       await this.assertProductsExist(dto.items);
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      await tx.collection.update({
-        where: { id },
-        data: {
-          ...(dto.name !== undefined && { name: dto.name }),
-          ...(dto.slug !== undefined && { slug: dto.slug }),
-          ...(dto.description !== undefined && { description: dto.description }),
-          ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
-          ...(dto.isPinnedToHome !== undefined && {
-            isPinnedToHome: dto.isPinnedToHome,
-          }),
-          ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
-          ...(dto.isActive !== undefined && { isActive: dto.isActive }),
-        },
-      });
-
-      if (dto.items) {
-        // Diff-update: items array is the new authoritative set.
-        const incomingProductIds = dto.items.map((i) => i.productId);
-        await tx.collectionItem.deleteMany({
-          where: {
-            collectionId: id,
-            productId: { notIn: incomingProductIds.length > 0 ? incomingProductIds : ['__none__'] },
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Serialise against concurrent addItems()/update() on the same
+        // collection (addItems takes the same lock) so a "replace" and an
+        // "append" can't interleave and corrupt the item set / sortOrder.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
+        await tx.collection.update({
+          where: { id },
+          data: {
+            ...(dto.name !== undefined && { name: dto.name }),
+            ...(dto.slug !== undefined && { slug: dto.slug }),
+            ...(dto.description !== undefined && {
+              description: dto.description,
+            }),
+            ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
+            ...(dto.isPinnedToHome !== undefined && {
+              isPinnedToHome: dto.isPinnedToHome,
+            }),
+            ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+            ...(dto.isActive !== undefined && { isActive: dto.isActive }),
           },
         });
-        for (let i = 0; i < dto.items.length; i++) {
-          const it = dto.items[i];
-          await tx.collectionItem.upsert({
+
+        if (dto.items) {
+          // Diff-update: items array is the new authoritative set.
+          const incomingProductIds = dto.items.map((i) => i.productId);
+          await tx.collectionItem.deleteMany({
             where: {
-              collectionId_productId: {
-                collectionId: id,
-                productId: it.productId,
+              collectionId: id,
+              productId: {
+                notIn:
+                  incomingProductIds.length > 0
+                    ? incomingProductIds
+                    : ['__none__'],
               },
             },
-            create: {
-              collectionId: id,
-              productId: it.productId,
-              sortOrder: it.sortOrder ?? i,
-            },
-            update: { sortOrder: it.sortOrder ?? i },
           });
+          for (let i = 0; i < dto.items.length; i++) {
+            const it = dto.items[i];
+            await tx.collectionItem.upsert({
+              where: {
+                collectionId_productId: {
+                  collectionId: id,
+                  productId: it.productId,
+                },
+              },
+              create: {
+                collectionId: id,
+                productId: it.productId,
+                sortOrder: it.sortOrder ?? i,
+              },
+              update: { sortOrder: it.sortOrder ?? i },
+            });
+          }
         }
-      }
 
-      return tx.collection.findUniqueOrThrow({
-        where: { id },
-        include: COLLECTION_INCLUDE,
+        return tx.collection.findUniqueOrThrow({
+          where: { id },
+          include: COLLECTION_INCLUDE,
+        });
       });
-    });
+    } catch (e) {
+      this.rethrowSlugConflict(e);
+    }
   }
 
   /** Appends products to a collection — used by the "add to collection" flow
