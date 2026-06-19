@@ -666,4 +666,50 @@ describe('OrdersService.assertDailyCaps (per-product daily order cap)', () => {
     expect(tx.$executeRaw).not.toHaveBeenCalled();
     expect(tx.orderItem.aggregate).not.toHaveBeenCalled();
   });
+
+  it('buckets by Vietnam date (UTC+7), not UTC — 18:30Z falls in the next VN day', async () => {
+    const tx = txWith(0);
+    // 2026-06-20T18:30Z = 2026-06-21 01:30 in Vietnam → VN day is June 21,
+    // whose window is [2026-06-20T17:00Z, 2026-06-21T17:00Z). The old UTC-based
+    // code would have bucketed this into June 20.
+    await call(
+      tx,
+      [{ id: 'p1', name: 'Chiffon', dailyMaxQuantity: 10 }],
+      new Map([['p1', 1]]),
+      new Date('2026-06-20T18:30:00Z'),
+    );
+    const where = tx.orderItem.aggregate.mock.calls[0][0].where;
+    expect(where.order.OR[0].scheduledFor.gte.toISOString()).toBe(
+      '2026-06-20T17:00:00.000Z',
+    );
+    expect(where.order.OR[0].scheduledFor.lt.toISOString()).toBe(
+      '2026-06-21T17:00:00.000Z',
+    );
+    // The lock key carries the VN calendar date, not the UTC one.
+    expect(tx.$executeRaw.mock.calls[0][1]).toBe('daily:p1:2026-06-21');
+  });
+
+  it('takes per-product locks in sorted id order (deadlock-safe)', async () => {
+    const tx = txWith(0);
+    await call(
+      tx,
+      [
+        { id: 'p3', name: 'C', dailyMaxQuantity: 10 },
+        { id: 'p1', name: 'A', dailyMaxQuantity: 10 },
+        { id: 'p2', name: 'B', dailyMaxQuantity: 10 },
+      ],
+      new Map([
+        ['p1', 1],
+        ['p2', 1],
+        ['p3', 1],
+      ]),
+      DAY, // 2026-06-20 10:00 VN → dayKey 2026-06-20
+    );
+    const lockKeys = tx.$executeRaw.mock.calls.map((c: unknown[]) => c[1]);
+    expect(lockKeys).toEqual([
+      'daily:p1:2026-06-20',
+      'daily:p2:2026-06-20',
+      'daily:p3:2026-06-20',
+    ]);
+  });
 });

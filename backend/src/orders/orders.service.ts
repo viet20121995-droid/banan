@@ -1361,22 +1361,19 @@ export class OrdersService {
       return next;
     });
 
-    this.realtime.emit(
-      [
-        `order:${id}`,
-        `user:${order.customerId}`,
-        `store:${order.storeId}`,
-        `kitchen:${order.kitchenId!}`,
-      ],
-      'order.status_changed',
-      {
-        orderId: id,
-        code: order.code,
-        fromStatus: order.status,
-        toStatus: targetOrderStatus,
-        at: new Date().toISOString(),
-      },
-    );
+    const rooms = [
+      `order:${id}`,
+      `user:${order.customerId}`,
+      `store:${order.storeId}`,
+    ];
+    if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
+    this.realtime.emit(rooms, 'order.status_changed', {
+      orderId: id,
+      code: order.code,
+      fromStatus: order.status,
+      toStatus: targetOrderStatus,
+      at: new Date().toISOString(),
+    });
 
     // Notify the customer that their order is ready / out for delivery —
     // the kitchen dispatch bypasses transition(), which would otherwise
@@ -1884,17 +1881,31 @@ export class OrdersService {
     qtyByProduct: Map<string, number>,
     targetAt: Date,
   ): Promise<void> {
-    const capped = products.filter(
-      (p) => p.dailyMaxQuantity != null && (qtyByProduct.get(p.id) ?? 0) > 0,
-    );
+    // Sorted by id so concurrent checkouts containing the same products always
+    // take the per-product advisory locks in the SAME order — otherwise order1
+    // (locks A then B) and order2 (locks B then A) could deadlock.
+    const capped = products
+      .filter(
+        (p) => p.dailyMaxQuantity != null && (qtyByProduct.get(p.id) ?? 0) > 0,
+      )
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     if (capped.length === 0) return;
 
-    // Fulfilment-day window in server-local time.
-    const dayStart = new Date(targetAt);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-    const dayKey = dayStart.toISOString().slice(0, 10); // YYYY-MM-DD
+    // Fulfilment-DAY window in Vietnam time (UTC+7, no DST) — the same
+    // convention the rest of the order/availability logic uses (the server
+    // runs in UTC). Shift +7h to read the VN calendar date, then express that
+    // VN-midnight … +24h window back as real UTC instants for the query.
+    const VN_OFFSET_MS = 7 * 3600 * 1000;
+    const shifted = new Date(targetAt.getTime() + VN_OFFSET_MS);
+    const dayKey = shifted.toISOString().slice(0, 10); // VN calendar date
+    const dayStart = new Date(
+      Date.UTC(
+        shifted.getUTCFullYear(),
+        shifted.getUTCMonth(),
+        shifted.getUTCDate(),
+      ) - VN_OFFSET_MS,
+    );
+    const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
 
     for (const p of capped) {
       const requested = qtyByProduct.get(p.id) ?? 0;
