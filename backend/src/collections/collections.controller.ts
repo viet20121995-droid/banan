@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -54,24 +53,18 @@ export class CollectionsController {
 export class MerchantCollectionsController {
   constructor(private readonly collections: CollectionsService) {}
 
+  // Collections are chain-wide catalog content (all owned by the single catalog
+  // store), so every staff member reads the same set. No per-branch scoping —
+  // scoping by the viewer's storeId would 403 every branch merchant (whose
+  // storeId never equals the catalog store) and break read-for-all-staff.
   @Get()
-  list(@CurrentUser() user: AuthPrincipal) {
-    // Admin has no assigned store — show every store's collections.
-    if (user.role === Role.ADMIN) {
-      return this.collections.listForStore(null);
-    }
-    if (!user.storeId) {
-      throw new BadRequestException({ code: 'NO_STORE_ASSIGNED' });
-    }
-    return this.collections.listForStore(user.storeId);
+  list() {
+    return this.collections.listForStore(null);
   }
 
   @Get(':id')
-  findOne(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
-    return this.collections.findOne(
-      id,
-      merchantStoreScope(user),
-    );
+  findOne(@Param('id') id: string) {
+    return this.collections.findOne(id, null);
   }
 
   // Collections are chain-wide catalog content, managed by admin only. New

@@ -713,3 +713,80 @@ describe('OrdersService.assertDailyCaps (per-product daily order cap)', () => {
     ]);
   });
 });
+
+/**
+ * A combo is read BEFORE the order transaction (to expand it into lines +
+ * compute bundleDiscount). assertBundlesUnchanged re-validates it inside the tx
+ * under a per-combo advisory lock so a concurrent admin edit/deactivate can't
+ * leave the order with stale lines. Invoked via the prototype with a mock tx.
+ */
+describe('OrdersService.assertBundlesUnchanged (combo re-validation in tx)', () => {
+  const call = (tx: unknown, bundleById: Map<string, unknown>): Promise<void> =>
+    (
+      OrdersService.prototype as unknown as {
+        assertBundlesUnchanged(
+          t: unknown,
+          b: Map<string, unknown>,
+        ): Promise<void>;
+      }
+    ).assertBundlesUnchanged.call({}, tx, bundleById);
+
+  const snapshot = {
+    priceVnd: 100000,
+    items: [
+      { productId: 'p1', variantId: 'v1', quantity: 1 },
+      { productId: 'p2', variantId: null, quantity: 2 },
+    ],
+  };
+  function txReturning(fresh: unknown) {
+    return {
+      $executeRaw: jest.fn().mockResolvedValue(0),
+      bundle: { findUnique: jest.fn().mockResolvedValue(fresh) },
+    };
+  }
+
+  it('passes when the combo is unchanged (order-insensitive fingerprint)', async () => {
+    const tx = txReturning({
+      isActive: true,
+      priceVnd: 100000,
+      items: [
+        { productId: 'p2', variantId: null, quantity: 2 }, // different order
+        { productId: 'p1', variantId: 'v1', quantity: 1 },
+      ],
+    });
+    await expect(
+      call(tx, new Map([['b1', snapshot]])),
+    ).resolves.toBeUndefined();
+    // Took the per-combo advisory lock before reading.
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a combo deactivated mid-checkout', async () => {
+    const tx = txReturning({
+      isActive: false,
+      priceVnd: 100000,
+      items: snapshot.items,
+    });
+    await expect(call(tx, new Map([['b1', snapshot]]))).rejects.toMatchObject({
+      response: { code: 'BUNDLE_UNAVAILABLE' },
+    });
+  });
+
+  it('rejects a combo whose price/composition changed mid-checkout', async () => {
+    const tx = txReturning({
+      isActive: true,
+      priceVnd: 90000, // price changed
+      items: snapshot.items,
+    });
+    await expect(call(tx, new Map([['b1', snapshot]]))).rejects.toMatchObject({
+      response: { code: 'BUNDLE_CHANGED' },
+    });
+  });
+
+  it('is a no-op when the cart has no combos', async () => {
+    const tx = txReturning(null);
+    await call(tx, new Map());
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
+    expect(tx.bundle.findUnique).not.toHaveBeenCalled();
+  });
+});

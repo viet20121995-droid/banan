@@ -64,13 +64,15 @@ export class CollectionsService {
     return resolveCatalogStoreId(this.prisma);
   }
 
-  /** Public read — pinned + active collections shown on customer home. */
-  async listForHome(storeId?: string) {
+  /** Public read — pinned + active collections shown on customer home.
+   *  `_storeId` is accepted for API compatibility but intentionally ignored:
+   *  collections are chain-wide (all on the catalog store), so filtering by a
+   *  branch storeId would match nothing and silently empty the home feed. */
+  async listForHome(_storeId?: string) {
     const collections = await this.prisma.collection.findMany({
       where: {
         isActive: true,
         isPinnedToHome: true,
-        ...(storeId && { storeId }),
         // Items must be present and the product still available.
         items: { some: { product: { isAvailable: true } } },
       },
@@ -139,14 +141,17 @@ export class CollectionsService {
     if (!collection) {
       throw new NotFoundException({ code: 'COLLECTION_NOT_FOUND' });
     }
-    // Privileged = admin or owning-store staff, who load the full item set for
+    // Privileged = admin or ANY merchant staff, who load the full item set for
     // the editor (incl. inactive collections + unavailable products).
+    // Collections are chain-wide catalog content owned by the single catalog
+    // store, so we do NOT gate on viewer.storeId — that would lock out every
+    // branch merchant (whose storeId never equals the catalog store) and
+    // contradict the read-for-all-staff model.
     const privileged =
       !!viewer &&
       (viewer.role === 'ADMIN' ||
-        ((viewer.role === 'MERCHANT_OWNER' ||
-          viewer.role === 'MERCHANT_STAFF') &&
-          viewer.storeId === collection.storeId));
+        viewer.role === 'MERCHANT_OWNER' ||
+        viewer.role === 'MERCHANT_STAFF');
     if (!collection.isActive && !privileged) {
       throw new NotFoundException({ code: 'COLLECTION_NOT_FOUND' });
     }
@@ -159,15 +164,26 @@ export class CollectionsService {
     return decorated;
   }
 
-  /** Maps a Prisma unique-constraint violation on slug to a clean 409. All
-   *  collections share the catalog store, so @@unique([storeId, slug]) behaves
-   *  as a global slug-uniqueness rule; without this it surfaces as a 500. */
-  private rethrowSlugConflict(e: unknown): never {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-      throw new ConflictException({
-        code: 'COLLECTION_SLUG_TAKEN',
-        message: 'Slug bộ sưu tập đã tồn tại — vui lòng chọn slug khác.',
-      });
+  /** Maps Prisma write errors to clean 4xx instead of an opaque 500:
+   *  - P2002 (unique slug) → 409. All collections share the catalog store, so
+   *    @@unique([storeId, slug]) behaves as a global slug-uniqueness rule.
+   *  - P2003 (FK violation) → 400 PRODUCT_NOT_FOUND. assertProductsExist runs
+   *    before the tx, so a product deleted in the window makes the insert fail
+   *    the Product FK; surface it as the same 400 the pre-check would have. */
+  private rethrowCatalogWriteError(e: unknown): never {
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === 'P2002') {
+        throw new ConflictException({
+          code: 'COLLECTION_SLUG_TAKEN',
+          message: 'Slug bộ sưu tập đã tồn tại — vui lòng chọn slug khác.',
+        });
+      }
+      if (e.code === 'P2003') {
+        throw new BadRequestException({
+          code: 'PRODUCT_NOT_FOUND',
+          message: 'Một hoặc nhiều sản phẩm không còn tồn tại.',
+        });
+      }
     }
     throw e;
   }
@@ -197,7 +213,7 @@ export class CollectionsService {
         include: COLLECTION_INCLUDE,
       });
     } catch (e) {
-      this.rethrowSlugConflict(e);
+      this.rethrowCatalogWriteError(e);
     }
   }
 
@@ -269,7 +285,7 @@ export class CollectionsService {
         });
       });
     } catch (e) {
-      this.rethrowSlugConflict(e);
+      this.rethrowCatalogWriteError(e);
     }
   }
 
@@ -287,37 +303,40 @@ export class CollectionsService {
     if (ids.length === 0) return this.findOne(id, storeIdScope);
     await this.assertProductsExist(ids.map((productId) => ({ productId })));
 
-    return this.prisma.$transaction(async (tx) => {
-      // Serialize concurrent appends to THIS collection so two requests adding
-      // different products can't both read the same max sortOrder and assign a
-      // duplicate (which would make ordering non-deterministic). The lock is
-      // released at transaction end.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
-      const existing = await tx.collectionItem.findMany({
-        where: { collectionId: id },
-        select: { productId: true, sortOrder: true },
-      });
-      const have = new Set(existing.map((e) => e.productId));
-      let next =
-        existing.reduce((m, e) => Math.max(m, e.sortOrder), -1) + 1;
-      const toAdd = ids
-        .filter((productId) => !have.has(productId))
-        .map((productId) => ({ collectionId: id, productId, sortOrder: next++ }));
-      // createMany + skipDuplicates is idempotent and race-safe: two concurrent
-      // "add this product" calls can't both pass the in-memory `have` check and
-      // then collide on the (collectionId, productId) unique index — the loser's
-      // row is silently skipped instead of throwing P2002.
-      if (toAdd.length > 0) {
-        await tx.collectionItem.createMany({
-          data: toAdd,
-          skipDuplicates: true,
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Serialize concurrent appends to THIS collection so two requests adding
+        // different products can't both read the same max sortOrder and assign a
+        // duplicate (which would make ordering non-deterministic). The lock is
+        // released at transaction end.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
+        const existing = await tx.collectionItem.findMany({
+          where: { collectionId: id },
+          select: { productId: true, sortOrder: true },
         });
-      }
-      return tx.collection.findUniqueOrThrow({
-        where: { id },
-        include: COLLECTION_INCLUDE,
+        const have = new Set(existing.map((e) => e.productId));
+        let next = existing.reduce((m, e) => Math.max(m, e.sortOrder), -1) + 1;
+        const toAdd = ids
+          .filter((productId) => !have.has(productId))
+          .map((productId) => ({ collectionId: id, productId, sortOrder: next++ }));
+        // createMany + skipDuplicates is idempotent and race-safe: two concurrent
+        // "add this product" calls can't both pass the in-memory `have` check and
+        // then collide on the (collectionId, productId) unique index — the loser's
+        // row is silently skipped instead of throwing P2002.
+        if (toAdd.length > 0) {
+          await tx.collectionItem.createMany({
+            data: toAdd,
+            skipDuplicates: true,
+          });
+        }
+        return tx.collection.findUniqueOrThrow({
+          where: { id },
+          include: COLLECTION_INCLUDE,
+        });
       });
-    });
+    } catch (e) {
+      this.rethrowCatalogWriteError(e);
+    }
   }
 
   async remove(id: string, storeIdScope: string | null): Promise<void> {

@@ -454,6 +454,13 @@ export class ProductsService {
     if (orderRefs > 0) {
       await this.prisma.$transaction([
         this.prisma.collectionItem.deleteMany({ where: { productId: id } }),
+        // A combo containing this product can no longer be fulfilled — deactivate
+        // it so it stops showing on the storefront (otherwise it stays "buyable"
+        // and every checkout fails with a confusing product-level error).
+        this.prisma.bundle.updateMany({
+          where: { items: { some: { productId: id } } },
+          data: { isActive: false },
+        }),
         this.prisma.product.update({
           where: { id },
           data: { isAvailable: false },
@@ -474,10 +481,18 @@ export class ProductsService {
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2003'
       ) {
-        await this.prisma.product.update({
-          where: { id },
-          data: { isAvailable: false },
-        });
+        await this.prisma.$transaction([
+          // Same as the order-ref archive path: a combo containing this product
+          // can't be fulfilled, so deactivate it alongside archiving.
+          this.prisma.bundle.updateMany({
+            where: { items: { some: { productId: id } } },
+            data: { isActive: false },
+          }),
+          this.prisma.product.update({
+            where: { id },
+            data: { isAvailable: false },
+          }),
+        ]);
         return { deleted: false, archived: true };
       }
       throw e;

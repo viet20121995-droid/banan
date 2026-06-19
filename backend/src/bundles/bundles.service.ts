@@ -62,9 +62,12 @@ export class BundlesService {
     });
   }
 
+  /// Public by-id — inactive (admin-disabled / draft) combos are hidden
+  /// entirely, matching list()/homePinned(). The merchant editor loads combos
+  /// (incl. inactive) via findOneForMerchant instead.
   async findOne(id: string) {
-    const bundle = await this.prisma.bundle.findUnique({
-      where: { id },
+    const bundle = await this.prisma.bundle.findFirst({
+      where: { id, isActive: true },
       include: BUNDLE_INCLUDE,
     });
     if (!bundle) throw new NotFoundException({ code: 'BUNDLE_NOT_FOUND' });
@@ -155,6 +158,11 @@ export class BundlesService {
     }
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // Serialise against an in-flight checkout of this combo: the order
+        // transaction takes the same `bundle:<id>` advisory lock and re-checks
+        // the combo, so an edit can't land between the order's read and its
+        // commit (which would persist stale component lines / bundleDiscount).
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'bundle:' + id}, 0))`;
         const updated = await tx.bundle.update({
           where: { id },
           data: {

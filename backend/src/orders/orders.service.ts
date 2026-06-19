@@ -317,6 +317,22 @@ export class OrdersService {
     // so auto-promotions don't stack on top of the combo deal.
     const lineFromBundle: boolean[] = [];
 
+    // Aggregate LIMITED-variant demand across every expanded line so a combo +
+    // a standalone line (or two combos) sharing one variant is rejected up
+    // front by the friendly check below — instead of passing it per-line and
+    // only failing mid-transaction with a misleading "someone else took the
+    // last one". The in-tx decrement is still the authoritative guard.
+    const demandByVariant = new Map<string, number>();
+    for (const input of expandedLines) {
+      const p = productById.get(input.productId);
+      const v = input.variantId
+        ? p?.variants.find((x) => x.id === input.variantId)
+        : p?.variants[0];
+      if (v) {
+        demandByVariant.set(v.id, (demandByVariant.get(v.id) ?? 0) + input.quantity);
+      }
+    }
+
     for (const input of expandedLines) {
       const product = productById.get(input.productId)!;
       if (!product.isAvailable) {
@@ -340,7 +356,10 @@ export class OrdersService {
       // realise we sold out.
       if (variant.stockMode === 'LIMITED') {
         const have = variant.stockQty ?? 0;
-        if (have < input.quantity) {
+        // Total demand for THIS variant across the whole cart (combo + direct),
+        // not just this line — so shared-variant carts fail here, not mid-tx.
+        const demand = demandByVariant.get(variant.id) ?? input.quantity;
+        if (have < demand) {
           throw new BadRequestException({
             code: 'OUT_OF_STOCK',
             message: have <= 0
@@ -521,6 +540,12 @@ export class OrdersService {
         qtyByProduct,
         targetAt,
       );
+
+      // Combo (bundle) read happened BEFORE this tx; re-validate each ordered
+      // combo here under a per-combo advisory lock so a concurrent admin edit
+      // (price/composition/deactivate) can't leave the order with stale lines.
+      // bundles.update() takes the same lock, so the two serialise.
+      await this.assertBundlesUnchanged(tx, bundleById);
 
       let addressId: string | undefined;
       if (dto.address) {
@@ -1863,6 +1888,76 @@ export class OrdersService {
       select: { id: true },
     });
     return { userId: user.id, createdNew: true };
+  }
+
+  /**
+   * Re-validates each ordered combo INSIDE the order transaction. The combo was
+   * read BEFORE the tx (to expand into line items + compute bundleDiscount), so
+   * a concurrent admin edit/deactivate could otherwise leave the order with
+   * stale component lines and a stale discount. Under a per-combo advisory lock
+   * (bundles.update() takes the same one, so they serialise) we re-fetch and
+   * reject if the combo is gone/inactive or its price or composition changed —
+   * the customer retries against the current combo. No-op when the cart has no
+   * combos.
+   */
+  private async assertBundlesUnchanged(
+    tx: Prisma.TransactionClient,
+    bundleById: Map<
+      string,
+      {
+        priceVnd: number;
+        items: Array<{
+          productId: string;
+          variantId: string | null;
+          quantity: number;
+        }>;
+      }
+    >,
+  ): Promise<void> {
+    const ids = [...bundleById.keys()].sort();
+    if (ids.length === 0) return;
+    const fingerprint = (b: {
+      priceVnd: number;
+      items: Array<{
+        productId: string;
+        variantId: string | null;
+        quantity: number;
+      }>;
+    }): string =>
+      `${b.priceVnd}|` +
+      b.items
+        .map((i) => `${i.productId}:${i.variantId ?? ''}:${i.quantity}`)
+        .sort()
+        .join(',');
+    for (const id of ids) {
+      // Same key bundles.update() locks on. Sorted ids + daily-caps-locked-first
+      // keep the global lock-acquisition order consistent (deadlock-safe).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'bundle:' + id}, 0))`;
+      const fresh = await tx.bundle.findUnique({
+        where: { id },
+        select: {
+          isActive: true,
+          priceVnd: true,
+          items: {
+            select: { productId: true, variantId: true, quantity: true },
+          },
+        },
+      });
+      if (!fresh || !fresh.isActive) {
+        throw new BadRequestException({
+          code: 'BUNDLE_UNAVAILABLE',
+          message:
+            'Một combo trong giỏ vừa ngừng bán. Vui lòng kiểm tra lại giỏ hàng.',
+        });
+      }
+      if (fingerprint(fresh) !== fingerprint(bundleById.get(id)!)) {
+        throw new BadRequestException({
+          code: 'BUNDLE_CHANGED',
+          message:
+            'Một combo trong giỏ vừa được cập nhật. Vui lòng tải lại giỏ và đặt lại.',
+        });
+      }
+    }
   }
 
   /**
