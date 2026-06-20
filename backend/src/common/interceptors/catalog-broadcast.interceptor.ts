@@ -24,6 +24,9 @@ const CONFIG_PATHS = [
   '/merchant/marketing',
   '/merchant/store',
   '/merchant/site-content',
+  // Admin chain-branch CRUD — the customer store directory / pickup picker
+  // reflects added/edited/removed branches. (Kitchens are internal-only.)
+  '/admin/stores',
 ];
 
 /**

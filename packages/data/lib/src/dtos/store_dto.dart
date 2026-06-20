@@ -11,6 +11,8 @@ class StoreDto {
     required this.openingHours,
     this.lat,
     this.lng,
+    this.wardCode,
+    this.defaultKitchenId,
     this.isPaused = false,
     this.isPickupPaused = false,
     this.isDeliveryPaused = false,
@@ -26,6 +28,9 @@ class StoreDto {
       phone: json['phone'] as String,
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),
+      // Only present on the admin listing; null on the public directory.
+      wardCode: json['wardCode'] as String?,
+      defaultKitchenId: json['defaultKitchenId'] as String?,
       openingHours: parseOpeningHoursJson(json['openingHours']),
       isPaused: json['isPaused'] as bool? ?? false,
       isPickupPaused: json['isPickupPaused'] as bool? ?? false,
@@ -41,6 +46,8 @@ class StoreDto {
   final String phone;
   final double? lat;
   final double? lng;
+  final String? wardCode;
+  final String? defaultKitchenId;
   final Map<String, List<List<String>>> openingHours;
   final bool isPaused;
   final bool isPickupPaused;
@@ -55,6 +62,8 @@ class StoreDto {
         phone: phone,
         lat: lat,
         lng: lng,
+        wardCode: wardCode,
+        defaultKitchenId: defaultKitchenId,
         openingHours: openingHours,
         isPaused: isPaused,
         isPickupPaused: isPickupPaused,

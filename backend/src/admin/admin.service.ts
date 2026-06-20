@@ -10,6 +10,8 @@ import bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { CreateUserDto, ProvisionableRole } from './dto/create-user.dto';
+import { CreateKitchenDto, UpdateKitchenDto } from './dto/kitchen.dto';
+import { CreateStoreDto, UpdateStoreDto } from './dto/store.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 const MERCHANT_ROLES: ProvisionableRole[] = [
@@ -20,6 +22,19 @@ const KITCHEN_ROLES: ProvisionableRole[] = [
   ProvisionableRole.KITCHEN_MANAGER,
   ProvisionableRole.KITCHEN_STAFF,
 ];
+
+/** Opening hours seeded onto a freshly-created branch (08:00–21:00 every day).
+ *  The merchant fine-tunes these afterwards via the store-settings screen; the
+ *  column is required (no DB default) so admin store-create must always set it. */
+const DEFAULT_OPENING_HOURS: Prisma.InputJsonValue = {
+  mon: [['08:00', '21:00']],
+  tue: [['08:00', '21:00']],
+  wed: [['08:00', '21:00']],
+  thu: [['08:00', '21:00']],
+  fri: [['08:00', '21:00']],
+  sat: [['08:00', '21:00']],
+  sun: [['08:00', '21:00']],
+};
 
 @Injectable()
 export class AdminService {
@@ -263,18 +278,186 @@ export class AdminService {
     return { ok: true };
   }
 
+  /** Full store rows (all scalar fields) — the admin stores screen needs the
+   *  identity fields to hydrate the editor; OrgOption dropdowns just read
+   *  id+name from the same payload. */
   listStores() {
-    return this.prisma.store.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true },
-    });
+    return this.prisma.store.findMany({ orderBy: { name: 'asc' } });
   }
 
   listKitchens() {
     return this.prisma.kitchen.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true },
+      select: { id: true, name: true, address: true, capacityPerHour: true },
     });
+  }
+
+  // ───────────────────────── Stores (chain branches) ─────────────────────────
+
+  /** Create a new branch. Identity only — opening hours seeded to a default;
+   *  pause/min-order/lead settings keep their schema defaults and are tuned via
+   *  the store-settings screen. */
+  async createStore(dto: CreateStoreDto) {
+    await this.assertKitchenExists(dto.defaultKitchenId);
+    try {
+      return await this.prisma.store.create({
+        data: {
+          name: dto.name.trim(),
+          slug: dto.slug.trim(),
+          address: dto.address.trim(),
+          phone: dto.phone.trim(),
+          wardCode: dto.wardCode?.trim() || null,
+          defaultKitchenId: dto.defaultKitchenId ?? null,
+          lat: dto.lat ?? null,
+          lng: dto.lng ?? null,
+          openingHours: DEFAULT_OPENING_HOURS,
+        },
+      });
+    } catch (e) {
+      this.rethrowStoreSlug(e);
+    }
+  }
+
+  async updateStore(id: string, dto: UpdateStoreDto) {
+    const existing = await this.prisma.store.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException({ code: 'STORE_NOT_FOUND' });
+
+    const data: Prisma.StoreUncheckedUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name.trim();
+    if (dto.slug !== undefined) data.slug = dto.slug.trim();
+    if (dto.address !== undefined) data.address = dto.address.trim();
+    if (dto.phone !== undefined) data.phone = dto.phone.trim();
+    if (dto.wardCode !== undefined) data.wardCode = dto.wardCode.trim() || null;
+    if (dto.lat !== undefined) data.lat = dto.lat;
+    if (dto.lng !== undefined) data.lng = dto.lng;
+    if (dto.defaultKitchenId !== undefined) {
+      // null detaches the default kitchen; a value must reference a real one.
+      await this.assertKitchenExists(dto.defaultKitchenId ?? undefined);
+      data.defaultKitchenId = dto.defaultKitchenId;
+    }
+
+    try {
+      return await this.prisma.store.update({ where: { id }, data });
+    } catch (e) {
+      this.rethrowStoreSlug(e);
+    }
+  }
+
+  /** Hard-delete a branch. Blocked (clean 400) if anything still references it,
+   *  since every back-relation is RESTRICT (a raw delete would 500 on the FK).
+   *  Blackout dates cascade, so they don't count as blockers. */
+  async deleteStore(id: string) {
+    const existing = await this.prisma.store.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException({ code: 'STORE_NOT_FOUND' });
+
+    const [users, products, orders, collections, bundles, threads, coupons, banners] =
+      await this.prisma.$transaction([
+        this.prisma.user.count({ where: { storeId: id } }),
+        this.prisma.product.count({ where: { storeId: id } }),
+        this.prisma.order.count({ where: { storeId: id } }),
+        this.prisma.collection.count({ where: { storeId: id } }),
+        this.prisma.bundle.count({ where: { storeId: id } }),
+        this.prisma.thread.count({ where: { storeId: id } }),
+        this.prisma.coupon.count({ where: { storeId: id } }),
+        this.prisma.banner.count({ where: { storeId: id } }),
+      ]);
+    if (users || products || orders || collections || bundles || threads || coupons || banners) {
+      throw new BadRequestException({
+        code: 'STORE_IN_USE',
+        message:
+          'Không thể xoá cửa hàng đang có dữ liệu liên kết (nhân viên / sản phẩm / đơn hàng…). ' +
+          'Hãy chuyển hoặc gỡ các dữ liệu đó trước.',
+        counts: { users, products, orders, collections, bundles, threads, coupons, banners },
+      });
+    }
+    await this.prisma.store.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  // ──────────────────────────── Kitchens (prep) ──────────────────────────────
+
+  async createKitchen(dto: CreateKitchenDto) {
+    return this.prisma.kitchen.create({
+      data: {
+        name: dto.name.trim(),
+        address: dto.address.trim(),
+        capacityPerHour: dto.capacityPerHour ?? 40,
+      },
+    });
+  }
+
+  async updateKitchen(id: string, dto: UpdateKitchenDto) {
+    const existing = await this.prisma.kitchen.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException({ code: 'KITCHEN_NOT_FOUND' });
+
+    const data: Prisma.KitchenUncheckedUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name.trim();
+    if (dto.address !== undefined) data.address = dto.address.trim();
+    if (dto.capacityPerHour !== undefined) data.capacityPerHour = dto.capacityPerHour;
+    return this.prisma.kitchen.update({ where: { id }, data });
+  }
+
+  /** Hard-delete a kitchen. Blocked if staff are assigned, a store uses it as
+   *  default, or it has production batches / orders (all RESTRICT). */
+  async deleteKitchen(id: string) {
+    const existing = await this.prisma.kitchen.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException({ code: 'KITCHEN_NOT_FOUND' });
+
+    const [users, defaultForStores, batches, orders] = await this.prisma.$transaction([
+      this.prisma.user.count({ where: { kitchenId: id } }),
+      this.prisma.store.count({ where: { defaultKitchenId: id } }),
+      this.prisma.productionBatch.count({ where: { kitchenId: id } }),
+      this.prisma.order.count({ where: { kitchenId: id } }),
+    ]);
+    if (users || defaultForStores || batches || orders) {
+      throw new BadRequestException({
+        code: 'KITCHEN_IN_USE',
+        message:
+          'Không thể xoá bếp đang được sử dụng (nhân viên / là bếp mặc định của cửa hàng / ' +
+          'mẻ sản xuất / đơn hàng).',
+        counts: { users, defaultForStores, batches, orders },
+      });
+    }
+    await this.prisma.kitchen.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  /** Validates a referenced kitchen exists (skips null/undefined). */
+  private async assertKitchenExists(kitchenId: string | null | undefined) {
+    if (!kitchenId) return;
+    const kitchen = await this.prisma.kitchen.findUnique({
+      where: { id: kitchenId },
+      select: { id: true },
+    });
+    if (!kitchen) {
+      throw new BadRequestException({
+        code: 'KITCHEN_NOT_FOUND',
+        message: 'Bếp được chọn không tồn tại (có thể vừa bị xoá).',
+      });
+    }
+  }
+
+  /** Store.slug is @unique — a duplicate surfaces as Prisma P2002. */
+  private rethrowStoreSlug(e: unknown): never {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw new ConflictException({
+        code: 'STORE_SLUG_TAKEN',
+        message: 'Slug cửa hàng đã tồn tại — vui lòng chọn slug khác.',
+      });
+    }
+    throw e;
   }
 
   private static view(u: {

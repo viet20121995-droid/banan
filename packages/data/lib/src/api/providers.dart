@@ -12,6 +12,7 @@ import '../repositories/banners_repository_impl.dart';
 import '../repositories/catalog_repository_impl.dart';
 import '../repositories/collections_repository_impl.dart';
 import '../repositories/customers_repository_impl.dart';
+import '../repositories/kitchens_repository_impl.dart';
 import '../repositories/loyalty_repository_impl.dart';
 import '../repositories/merchant_coupons_repository_impl.dart';
 import '../repositories/notifications_repository_impl.dart';
@@ -39,6 +40,7 @@ import 'geo_api.dart';
 import 'gift_cards_api.dart';
 import 'health_api.dart';
 import 'interceptors/auth_interceptor.dart';
+import 'kitchens_api.dart';
 import 'loyalty_api.dart';
 import 'marketing_api.dart';
 import 'merchant_coupons_api.dart';
@@ -414,6 +416,28 @@ final Provider<StoresRepository> storesRepositoryProvider =
     Provider<StoresRepository>(
   (ref) => StoresRepositoryImpl(ref.watch(storesApiProvider)),
 );
+
+/// Admin-only — chain kitchens CRUD (`/admin/kitchens`).
+final Provider<KitchensApi> kitchensApiProvider = Provider<KitchensApi>(
+  (ref) => KitchensApi(ref.watch(dioProvider)),
+);
+
+final Provider<KitchensRepository> kitchensRepositoryProvider =
+    Provider<KitchensRepository>(
+  (ref) => KitchensRepositoryImpl(ref.watch(kitchensApiProvider)),
+);
+
+/// Kitchen list — feeds the kitchens management screen and the store editor's
+/// default-kitchen picker. autoDispose so it refetches when a screen remounts.
+final kitchensListProvider =
+    FutureProvider.autoDispose<List<Kitchen>>((ref) async {
+  final repo = ref.watch(kitchensRepositoryProvider);
+  final res = await repo.list();
+  return res.when(
+    success: (list) => list,
+    failure: (f) => throw Exception(f.message ?? f.code),
+  );
+});
 
 /// Merchant-only — settings panel + blackout date manager.
 final Provider<StoreSettingsApi> storeSettingsApiProvider =

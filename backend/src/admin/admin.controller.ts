@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
@@ -6,6 +17,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
+import { CreateKitchenDto, UpdateKitchenDto } from './dto/kitchen.dto';
+import { CreateStoreDto, UpdateStoreDto } from './dto/store.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -63,8 +76,40 @@ export class AdminController {
     return this.admin.listStores();
   }
 
+  @Post('stores')
+  createStore(@Body() dto: CreateStoreDto) {
+    return this.admin.createStore(dto);
+  }
+
+  @Patch('stores/:id')
+  updateStore(@Param('id') id: string, @Body() dto: UpdateStoreDto) {
+    return this.admin.updateStore(id, dto);
+  }
+
+  @Delete('stores/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteStore(@Param('id') id: string) {
+    return this.admin.deleteStore(id);
+  }
+
   @Get('kitchens')
   kitchens() {
     return this.admin.listKitchens();
+  }
+
+  @Post('kitchens')
+  createKitchen(@Body() dto: CreateKitchenDto) {
+    return this.admin.createKitchen(dto);
+  }
+
+  @Patch('kitchens/:id')
+  updateKitchen(@Param('id') id: string, @Body() dto: UpdateKitchenDto) {
+    return this.admin.updateKitchen(id, dto);
+  }
+
+  @Delete('kitchens/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteKitchen(@Param('id') id: string) {
+    return this.admin.deleteKitchen(id);
   }
 }

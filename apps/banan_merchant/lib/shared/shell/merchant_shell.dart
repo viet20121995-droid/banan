@@ -425,9 +425,25 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
               iconSelected: Icons.article,
               route: '/settings/content',
             ),
+          // Chain infrastructure — admin manages branches, kitchens and the
+          // staff accounts attached to them.
           if (isAdmin)
             const _NavItem(
-              label: 'Tài khoản',
+              label: 'Cửa hàng (chuỗi)',
+              icon: Icons.storefront_outlined,
+              iconSelected: Icons.storefront,
+              route: '/stores',
+            ),
+          if (isAdmin)
+            const _NavItem(
+              label: 'Bếp',
+              icon: Icons.soup_kitchen_outlined,
+              iconSelected: Icons.soup_kitchen,
+              route: '/kitchens',
+            ),
+          if (isAdmin)
+            const _NavItem(
+              label: 'Nhân sự (tài khoản)',
               icon: Icons.admin_panel_settings_outlined,
               iconSelected: Icons.admin_panel_settings,
               route: '/admin/accounts',

@@ -14,6 +14,8 @@ class Store extends Equatable {
     required this.openingHours,
     this.lat,
     this.lng,
+    this.wardCode,
+    this.defaultKitchenId,
     this.isPaused = false,
     this.isPickupPaused = false,
     this.isDeliveryPaused = false,
@@ -27,6 +29,14 @@ class Store extends Equatable {
   final String phone;
   final double? lat;
   final double? lng;
+
+  /// HCMC ward slug this branch sits in (drives same-ward delivery fee).
+  /// Null when not yet assigned. Only populated on the admin listing.
+  final String? wardCode;
+
+  /// Kitchen that prepares this branch's orders by default. Null when unset.
+  /// Only populated on the admin listing.
+  final String? defaultKitchenId;
 
   /// Weekday key (`mon`..`sun`) → list of `[open, close]` time strings.
   final Map<String, List<List<String>>> openingHours;
@@ -129,6 +139,8 @@ class Store extends Equatable {
         phone,
         lat,
         lng,
+        wardCode,
+        defaultKitchenId,
         openingHours,
         isPaused,
         isPickupPaused,

@@ -15,6 +15,10 @@ import '../features/bundles_mgmt/bundles_list_screen.dart';
 import '../features/campaigns_mgmt/campaigns_screen.dart';
 import '../features/categories_mgmt/categories_list_screen.dart';
 import '../features/categories_mgmt/category_editor_screen.dart';
+import '../features/kitchens_mgmt/kitchen_editor_screen.dart';
+import '../features/kitchens_mgmt/kitchens_list_screen.dart';
+import '../features/stores_mgmt/store_editor_screen.dart';
+import '../features/stores_mgmt/stores_list_screen.dart';
 import '../features/collections_mgmt/collection_editor_screen.dart';
 import '../features/content_mgmt/site_content_editor_screen.dart';
 import '../features/marketing_mgmt/marketing_screen.dart';
@@ -108,6 +112,33 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
         path: '/categories/:id/edit',
         builder: (context, state) =>
             CategoryEditorScreen(categoryId: state.pathParameters['id']),
+      ),
+      // Chain infrastructure — admin-only (nav hides these from non-admins).
+      GoRoute(
+        path: '/stores',
+        builder: (_, __) => const StoresListScreen(),
+      ),
+      GoRoute(
+        path: '/stores/new',
+        builder: (_, __) => const StoreEditorScreen(),
+      ),
+      GoRoute(
+        path: '/stores/:id/edit',
+        builder: (context, state) =>
+            StoreEditorScreen(storeId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '/kitchens',
+        builder: (_, __) => const KitchensListScreen(),
+      ),
+      GoRoute(
+        path: '/kitchens/new',
+        builder: (_, __) => const KitchenEditorScreen(),
+      ),
+      GoRoute(
+        path: '/kitchens/:id/edit',
+        builder: (context, state) =>
+            KitchenEditorScreen(kitchenId: state.pathParameters['id']),
       ),
       GoRoute(
         path: '/bundles',
