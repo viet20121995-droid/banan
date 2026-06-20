@@ -172,9 +172,22 @@ export class CollectionsService {
   private rethrowCatalogWriteError(e: unknown): never {
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
       if (e.code === 'P2002') {
-        throw new ConflictException({
-          code: 'COLLECTION_SLUG_TAKEN',
-          message: 'Slug bộ sưu tập đã tồn tại — vui lòng chọn slug khác.',
+        // Two unique constraints can fire on a collection write: the slug
+        // (@@unique([storeId, slug])) and an item's (collectionId, productId).
+        // Discriminate on the violated columns so a duplicate product isn't
+        // mis-reported as a slug clash.
+        const target = Array.isArray(e.meta?.target)
+          ? (e.meta?.target as string[]).join(',')
+          : String(e.meta?.target ?? '');
+        if (target.includes('slug')) {
+          throw new ConflictException({
+            code: 'COLLECTION_SLUG_TAKEN',
+            message: 'Slug bộ sưu tập đã tồn tại — vui lòng chọn slug khác.',
+          });
+        }
+        throw new BadRequestException({
+          code: 'COLLECTION_DUPLICATE_PRODUCT',
+          message: 'Một sản phẩm bị trùng trong bộ sưu tập.',
         });
       }
       if (e.code === 'P2003') {

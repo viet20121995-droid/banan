@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import { BundlesService } from '../bundles/bundles.service';
+import { lockCatalogBundles } from '../common/catalog-lock';
 import { PrismaService } from '../prisma/prisma.service';
 
 import type { BulkImportDto, BulkPriceDto } from './dto/bulk.dto';
@@ -32,7 +34,10 @@ export interface BulkPriceResult {
 
 @Injectable()
 export class ProductsBulkService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bundles: BundlesService,
+  ) {}
 
   /**
    * CSV product import (create-only). Each row is upserted-by-creation: an
@@ -156,14 +161,23 @@ export class ProductsBulkService {
 
     const dryRun = dto.dryRun === true;
     if (!dryRun && planned.length > 0) {
-      await this.prisma.$transaction(
-        planned.map((p) =>
-          this.prisma.product.update({
+      await this.prisma.$transaction(async (tx) => {
+        // Coarse lock so the post-update combo re-validation sees stable
+        // membership (vs concurrent combo edits / single-product edits).
+        await lockCatalogBundles(tx);
+        for (const p of planned) {
+          await tx.product.update({
             where: { id: p.id },
             data: { basePrice: new Prisma.Decimal(p.to) },
-          }),
-        ),
-      );
+          });
+        }
+        // A price change can push a combo above its à-la-carte sum — deactivate
+        // any combo that no longer validates.
+        await this.bundles.revalidateForProducts(
+          tx,
+          planned.map((p) => p.id),
+        );
+      });
     }
 
     return {

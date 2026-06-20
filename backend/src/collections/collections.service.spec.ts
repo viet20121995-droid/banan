@@ -178,19 +178,35 @@ describe('CollectionsService.findOnePublic (customer availability filter)', () =
  * slug]) is effectively a global slug rule. A duplicate must surface as a clean
  * 409, not an opaque Prisma 500.
  */
-describe('CollectionsService slug-conflict mapping', () => {
-  const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint', {
-    code: 'P2002',
-    clientVersion: 'test',
-  });
+describe('CollectionsService P2002 mapping (slug vs duplicate product)', () => {
+  const p2002 = (target: string[]) =>
+    new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+      code: 'P2002',
+      clientVersion: 'test',
+      meta: { target },
+    });
 
-  it('maps a duplicate slug to ConflictException on create', async () => {
+  it('maps a duplicate SLUG to ConflictException (409) on create', async () => {
     const prisma = {
-      collection: { create: jest.fn().mockRejectedValue(p2002) },
+      collection: {
+        create: jest.fn().mockRejectedValue(p2002(['storeId', 'slug'])),
+      },
     };
     const service = new CollectionsService(prisma as unknown as PrismaService);
     await expect(service.create('s1', { name: 'X', slug: 'dup' } as never)).rejects.toBeInstanceOf(
       ConflictException,
     );
+  });
+
+  it('maps a duplicate ITEM (collectionId, productId) to BadRequest (400), not a slug clash', async () => {
+    const prisma = {
+      collection: {
+        create: jest.fn().mockRejectedValue(p2002(['collectionId', 'productId'])),
+      },
+    };
+    const service = new CollectionsService(prisma as unknown as PrismaService);
+    await expect(service.create('s1', { name: 'X', slug: 'ok' } as never)).rejects.toMatchObject({
+      response: { code: 'COLLECTION_DUPLICATE_PRODUCT' },
+    });
   });
 });

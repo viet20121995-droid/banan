@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import { lockBundle, lockCatalogBundles } from '../common/catalog-lock';
 import { resolveCatalogStoreId } from '../common/catalog-store';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -89,61 +90,63 @@ export class BundlesService {
   }
 
   async create(storeId: string, dto: CreateBundleDto) {
-    await this.assertItemsValid(dto.items, dto.priceVnd);
     try {
-      const bundle = await this.prisma.bundle.create({
-        data: {
-          storeId,
-          name: dto.name.trim(),
-          slug: dto.slug.trim(),
-          description: dto.description?.trim() || null,
-          imageUrl: dto.imageUrl?.trim() || null,
-          priceVnd: dto.priceVnd,
-          isActive: dto.isActive ?? true,
-          isPinnedToHome: dto.isPinnedToHome ?? false,
-          sortOrder: dto.sortOrder ?? 0,
-          items: {
-            createMany: {
-              data: this.normaliseItems(dto.items),
+      return await this.prisma.$transaction(async (tx) => {
+        // Coarse lock first: serialise combo membership/validity against
+        // concurrent product edits + other combo writes, and validate INSIDE
+        // the lock so two admins can't both pass a now-stale check and write
+        // conflicting combos.
+        await lockCatalogBundles(tx);
+        await this.assertItemsValid(tx, dto.items, dto.priceVnd);
+        return await tx.bundle.create({
+          data: {
+            storeId,
+            name: dto.name.trim(),
+            slug: dto.slug.trim(),
+            description: dto.description?.trim() || null,
+            imageUrl: dto.imageUrl?.trim() || null,
+            priceVnd: dto.priceVnd,
+            isActive: dto.isActive ?? true,
+            isPinnedToHome: dto.isPinnedToHome ?? false,
+            sortOrder: dto.sortOrder ?? 0,
+            items: {
+              createMany: {
+                data: this.normaliseItems(dto.items),
+              },
             },
           },
-        },
-        include: BUNDLE_INCLUDE,
-      });
-      return bundle;
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException({
-          code: 'BUNDLE_SLUG_TAKEN',
-          message: 'Slug đã tồn tại — chọn slug khác.',
+          include: BUNDLE_INCLUDE,
         });
-      }
-      throw e;
+      });
+    } catch (e) {
+      this.rethrowBundleWriteError(e);
     }
   }
 
   async update(id: string, storeIdScope: string | null, dto: UpdateBundleDto) {
     const existing = await this.findOneForMerchant(id, storeIdScope);
-    // Validate the EFFECTIVE item set + price (merge with existing when the
-    // update omits one side) so a price-only edit can't push the combo above
-    // the à-la-carte sum, and new items keep valid variants.
-    if (dto.items || dto.priceVnd !== undefined) {
-      const itemsForCheck =
-        dto.items ??
-        existing.items.map((it) => ({
-          productId: it.productId,
-          variantId: it.variantId ?? undefined,
-          quantity: it.quantity,
-        }));
-      await this.assertItemsValid(itemsForCheck, dto.priceVnd ?? existing.priceVnd);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // Serialise against an in-flight checkout of this combo: the order
-        // transaction takes the same `bundle:<id>` advisory lock and re-checks
-        // the combo, so an edit can't land between the order's read and its
-        // commit (which would persist stale component lines / bundleDiscount).
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'bundle:' + id}, 0))`;
+        // Coarse lock (vs product edits + other combo writes), THEN the
+        // per-combo lock (vs an in-flight checkout that re-validates this combo
+        // via the same `bundle:<id>` key). Coarse-first keeps acquisition order
+        // consistent and deadlock-free.
+        await lockCatalogBundles(tx);
+        await lockBundle(tx, id);
+        // Validate the EFFECTIVE item set + price (merge with existing when the
+        // update omits one side) INSIDE the lock, so a price-only edit can't
+        // push the combo above the à-la-carte sum and two concurrent edits
+        // can't both pass a stale check.
+        if (dto.items || dto.priceVnd !== undefined) {
+          const itemsForCheck =
+            dto.items ??
+            existing.items.map((it) => ({
+              productId: it.productId,
+              variantId: it.variantId ?? undefined,
+              quantity: it.quantity,
+            }));
+          await this.assertItemsValid(tx, itemsForCheck, dto.priceVnd ?? existing.priceVnd);
+        }
         const updated = await tx.bundle.update({
           where: { id },
           data: {
@@ -178,23 +181,18 @@ export class BundlesService {
         });
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException({
-          code: 'BUNDLE_SLUG_TAKEN',
-          message: 'Slug đã tồn tại — chọn slug khác.',
-        });
-      }
-      throw e;
+      this.rethrowBundleWriteError(e);
     }
   }
 
   async remove(id: string, storeIdScope: string | null) {
     await this.findOneForMerchant(id, storeIdScope);
     await this.prisma.$transaction(async (tx) => {
-      // Serialise the delete against an in-flight checkout of this combo (the
-      // order tx takes the same `bundle:<id>` lock and re-validates), so the
-      // combo can't vanish between the order's re-check and its commit.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'bundle:' + id}, 0))`;
+      // Coarse lock (vs product/combo writes) then the per-combo lock (vs an
+      // in-flight checkout re-validating this combo), so the combo can't vanish
+      // between the order's re-check and its commit.
+      await lockCatalogBundles(tx);
+      await lockBundle(tx, id);
       await tx.bundle.delete({ where: { id } });
     });
   }
@@ -230,9 +228,98 @@ export class BundlesService {
   /// default variant), and the flat combo price never EXCEEDS the à-la-carte
   /// sum — a combo is a deal, not a markup; otherwise order creation would
   /// silently charge the higher regular sum (the discount clamps at 0).
-  private async assertItemsValid(items: BundleItemInputDto[], priceVnd: number): Promise<void> {
+  /**
+   * Re-validate every active combo that contains any of `productIds` after a
+   * product edit, and deactivate the ones that are no longer fulfillable (a
+   * now-unavailable / flavour-pick / day-conflicting / missing component, or a
+   * combo price that now exceeds the à-la-carte sum). The CALLER must already
+   * hold the catalog-bundles coarse lock (so membership is stable) and run
+   * inside a transaction. Each deactivated combo's per-combo lock is taken
+   * (sorted) so an in-flight checkout serialises and sees it go inactive.
+   * Returns the deactivated combo ids.
+   */
+  async revalidateForProducts(
+    tx: Prisma.TransactionClient,
+    productIds: string[],
+  ): Promise<string[]> {
+    if (productIds.length === 0) return [];
+    const bundles = await tx.bundle.findMany({
+      where: { isActive: true, items: { some: { productId: { in: productIds } } } },
+      include: BUNDLE_INCLUDE,
+    });
+    const toDeactivate = bundles
+      .filter((b) => !this.isBundleStillValid(b))
+      .map((b) => b.id)
+      .sort();
+    if (toDeactivate.length === 0) return [];
+    for (const bid of toDeactivate) await lockBundle(tx, bid);
+    await tx.bundle.updateMany({
+      where: { id: { in: toDeactivate } },
+      data: { isActive: false },
+    });
+    return toDeactivate;
+  }
+
+  /** Non-throwing mirror of assertItemsValid's rules, evaluated against a
+   *  combo's CURRENT persisted items + product data — used by
+   *  revalidateForProducts to decide whether a combo survives a product edit. */
+  private isBundleStillValid(
+    bundle: Prisma.BundleGetPayload<{ include: typeof BUNDLE_INCLUDE }>,
+  ): boolean {
+    let regular = new Prisma.Decimal(0);
+    const dayConstrained: number[][] = [];
+    for (const it of bundle.items) {
+      const product = it.product;
+      if (!product || !product.isAvailable) return false;
+      if (product.flavorPickCount && product.flavorPickCount > 0) return false;
+      const variant = it.variant ?? product.variants[0];
+      if (!variant) return false;
+      if (product.availableDaysOfWeek.length > 0) {
+        dayConstrained.push(product.availableDaysOfWeek);
+      }
+      regular = regular.plus(
+        new Prisma.Decimal(product.basePrice).plus(variant.priceDelta).times(it.quantity),
+      );
+    }
+    if (dayConstrained.length > 0) {
+      const common = [0, 1, 2, 3, 4, 5, 6].filter((d) =>
+        dayConstrained.every((days) => days.includes(d)),
+      );
+      if (common.length === 0) return false;
+    }
+    return bundle.priceVnd <= Number(regular.toString());
+  }
+
+  /** P2002 on a combo write means either a duplicate slug (→ 409) or — far less
+   *  likely, normaliseItems dedupes — a duplicate (productId, variantId) item
+   *  (→ 400). Discriminate on the violated constraint instead of always
+   *  blaming the slug. */
+  private rethrowBundleWriteError(e: unknown): never {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      const target = Array.isArray(e.meta?.target)
+        ? (e.meta?.target as string[]).join(',')
+        : String(e.meta?.target ?? '');
+      if (target.includes('slug')) {
+        throw new ConflictException({
+          code: 'BUNDLE_SLUG_TAKEN',
+          message: 'Slug đã tồn tại — chọn slug khác.',
+        });
+      }
+      throw new BadRequestException({
+        code: 'BUNDLE_DUPLICATE_ITEM',
+        message: 'Combo có món bị trùng — vui lòng kiểm tra lại danh sách.',
+      });
+    }
+    throw e;
+  }
+
+  private async assertItemsValid(
+    db: Prisma.TransactionClient,
+    items: BundleItemInputDto[],
+    priceVnd: number,
+  ): Promise<void> {
     const ids = Array.from(new Set(items.map((i) => i.productId)));
-    const products = await this.prisma.product.findMany({
+    const products = await db.product.findMany({
       where: { id: { in: ids } },
       // Canonical variant ordering — must match the bundle-detail API and the
       // order-side default so `variants[0]` resolves to the SAME variant the

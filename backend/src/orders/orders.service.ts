@@ -581,27 +581,39 @@ export class OrdersService {
         }
       }
 
-      // Race-safe stock decrement for LIMITED variants — uses a
-      // conditional updateMany so two parallel checkouts can't both
-      // pass the early check above. If `count` comes back 0, someone
-      // else just took the last unit and we roll the whole txn back.
+      // Race-safe stock decrement for LIMITED variants — a conditional
+      // updateMany so two parallel checkouts can't both pass the early check
+      // above; count 0 means someone took the last unit and we roll back.
+      //
+      // Demand is aggregated per variant (a variant can appear in a combo line
+      // AND a standalone line) and applied in SORTED variant-id order, so two
+      // checkouts sharing variants A and B can't acquire the row locks in
+      // opposite order and deadlock.
+      const limitedDemand = new Map<string, { quantity: number; productName: string }>();
       for (const line of lineCreates) {
         const variantId = line.variantId;
         if (!variantId) continue;
         const variant = productById.get(line.productId)!.variants.find((v) => v.id === variantId);
         if (!variant || variant.stockMode !== 'LIMITED') continue;
+        const cur = limitedDemand.get(variantId);
+        if (cur) cur.quantity += line.quantity;
+        else
+          limitedDemand.set(variantId, {
+            quantity: line.quantity,
+            productName: line.productName,
+          });
+      }
+      for (const variantId of [...limitedDemand.keys()].sort()) {
+        const { quantity, productName } = limitedDemand.get(variantId)!;
         const updated = await tx.productVariant.updateMany({
-          where: {
-            id: variantId,
-            stockQty: { gte: line.quantity },
-          },
-          data: { stockQty: { decrement: line.quantity } },
+          where: { id: variantId, stockQty: { gte: quantity } },
+          data: { stockQty: { decrement: quantity } },
         });
         if (updated.count === 0) {
           throw new BadRequestException({
             code: 'OUT_OF_STOCK',
             message:
-              `"${line.productName}" vừa hết — một khách khác đã mua ` +
+              `"${productName}" vừa hết — một khách khác đã mua ` +
               `mất món cuối trong lúc bạn đặt. Vui lòng chọn món khác.`,
           });
         }
@@ -1133,6 +1145,13 @@ export class OrdersService {
       });
     });
 
+    // The order may have moved off a previous kitchen — evict that kitchen's
+    // stale `order:{id}` subscribers BEFORE we emit, and AWAIT it, so neither
+    // this transfer event nor any later kitchen-status event reaches the old
+    // kitchen. The new kitchen's staff (joined via kitchen:{id}) and the
+    // customer/store are unaffected.
+    await this.realtime.evictStaleKitchenSubscribers(id, kitchenId);
+
     this.realtime.emit(
       [`order:${id}`, `user:${order.customerId}`, `store:${order.storeId}`, `kitchen:${kitchenId}`],
       'order.status_changed',
@@ -1147,12 +1166,6 @@ export class OrdersService {
         at: new Date().toISOString(),
       },
     );
-
-    // The order may have moved off a previous kitchen — evict that kitchen's
-    // stale `order:{id}` subscribers so they stop receiving the new kitchen's
-    // kanban events. Fire-and-forget; the new kitchen's staff (joined via
-    // kitchen:{id}) and the customer/store are unaffected.
-    void this.realtime.evictStaleKitchenSubscribers(id, kitchenId);
 
     await this.notifications.sendToUser(
       order.customerId,

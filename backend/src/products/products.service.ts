@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 
+import { BundlesService } from '../bundles/bundles.service';
+import { lockCatalogBundles } from '../common/catalog-lock';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { birthdayCakeProductIds } from './birthday-cake.util';
@@ -16,7 +18,10 @@ const PRODUCT_INCLUDE = {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bundles: BundlesService,
+  ) {}
 
   /**
    * The "catalog owner" — the single store whose products represent the
@@ -324,6 +329,10 @@ export class ProductsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Coarse lock: serialise this product edit against combo create/update
+      // and other product writes, so the post-edit combo re-validation below
+      // sees a stable membership and can't race a concurrent combo change.
+      await lockCatalogBundles(tx);
       const data: Prisma.ProductUpdateInput = {
         ...(dto.categoryId && { category: { connect: { id: dto.categoryId } } }),
         ...(dto.name !== undefined && { name: dto.name }),
@@ -368,6 +377,11 @@ export class ProductsService {
         await this.reconcileVariants(tx, id, dto.variants);
       }
 
+      // A price / flavour-pick / selling-day / availability / variant change can
+      // make a combo containing this product unfulfillable — deactivate any that
+      // no longer validate (under the coarse lock taken above).
+      await this.bundles.revalidateForProducts(tx, [id]);
+
       return tx.product.findUniqueOrThrow({
         where: { id },
         include: PRODUCT_INCLUDE,
@@ -409,6 +423,18 @@ export class ProductsService {
       where: { productId },
       select: { id: true },
     });
+    const existingIds = new Set(existing.map((v) => v.id));
+    // Ownership guard: a supplied variant id must already belong to THIS
+    // product. Without it, `update({ where: { id } })` would happily mutate
+    // another product's variant (no productId scope on a by-id update).
+    for (const v of variants) {
+      if (v.id && !existingIds.has(v.id)) {
+        throw new BadRequestException({
+          code: 'VARIANT_NOT_IN_PRODUCT',
+          message: 'Một biến thể không thuộc sản phẩm này.',
+        });
+      }
+    }
     const toDelete = existing.filter((v) => !incomingIds.has(v.id)).map((v) => v.id);
 
     if (toDelete.length > 0) {
@@ -469,6 +495,7 @@ export class ProductsService {
     });
     if (orderRefs > 0) {
       await this.prisma.$transaction(async (tx) => {
+        await lockCatalogBundles(tx);
         await tx.collectionItem.deleteMany({ where: { productId: id } });
         // A combo containing this product can no longer be fulfilled — deactivate
         // it so it stops showing on the storefront (otherwise it stays "buyable"
@@ -492,6 +519,7 @@ export class ProductsService {
       // working "delete" by archiving the product.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
         await this.prisma.$transaction(async (tx) => {
+          await lockCatalogBundles(tx);
           // Same as the order-ref archive path: a combo containing this product
           // can't be fulfilled, so deactivate it alongside archiving.
           await this.deactivateBundlesContaining(tx, id);
