@@ -134,15 +134,19 @@ export class RealtimeGateway implements OnGatewayConnection {
     });
     if (!order) return;
     const role = data.role;
+    // Kitchen staff are intentionally NOT allowed into a per-order room: they
+    // work off the kitchen:<id> kanban room (which carries status + kitchen
+    // status for their current orders). Letting a kitchen socket join order:<id>
+    // means a later transfer AWAY from that kitchen leaves a stale subscriber
+    // receiving the order's status / payment_captured / refund.updated events
+    // (room eviction is only best-effort). So they get nothing extra by
+    // subscribing — and we close the leak at the source.
     const allowed =
       role === 'ADMIN' ||
       order.customerId === data.userId ||
       ((role === 'MERCHANT_OWNER' || role === 'MERCHANT_STAFF') &&
         !!data.storeId &&
-        data.storeId === order.storeId) ||
-      ((role === 'KITCHEN_MANAGER' || role === 'KITCHEN_STAFF') &&
-        !!order.kitchenId &&
-        data.kitchenId === order.kitchenId);
+        data.storeId === order.storeId);
     if (!allowed) {
       this.logger.warn(`socket ${client.id} (${data.userId}) denied order:subscribe ${orderId}`);
       return;

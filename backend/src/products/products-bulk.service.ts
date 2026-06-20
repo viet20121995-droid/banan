@@ -130,12 +130,14 @@ export class ProductsBulkService {
       if (!dto.collectionSlug) {
         throw new BadRequestException({ code: 'COLLECTION_REQUIRED' });
       }
-      const items = await this.prisma.collectionItem.findMany({
-        where: { collection: { slug: dto.collectionSlug } },
-        select: { productId: true },
-      });
-      const ids = items.map((i) => i.productId);
-      where = { storeId, id: { in: ids.length ? ids : ['__none__'] } };
+      // Relational filter instead of a pre-resolved id list — membership is
+      // evaluated when the query runs (inside the tx for the real run), so a
+      // concurrent collection edit can't make us re-price a just-removed product
+      // or skip a just-added one.
+      where = {
+        storeId,
+        collectionItems: { some: { collection: { slug: dto.collectionSlug } } },
+      };
     }
 
     const compute = (cur: number): number => {
@@ -175,32 +177,46 @@ export class ProductsBulkService {
 
     // Real run: READ + compute + WRITE inside one locked transaction, so a
     // concurrent product edit can't commit between the read and the write and
-    // get overwritten with a price computed from the stale snapshot.
-    return this.prisma.$transaction(async (tx) => {
-      // Coarse lock vs concurrent product/combo writes; the post-update combo
-      // re-validation then sees stable membership.
-      await lockCatalogBundles(tx);
-      const products = await tx.product.findMany({
-        where,
-        select: { id: true, name: true, basePrice: true },
-      });
-      const planned = plan(products);
-      // Lock affected combos before writing the product rows.
-      const lockedBundles = await this.bundles.lockActiveBundlesForProducts(
-        tx,
-        planned.map((p) => p.id),
-      );
-      for (const p of planned) {
-        await tx.product.update({
-          where: { id: p.id },
-          data: { basePrice: new Prisma.Decimal(p.to) },
+    // get overwritten with a price computed from the stale snapshot. An explicit
+    // (generous) timeout is set because the coarse lock + a large catalog can
+    // exceed Prisma's 5s interactive-tx default.
+    return this.prisma.$transaction(
+      async (tx) => {
+        // Coarse lock vs concurrent product/combo writes; the post-update combo
+        // re-validation then sees stable membership.
+        await lockCatalogBundles(tx);
+        const products = await tx.product.findMany({
+          where,
+          select: { id: true, name: true, basePrice: true },
         });
-      }
-      // A price change can push a combo above its à-la-carte sum — deactivate
-      // any of the locked combos that no longer validate.
-      await this.bundles.deactivateInvalidBundles(tx, lockedBundles);
-      return result(planned, false);
-    });
+        const planned = plan(products);
+        // Lock affected combos before writing the product rows.
+        const lockedBundles = await this.bundles.lockActiveBundlesForProducts(
+          tx,
+          planned.map((p) => p.id),
+        );
+        // Batch the writes: group by target price so the update is a handful of
+        // updateMany calls (one per distinct price) instead of one round-trip
+        // per product — keeps a large catalog well under the tx timeout.
+        const byTarget = new Map<number, string[]>();
+        for (const p of planned) {
+          const arr = byTarget.get(p.to);
+          if (arr) arr.push(p.id);
+          else byTarget.set(p.to, [p.id]);
+        }
+        for (const [to, idsForPrice] of byTarget) {
+          await tx.product.updateMany({
+            where: { id: { in: idsForPrice } },
+            data: { basePrice: new Prisma.Decimal(to) },
+          });
+        }
+        // A price change can push a combo above its à-la-carte sum — deactivate
+        // any of the locked combos that no longer validate.
+        await this.bundles.deactivateInvalidBundles(tx, lockedBundles);
+        return result(planned, false);
+      },
+      { timeout: 120_000, maxWait: 15_000 },
+    );
   }
 
   private async catalogStoreId(): Promise<string> {

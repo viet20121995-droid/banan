@@ -581,9 +581,38 @@ export class OrdersService {
         }
       }
 
+      // Re-read the products + variants FRESH inside the tx — the availability +
+      // stockMode checked before the transaction can be stale. If an admin set a
+      // product/variant unavailable, or flipped a variant UNLIMITED→LIMITED, at
+      // checkout time, the pre-tx snapshot would let the order through without
+      // decrementing stock (oversell). Validate + build the decrement plan from
+      // the fresh state instead.
+      const freshProducts = new Map(
+        (
+          await tx.product.findMany({
+            where: { id: { in: [...new Set(lineCreates.map((l) => l.productId))] } },
+            select: { id: true, isAvailable: true },
+          })
+        ).map((p) => [p.id, p]),
+      );
+      const freshVariants = new Map(
+        (
+          await tx.productVariant.findMany({
+            where: {
+              id: {
+                in: [
+                  ...new Set(lineCreates.map((l) => l.variantId).filter((v): v is string => !!v)),
+                ],
+              },
+            },
+            select: { id: true, stockMode: true, isAvailable: true },
+          })
+        ).map((v) => [v.id, v]),
+      );
+
       // Race-safe stock decrement for LIMITED variants — a conditional
-      // updateMany so two parallel checkouts can't both pass the early check
-      // above; count 0 means someone took the last unit and we roll back.
+      // updateMany so two parallel checkouts can't both pass the check; count 0
+      // means someone took the last unit and we roll back.
       //
       // Demand is aggregated per variant (a variant can appear in a combo line
       // AND a standalone line) and applied in SORTED variant-id order, so two
@@ -591,10 +620,23 @@ export class OrdersService {
       // opposite order and deadlock.
       const limitedDemand = new Map<string, { quantity: number; productName: string }>();
       for (const line of lineCreates) {
+        const product = freshProducts.get(line.productId);
+        if (!product || !product.isAvailable) {
+          throw new BadRequestException({
+            code: 'PRODUCT_UNAVAILABLE',
+            message: `"${line.productName}" vừa ngừng bán — vui lòng kiểm tra lại giỏ hàng.`,
+          });
+        }
         const variantId = line.variantId;
         if (!variantId) continue;
-        const variant = productById.get(line.productId)!.variants.find((v) => v.id === variantId);
-        if (!variant || variant.stockMode !== 'LIMITED') continue;
+        const variant = freshVariants.get(variantId);
+        if (!variant || !variant.isAvailable) {
+          throw new BadRequestException({
+            code: 'VARIANT_UNAVAILABLE',
+            message: `Lựa chọn cho "${line.productName}" vừa ngừng bán.`,
+          });
+        }
+        if (variant.stockMode !== 'LIMITED') continue;
         const cur = limitedDemand.get(variantId);
         if (cur) cur.quantity += line.quantity;
         else
@@ -1244,13 +1286,11 @@ export class OrdersService {
       where: { id },
       include: ORDER_INCLUDE,
     });
-    // Kitchen-internal workflow (PREPARING→BAKING→…) is deliberately NOT sent to
-    // the order:{id} room: a kitchen the order was transferred AWAY from could
-    // still be subscribed there, and socket eviction is only best-effort. The
-    // customer still receives it via their user:{id} room, the current kitchen
-    // via kitchen:{id}, the merchant via store:{id} — so a stale old-kitchen
-    // socket can't see the new kitchen's workflow even if eviction failed.
-    const rooms = [`user:${order.customerId}`, `store:${order.storeId}`];
+    // Safe to include order:{id}: kitchen staff can no longer join an order room
+    // (onOrderSubscribe rejects KITCHEN roles), so no kitchen the order was
+    // transferred away from can be a stale subscriber. The customer / admin
+    // watching the order get the kitchen workflow live again.
+    const rooms = [`order:${id}`, `user:${order.customerId}`, `store:${order.storeId}`];
     if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
     this.realtime.emit(rooms, 'order.kitchen_status_changed', {
       orderId: id,
