@@ -138,11 +138,6 @@ export class ProductsBulkService {
       where = { storeId, id: { in: ids.length ? ids : ['__none__'] } };
     }
 
-    const products = await this.prisma.product.findMany({
-      where,
-      select: { id: true, name: true, basePrice: true },
-    });
-
     const compute = (cur: number): number => {
       let next = dto.mode === 'percent' ? cur * (1 + dto.amount / 100) : cur + dto.amount;
       if (next < 0) next = 0;
@@ -151,36 +146,15 @@ export class ProductsBulkService {
       }
       return Math.round(next * 100) / 100;
     };
-
-    const planned = products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      from: Number(p.basePrice),
-      to: compute(Number(p.basePrice)),
-    }));
-
-    const dryRun = dto.dryRun === true;
-    if (!dryRun && planned.length > 0) {
-      await this.prisma.$transaction(async (tx) => {
-        // Coarse lock so the post-update combo re-validation sees stable
-        // membership (vs concurrent combo edits / single-product edits).
-        await lockCatalogBundles(tx);
-        for (const p of planned) {
-          await tx.product.update({
-            where: { id: p.id },
-            data: { basePrice: new Prisma.Decimal(p.to) },
-          });
-        }
-        // A price change can push a combo above its à-la-carte sum — deactivate
-        // any combo that no longer validates.
-        await this.bundles.revalidateForProducts(
-          tx,
-          planned.map((p) => p.id),
-        );
-      });
-    }
-
-    return {
+    type Row = { id: string; name: string; basePrice: Prisma.Decimal };
+    const plan = (products: Row[]) =>
+      products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        from: Number(p.basePrice),
+        to: compute(Number(p.basePrice)),
+      }));
+    const result = (planned: ReturnType<typeof plan>, dryRun: boolean): BulkPriceResult => ({
       matched: planned.length,
       updated: dryRun ? 0 : planned.length,
       dryRun,
@@ -189,7 +163,44 @@ export class ProductsBulkService {
         from: p.from,
         to: p.to,
       })),
-    };
+    });
+
+    if (dto.dryRun === true) {
+      const products = await this.prisma.product.findMany({
+        where,
+        select: { id: true, name: true, basePrice: true },
+      });
+      return result(plan(products), true);
+    }
+
+    // Real run: READ + compute + WRITE inside one locked transaction, so a
+    // concurrent product edit can't commit between the read and the write and
+    // get overwritten with a price computed from the stale snapshot.
+    return this.prisma.$transaction(async (tx) => {
+      // Coarse lock vs concurrent product/combo writes; the post-update combo
+      // re-validation then sees stable membership.
+      await lockCatalogBundles(tx);
+      const products = await tx.product.findMany({
+        where,
+        select: { id: true, name: true, basePrice: true },
+      });
+      const planned = plan(products);
+      // Lock affected combos before writing the product rows.
+      const lockedBundles = await this.bundles.lockActiveBundlesForProducts(
+        tx,
+        planned.map((p) => p.id),
+      );
+      for (const p of planned) {
+        await tx.product.update({
+          where: { id: p.id },
+          data: { basePrice: new Prisma.Decimal(p.to) },
+        });
+      }
+      // A price change can push a combo above its à-la-carte sum — deactivate
+      // any of the locked combos that no longer validate.
+      await this.bundles.deactivateInvalidBundles(tx, lockedBundles);
+      return result(planned, false);
+    });
   }
 
   private async catalogStoreId(): Promise<string> {

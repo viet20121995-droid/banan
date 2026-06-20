@@ -124,7 +124,9 @@ export class BundlesService {
   }
 
   async update(id: string, storeIdScope: string | null, dto: UpdateBundleDto) {
-    const existing = await this.findOneForMerchant(id, storeIdScope);
+    // Scope / 404 check only — the data used for validation is re-read INSIDE
+    // the lock below (the pre-lock snapshot can be stale under concurrency).
+    await this.findOneForMerchant(id, storeIdScope);
     try {
       return await this.prisma.$transaction(async (tx) => {
         // Coarse lock (vs product edits + other combo writes), THEN the
@@ -133,19 +135,28 @@ export class BundlesService {
         // consistent and deadlock-free.
         await lockCatalogBundles(tx);
         await lockBundle(tx, id);
-        // Validate the EFFECTIVE item set + price (merge with existing when the
-        // update omits one side) INSIDE the lock, so a price-only edit can't
-        // push the combo above the à-la-carte sum and two concurrent edits
-        // can't both pass a stale check.
-        if (dto.items || dto.priceVnd !== undefined) {
+        // Re-read the combo UNDER the lock: the merge fallback + validation must
+        // use the CURRENT committed combo, not a snapshot read before the lock,
+        // or two concurrent edits (one price, one items) can each validate
+        // against stale data and write an invalid combo.
+        const current = await tx.bundle.findUnique({
+          where: { id },
+          include: BUNDLE_INCLUDE,
+        });
+        if (!current) throw new NotFoundException({ code: 'BUNDLE_NOT_FOUND' });
+        // Validate the EFFECTIVE item set + price when items/price change OR the
+        // combo is being (re)activated — re-activation must re-check that the
+        // combo is still fulfillable (a component may have gone unavailable).
+        const reactivating = dto.isActive === true && !current.isActive;
+        if (dto.items || dto.priceVnd !== undefined || reactivating) {
           const itemsForCheck =
             dto.items ??
-            existing.items.map((it) => ({
+            current.items.map((it) => ({
               productId: it.productId,
               variantId: it.variantId ?? undefined,
               quantity: it.quantity,
             }));
-          await this.assertItemsValid(tx, itemsForCheck, dto.priceVnd ?? existing.priceVnd);
+          await this.assertItemsValid(tx, itemsForCheck, dto.priceVnd ?? current.priceVnd);
         }
         const updated = await tx.bundle.update({
           where: { id },
@@ -229,30 +240,49 @@ export class BundlesService {
   /// sum — a combo is a deal, not a markup; otherwise order creation would
   /// silently charge the higher regular sum (the discount clamps at 0).
   /**
-   * Re-validate every active combo that contains any of `productIds` after a
-   * product edit, and deactivate the ones that are no longer fulfillable (a
-   * now-unavailable / flavour-pick / day-conflicting / missing component, or a
-   * combo price that now exceeds the à-la-carte sum). The CALLER must already
-   * hold the catalog-bundles coarse lock (so membership is stable) and run
-   * inside a transaction. Each deactivated combo's per-combo lock is taken
-   * (sorted) so an in-flight checkout serialises and sees it go inactive.
-   * Returns the deactivated combo ids.
+   * Advisory-lock every ACTIVE combo containing any of `productIds`, in sorted
+   * id order. The CALLER must already hold the catalog-bundles coarse lock (so
+   * membership is stable) and MUST call this BEFORE mutating product/variant
+   * rows — a checkout locks the combo (`bundle:<id>`) and then the variant row,
+   * so taking the combo locks first here matches that order and avoids a
+   * cross-deadlock (combo-lock-then-variant-row both sides). Returns the locked
+   * combo ids for a later revalidation pass.
    */
-  async revalidateForProducts(
+  async lockActiveBundlesForProducts(
     tx: Prisma.TransactionClient,
     productIds: string[],
   ): Promise<string[]> {
     if (productIds.length === 0) return [];
+    const rows = await tx.bundle.findMany({
+      where: {
+        isActive: true,
+        items: { some: { productId: { in: productIds } } },
+      },
+      select: { id: true },
+    });
+    const ids = rows.map((r) => r.id).sort();
+    for (const bid of ids) await lockBundle(tx, bid);
+    return ids;
+  }
+
+  /**
+   * Re-evaluate the given (already-locked) combos against current data and
+   * deactivate the ones no longer fulfillable — a now-unavailable / flavour-pick
+   * / day-conflicting / missing component, or a combo price that now exceeds the
+   * à-la-carte sum. Returns the deactivated combo ids. Pair with
+   * lockActiveBundlesForProducts: lock → mutate product → this.
+   */
+  async deactivateInvalidBundles(
+    tx: Prisma.TransactionClient,
+    bundleIds: string[],
+  ): Promise<string[]> {
+    if (bundleIds.length === 0) return [];
     const bundles = await tx.bundle.findMany({
-      where: { isActive: true, items: { some: { productId: { in: productIds } } } },
+      where: { id: { in: bundleIds }, isActive: true },
       include: BUNDLE_INCLUDE,
     });
-    const toDeactivate = bundles
-      .filter((b) => !this.isBundleStillValid(b))
-      .map((b) => b.id)
-      .sort();
+    const toDeactivate = bundles.filter((b) => !this.isBundleStillValid(b)).map((b) => b.id);
     if (toDeactivate.length === 0) return [];
-    for (const bid of toDeactivate) await lockBundle(tx, bid);
     await tx.bundle.updateMany({
       where: { id: { in: toDeactivate } },
       data: { isActive: false },
@@ -262,7 +292,10 @@ export class BundlesService {
 
   /** Non-throwing mirror of assertItemsValid's rules, evaluated against a
    *  combo's CURRENT persisted items + product data — used by
-   *  revalidateForProducts to decide whether a combo survives a product edit. */
+   *  deactivateInvalidBundles to decide whether a combo survives a product
+   *  edit. Mirrors assertItemsValid exactly: a component that is missing,
+   *  unavailable (product OR variant), a flavour-pick, day-conflicting, or whose
+   *  prices now push the combo above the à-la-carte sum makes it invalid. */
   private isBundleStillValid(
     bundle: Prisma.BundleGetPayload<{ include: typeof BUNDLE_INCLUDE }>,
   ): boolean {
@@ -273,7 +306,7 @@ export class BundlesService {
       if (!product || !product.isAvailable) return false;
       if (product.flavorPickCount && product.flavorPickCount > 0) return false;
       const variant = it.variant ?? product.variants[0];
-      if (!variant) return false;
+      if (!variant || !variant.isAvailable) return false;
       if (product.availableDaysOfWeek.length > 0) {
         dayConstrained.push(product.availableDaysOfWeek);
       }
@@ -337,6 +370,14 @@ export class BundlesService {
     const dayConstrained: number[][] = [];
     for (const it of items) {
       const product = byId.get(it.productId)!;
+      // An unavailable (archived/discontinued) product can't go in a combo — it
+      // would make every checkout of the combo fail. Block it at config time.
+      if (!product.isAvailable) {
+        throw new BadRequestException({
+          code: 'BUNDLE_PRODUCT_UNAVAILABLE',
+          message: `"${product.name}" hiện ngừng bán nên chưa thể đưa vào combo.`,
+        });
+      }
       // A "pick-your-flavours" product can't live in a combo: the combo fixes
       // its contents, so no flavour composition is captured and the kitchen
       // wouldn't know what to make. Block it at configuration time.
@@ -353,6 +394,13 @@ export class BundlesService {
         throw new BadRequestException({
           code: it.variantId ? 'VARIANT_NOT_IN_PRODUCT' : 'PRODUCT_NO_VARIANT',
           message: `Lựa chọn không hợp lệ cho "${product.name}".`,
+        });
+      }
+      // The chosen (or default) variant must itself be on sale.
+      if (!variant.isAvailable) {
+        throw new BadRequestException({
+          code: 'BUNDLE_VARIANT_UNAVAILABLE',
+          message: `Lựa chọn cho "${product.name}" hiện không bán.`,
         });
       }
       if (product.availableDaysOfWeek.length > 0) {

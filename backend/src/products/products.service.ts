@@ -333,6 +333,10 @@ export class ProductsService {
       // and other product writes, so the post-edit combo re-validation below
       // sees a stable membership and can't race a concurrent combo change.
       await lockCatalogBundles(tx);
+      // Lock affected combos BEFORE touching product/variant rows. A checkout
+      // locks the combo (`bundle:<id>`) then the variant row; acquiring the
+      // combo locks first here matches that order so the two can't deadlock.
+      const lockedBundles = await this.bundles.lockActiveBundlesForProducts(tx, [id]);
       const data: Prisma.ProductUpdateInput = {
         ...(dto.categoryId && { category: { connect: { id: dto.categoryId } } }),
         ...(dto.name !== undefined && { name: dto.name }),
@@ -378,9 +382,9 @@ export class ProductsService {
       }
 
       // A price / flavour-pick / selling-day / availability / variant change can
-      // make a combo containing this product unfulfillable — deactivate any that
-      // no longer validate (under the coarse lock taken above).
-      await this.bundles.revalidateForProducts(tx, [id]);
+      // make a combo containing this product unfulfillable — deactivate any of
+      // the (already-locked) combos that no longer validate.
+      await this.bundles.deactivateInvalidBundles(tx, lockedBundles);
 
       return tx.product.findUniqueOrThrow({
         where: { id },

@@ -1244,7 +1244,13 @@ export class OrdersService {
       where: { id },
       include: ORDER_INCLUDE,
     });
-    const rooms = [`order:${id}`, `user:${order.customerId}`, `store:${order.storeId}`];
+    // Kitchen-internal workflow (PREPARING→BAKING→…) is deliberately NOT sent to
+    // the order:{id} room: a kitchen the order was transferred AWAY from could
+    // still be subscribed there, and socket eviction is only best-effort. The
+    // customer still receives it via their user:{id} room, the current kitchen
+    // via kitchen:{id}, the merchant via store:{id} — so a stale old-kitchen
+    // socket can't see the new kitchen's workflow even if eviction failed.
+    const rooms = [`user:${order.customerId}`, `store:${order.storeId}`];
     if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
     this.realtime.emit(rooms, 'order.kitchen_status_changed', {
       orderId: id,

@@ -174,20 +174,33 @@ export class RealtimeGateway implements OnGatewayConnection {
   ): Promise<void> {
     if (!this.server) return;
     const room = `order:${orderId}`;
+    let sockets;
     try {
-      const sockets = await this.server.in(room).fetchSockets();
-      for (const socket of sockets) {
-        const data = socket.data as SocketData | undefined;
-        if (
-          data &&
-          (data.role === 'KITCHEN_MANAGER' || data.role === 'KITCHEN_STAFF') &&
-          data.kitchenId !== currentKitchenId
-        ) {
+      sockets = await this.server.in(room).fetchSockets();
+    } catch (err) {
+      // Adapter failure — eviction is BEST-EFFORT and never the only defence:
+      // sensitive kitchen-status events are no longer routed to order:{id}
+      // (see transitionKitchen), so a stale socket can still be in this room
+      // but won't receive the new kitchen's workflow. Log loudly.
+      this.logger.error(
+        `evictStaleKitchenSubscribers(${orderId}) fetchSockets failed: ${String(err)}`,
+      );
+      return;
+    }
+    for (const socket of sockets) {
+      const data = socket.data as SocketData | undefined;
+      if (
+        data &&
+        (data.role === 'KITCHEN_MANAGER' || data.role === 'KITCHEN_STAFF') &&
+        data.kitchenId !== currentKitchenId
+      ) {
+        // Isolate per-socket: one failed leave must not skip the rest.
+        try {
           socket.leave(room);
+        } catch (err) {
+          this.logger.error(`evict leave failed for ${socket.id} on ${room}: ${String(err)}`);
         }
       }
-    } catch (err) {
-      this.logger.warn(`evictStaleKitchenSubscribers(${orderId}) failed: ${String(err)}`);
     }
   }
 }
