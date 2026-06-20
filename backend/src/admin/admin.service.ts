@@ -79,10 +79,7 @@ export class AdminService {
       });
       return AdminService.view(user);
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException({
           code: 'EMAIL_TAKEN',
           message: 'An account with that email or phone already exists.',
@@ -92,12 +89,7 @@ export class AdminService {
     }
   }
 
-  async listUsers(opts: {
-    role?: string;
-    q?: string;
-    page: number;
-    perPage: number;
-  }) {
+  async listUsers(opts: { role?: string; q?: string; page: number; perPage: number }) {
     const where: Prisma.UserWhereInput = {};
     if (opts.role && opts.role in Role) {
       where.role = opts.role as Role;
@@ -172,14 +164,10 @@ export class AdminService {
     if (dto.role !== undefined) data.role = nextRole;
 
     const touchesLinkage =
-      dto.role !== undefined ||
-      dto.storeId !== undefined ||
-      dto.kitchenId !== undefined;
+      dto.role !== undefined || dto.storeId !== undefined || dto.kitchenId !== undefined;
     if (touchesLinkage) {
-      const isMerchant =
-        nextRole === Role.MERCHANT_OWNER || nextRole === Role.MERCHANT_STAFF;
-      const isKitchen =
-        nextRole === Role.KITCHEN_MANAGER || nextRole === Role.KITCHEN_STAFF;
+      const isMerchant = nextRole === Role.MERCHANT_OWNER || nextRole === Role.MERCHANT_STAFF;
+      const isKitchen = nextRole === Role.KITCHEN_MANAGER || nextRole === Role.KITCHEN_STAFF;
       if (isMerchant) {
         const storeId = dto.storeId ?? existing.storeId;
         if (!storeId) {
@@ -223,10 +211,7 @@ export class AdminService {
       const user = await this.prisma.user.update({ where: { id }, data });
       return AdminService.view(user);
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException({
           code: 'EMAIL_TAKEN',
           message: 'Email hoặc số điện thoại đã được dùng.',

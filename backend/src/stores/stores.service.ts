@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -83,11 +79,12 @@ export class StoresService {
         isPickupPaused: dto.isPickupPaused,
         isDeliveryPaused: dto.isDeliveryPaused,
         // Allow clearing the reason by passing an empty string.
-        pauseReason: dto.pauseReason === undefined
-          ? undefined
-          : dto.pauseReason.trim().length === 0
-            ? null
-            : dto.pauseReason.trim(),
+        pauseReason:
+          dto.pauseReason === undefined
+            ? undefined
+            : dto.pauseReason.trim().length === 0
+              ? null
+              : dto.pauseReason.trim(),
         minOrderVnd: dto.minOrderVnd,
         defaultLeadHours: dto.defaultLeadHours,
         openingHours: dto.openingHours as Prisma.InputJsonValue | undefined,
@@ -138,10 +135,7 @@ export class StoresService {
   }
 
   /// Inserts many blackouts in one go, skipping duplicates.
-  async addBlackoutsBulk(
-    storeId: string,
-    dates: { date: string; reason?: string }[],
-  ) {
+  async addBlackoutsBulk(storeId: string, dates: { date: string; reason?: string }[]) {
     if (dates.length === 0) return { added: 0 };
     const rows = dates.map((d) => ({
       storeId,

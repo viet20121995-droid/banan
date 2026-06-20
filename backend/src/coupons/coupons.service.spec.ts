@@ -40,9 +40,7 @@ describe('CouponsService.validate', () => {
   };
 
   it('rejects an unknown / inactive coupon', async () => {
-    await expect(
-      makeService(null).validate(args),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(makeService(null).validate(args)).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       makeService(baseCoupon({ isActive: false })).validate(args),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -53,16 +51,12 @@ describe('CouponsService.validate', () => {
       startsAt: new Date(Date.now() - 2 * 86_400_000),
       endsAt: new Date(Date.now() - 86_400_000),
     });
-    await expect(
-      makeService(expired).validate(args),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(makeService(expired).validate(args)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects a coupon scoped to another store', async () => {
     const svc = makeService(baseCoupon({ storeId: 'store-A' }));
-    await expect(
-      svc.validate({ ...args, storeId: 'store-B' }),
-    ).rejects.toMatchObject({
+    await expect(svc.validate({ ...args, storeId: 'store-B' })).rejects.toMatchObject({
       response: { code: 'COUPON_WRONG_STORE' },
     });
   });
@@ -74,13 +68,9 @@ describe('CouponsService.validate', () => {
   });
 
   it('computes PERCENT / FIXED / FREE_DELIVERY discounts', async () => {
-    expect(
-      (await makeService(baseCoupon()).validate(args)).discountVnd,
-    ).toBe(20_000);
+    expect((await makeService(baseCoupon()).validate(args)).discountVnd).toBe(20_000);
 
-    const fixed = makeService(
-      baseCoupon({ type: 'FIXED', value: new Prisma.Decimal(50_000) }),
-    );
+    const fixed = makeService(baseCoupon({ type: 'FIXED', value: new Prisma.Decimal(50_000) }));
     expect((await fixed.validate(args)).discountVnd).toBe(50_000);
 
     const ship = makeService(baseCoupon({ type: 'FREE_DELIVERY' }));
@@ -91,25 +81,18 @@ describe('CouponsService.validate', () => {
 
   it('enforces the per-user redemption limit', async () => {
     const svc = makeService(baseCoupon({ perUserLimit: 1 }), 1);
-    await expect(svc.validate(args)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(svc.validate(args)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('enforces a minimum subtotal', async () => {
-    const svc = makeService(
-      baseCoupon({ minSubtotal: new Prisma.Decimal(500_000) }),
-    );
+    const svc = makeService(baseCoupon({ minSubtotal: new Prisma.Decimal(500_000) }));
     await expect(svc.validate(args)).rejects.toMatchObject({
       response: { code: 'COUPON_MIN_SUBTOTAL' },
     });
   });
 });
 
-function makeTx(opts: {
-  coupon: Record<string, unknown>;
-  userCount?: number;
-}) {
+function makeTx(opts: { coupon: Record<string, unknown>; userCount?: number }) {
   const create = jest.fn().mockResolvedValue({});
   const update = jest.fn().mockResolvedValue({});
   const count = jest.fn().mockResolvedValue(opts.userCount ?? 0);
@@ -149,9 +132,9 @@ describe('CouponsService.recordRedemption (authoritative, race-safe)', () => {
     const m = makeTx({
       coupon: { maxRedemptions: 100, perUserLimit: 0, redemptions: 100 },
     });
-    await expect(
-      makeService(null).recordRedemption(callArgs(m.tx)),
-    ).rejects.toMatchObject({ response: { code: 'COUPON_LIMIT_REACHED' } });
+    await expect(makeService(null).recordRedemption(callArgs(m.tx))).rejects.toMatchObject({
+      response: { code: 'COUPON_LIMIT_REACHED' },
+    });
     expect(m.create).not.toHaveBeenCalled();
     expect(m.update).not.toHaveBeenCalled();
   });
@@ -161,9 +144,9 @@ describe('CouponsService.recordRedemption (authoritative, race-safe)', () => {
       coupon: { maxRedemptions: null, perUserLimit: 1, redemptions: 3 },
       userCount: 1,
     });
-    await expect(
-      makeService(null).recordRedemption(callArgs(m.tx)),
-    ).rejects.toMatchObject({ response: { code: 'COUPON_USER_LIMIT' } });
+    await expect(makeService(null).recordRedemption(callArgs(m.tx))).rejects.toMatchObject({
+      response: { code: 'COUPON_USER_LIMIT' },
+    });
     expect(m.create).not.toHaveBeenCalled();
   });
 

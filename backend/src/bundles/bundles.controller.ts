@@ -78,10 +78,7 @@ export class MerchantBundlesController {
   // Merchants keep read-only list/view above but the UI hides Combo entirely.
   @Roles(Role.ADMIN)
   @Post()
-  async create(
-    @CurrentUser() _user: AuthPrincipal,
-    @Body() dto: CreateBundleDto,
-  ) {
+  async create(@CurrentUser() _user: AuthPrincipal, @Body() dto: CreateBundleDto) {
     const storeId = await this.bundles.catalogStoreId();
     return this.bundles.create(storeId, dto);
   }

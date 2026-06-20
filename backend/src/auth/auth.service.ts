@@ -155,10 +155,7 @@ export class AuthService {
     try {
       return await this.prisma.user.update({ where: { id: userId }, data });
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException({
           code: 'AUTH_PHONE_TAKEN',
           message: 'That phone number is already in use.',
@@ -220,9 +217,7 @@ export class AuthService {
 
     const rawToken = randomBytes(32).toString('base64url');
     const tokenHash = AuthService.hashToken(rawToken);
-    const expiresAt = new Date(
-      Date.now() + AuthService.RESET_TTL_MINUTES * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + AuthService.RESET_TTL_MINUTES * 60 * 1000);
     await this.prisma.passwordReset.create({
       data: { userId: user.id, tokenHash, expiresAt },
     });
@@ -325,11 +320,7 @@ export class AuthService {
 
   /** Start an email-change: verify password, ensure the target is free, then
    *  email a single-use confirmation link to the NEW address. */
-  async requestEmailChange(
-    userId: string,
-    newEmailRaw: string,
-    password: string,
-  ): Promise<void> {
+  async requestEmailChange(userId: string, newEmailRaw: string, password: string): Promise<void> {
     const newEmail = newEmailRaw.toLowerCase().trim();
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException({ code: 'AUTH_USER_NOT_FOUND' });
@@ -361,9 +352,7 @@ export class AuthService {
     });
     const rawToken = randomBytes(32).toString('base64url');
     const tokenHash = AuthService.hashToken(rawToken);
-    const expiresAt = new Date(
-      Date.now() + AuthService.EMAIL_CHANGE_TTL_MINUTES * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + AuthService.EMAIL_CHANGE_TTL_MINUTES * 60 * 1000);
     await this.prisma.emailChange.create({
       data: { userId, newEmail, tokenHash, expiresAt },
     });
@@ -441,9 +430,7 @@ export class AuthService {
 
     const rawRefresh = randomBytes(48).toString('base64url');
     const tokenHash = AuthService.hashToken(rawRefresh);
-    const expiresAt = new Date(
-      Date.now() + AuthService.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + AuthService.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000);
 
     await this.prisma.refreshToken.create({
       data: {

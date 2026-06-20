@@ -4,15 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  Order,
-  OrderStatus,
-  Payment,
-  Prisma,
-  Refund,
-  RefundStatus,
-  Role,
-} from '@prisma/client';
+import { Order, OrderStatus, Payment, Prisma, Refund, RefundStatus, Role } from '@prisma/client';
 
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -76,9 +68,7 @@ export class RefundsService {
     const existing = await findActive();
     if (existing) return { refund: existing, created: false };
 
-    const amount = args.amount
-      ? new Prisma.Decimal(args.amount.toString())
-      : args.payment.amount;
+    const amount = args.amount ? new Prisma.Decimal(args.amount.toString()) : args.payment.amount;
     const data = {
       orderId: args.order.id,
       paymentId: args.payment.id,
@@ -98,10 +88,7 @@ export class RefundsService {
       const refund = await db.refund.create({ data });
       return { refund, created: true };
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         const winner = await findActive();
         if (winner) return { refund: winner, created: false };
       }
@@ -278,15 +265,11 @@ export class RefundsService {
   }
 
   private emit(refund: Refund) {
-    this.realtime.emit(
-      [`order:${refund.orderId}`],
-      'refund.updated',
-      {
-        refundId: refund.id,
-        orderId: refund.orderId,
-        status: refund.status,
-        amount: refund.amount.toString(),
-      },
-    );
+    this.realtime.emit([`order:${refund.orderId}`], 'refund.updated', {
+      refundId: refund.id,
+      orderId: refund.orderId,
+      status: refund.status,
+      amount: refund.amount.toString(),
+    });
   }
 }

@@ -20,9 +20,7 @@ describe('validateEnv', () => {
   });
 
   it('rejects a too-short secret', () => {
-    expect(() =>
-      validateEnv({ ...good, JWT_REFRESH_SECRET: 'short' }),
-    ).toThrow(/at least 32/);
+    expect(() => validateEnv({ ...good, JWT_REFRESH_SECRET: 'short' })).toThrow(/at least 32/);
   });
 
   it('rejects a missing secret', () => {

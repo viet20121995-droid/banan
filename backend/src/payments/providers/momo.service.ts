@@ -5,10 +5,7 @@ import { customAlphabet } from 'nanoid';
 
 import { PrismaService } from '../../prisma/prisma.service';
 
-const requestIdGen = customAlphabet(
-  'abcdefghijklmnopqrstuvwxyz0123456789',
-  16,
-);
+const requestIdGen = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 16);
 
 /**
  * MoMo (test gateway) integration. We POST the create-payment request with
@@ -39,10 +36,7 @@ export class MoMoPaymentService {
     orderCode: string;
     amount: string;
     currency: string;
-  }): Promise<
-    | { paymentId: string; redirectUrl: string }
-    | { configurationError: string }
-  > {
+  }): Promise<{ paymentId: string; redirectUrl: string } | { configurationError: string }> {
     if (!this.enabled) {
       return {
         configurationError:
@@ -56,11 +50,9 @@ export class MoMoPaymentService {
       this.config.get<string>('MOMO_ENDPOINT') ??
       'https://test-payment.momo.vn/v2/gateway/api/create';
     const returnUrl =
-      this.config.get<string>('MOMO_RETURN_URL') ??
-      'http://localhost:8081/payments/return/momo';
+      this.config.get<string>('MOMO_RETURN_URL') ?? 'http://localhost:8081/payments/return/momo';
     const ipnUrl =
-      this.config.get<string>('MOMO_IPN_URL') ??
-      'http://localhost:3000/api/v1/payments/momo/ipn';
+      this.config.get<string>('MOMO_IPN_URL') ?? 'http://localhost:3000/api/v1/payments/momo/ipn';
 
     const requestId = requestIdGen();
     const momoOrderId = `${args.orderCode}-${requestId}`;
@@ -80,9 +72,7 @@ export class MoMoPaymentService {
       `&redirectUrl=${returnUrl}` +
       `&requestId=${requestId}` +
       `&requestType=${requestType}`;
-    const signature = createHmac('sha256', secretKey)
-      .update(rawSignature)
-      .digest('hex');
+    const signature = createHmac('sha256', secretKey).update(rawSignature).digest('hex');
 
     const body = {
       partnerCode,

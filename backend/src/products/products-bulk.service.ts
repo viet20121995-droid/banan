@@ -40,10 +40,7 @@ export class ProductsBulkService {
    * safe. Every new product gets a single "Default · Original" variant so
    * the order-item shape stays uniform.
    */
-  async bulkImport(
-    storeId: string,
-    dto: BulkImportDto,
-  ): Promise<BulkImportResult> {
+  async bulkImport(storeId: string, dto: BulkImportDto): Promise<BulkImportResult> {
     const cats = await this.prisma.category.findMany({
       select: { id: true, name: true },
     });
@@ -71,7 +68,7 @@ export class ProductsBulkService {
         errors.push({ row: rowNo, name, error: 'CATEGORY_NOT_FOUND' });
         continue;
       }
-      const slug = (row.slug?.trim() || slugify(name)) || `sp-${rowNo}`;
+      const slug = row.slug?.trim() || slugify(name) || `sp-${rowNo}`;
 
       const existing = await this.prisma.product.findUnique({
         where: { storeId_slug: { storeId, slug } },
@@ -142,8 +139,7 @@ export class ProductsBulkService {
     });
 
     const compute = (cur: number): number => {
-      let next =
-        dto.mode === 'percent' ? cur * (1 + dto.amount / 100) : cur + dto.amount;
+      let next = dto.mode === 'percent' ? cur * (1 + dto.amount / 100) : cur + dto.amount;
       if (next < 0) next = 0;
       if (dto.roundTo && dto.roundTo > 0) {
         next = Math.round(next / dto.roundTo) * dto.roundTo;

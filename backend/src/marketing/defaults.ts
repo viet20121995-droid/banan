@@ -47,8 +47,8 @@ export const DEFAULT_REFERRAL: ReferralConfig = {
   referrerPoints: 50,
   refereePoints: 50,
   description:
-    'Giới thiệu bạn bè — cả bạn và người được giới thiệu đều nhận điểm '
-    + 'thưởng khi họ đặt đơn đầu tiên.',
+    'Giới thiệu bạn bè — cả bạn và người được giới thiệu đều nhận điểm ' +
+    'thưởng khi họ đặt đơn đầu tiên.',
 };
 
 export const DEFAULT_GIFT_CARD: GiftCardConfig = {
@@ -66,8 +66,8 @@ export const DEFAULT_CATERING: CateringConfig = {
   minGuests: 20,
   leadDays: 3,
   description:
-    'Đặt bánh & tráng miệng cho sự kiện, tiệc công ty, sinh nhật đông người. '
-    + 'Để lại thông tin, chúng tôi sẽ liên hệ tư vấn và báo giá.',
+    'Đặt bánh & tráng miệng cho sự kiện, tiệc công ty, sinh nhật đông người. ' +
+    'Để lại thông tin, chúng tôi sẽ liên hệ tư vấn và báo giá.',
 };
 
 export const DEFAULT_REWARDS: RewardsConfig = {

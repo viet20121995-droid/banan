@@ -8,9 +8,7 @@
 const PLACEHOLDER = /replace-me/i;
 const MIN_SECRET_LEN = 32;
 
-export function validateEnv(
-  config: Record<string, unknown>,
-): Record<string, unknown> {
+export function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
   const errors: string[] = [];
 
   for (const key of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET']) {
@@ -18,18 +16,14 @@ export function validateEnv(
     if (typeof value !== 'string' || value.length === 0) {
       errors.push(`${key} is not set`);
     } else if (PLACEHOLDER.test(value)) {
-      errors.push(
-        `${key} still uses the .env.example placeholder — set a real random secret`,
-      );
+      errors.push(`${key} still uses the .env.example placeholder — set a real random secret`);
     } else if (value.length < MIN_SECRET_LEN) {
       errors.push(`${key} must be at least ${MIN_SECRET_LEN} characters`);
     }
   }
 
   if (errors.length > 0) {
-    throw new Error(
-      `Invalid environment configuration:\n - ${errors.join('\n - ')}`,
-    );
+    throw new Error(`Invalid environment configuration:\n - ${errors.join('\n - ')}`);
   }
   return config;
 }

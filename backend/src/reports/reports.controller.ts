@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  Controller,
-  Get,
-  Query,
-  Res,
-} from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { OrderStatus, Role } from '@prisma/client';
 import type { Response } from 'express';
@@ -24,10 +18,7 @@ export class ReportsController {
 
   /// Scope every request to the merchant's store. Admin sees chain-wide
   /// (storeId omitted) unless they explicitly filter `?storeId=`.
-  private rangeOf(
-    user: AuthPrincipal,
-    q: { from?: string; to?: string; storeId?: string },
-  ) {
+  private rangeOf(user: AuthPrincipal, q: { from?: string; to?: string; storeId?: string }) {
     // A non-admin with no store would otherwise fall through to a null
     // (chain-wide) scope and see every store's figures — refuse it.
     if (user.role !== Role.ADMIN && !user.storeId) {
@@ -36,10 +27,7 @@ export class ReportsController {
         message: 'Tài khoản chưa được gán cửa hàng.',
       });
     }
-    const scopedStore =
-      user.role === Role.ADMIN
-        ? q.storeId
-        : user.storeId ?? undefined;
+    const scopedStore = user.role === Role.ADMIN ? q.storeId : (user.storeId ?? undefined);
     return this.reports.parseRange({ ...q, storeId: scopedStore });
   }
 
@@ -56,10 +44,7 @@ export class ReportsController {
     @CurrentUser() user: AuthPrincipal,
     @Query() q: { from?: string; to?: string; storeId?: string; limit?: string },
   ) {
-    return this.reports.productSales(
-      this.rangeOf(user, q),
-      Number(q.limit) || 50,
-    );
+    return this.reports.productSales(this.rangeOf(user, q), Number(q.limit) || 50);
   }
 
   @Get('orders')
@@ -91,8 +76,7 @@ export class ReportsController {
     const buf = await this.reports.buildWorkbook(range);
     const filename = `banan-report-${q.from}_${q.to}.xlsx`;
     res.set({
-      'Content-Type':
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${filename}"`,
       'Content-Length': buf.length.toString(),
     });

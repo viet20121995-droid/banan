@@ -1,9 +1,6 @@
 import { Module } from '@nestjs/common';
 
-import {
-  GiftCardsController,
-  MerchantGiftCardsController,
-} from './gift-cards.controller';
+import { GiftCardsController, MerchantGiftCardsController } from './gift-cards.controller';
 import { GiftCardsService } from './gift-cards.service';
 
 @Module({

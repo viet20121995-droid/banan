@@ -30,10 +30,7 @@ export class ContactService {
    * still "works" end-to-end without external setup.
    */
   async submit(dto: ContactDto): Promise<void> {
-    const to =
-      this.config.get<string>('CONTACT_TO') ??
-      this.config.get<string>('EMAIL_FROM') ??
-      '';
+    const to = this.config.get<string>('CONTACT_TO') ?? this.config.get<string>('EMAIL_FROM') ?? '';
 
     const rows: Array<[string, string | undefined]> = [
       ['Tên', dto.name],

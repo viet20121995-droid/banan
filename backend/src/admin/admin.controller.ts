@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
@@ -58,18 +49,12 @@ export class AdminController {
   }
 
   @Post('users/:id/reset-password')
-  resetUserPassword(
-    @Param('id') id: string,
-    @Body() dto: ResetUserPasswordDto,
-  ) {
+  resetUserPassword(@Param('id') id: string, @Body() dto: ResetUserPasswordDto) {
     return this.admin.resetUserPassword(id, dto.password);
   }
 
   @Delete('users/:id')
-  deactivateUser(
-    @Param('id') id: string,
-    @CurrentUser() principal: AuthPrincipal,
-  ) {
+  deactivateUser(@Param('id') id: string, @CurrentUser() principal: AuthPrincipal) {
     return this.admin.deactivateUser(id, principal.sub);
   }
 

@@ -1,9 +1,6 @@
 import { Module } from '@nestjs/common';
 
-import {
-  BannersController,
-  MerchantBannersController,
-} from './banners.controller';
+import { BannersController, MerchantBannersController } from './banners.controller';
 import { BannersService } from './banners.service';
 
 @Module({

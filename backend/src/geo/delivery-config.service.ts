@@ -60,25 +60,16 @@ export class DeliveryConfigService {
     hasBirthdayCake: boolean,
   ): number {
     const sameWard =
-      customerWardCode != null &&
-      storeWardCode != null &&
-      customerWardCode === storeWardCode;
+      customerWardCode != null && storeWardCode != null && customerWardCode === storeWardCode;
     if (hasBirthdayCake) {
-      return sameWard
-        ? config.birthdayCakeFeeSameWardVnd
-        : config.birthdayCakeFeeOtherWardVnd;
+      return sameWard ? config.birthdayCakeFeeSameWardVnd : config.birthdayCakeFeeOtherWardVnd;
     }
-    return sameWard
-      ? config.standardFeeSameWardVnd
-      : config.standardFeeOtherWardVnd;
+    return sameWard ? config.standardFeeSameWardVnd : config.standardFeeOtherWardVnd;
   }
 
   /// True when any of the given product ids belongs to the birthday-cake
   /// collection (matched by `birthdayCakeCollectionSlug` on the config).
-  async cartHasBirthdayCake(
-    productIds: string[],
-    config?: DeliveryConfig,
-  ): Promise<boolean> {
+  async cartHasBirthdayCake(productIds: string[], config?: DeliveryConfig): Promise<boolean> {
     if (productIds.length === 0) return false;
     const slug = (config ?? (await this.get())).birthdayCakeCollectionSlug;
     if (!slug) return false;

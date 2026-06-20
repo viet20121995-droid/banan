@@ -1,9 +1,6 @@
 import { Module } from '@nestjs/common';
 
-import {
-  MerchantSiteContentController,
-  SiteContentController,
-} from './site-content.controller';
+import { MerchantSiteContentController, SiteContentController } from './site-content.controller';
 import { SiteContentService } from './site-content.service';
 
 @Module({

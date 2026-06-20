@@ -28,9 +28,7 @@ const token = {
 describe('JwtStrategy.validate', () => {
   it('throws when the user no longer exists', async () => {
     const { strategy } = makeStrategy(null);
-    await expect(strategy.validate(token)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(strategy.validate(token)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('throws when the account has been deactivated', async () => {
@@ -42,9 +40,7 @@ describe('JwtStrategy.validate', () => {
       kitchenId: null,
       isActive: false,
     });
-    await expect(strategy.validate(token)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(strategy.validate(token)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('returns the FRESH role/store/kitchen from the DB, not the token claims', async () => {
@@ -68,8 +64,6 @@ describe('JwtStrategy.validate', () => {
 
   it('throws on a payload with no subject', async () => {
     const { strategy } = makeStrategy({ id: 'u1', isActive: true });
-    await expect(strategy.validate({} as never)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(strategy.validate({} as never)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

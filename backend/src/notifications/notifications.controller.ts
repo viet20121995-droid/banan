@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ArrayMaxSize, IsArray, IsString } from 'class-validator';
 
@@ -39,10 +31,7 @@ export class NotificationsController {
 
   @Post('read')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async markRead(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: MarkReadDto,
-  ): Promise<void> {
+  async markRead(@CurrentUser() user: AuthPrincipal, @Body() dto: MarkReadDto): Promise<void> {
     await this.notifications.markRead(user.sub, dto.ids);
   }
 

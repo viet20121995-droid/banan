@@ -1,12 +1,6 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import {
-  IsBoolean,
-  IsEmail,
-  IsOptional,
-  IsString,
-  MaxLength,
-} from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Role } from '@prisma/client';
 
 import { Public } from '../auth/decorators/public.decorator';

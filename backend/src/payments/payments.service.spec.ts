@@ -42,9 +42,7 @@ function makeService(opts: {
   order?: Record<string, unknown> | null;
 }) {
   const findFirst = jest.fn().mockResolvedValue(opts.payment ?? null);
-  const updateMany = jest
-    .fn()
-    .mockResolvedValue({ count: opts.updateCount ?? 1 });
+  const updateMany = jest.fn().mockResolvedValue({ count: opts.updateCount ?? 1 });
   const orderFindUnique = jest.fn().mockResolvedValue(
     opts.order === undefined
       ? {
@@ -87,10 +85,7 @@ function makeService(opts: {
   };
 }
 
-const capture = (
-  svc: PaymentsService,
-  paidAmountVnd: number | null | undefined,
-) =>
+const capture = (svc: PaymentsService, paidAmountVnd: number | null | undefined) =>
   svc.applyCapture({
     provider: 'PAYOS' as never,
     providerRef: 'PR-1',
@@ -219,14 +214,9 @@ type RefundRow = {
   status: string;
 };
 
-function makeRefundService(opts: {
-  refund?: RefundRow | null;
-  refundUpdateCount?: number;
-}) {
+function makeRefundService(opts: { refund?: RefundRow | null; refundUpdateCount?: number }) {
   const refundFindFirst = jest.fn().mockResolvedValue(opts.refund ?? null);
-  const refundUpdateMany = jest
-    .fn()
-    .mockResolvedValue({ count: opts.refundUpdateCount ?? 1 });
+  const refundUpdateMany = jest.fn().mockResolvedValue({ count: opts.refundUpdateCount ?? 1 });
   const orderUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const paymentUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const prisma = {
@@ -339,14 +329,10 @@ describe('PaymentsService.validate (provider availability — blocks before orde
   });
 
   it('allows a configured online provider', () => {
-    expect(() =>
-      validateSvc({ stripe: true }).validate('STRIPE' as never, 'PICKUP'),
-    ).not.toThrow();
+    expect(() => validateSvc({ stripe: true }).validate('STRIPE' as never, 'PICKUP')).not.toThrow();
   });
 
   it('CASH is always allowed (delegates to cash policy, no enabled check)', () => {
-    expect(() =>
-      validateSvc({}).validate('CASH' as never, 'PICKUP'),
-    ).not.toThrow();
+    expect(() => validateSvc({}).validate('CASH' as never, 'PICKUP')).not.toThrow();
   });
 });

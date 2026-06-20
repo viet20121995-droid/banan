@@ -79,10 +79,7 @@ export class MerchantThreadsController {
   }
 
   @Post()
-  async create(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: CreateThreadDto,
-  ) {
+  async create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateThreadDto) {
     const storeId = await this.threads.catalogStoreId();
     return this.threads.create(storeId, user.sub, dto);
   }

@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { EmailService } from '../notifications/email.service';
@@ -108,12 +104,7 @@ export class NewsletterService {
 
   // ── Merchant-side listing + stats ──────────────────────────────────
 
-  async list(filters: {
-    q?: string;
-    confirmed?: boolean;
-    page?: number;
-    perPage?: number;
-  }) {
+  async list(filters: { q?: string; confirmed?: boolean; page?: number; perPage?: number }) {
     const page = filters.page ?? 1;
     const perPage = Math.min(filters.perPage ?? 50, 200);
     const where: Prisma.NewsletterSubscriberWhereInput = {
@@ -131,25 +122,24 @@ export class NewsletterService {
     };
     // 4 queries in one transaction — paginated list + filtered count +
     // 3 KPI counts (active / pending / unsubscribed).
-    const [items, total, active, pending, unsubscribed] =
-      await this.prisma.$transaction([
-        this.prisma.newsletterSubscriber.findMany({
-          where,
-          orderBy: { subscribedAt: 'desc' },
-          skip: (page - 1) * perPage,
-          take: perPage,
-        }),
-        this.prisma.newsletterSubscriber.count({ where }),
-        this.prisma.newsletterSubscriber.count({
-          where: { confirmedAt: { not: null }, unsubscribedAt: null },
-        }),
-        this.prisma.newsletterSubscriber.count({
-          where: { confirmedAt: null, unsubscribedAt: null },
-        }),
-        this.prisma.newsletterSubscriber.count({
-          where: { unsubscribedAt: { not: null } },
-        }),
-      ]);
+    const [items, total, active, pending, unsubscribed] = await this.prisma.$transaction([
+      this.prisma.newsletterSubscriber.findMany({
+        where,
+        orderBy: { subscribedAt: 'desc' },
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
+      this.prisma.newsletterSubscriber.count({ where }),
+      this.prisma.newsletterSubscriber.count({
+        where: { confirmedAt: { not: null }, unsubscribedAt: null },
+      }),
+      this.prisma.newsletterSubscriber.count({
+        where: { confirmedAt: null, unsubscribedAt: null },
+      }),
+      this.prisma.newsletterSubscriber.count({
+        where: { unsubscribedAt: { not: null } },
+      }),
+    ]);
 
     return {
       items,
@@ -212,8 +202,7 @@ export class NewsletterService {
       for (const s of subs) {
         map.set(s.email.toLowerCase(), {
           unsubscribe:
-            `${apiBase}/newsletter/unsubscribe?token=` +
-            encodeURIComponent(s.unsubscribeToken),
+            `${apiBase}/newsletter/unsubscribe?token=` + encodeURIComponent(s.unsubscribeToken),
         });
       }
     }
@@ -250,12 +239,7 @@ export class NewsletterService {
         const sent = await this.email.sendRaw({
           toEmail: email,
           subject: input.subject,
-          html: this.renderCampaign(
-            input.subject,
-            input.body,
-            info.unsubscribe,
-            input.imageUrl,
-          ),
+          html: this.renderCampaign(input.subject, input.body, info.unsubscribe, input.imageUrl),
         });
         if (sent) emailsSent++;
       } catch {
@@ -350,8 +334,7 @@ export class NewsletterService {
     const esc = (s: string) => this.escapeHtml(s);
     const bodyHtml = esc(body).replace(/\n/g, '<br>');
     // Only embed an http(s) image — never a javascript:/data: URL.
-    const safeImage =
-      imageUrl && /^https?:\/\//i.test(imageUrl.trim()) ? imageUrl.trim() : '';
+    const safeImage = imageUrl && /^https?:\/\//i.test(imageUrl.trim()) ? imageUrl.trim() : '';
     const banner = safeImage
       ? `<img src="${esc(safeImage)}" alt="" style="width:100%;max-height:280px;object-fit:cover;border-radius:10px;margin-bottom:16px;">`
       : '';
@@ -372,22 +355,13 @@ export class NewsletterService {
 
   // ── Helpers ────────────────────────────────────────────────────────
 
-  private async sendVerifyMail(
-    email: string,
-    name: string | null,
-    token: string,
-  ): Promise<void> {
-    const url =
-      `${this.email.apiBaseUrl}/newsletter/confirm?token=` +
-      encodeURIComponent(token);
+  private async sendVerifyMail(email: string, name: string | null, token: string): Promise<void> {
+    const url = `${this.email.apiBaseUrl}/newsletter/confirm?token=` + encodeURIComponent(token);
     const unsubscribeUrl =
-      `${this.email.apiBaseUrl}/newsletter/unsubscribe?token=` +
-      encodeURIComponent(token);
+      `${this.email.apiBaseUrl}/newsletter/unsubscribe?token=` + encodeURIComponent(token);
     // `name` comes from the public subscribe form — escape it before it lands
     // in the email HTML (the campaign path escapes; this one must too).
-    const greeting = name
-      ? `Xin chào ${this.escapeHtml(name)},`
-      : 'Xin chào,';
+    const greeting = name ? `Xin chào ${this.escapeHtml(name)},` : 'Xin chào,';
     const html = `
       <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2b2a22;">
         <h2 style="color:#1E6A35;margin:0 0 12px 0">Cảm ơn bạn đã đăng ký!</h2>

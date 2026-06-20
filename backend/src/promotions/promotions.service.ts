@@ -190,26 +190,17 @@ export class PromotionsService {
 
   /** Drops campaigns that have hit their global `usageLimit`, and (when the
    *  customer is known) ones the user has hit `perUserLimit` on. */
-  private async filterByUsage(
-    live: Campaign[],
-    customerId?: string,
-  ): Promise<Campaign[]> {
-    const underGlobal = live.filter(
-      (c) => c.usageLimit == null || c.usedCount < c.usageLimit,
-    );
+  private async filterByUsage(live: Campaign[], customerId?: string): Promise<Campaign[]> {
+    const underGlobal = live.filter((c) => c.usageLimit == null || c.usedCount < c.usageLimit);
     if (!customerId) return underGlobal;
-    const limited = underGlobal.filter(
-      (c) => c.perUserLimit != null && c.perUserLimit > 0,
-    );
+    const limited = underGlobal.filter((c) => c.perUserLimit != null && c.perUserLimit > 0);
     if (limited.length === 0) return underGlobal;
     const counts = await this.prisma.campaignRedemption.groupBy({
       by: ['campaignId'],
       where: { userId: customerId, campaignId: { in: limited.map((c) => c.id) } },
       _count: { campaignId: true },
     });
-    const usedByUser = new Map(
-      counts.map((r) => [r.campaignId, r._count.campaignId]),
-    );
+    const usedByUser = new Map(counts.map((r) => [r.campaignId, r._count.campaignId]));
     return underGlobal.filter((c) => {
       if (c.perUserLimit == null || c.perUserLimit <= 0) return true;
       return (usedByUser.get(c.id) ?? 0) < c.perUserLimit;
@@ -231,8 +222,7 @@ export class PromotionsService {
     tx: Prisma.TransactionClient;
   }): Promise<void> {
     for (const campaignId of args.campaignIds) {
-      await args.tx
-        .$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${campaignId}, 0))`;
+      await args.tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${campaignId}, 0))`;
       const c = await args.tx.campaign.findUnique({
         where: { id: campaignId },
         select: { usageLimit: true, perUserLimit: true, usedCount: true },
@@ -269,10 +259,7 @@ export class PromotionsService {
    *  redemption row(s) and decrements usedCount. Used when an order is
    *  cancelled or its payment can't be initiated, so a campaign's per-user /
    *  global allowance isn't burned on an order that never completed. */
-  async reverseUsage(
-    orderId: string,
-    db?: Prisma.TransactionClient,
-  ): Promise<void> {
+  async reverseUsage(orderId: string, db?: Prisma.TransactionClient): Promise<void> {
     const run = async (tx: Prisma.TransactionClient): Promise<void> => {
       const rows = await tx.campaignRedemption.findMany({
         where: { orderId },
@@ -305,21 +292,13 @@ export class PromotionsService {
     if (start == null || end == null) return false;
     const { minutes, day } = vnNow(now);
     const inWindow =
-      start <= end
-        ? minutes >= start && minutes < end
-        : minutes >= start || minutes < end; // overnight window
-    const days = Array.isArray(cfg.daysOfWeek)
-      ? (cfg.daysOfWeek as number[])
-      : [];
+      start <= end ? minutes >= start && minutes < end : minutes >= start || minutes < end; // overnight window
+    const days = Array.isArray(cfg.daysOfWeek) ? (cfg.daysOfWeek as number[]) : [];
     const dayOk = days.length === 0 || days.includes(day);
     return inWindow && dayOk;
   }
 
-  private matchesLine(
-    c: Campaign,
-    productId: string,
-    categoryId: string | null,
-  ): boolean {
+  private matchesLine(c: Campaign, productId: string, categoryId: string | null): boolean {
     switch (c.type) {
       case 'PRODUCT_DISCOUNT': {
         const cfg = (c.config ?? {}) as Record<string, unknown>;
@@ -340,11 +319,7 @@ export class PromotionsService {
   }
 
   /** Scope match for whole-menu-capable types (empty scope = whole menu). */
-  private scopeMatches(
-    c: Campaign,
-    productId: string,
-    categoryId: string | null,
-  ): boolean {
+  private scopeMatches(c: Campaign, productId: string, categoryId: string | null): boolean {
     const cfg = (c.config ?? {}) as Record<string, unknown>;
     const pids = asStrArray(cfg.productIds);
     const cids = asStrArray(cfg.categoryIds);
@@ -363,17 +338,12 @@ export class PromotionsService {
 
   /** Buy X Get Y: every (buyQty+getQty) qualifying units yields getQty
    *  discounted units (cheapest first), at getDiscountPct% off (default 100). */
-  private bxgyDiscount(
-    c: Campaign,
-    lines: CartLine[],
-    catOf: Map<string, string | null>,
-  ): number {
+  private bxgyDiscount(c: Campaign, lines: CartLine[], catOf: Map<string, string | null>): number {
     const cfg = (c.config ?? {}) as Record<string, unknown>;
     const buyQty = Math.floor(Number(cfg.buyQty) || 0);
     const getQty = Math.floor(Number(cfg.getQty) || 0);
     if (buyQty <= 0 || getQty <= 0) return 0;
-    const getPct =
-      cfg.getDiscountPct != null ? Number(cfg.getDiscountPct) : 100;
+    const getPct = cfg.getDiscountPct != null ? Number(cfg.getDiscountPct) : 100;
     if (getPct <= 0) return 0;
 
     const units: number[] = [];
@@ -402,8 +372,7 @@ export class PromotionsService {
         return ctx.orderCount === 0;
       case 'BIRTHDAY': {
         if (!ctx.birthday) return false;
-        const windowDays =
-          cfg.windowDays != null ? Number(cfg.windowDays) : 7;
+        const windowDays = cfg.windowDays != null ? Number(cfg.windowDays) : 7;
         return withinBirthday(ctx.birthday, now, windowDays);
       }
       case 'REACTIVATION': {
@@ -419,16 +388,14 @@ export class PromotionsService {
     }
   }
 
-  private orderDiscount(
-    c: Campaign,
-    subtotalVnd: number,
-    ctx: CustomerContext,
-  ): number {
+  private orderDiscount(c: Campaign, subtotalVnd: number, ctx: CustomerContext): number {
     const cfg = (c.config ?? {}) as Record<string, unknown>;
     // MEMBERSHIP_BENEFIT reads the % (or ₫) for the customer's current tier.
     const value =
       c.type === 'MEMBERSHIP_BENEFIT'
-        ? (ctx.tier ? tierValue(cfg, ctx.tier) : 0)
+        ? ctx.tier
+          ? tierValue(cfg, ctx.tier)
+          : 0
         : Number(cfg.value) || 0;
     if (value <= 0) return 0;
     const minSub = Number(cfg.minSubtotal) || 0;
@@ -556,12 +523,8 @@ function withinBirthday(birthday: Date, now: Date, windowDays: number): boolean 
     const cur = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
     return Math.floor((cur - start) / 86_400_000);
   };
-  const bdayUtc = new Date(
-    Date.UTC(2020, birthday.getUTCMonth(), birthday.getUTCDate()),
-  );
-  const nowRef = new Date(
-    Date.UTC(2020, vnNowDate.getUTCMonth(), vnNowDate.getUTCDate()),
-  );
+  const bdayUtc = new Date(Date.UTC(2020, birthday.getUTCMonth(), birthday.getUTCDate()));
+  const nowRef = new Date(Date.UTC(2020, vnNowDate.getUTCMonth(), vnNowDate.getUTCDate()));
   let diff = Math.abs(dayOfYear(nowRef) - dayOfYear(bdayUtc));
   if (diff > 182) diff = 365 - diff; // wrap-around
   return diff <= windowDays;

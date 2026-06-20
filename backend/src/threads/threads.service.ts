@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
@@ -43,9 +38,7 @@ export class ThreadsService {
 
   /** Public feed — published only, newest first, optionally filtered by
    * store and/or a single hashtag. */
-  async listPublished(
-    opts: { storeId?: string; limit?: number; hashtag?: string } = {},
-  ) {
+  async listPublished(opts: { storeId?: string; limit?: number; hashtag?: string } = {}) {
     return this.prisma.thread.findMany({
       where: {
         publishedAt: { not: null },
@@ -97,8 +90,7 @@ export class ThreadsService {
     const canSeeDraft =
       !!viewer &&
       (viewer.role === 'ADMIN' ||
-        ((viewer.role === 'MERCHANT_OWNER' ||
-          viewer.role === 'MERCHANT_STAFF') &&
+        ((viewer.role === 'MERCHANT_OWNER' || viewer.role === 'MERCHANT_STAFF') &&
           viewer.storeId === thread.storeId));
     if (!canSeeDraft) throw new NotFoundException({ code: 'THREAD_NOT_FOUND' });
     return thread;
@@ -144,9 +136,7 @@ export class ThreadsService {
         productId: dto.productId ?? null,
         ctaLabel: dto.ctaLabel ?? null,
         ctaUrl: dto.ctaUrl ?? null,
-        scheduledPublishAt: dto.scheduledPublishAt
-          ? new Date(dto.scheduledPublishAt)
-          : null,
+        scheduledPublishAt: dto.scheduledPublishAt ? new Date(dto.scheduledPublishAt) : null,
         publishedAt: dto.publish ? new Date() : null,
       },
       include: THREAD_INCLUDE,
@@ -173,15 +163,11 @@ export class ThreadsService {
         ...(dto.ctaLabel !== undefined && { ctaLabel: dto.ctaLabel }),
         ...(dto.ctaUrl !== undefined && { ctaUrl: dto.ctaUrl }),
         ...(dto.scheduledPublishAt !== undefined && {
-          scheduledPublishAt: dto.scheduledPublishAt
-            ? new Date(dto.scheduledPublishAt)
-            : null,
+          scheduledPublishAt: dto.scheduledPublishAt ? new Date(dto.scheduledPublishAt) : null,
         }),
         ...(dto.publish !== undefined && {
           // Re-publish only updates the timestamp on a transition from draft.
-          publishedAt: dto.publish
-            ? (existing.publishedAt ?? new Date())
-            : null,
+          publishedAt: dto.publish ? (existing.publishedAt ?? new Date()) : null,
         }),
       },
       include: THREAD_INCLUDE,

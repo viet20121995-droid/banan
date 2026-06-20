@@ -179,9 +179,7 @@ export class AnalyticsService {
       existing.revenue += Number(item.lineTotal.toString());
       sellers.set(item.productId, existing);
     }
-    const bestSellers = [...sellers.values()]
-      .sort((a, b) => b.unitsSold - a.unitsSold)
-      .slice(0, 5);
+    const bestSellers = [...sellers.values()].sort((a, b) => b.unitsSold - a.unitsSold).slice(0, 5);
 
     return {
       range,
@@ -191,8 +189,7 @@ export class AnalyticsService {
         completed,
         cancelled,
         refunded,
-        refundRate:
-          orders.length === 0 ? 0 : (refunded + cancelled) / orders.length,
+        refundRate: orders.length === 0 ? 0 : (refunded + cancelled) / orders.length,
         avgOrderValue: completed === 0 ? 0 : revenue / completed,
       },
       daily: this.fillDaily(start, end, daily),
@@ -251,10 +248,14 @@ export class AnalyticsService {
 
       if (o.status === 'SENT_TO_KITCHEN') {
         inProgress += 1;
-      } else if (o.kitchenStatus === 'READY_DISPATCH' || o.status === 'COMPLETED' || o.status === 'READY_FOR_PICKUP' || o.status === 'DELIVERING') {
+      } else if (
+        o.kitchenStatus === 'READY_DISPATCH' ||
+        o.status === 'COMPLETED' ||
+        o.status === 'READY_FOR_PICKUP' ||
+        o.status === 'DELIVERING'
+      ) {
         dispatched += 1;
-        const elapsed =
-          (o.updatedAt.getTime() - o.createdAt.getTime()) / 1000 / 60;
+        const elapsed = (o.updatedAt.getTime() - o.createdAt.getTime()) / 1000 / 60;
         dispatchMinutesSum += elapsed;
         dispatchedCounted += 1;
       }
@@ -270,8 +271,7 @@ export class AnalyticsService {
         received: orders.length,
         inProgress,
         dispatched,
-        avgDispatchMinutes:
-          dispatchedCounted === 0 ? 0 : dispatchMinutesSum / dispatchedCounted,
+        avgDispatchMinutes: dispatchedCounted === 0 ? 0 : dispatchMinutesSum / dispatchedCounted,
         capacityUtilization,
       },
       daily: this.fillKitchenDaily(start, end, daily),

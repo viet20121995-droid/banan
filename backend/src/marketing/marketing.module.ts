@@ -1,9 +1,6 @@
 import { Module } from '@nestjs/common';
 
-import {
-  MarketingController,
-  MerchantMarketingController,
-} from './marketing.controller';
+import { MarketingController, MerchantMarketingController } from './marketing.controller';
 import { MarketingService } from './marketing.service';
 
 @Module({

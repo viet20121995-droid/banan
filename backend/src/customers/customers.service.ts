@@ -33,9 +33,7 @@ export class CustomersService {
    * sees everyone.
    */
   async list(storeId: string | null, opts: ListOpts) {
-    const orderScope: Prisma.OrderWhereInput | undefined = storeId
-      ? { storeId }
-      : undefined;
+    const orderScope: Prisma.OrderWhereInput | undefined = storeId ? { storeId } : undefined;
 
     const where: Prisma.UserWhereInput = {
       role: Role.CUSTOMER,
@@ -100,12 +98,7 @@ export class CustomersService {
    * dedupe key — re-creating with the same phone surfaces a clear error
    * instead of silently overwriting.
    */
-  async createCustomer(input: {
-    fullName: string;
-    phone: string;
-    email?: string;
-    notes?: string;
-  }) {
+  async createCustomer(input: { fullName: string; phone: string; email?: string; notes?: string }) {
     const fullName = input.fullName.trim();
     const phone = input.phone.trim();
     if (fullName.length < 2) {
@@ -143,10 +136,7 @@ export class CustomersService {
         createdAt: user.createdAt,
       };
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         const target = (e.meta?.target as string[] | undefined)?.join(',');
         throw new ConflictException({
           code: 'CUSTOMER_EXISTS',
@@ -162,10 +152,7 @@ export class CustomersService {
   async detail(storeId: string | null, customerId: string) {
     const { user, orders } = await this.loadServed(storeId, customerId);
 
-    const totalSpentVnd = orders.reduce(
-      (sum, o) => sum + Number(o.total),
-      0,
-    );
+    const totalSpentVnd = orders.reduce((sum, o) => sum + Number(o.total), 0);
 
     return {
       id: user.id,
@@ -234,9 +221,7 @@ export class CustomersService {
     body: string,
     tag?: string,
   ): Promise<{ sent: number }> {
-    const orderScope: Prisma.OrderWhereInput | undefined = storeId
-      ? { storeId }
-      : undefined;
+    const orderScope: Prisma.OrderWhereInput | undefined = storeId ? { storeId } : undefined;
     const where: Prisma.UserWhereInput = {
       role: Role.CUSTOMER,
       orders: orderScope ? { some: orderScope } : { some: {} },
@@ -293,9 +278,7 @@ export class CustomersService {
     const updated = await this.prisma.user.update({
       where: { id: customerId },
       data: {
-        ...(notes !== undefined
-          ? { merchantNotes: notes.trim() || null }
-          : {}),
+        ...(notes !== undefined ? { merchantNotes: notes.trim() || null } : {}),
         ...(tags !== undefined
           ? {
               merchantTags: Array.from(
@@ -392,10 +375,7 @@ export class CustomersService {
         birthday: u.birthday?.toISOString() ?? null,
       };
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         const target = (e.meta?.target as string[] | undefined)?.join(',');
         throw new ConflictException({
           code: 'CUSTOMER_EXISTS',
@@ -414,9 +394,7 @@ export class CustomersService {
    * customer; a store merchant gets only those they've served.
    */
   async exportCsv(storeId: string | null, q?: string): Promise<string> {
-    const orderScope: Prisma.OrderWhereInput | undefined = storeId
-      ? { storeId }
-      : undefined;
+    const orderScope: Prisma.OrderWhereInput | undefined = storeId ? { storeId } : undefined;
     const where: Prisma.UserWhereInput = {
       role: Role.CUSTOMER,
       orders: orderScope ? { some: orderScope } : { some: {} },
@@ -460,8 +438,7 @@ export class CustomersService {
       // Quote always — simplest correct CSV; double internal quotes.
       return `"${s.replace(/"/g, '""')}"`;
     };
-    const ymd = (d: Date | null): string =>
-      d ? d.toISOString().slice(0, 10) : '';
+    const ymd = (d: Date | null): string => (d ? d.toISOString().slice(0, 10) : '');
 
     const rows = users.map((u) => {
       const spent = u.orders.reduce((sum, o) => sum + Number(o.total), 0);
@@ -504,9 +481,7 @@ export class CustomersService {
     const { user } = await this.loadServed(storeId, customerId);
     const code = `BANAN-${randomBytes(4).toString('hex').toUpperCase()}`;
     const now = new Date();
-    const endsAt = new Date(
-      now.getTime() + args.days * 24 * 60 * 60 * 1000,
-    );
+    const endsAt = new Date(now.getTime() + args.days * 24 * 60 * 60 * 1000);
     const coupon = await this.prisma.coupon.create({
       data: {
         code,
@@ -548,9 +523,7 @@ export class CustomersService {
    * merchant has actually served this customer (admins bypass the check).
    */
   private async loadServed(storeId: string | null, customerId: string) {
-    const orderScope: Prisma.OrderWhereInput = storeId
-      ? { customerId, storeId }
-      : { customerId };
+    const orderScope: Prisma.OrderWhereInput = storeId ? { customerId, storeId } : { customerId };
 
     const user = await this.prisma.user.findFirst({
       where: { id: customerId, role: Role.CUSTOMER },

@@ -1,10 +1,4 @@
-import {
-  IsEmail,
-  IsOptional,
-  IsString,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 /// Merchant-side customer creation — typically used when a phone customer
 /// places an order and the merchant wants a record. Phone is the primary

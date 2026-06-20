@@ -39,9 +39,7 @@ export class MarketingService {
       where: { id: ID },
     });
     const cfg = (stored: unknown, def: unknown) =>
-      stored && typeof stored === 'object'
-        ? { ...(def as object), ...(stored as object) }
-        : def;
+      stored && typeof stored === 'object' ? { ...(def as object), ...(stored as object) } : def;
     return {
       referral: {
         enabled: row?.referralEnabled ?? false,
@@ -75,14 +73,18 @@ export class MarketingService {
     if (patch.referralConfig !== undefined) data.referralConfig = j(patch.referralConfig);
     if (patch.giftCardEnabled !== undefined) data.giftCardEnabled = patch.giftCardEnabled;
     if (patch.giftCardConfig !== undefined) data.giftCardConfig = j(patch.giftCardConfig);
-    if (patch.subscriptionEnabled !== undefined) data.subscriptionEnabled = patch.subscriptionEnabled;
-    if (patch.subscriptionConfig !== undefined) data.subscriptionConfig = j(patch.subscriptionConfig);
+    if (patch.subscriptionEnabled !== undefined)
+      data.subscriptionEnabled = patch.subscriptionEnabled;
+    if (patch.subscriptionConfig !== undefined)
+      data.subscriptionConfig = j(patch.subscriptionConfig);
     if (patch.cateringEnabled !== undefined) data.cateringEnabled = patch.cateringEnabled;
     if (patch.cateringConfig !== undefined) data.cateringConfig = j(patch.cateringConfig);
     if (patch.rewardsEnabled !== undefined) data.rewardsEnabled = patch.rewardsEnabled;
     if (patch.rewardsConfig !== undefined) data.rewardsConfig = j(patch.rewardsConfig);
 
-    const { id: _omit, ...update } = data;
+    // `id` is fixed (ID) and only set on create — strip it from the update clause.
+    const update = { ...data };
+    delete update.id;
     await this.prisma.marketingConfig.upsert({
       where: { id: ID },
       create: data,

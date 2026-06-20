@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Query,
-  Res,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import type { Response } from 'express';
@@ -16,12 +9,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { EmailService } from '../notifications/email.service';
 
-import {
-  ListSubscribersDto,
-  SendCampaignDto,
-  SubscribeDto,
-  TestCampaignDto,
-} from './dto';
+import { ListSubscribersDto, SendCampaignDto, SubscribeDto, TestCampaignDto } from './dto';
 import { NewsletterService } from './newsletter.service';
 
 @ApiTags('newsletter')
@@ -44,49 +32,40 @@ export class NewsletterController {
   // small branded HTML page (handled by the backend) instead of JSON.
   @Public()
   @Get('confirm')
-  async confirm(
-    @Query('token') token: string,
-    @Res() res: Response,
-  ): Promise<void> {
+  async confirm(@Query('token') token: string, @Res() res: Response): Promise<void> {
     try {
       await this.newsletter.confirm(token);
-      res.type('html').send(
-        this.page(
-          'Đã xác nhận đăng ký 🎉',
-          'Cảm ơn bạn! Bạn sẽ nhận khuyến mãi & món mới từ Banan qua email.',
-        ),
-      );
+      res
+        .type('html')
+        .send(
+          this.page(
+            'Đã xác nhận đăng ký 🎉',
+            'Cảm ơn bạn! Bạn sẽ nhận khuyến mãi & món mới từ Banan qua email.',
+          ),
+        );
     } catch {
-      res.status(400).type('html').send(
-        this.page(
-          'Liên kết không hợp lệ',
-          'Liên kết xác nhận đã hết hạn hoặc không đúng.',
-        ),
-      );
+      res
+        .status(400)
+        .type('html')
+        .send(this.page('Liên kết không hợp lệ', 'Liên kết xác nhận đã hết hạn hoặc không đúng.'));
     }
   }
 
   @Public()
   @Get('unsubscribe')
-  async unsubscribe(
-    @Query('token') token: string,
-    @Res() res: Response,
-  ): Promise<void> {
+  async unsubscribe(@Query('token') token: string, @Res() res: Response): Promise<void> {
     try {
       await this.newsletter.unsubscribe(token);
-      res.type('html').send(
-        this.page(
-          'Đã hủy đăng ký',
-          'Bạn sẽ không nhận email tin tức từ Banan nữa. Hẹn gặp lại!',
-        ),
-      );
+      res
+        .type('html')
+        .send(
+          this.page('Đã hủy đăng ký', 'Bạn sẽ không nhận email tin tức từ Banan nữa. Hẹn gặp lại!'),
+        );
     } catch {
-      res.status(400).type('html').send(
-        this.page(
-          'Liên kết không hợp lệ',
-          'Liên kết không đúng hoặc đã hết hạn.',
-        ),
-      );
+      res
+        .status(400)
+        .type('html')
+        .send(this.page('Liên kết không hợp lệ', 'Liên kết không đúng hoặc đã hết hạn.'));
     }
   }
 
@@ -116,9 +95,7 @@ export class MerchantNewsletterController {
   @Get('export.csv')
   async exportCsv(@Res() res: Response): Promise<void> {
     const csv = await this.newsletter.exportActiveCsv();
-    const filename = `banan-newsletter-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
+    const filename = `banan-newsletter-${new Date().toISOString().slice(0, 10)}.csv`;
     res.set({
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="${filename}"`,

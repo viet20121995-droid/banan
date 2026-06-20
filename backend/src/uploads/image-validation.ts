@@ -37,10 +37,7 @@ export function sniffImageBuffer(buf: Buffer): boolean {
     return true;
   }
   // WEBP: "RIFF"...."WEBP"
-  if (
-    buf.toString('ascii', 0, 4) === 'RIFF' &&
-    buf.toString('ascii', 8, 12) === 'WEBP'
-  ) {
+  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
     return true;
   }
   // AVIF / HEIF family: "....ftyp" + brand avif/avis/mif1/miaf

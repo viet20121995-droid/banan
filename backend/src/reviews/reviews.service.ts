@@ -134,8 +134,7 @@ export class ReviewsService {
     if (!REVIEW_ELIGIBLE_STATUSES.includes(order.status)) {
       throw new BadRequestException({
         code: 'ORDER_NOT_ELIGIBLE_FOR_REVIEW',
-        message:
-          'Bạn chỉ có thể đánh giá sau khi đơn hàng đã giao hoặc sẵn sàng nhận.',
+        message: 'Bạn chỉ có thể đánh giá sau khi đơn hàng đã giao hoặc sẵn sàng nhận.',
       });
     }
     if (!order.items.some((i) => i.productId === dto.productId)) {
@@ -216,12 +215,7 @@ export class ReviewsService {
     return { items, meta: { page, perPage, total } };
   }
 
-  async moderate(
-    id: string,
-    dto: ModerateReviewDto,
-    actorId: string,
-    storeId: string | null,
-  ) {
+  async moderate(id: string, dto: ModerateReviewDto, actorId: string, storeId: string | null) {
     const existing = await this.prisma.review.findUnique({
       where: { id },
       select: { id: true, status: true, product: { select: { storeId: true } } },

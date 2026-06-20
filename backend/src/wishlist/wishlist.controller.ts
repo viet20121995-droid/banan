@@ -1,13 +1,4 @@
-import {
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Param,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
@@ -30,11 +21,7 @@ export class WishlistController {
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
   ) {
-    return this.wishlist.list(
-      user.sub,
-      Number(page) || 1,
-      Number(perPage) || 30,
-    );
+    return this.wishlist.list(user.sub, Number(page) || 1, Number(perPage) || 30);
   }
 
   /// Lightweight — just `{ productIds: [...] }` for the menu screen to mark
@@ -51,10 +38,7 @@ export class WishlistController {
 
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete(':productId')
-  remove(
-    @CurrentUser() user: AuthPrincipal,
-    @Param('productId') productId: string,
-  ) {
+  remove(@CurrentUser() user: AuthPrincipal, @Param('productId') productId: string) {
     return this.wishlist.remove(user.sub, productId);
   }
 }

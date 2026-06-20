@@ -37,8 +37,8 @@ describe('merchantStoreScope', () => {
   });
 
   it('merchant STAFF without a store → NO_STORE_ASSIGNED', () => {
-    expect(() =>
-      merchantStoreScope(user({ role: 'MERCHANT_STAFF', storeId: undefined })),
-    ).toThrow(BadRequestException);
+    expect(() => merchantStoreScope(user({ role: 'MERCHANT_STAFF', storeId: undefined }))).toThrow(
+      BadRequestException,
+    );
   });
 });

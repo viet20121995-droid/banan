@@ -36,10 +36,7 @@ const KITCHEN_TRANSITIONS: Record<KitchenStatus, KitchenStatus[]> = {
 };
 
 /** `from` may be null when the order has just been transferred to the kitchen. */
-export function isAllowedKitchenTransition(
-  from: KitchenStatus | null,
-  to: KitchenStatus,
-): boolean {
+export function isAllowedKitchenTransition(from: KitchenStatus | null, to: KitchenStatus): boolean {
   if (from === null) return to === 'PENDING_ACK';
   return KITCHEN_TRANSITIONS[from]?.includes(to) ?? false;
 }

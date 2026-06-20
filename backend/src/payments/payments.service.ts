@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   Order,
   OrderItem,
@@ -67,9 +62,7 @@ export class PaymentsService {
       where: { provider: args.provider, providerRef: args.providerRef },
     });
     if (!payment) {
-      this.logger.warn(
-        `Capture for unknown ${args.provider} ref ${args.providerRef} — ignored`,
-      );
+      this.logger.warn(`Capture for unknown ${args.provider} ref ${args.providerRef} — ignored`);
       return;
     }
     if (payment.status !== 'INITIATED' && payment.status !== 'AUTHORIZED') {
@@ -81,10 +74,7 @@ export class PaymentsService {
     // Currency cross-check (defense-in-depth alongside the amount check, which
     // is currency-blind). All orders are VND today, so a mismatch means a
     // misconfigured provider account / unexpected settlement currency.
-    if (
-      args.currency &&
-      args.currency.toUpperCase() !== payment.currency.toUpperCase()
-    ) {
+    if (args.currency && args.currency.toUpperCase() !== payment.currency.toUpperCase()) {
       this.logger.error(
         `Currency mismatch on payment ${payment.id}: provider reports ${args.currency}, expected ${payment.currency} — refusing to capture`,
       );
@@ -133,26 +123,17 @@ export class PaymentsService {
               requestedById: 'system',
             },
           });
-          this.realtime.emit(
-            [`store:${order.storeId}`],
-            'refund.auto_requested',
-            {
-              orderId: order.id,
-              paymentId: payment.id,
-              at: new Date().toISOString(),
-            },
-          );
+          this.realtime.emit([`store:${order.storeId}`], 'refund.auto_requested', {
+            orderId: order.id,
+            paymentId: payment.id,
+            at: new Date().toISOString(),
+          });
         } catch (e) {
           // The cancel path's refund row won the race (partial unique index on
           // (orderId, paymentId) for non-REJECTED). That refund already covers
           // this payment, so the duplicate is a no-op. Standalone create (not
           // an interactive tx), so catching is safe.
-          if (
-            !(
-              e instanceof Prisma.PrismaClientKnownRequestError &&
-              e.code === 'P2002'
-            )
-          ) {
+          if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')) {
             throw e;
           }
         }
@@ -243,11 +224,7 @@ export class PaymentsService {
       },
     });
     if (!order) return;
-    const rooms = [
-      `order:${order.id}`,
-      `user:${order.customerId}`,
-      `store:${order.storeId}`,
-    ];
+    const rooms = [`order:${order.id}`, `user:${order.customerId}`, `store:${order.storeId}`];
     if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
     this.realtime.emit(rooms, 'order.payment_captured', {
       orderId: order.id,

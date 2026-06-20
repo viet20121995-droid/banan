@@ -1,20 +1,7 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  HttpCode,
-  HttpStatus,
-  Param,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Delete, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { DevicePlatform } from '@prisma/client';
-import {
-  IsEnum,
-  IsString,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { IsEnum, IsString, MaxLength, MinLength } from 'class-validator';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
@@ -39,10 +26,7 @@ export class MeDevicesController {
   /** Idempotent registration — the same token from a previously-logged-in
    *  user gets re-pointed to the current user. */
   @Post()
-  async register(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: RegisterDeviceDto,
-  ) {
+  async register(@CurrentUser() user: AuthPrincipal, @Body() dto: RegisterDeviceDto) {
     const now = new Date();
     const device = await this.prisma.deviceToken.upsert({
       where: { token: dto.token },

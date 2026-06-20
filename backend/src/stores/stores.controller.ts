@@ -124,10 +124,7 @@ export class MerchantStoreController {
   }
 
   @Patch('settings')
-  updateSettings(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: UpdateStoreSettingsDto,
-  ) {
+  updateSettings(@CurrentUser() user: AuthPrincipal, @Body() dto: UpdateStoreSettingsDto) {
     return this.stores.updateSettings(this.scope(user), dto);
   }
 
@@ -137,28 +134,19 @@ export class MerchantStoreController {
   }
 
   @Post('blackouts')
-  addBlackout(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: CreateBlackoutDto,
-  ) {
+  addBlackout(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateBlackoutDto) {
     return this.stores.addBlackout(this.scope(user), dto.date, dto.reason);
   }
 
   /// Batch add — convenient for marking Tết holidays in one request.
   @Post('blackouts/bulk')
-  addBlackoutsBulk(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: CreateManyBlackoutsDto,
-  ) {
+  addBlackoutsBulk(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateManyBlackoutsDto) {
     return this.stores.addBlackoutsBulk(this.scope(user), dto.dates);
   }
 
   @Delete('blackouts/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  removeBlackout(
-    @CurrentUser() user: AuthPrincipal,
-    @Param('id') id: string,
-  ) {
+  removeBlackout(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
     return this.stores.removeBlackout(this.scope(user), id);
   }
 }

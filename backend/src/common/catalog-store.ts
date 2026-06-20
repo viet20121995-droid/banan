@@ -11,9 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
  * here. Mirrors `ProductsService.catalogStoreId` (products already do this);
  * shared so collections/bundles/threads stay consistent.
  */
-export async function resolveCatalogStoreId(
-  prisma: PrismaService,
-): Promise<string> {
+export async function resolveCatalogStoreId(prisma: PrismaService): Promise<string> {
   const primary = await prisma.store.findUnique({
     where: { slug: 'banan-le-thanh-ton' },
     select: { id: true },

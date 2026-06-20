@@ -1,12 +1,4 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Get,
-  Param,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   IsBoolean,
@@ -51,10 +43,7 @@ export class CouponsController {
 
   /** Customer enters a code at checkout — server validates + returns the discount. */
   @Post('validate')
-  async validate(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: ValidateCouponDto,
-  ) {
+  async validate(@CurrentUser() user: AuthPrincipal, @Body() dto: ValidateCouponDto) {
     const result = await this.coupons.validate({
       code: dto.code,
       subtotalVnd: dto.subtotal,
@@ -160,10 +149,7 @@ export class MerchantCouponsController {
   }
 
   @Post()
-  create(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: CreateCouponDto,
-  ) {
+  create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateCouponDto) {
     return this.coupons.createForStore(this.scope(user), dto);
   }
 

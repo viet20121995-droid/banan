@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -62,10 +58,7 @@ export class WishlistService {
       });
       return item;
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         // Already in the wishlist — idempotent: return the existing row.
         return this.prisma.wishlistItem.findUniqueOrThrow({
           where: { userId_productId: { userId, productId } },
@@ -82,10 +75,7 @@ export class WishlistService {
         where: { userId_productId: { userId, productId } },
       })
       .catch((e) => {
-        if (
-          e instanceof Prisma.PrismaClientKnownRequestError &&
-          e.code === 'P2025'
-        ) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
           return null; // not in wishlist — idempotent.
         }
         throw e;

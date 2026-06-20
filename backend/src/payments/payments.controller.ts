@@ -87,8 +87,7 @@ export class PaymentsController {
   @Get('payos/return')
   payosReturn(@Query() query: Record<string, string>, @Res() res: Response) {
     const customerBase =
-      this.config.get<string>('CUSTOMER_APP_BASE_URL') ??
-      'http://localhost:8081';
+      this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081';
     // PayOS appends e.g. ?code=00&status=PAID&cancel=false&orderCode=...
     const cancelled = query['cancel'] === 'true' || query['status'] === 'CANCELLED';
     const status = !cancelled && query['code'] === '00' ? 'success' : 'failed';
@@ -101,9 +100,7 @@ export class PaymentsController {
   @Public()
   @Post('payos/webhook')
   @HttpCode(HttpStatus.OK)
-  async payosWebhook(
-    @Body() body: Record<string, unknown>,
-  ): Promise<{ success: boolean }> {
+  async payosWebhook(@Body() body: Record<string, unknown>): Promise<{ success: boolean }> {
     const verified = this.payos.verifyWebhook(body);
     if (!verified.ok || !verified.orderCode) {
       // PayOS sends a test ping with a dummy payload when you register the

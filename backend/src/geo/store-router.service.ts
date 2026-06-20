@@ -33,9 +33,7 @@ export class StoreRouterService {
 
   /// Resolves the fulfilling branch for a given ward. Returns null when the
   /// ward is unknown, has no eligible stores, or no store has coordinates.
-  async pickNearestDeliveryStore(
-    wardCode: string | null | undefined,
-  ): Promise<RoutedStore | null> {
+  async pickNearestDeliveryStore(wardCode: string | null | undefined): Promise<RoutedStore | null> {
     const ward = findWard(wardCode);
     if (!ward) return null;
     return this.pickNearestForPoint(ward);
@@ -44,10 +42,7 @@ export class StoreRouterService {
   /// Same as above but for an arbitrary point — exposed in case we add a
   /// "use my GPS location" feature later. Stays in this service so the
   /// filtering rules (pause flags, missing coords) live in one place.
-  async pickNearestForPoint(point: {
-    lat: number;
-    lng: number;
-  }): Promise<RoutedStore | null> {
+  async pickNearestForPoint(point: { lat: number; lng: number }): Promise<RoutedStore | null> {
     // Only branches accepting delivery — both master and channel pause
     // must be off. NULL lat/lng excluded so we don't compute against
     // missing data.

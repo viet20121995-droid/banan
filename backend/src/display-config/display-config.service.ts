@@ -26,8 +26,7 @@ export class DisplayConfigService {
     // Empty-string from the merchant form means "clear this channel".
     // Normalise to null so the customer side can treat empty == not
     // configured uniformly.
-    const norm = (v?: string) =>
-      v === undefined ? undefined : v.trim() === '' ? null : v.trim();
+    const norm = (v?: string) => (v === undefined ? undefined : v.trim() === '' ? null : v.trim());
     return this.prisma.displayConfig.upsert({
       where: { id: 'default' },
       create: { id: 'default', ...patch },

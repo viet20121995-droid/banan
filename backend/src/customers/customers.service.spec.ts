@@ -18,9 +18,13 @@ type UserRow = {
 };
 
 function makeService(user: UserRow, opts: { servedOrders?: number } = {}) {
-  const update = jest
-    .fn()
-    .mockResolvedValue({ id: user.id, fullName: 'X', email: user.email, phone: user.phone, birthday: null });
+  const update = jest.fn().mockResolvedValue({
+    id: user.id,
+    fullName: 'X',
+    email: user.email,
+    phone: user.phone,
+    birthday: null,
+  });
   const prisma = {
     user: {
       findFirst: jest.fn().mockResolvedValue(user),
@@ -28,19 +32,17 @@ function makeService(user: UserRow, opts: { servedOrders?: number } = {}) {
     },
     order: {
       // loadServed requires ≥1 served order when a storeId is supplied.
-      findMany: jest
-        .fn()
-        .mockResolvedValue(
-          Array.from({ length: opts.servedOrders ?? 1 }, (_, i) => ({
-            id: `o${i}`,
-            code: 'BAN-1',
-            status: 'COMPLETED',
-            fulfillmentType: 'PICKUP',
-            total: 1000,
-            createdAt: new Date(),
-            store: { id: 's1', name: 'S' },
-          })),
-        ),
+      findMany: jest.fn().mockResolvedValue(
+        Array.from({ length: opts.servedOrders ?? 1 }, (_, i) => ({
+          id: `o${i}`,
+          code: 'BAN-1',
+          status: 'COMPLETED',
+          fulfillmentType: 'PICKUP',
+          total: 1000,
+          createdAt: new Date(),
+          store: { id: 's1', name: 'S' },
+        })),
+      ),
     },
   };
   const noop = {} as never;
@@ -69,9 +71,9 @@ describe('CustomersService.updateProfile (identity boundary)', () => {
 
   it('merchant CANNOT change a claimed customer phone', async () => {
     const { svc, update } = makeService(baseUser({ claimed: true }));
-    await expect(
-      svc.updateProfile('s1', 'u1', { phone: '0911111111' }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(svc.updateProfile('s1', 'u1', { phone: '0911111111' })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
     expect(update).not.toHaveBeenCalled();
   });
 

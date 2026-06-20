@@ -5,10 +5,7 @@ import bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 
 /** Minimal mocks — no DB. */
-function makeService(overrides: {
-  userCreate?: jest.Mock;
-  userFindFirst?: jest.Mock;
-}) {
+function makeService(overrides: { userCreate?: jest.Mock; userFindFirst?: jest.Mock }) {
   const prisma = {
     user: {
       create: overrides.userCreate ?? jest.fn(),
@@ -25,12 +22,7 @@ function makeService(overrides: {
     sendRaw: jest.fn().mockResolvedValue(undefined),
     sendPasswordReset: jest.fn().mockResolvedValue(undefined),
   };
-  const svc = new AuthService(
-    prisma as never,
-    jwt as never,
-    config as never,
-    email as never,
-  );
+  const svc = new AuthService(prisma as never, jwt as never, config as never, email as never);
   return { svc, prisma, jwt };
 }
 

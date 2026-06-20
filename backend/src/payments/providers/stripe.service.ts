@@ -45,10 +45,7 @@ export class StripePaymentService {
     amount: string;
     currency: string;
     items: CheckoutItem[];
-  }): Promise<
-    | { paymentId: string; redirectUrl: string }
-    | { configurationError: string }
-  > {
+  }): Promise<{ paymentId: string; redirectUrl: string } | { configurationError: string }> {
     if (!this.stripe) {
       return {
         configurationError:
@@ -59,8 +56,7 @@ export class StripePaymentService {
       this.config.get<string>('STRIPE_SUCCESS_URL') ??
       'http://localhost:8081/payments/return/stripe';
     const cancelUrl =
-      this.config.get<string>('STRIPE_CANCEL_URL') ??
-      'http://localhost:8081/checkout';
+      this.config.get<string>('STRIPE_CANCEL_URL') ?? 'http://localhost:8081/checkout';
 
     // Charge the ACTUAL order total (after delivery fee, campaign/coupon/points/
     // gift-card adjustments) as a single line item, so Stripe's amount_total
@@ -88,8 +84,7 @@ export class StripePaymentService {
           },
         },
       ],
-      success_url:
-        `${successBase}?session_id={CHECKOUT_SESSION_ID}&order_code=${args.orderCode}`,
+      success_url: `${successBase}?session_id={CHECKOUT_SESSION_ID}&order_code=${args.orderCode}`,
       cancel_url: cancelUrl,
       metadata: { orderId: args.orderId, orderCode: args.orderCode },
     });
@@ -135,11 +130,7 @@ export class StripePaymentService {
     }
     let event: Stripe.Event;
     try {
-      event = this.stripe.webhooks.constructEvent(
-        rawBody,
-        signature,
-        this.webhookSecret,
-      );
+      event = this.stripe.webhooks.constructEvent(rawBody, signature, this.webhookSecret);
     } catch (e) {
       this.logger.error('Stripe webhook signature verification failed', e as Error);
       throw new Error('invalid_signature');
@@ -170,8 +161,7 @@ export class StripePaymentService {
       // back for the caller to match the in-flight Refund row and complete it.
       const charge = event.data.object as Stripe.Charge;
       const settled =
-        charge.refunds?.data?.find((r) => r.status === 'succeeded') ??
-        charge.refunds?.data?.[0];
+        charge.refunds?.data?.find((r) => r.status === 'succeeded') ?? charge.refunds?.data?.[0];
       if (!settled) return { kind: 'ignored' };
       return {
         kind: 'refunded',

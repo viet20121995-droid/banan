@@ -1,11 +1,4 @@
-import {
-  IsInt,
-  IsISO8601,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { IsInt, IsISO8601, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class IssueGiftCardDto {
   @IsInt()

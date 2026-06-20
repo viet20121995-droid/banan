@@ -33,18 +33,11 @@ export class ReviewsController {
   /// Public — anyone can read published reviews for a product.
   @Public()
   @Get('product/:productId')
-  findForProduct(
-    @Param('productId') productId: string,
-    @Query() q: PaginationDto,
-  ) {
+  findForProduct(@Param('productId') productId: string, @Query() q: PaginationDto) {
     // DTO already validated page/perPage as finite ints (1..100). This public
     // endpoint additionally caps perPage at 50 (DoS amplification on an
     // unauthenticated route with joins).
-    return this.reviews.findPublicForProduct(
-      productId,
-      q.page ?? 1,
-      Math.min(q.perPage ?? 20, 50),
-    );
+    return this.reviews.findPublicForProduct(productId, q.page ?? 1, Math.min(q.perPage ?? 20, 50));
   }
 
   /// Authenticated — list MY reviews.
@@ -58,10 +51,7 @@ export class ReviewsController {
   /// per-item "Đánh giá / Sửa đánh giá" CTA on the customer order detail).
   @Roles(Role.CUSTOMER)
   @Get('mine/order/:orderId')
-  findByOrder(
-    @CurrentUser() user: AuthPrincipal,
-    @Param('orderId') orderId: string,
-  ) {
+  findByOrder(@CurrentUser() user: AuthPrincipal, @Param('orderId') orderId: string) {
     return this.reviews.findByUserAndOrder(user.sub, orderId);
   }
 
@@ -92,10 +82,7 @@ export class MerchantReviewsController {
     @Query() q: ListReviewsDto,
     @Query('status') status?: ReviewStatus,
   ) {
-    return this.reviews.findAllForMerchant(
-      { ...q, status },
-      merchantStoreScope(user),
-    );
+    return this.reviews.findAllForMerchant({ ...q, status }, merchantStoreScope(user));
   }
 
   @Patch(':id/moderate')

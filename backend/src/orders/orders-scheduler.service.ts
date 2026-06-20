@@ -55,16 +55,12 @@ export class OrdersSchedulerService {
         data: { dueSoonNotifiedAt: now },
       });
 
-      this.realtime.emit(
-        [`store:${order.storeId}`, `order:${order.id}`],
-        'order.due_soon',
-        {
-          orderId: order.id,
-          code: order.code,
-          scheduledFor: order.scheduledFor!.toISOString(),
-          at: now.toISOString(),
-        },
-      );
+      this.realtime.emit([`store:${order.storeId}`, `order:${order.id}`], 'order.due_soon', {
+        orderId: order.id,
+        code: order.code,
+        scheduledFor: order.scheduledFor!.toISOString(),
+        at: now.toISOString(),
+      });
     }
 
     this.logger.log(`Surfaced ${ready.length} scheduled order(s) as due-soon`);

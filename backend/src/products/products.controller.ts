@@ -51,10 +51,7 @@ export class ProductsController {
   /// section is visible to anonymous browsers too.
   @Public()
   @Get(':id/recommendations')
-  recommendations(
-    @Param('id') id: string,
-    @Query('limit') limit?: string,
-  ) {
+  recommendations(@Param('id') id: string, @Query('limit') limit?: string) {
     return this.products.recommendations(id, Number(limit) || 8);
   }
 
@@ -67,20 +64,14 @@ export class ProductsController {
 
   @Roles(Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN)
   @Get('merchant/list')
-  async findAllForStore(
-    @CurrentUser() _user: AuthPrincipal,
-    @Query() q: ListProductsDto,
-  ) {
+  async findAllForStore(@CurrentUser() _user: AuthPrincipal, @Query() q: ListProductsDto) {
     const storeId = await this.products.catalogStoreId();
     return this.products.findAllForStore(storeId, q);
   }
 
   @Roles(Role.ADMIN)
   @Post()
-  async create(
-    @CurrentUser() _user: AuthPrincipal,
-    @Body() dto: CreateProductDto,
-  ) {
+  async create(@CurrentUser() _user: AuthPrincipal, @Body() dto: CreateProductDto) {
     const storeId = await this.products.catalogStoreId();
     return this.products.create(storeId, dto);
   }
@@ -118,10 +109,7 @@ export class ProductsController {
   @Roles(Role.ADMIN)
   @Post('merchant/bulk-import')
   @HttpCode(HttpStatus.OK)
-  async bulkImport(
-    @CurrentUser() _user: AuthPrincipal,
-    @Body() dto: BulkImportDto,
-  ) {
+  async bulkImport(@CurrentUser() _user: AuthPrincipal, @Body() dto: BulkImportDto) {
     const storeId = await this.products.catalogStoreId();
     return this.bulk.bulkImport(storeId, dto);
   }
@@ -131,10 +119,7 @@ export class ProductsController {
   @Roles(Role.ADMIN)
   @Post('merchant/bulk-price')
   @HttpCode(HttpStatus.OK)
-  async bulkPrice(
-    @CurrentUser() _user: AuthPrincipal,
-    @Body() dto: BulkPriceDto,
-  ) {
+  async bulkPrice(@CurrentUser() _user: AuthPrincipal, @Body() dto: BulkPriceDto) {
     return this.bulk.bulkPrice(dto);
   }
 }

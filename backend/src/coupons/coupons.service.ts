@@ -51,11 +51,7 @@ export class CouponsService {
     }
     // Store-scoped coupons only work at their owning store. Chain-wide
     // coupons (storeId null) work everywhere.
-    if (
-      coupon.storeId !== null &&
-      args.storeId !== undefined &&
-      coupon.storeId !== args.storeId
-    ) {
+    if (coupon.storeId !== null && args.storeId !== undefined && coupon.storeId !== args.storeId) {
       throw new BadRequestException({
         code: 'COUPON_WRONG_STORE',
         message: 'This coupon is not valid at this store.',
@@ -68,10 +64,7 @@ export class CouponsService {
         message: 'This coupon is not active right now.',
       });
     }
-    if (
-      coupon.maxRedemptions !== null &&
-      coupon.redemptions >= coupon.maxRedemptions
-    ) {
+    if (coupon.maxRedemptions !== null && coupon.redemptions >= coupon.maxRedemptions) {
       throw new BadRequestException({
         code: 'COUPON_LIMIT_REACHED',
         message: 'This coupon has been fully claimed.',
@@ -130,10 +123,7 @@ export class CouponsService {
       where: { id: args.couponId },
       select: { maxRedemptions: true, perUserLimit: true, redemptions: true },
     });
-    if (
-      coupon.maxRedemptions !== null &&
-      coupon.redemptions >= coupon.maxRedemptions
-    ) {
+    if (coupon.maxRedemptions !== null && coupon.redemptions >= coupon.maxRedemptions) {
       throw new BadRequestException({
         code: 'COUPON_LIMIT_REACHED',
         message: 'This coupon has been fully claimed.',
@@ -169,10 +159,7 @@ export class CouponsService {
    *  is cancelled or its payment can't be initiated, so the coupon use isn't
    *  burned on an order that never went through. Each row maps to exactly one
    *  prior increment, so the decrement stays balanced. */
-  async reverseRedemption(
-    orderId: string,
-    db?: Prisma.TransactionClient,
-  ): Promise<void> {
+  async reverseRedemption(orderId: string, db?: Prisma.TransactionClient): Promise<void> {
     const run = async (tx: Prisma.TransactionClient): Promise<void> => {
       const rows = await tx.couponRedemption.findMany({
         where: { orderId },
@@ -224,8 +211,7 @@ export class CouponsService {
         continue;
       }
       if (c.startsAt > now) continue; // not started yet
-      const globalExhausted =
-        c.maxRedemptions != null && c.redemptions >= c.maxRedemptions;
+      const globalExhausted = c.maxRedemptions != null && c.redemptions >= c.maxRedemptions;
       const userExhausted = (usedByCoupon.get(c.id) ?? 0) >= c.perUserLimit;
       if (globalExhausted || userExhausted) continue;
       available.push(this.walletView(c));
@@ -302,10 +288,7 @@ export class CouponsService {
               : null,
           startsAt: start,
           endsAt: end,
-          maxRedemptions:
-            dto.maxRedemptions && dto.maxRedemptions > 0
-              ? dto.maxRedemptions
-              : null,
+          maxRedemptions: dto.maxRedemptions && dto.maxRedemptions > 0 ? dto.maxRedemptions : null,
           perUserLimit: dto.perUserLimit,
           isActive: true,
           storeId: storeId ?? null,
@@ -314,10 +297,7 @@ export class CouponsService {
       });
       return this.view(created, storeId);
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new BadRequestException({
           code: 'COUPON_CODE_TAKEN',
           message: 'That code is already in use.',
@@ -352,9 +332,7 @@ export class CouponsService {
     }
     if (patch.maxRedemptions !== undefined) {
       data.maxRedemptions =
-        patch.maxRedemptions && patch.maxRedemptions > 0
-          ? patch.maxRedemptions
-          : null;
+        patch.maxRedemptions && patch.maxRedemptions > 0 ? patch.maxRedemptions : null;
     }
     const updated = await this.prisma.coupon.update({
       where: { id: coupon.id },
@@ -382,8 +360,7 @@ export class CouponsService {
       code: c.code,
       type: c.type,
       value: Number(c.value.toString()),
-      minSubtotalVnd:
-        c.minSubtotal === null ? null : Number(c.minSubtotal.toString()),
+      minSubtotalVnd: c.minSubtotal === null ? null : Number(c.minSubtotal.toString()),
       startsAt: c.startsAt.toISOString(),
       endsAt: c.endsAt.toISOString(),
       maxRedemptions: c.maxRedemptions,
@@ -397,11 +374,7 @@ export class CouponsService {
     };
   }
 
-  private computeDiscount(
-    coupon: Coupon,
-    subtotalVnd: number,
-    deliveryFeeVnd: number,
-  ): number {
+  private computeDiscount(coupon: Coupon, subtotalVnd: number, deliveryFeeVnd: number): number {
     const value = Number(coupon.value.toString());
     switch (coupon.type satisfies CouponType) {
       case 'PERCENT':

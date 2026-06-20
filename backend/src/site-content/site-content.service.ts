@@ -3,11 +3,7 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
-import {
-  defaultFor,
-  SITE_CONTENT_KEYS,
-  type SiteContentKey,
-} from './defaults';
+import { defaultFor, SITE_CONTENT_KEYS, type SiteContentKey } from './defaults';
 
 @Injectable()
 export class SiteContentService {

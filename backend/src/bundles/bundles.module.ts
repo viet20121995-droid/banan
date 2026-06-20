@@ -1,9 +1,6 @@
 import { Module } from '@nestjs/common';
 
-import {
-  BundlesController,
-  MerchantBundlesController,
-} from './bundles.controller';
+import { BundlesController, MerchantBundlesController } from './bundles.controller';
 import { BundlesService } from './bundles.service';
 
 @Module({

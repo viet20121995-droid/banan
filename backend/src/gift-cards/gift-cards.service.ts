@@ -26,12 +26,7 @@ export class GiftCardsService {
   }
 
   /** Admin issues a card with a starting value. */
-  async issue(args: {
-    valueVnd: number;
-    expiresAt?: string;
-    note?: string;
-    issuedById?: string;
-  }) {
+  async issue(args: { valueVnd: number; expiresAt?: string; note?: string; issuedById?: string }) {
     if (!args.valueVnd || args.valueVnd < 1000) {
       throw new BadRequestException({
         code: 'GIFT_CARD_VALUE_INVALID',

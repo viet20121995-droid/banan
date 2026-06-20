@@ -16,11 +16,7 @@ import { diskStorage } from 'multer';
 
 import { Roles } from '../auth/decorators/roles.decorator';
 
-import {
-  ACCEPTED_IMAGE_MIMES,
-  extForMime,
-  fileLooksLikeImage,
-} from './image-validation';
+import { ACCEPTED_IMAGE_MIMES, extForMime, fileLooksLikeImage } from './image-validation';
 
 @ApiTags('uploads')
 @Controller({ path: 'uploads', version: '1' })

@@ -1,11 +1,4 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Get,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import {
@@ -102,17 +95,12 @@ export class GeoController {
   async deliveryQuote(@Body() dto: QuoteRequestDto) {
     const cfg = await this.config.get();
     const productIds = dto.productIds ?? [];
-    const hasBirthdayCake = await this.config.cartHasBirthdayCake(
-      productIds,
-      cfg,
-    );
+    const hasBirthdayCake = await this.config.cartHasBirthdayCake(productIds, cfg);
 
     // No ward yet — show the "same ward" fee (best case) as a teaser so
     // the customer has something to read until they pick a phường.
     if (!dto.wardCode) {
-      const fee = hasBirthdayCake
-        ? cfg.birthdayCakeFeeSameWardVnd
-        : cfg.standardFeeSameWardVnd;
+      const fee = hasBirthdayCake ? cfg.birthdayCakeFeeSameWardVnd : cfg.standardFeeSameWardVnd;
       return {
         ...this._breakdown(fee, hasBirthdayCake, 'same'),
         distanceKm: null as number | null,
@@ -132,9 +120,7 @@ export class GeoController {
     }
     const routed = await this.router.pickNearestForPoint(ward);
     if (!routed) {
-      const fee = hasBirthdayCake
-        ? cfg.birthdayCakeFeeOtherWardVnd
-        : cfg.standardFeeOtherWardVnd;
+      const fee = hasBirthdayCake ? cfg.birthdayCakeFeeOtherWardVnd : cfg.standardFeeOtherWardVnd;
       return {
         ...this._breakdown(fee, hasBirthdayCake, 'other'),
         distanceKm: null,
@@ -143,15 +129,8 @@ export class GeoController {
         noStoreAvailable: true,
       };
     }
-    const sameWard =
-      routed.storeWardCode != null &&
-      routed.storeWardCode === dto.wardCode;
-    const fee = this.config.feeFor(
-      cfg,
-      dto.wardCode,
-      routed.storeWardCode,
-      hasBirthdayCake,
-    );
+    const sameWard = routed.storeWardCode != null && routed.storeWardCode === dto.wardCode;
+    const fee = this.config.feeFor(cfg, dto.wardCode, routed.storeWardCode, hasBirthdayCake);
     return {
       ...this._breakdown(fee, hasBirthdayCake, sameWard ? 'same' : 'other'),
       distanceKm: Math.round(routed.distanceKm * 10) / 10,
@@ -167,11 +146,7 @@ export class GeoController {
 
   /// Shared shape — keeps the breakdown explicit so the customer sees
   /// exactly which tier applies and why.
-  private _breakdown(
-    feeVnd: number,
-    hasBirthdayCake: boolean,
-    band: 'same' | 'other',
-  ) {
+  private _breakdown(feeVnd: number, hasBirthdayCake: boolean, band: 'same' | 'other') {
     return {
       totalVnd: feeVnd,
       tier: hasBirthdayCake ? ('birthdayCake' as const) : ('standard' as const),

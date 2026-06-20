@@ -42,10 +42,7 @@ export class PushService {
       return null;
     }
     try {
-      const json = JSON.parse(readFileSync(abs, 'utf8')) as Record<
-        string,
-        unknown
-      >;
+      const json = JSON.parse(readFileSync(abs, 'utf8')) as Record<string, unknown>;
       const app = admin.apps.length
         ? admin.app()
         : admin.initializeApp({
@@ -62,8 +59,7 @@ export class PushService {
 
   /** Resolve the click-through URL for a web push from the payload. */
   private linkFor(data?: Record<string, unknown>): string {
-    const base = (this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? '')
-      .replace(/\/$/, '');
+    const base = (this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? '').replace(/\/$/, '');
     if (typeof data?.linkPath === 'string' && data.linkPath) {
       const p = data.linkPath.startsWith('/') ? data.linkPath : `/${data.linkPath}`;
       return base + p;
@@ -173,8 +169,7 @@ export class PushService {
         });
       }
       this.logger.log(
-        `Push ${label} ok=${ok}/${tokens.length}` +
-          (stale.length ? ` pruned=${stale.length}` : ''),
+        `Push ${label} ok=${ok}/${tokens.length}` + (stale.length ? ` pruned=${stale.length}` : ''),
       );
     } catch (err) {
       this.logger.warn(`Push fan-out failed: ${(err as Error).message}`);

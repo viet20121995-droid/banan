@@ -55,11 +55,7 @@ export class OrdersController {
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
   ) {
-    return this.orders.listForCustomer(
-      user.sub,
-      Number(page) || 1,
-      Number(perPage) || 20,
-    );
+    return this.orders.listForCustomer(user.sub, Number(page) || 1, Number(perPage) || 20);
   }
 
   @Get(':id')
@@ -69,11 +65,7 @@ export class OrdersController {
 
   @Roles(Role.CUSTOMER)
   @Post(':id/cancel')
-  cancel(
-    @CurrentUser() user: AuthPrincipal,
-    @Param('id') id: string,
-    @Body() dto: CancelOrderDto,
-  ) {
+  cancel(@CurrentUser() user: AuthPrincipal, @Param('id') id: string, @Body() dto: CancelOrderDto) {
     return this.orders.customerCancel(id, user.sub, dto.reason);
   }
 }

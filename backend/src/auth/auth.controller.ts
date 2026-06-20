@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { User } from '@prisma/client';
@@ -74,10 +66,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @Patch('me')
-  async updateProfile(
-    @CurrentUser() principal: AuthPrincipal,
-    @Body() dto: UpdateProfileDto,
-  ) {
+  async updateProfile(@CurrentUser() principal: AuthPrincipal, @Body() dto: UpdateProfileDto) {
     const user = await this.auth.updateProfile(principal.sub, dto);
     return { user: AuthController.toUserView(user) };
   }
@@ -92,11 +81,7 @@ export class AuthController {
     @CurrentUser() principal: AuthPrincipal,
     @Body() dto: ChangePasswordDto,
   ): Promise<void> {
-    await this.auth.changePassword(
-      principal.sub,
-      dto.currentPassword,
-      dto.newPassword,
-    );
+    await this.auth.changePassword(principal.sub, dto.currentPassword, dto.newPassword);
   }
 
   // Returns 200 with {ok:true} whether or not the email exists — never leak
@@ -136,15 +121,8 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @Post('change-email')
-  async changeEmail(
-    @CurrentUser() principal: AuthPrincipal,
-    @Body() dto: ChangeEmailDto,
-  ) {
-    await this.auth.requestEmailChange(
-      principal.sub,
-      dto.newEmail,
-      dto.password,
-    );
+  async changeEmail(@CurrentUser() principal: AuthPrincipal, @Body() dto: ChangeEmailDto) {
+    await this.auth.requestEmailChange(principal.sub, dto.newEmail, dto.password);
     return { ok: true };
   }
 
@@ -156,11 +134,7 @@ export class AuthController {
     return this.auth.confirmEmailChange(dto.token);
   }
 
-  private static toSession(input: {
-    accessToken: string;
-    refreshToken: string;
-    user: User;
-  }) {
+  private static toSession(input: { accessToken: string; refreshToken: string; user: User }) {
     return {
       accessToken: input.accessToken,
       refreshToken: input.refreshToken,

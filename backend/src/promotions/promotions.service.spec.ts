@@ -5,10 +5,7 @@ import { PromotionsService } from './promotions.service';
  * reads counters). A per-campaign advisory lock serialises redemptions of the
  * same campaign in the order tx; these lock the re-check + increment behaviour.
  */
-function makeTx(opts: {
-  campaign: Record<string, unknown> | null;
-  userCount?: number;
-}) {
+function makeTx(opts: { campaign: Record<string, unknown> | null; userCount?: number }) {
   const executeRaw = jest.fn().mockResolvedValue(1);
   const findUnique = jest.fn().mockResolvedValue(opts.campaign);
   const count = jest.fn().mockResolvedValue(opts.userCount ?? 0);

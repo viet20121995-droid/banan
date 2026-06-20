@@ -49,8 +49,7 @@ export class KitchenAnalyticsController {
     // Admin must name the kitchen via ?kitchenId=; staff are pinned to theirs.
     // Never pass an undefined kitchenId to the query (it would silently read
     // every kitchen's orders).
-    const kitchenId =
-      user.role === Role.ADMIN ? kitchenIdParam : user.kitchenId;
+    const kitchenId = user.role === Role.ADMIN ? kitchenIdParam : user.kitchenId;
     if (!kitchenId) {
       throw new BadRequestException({
         code: 'NO_KITCHEN_ASSIGNED',

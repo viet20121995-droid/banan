@@ -46,9 +46,7 @@ export class PayOSPaymentService {
     orderCode: string;
     amount: string;
     currency: string;
-  }): Promise<
-    { paymentId: string; redirectUrl: string } | { configurationError: string }
-  > {
+  }): Promise<{ paymentId: string; redirectUrl: string } | { configurationError: string }> {
     if (!this.enabled) {
       return {
         configurationError:
@@ -61,13 +59,10 @@ export class PayOSPaymentService {
       this.config.get<string>('PAYOS_ENDPOINT') ??
       'https://api-merchant.payos.vn/v2/payment-requests';
     const customerBase =
-      this.config.get<string>('CUSTOMER_APP_BASE_URL') ??
-      'http://localhost:8081';
+      this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081';
     const returnUrl =
-      this.config.get<string>('PAYOS_RETURN_URL') ??
-      `${customerBase}/payments/return/payos`;
-    const cancelUrl =
-      this.config.get<string>('PAYOS_CANCEL_URL') ?? returnUrl;
+      this.config.get<string>('PAYOS_RETURN_URL') ?? `${customerBase}/payments/return/payos`;
+    const cancelUrl = this.config.get<string>('PAYOS_CANCEL_URL') ?? returnUrl;
 
     // PayOS requires a NUMERIC, per-merchant-unique orderCode. A Postgres
     // sequence makes it collision-proof (vs timestamp codes that clash for
@@ -88,9 +83,7 @@ export class PayOSPaymentService {
       `&description=${description}` +
       `&orderCode=${orderCode}` +
       `&returnUrl=${returnUrl}`;
-    const signature = createHmac('sha256', this.checksumKey)
-      .update(signatureInput)
-      .digest('hex');
+    const signature = createHmac('sha256', this.checksumKey).update(signatureInput).digest('hex');
 
     const body = {
       orderCode,
@@ -162,9 +155,7 @@ export class PayOSPaymentService {
         return `${k}=${val}`;
       })
       .join('&');
-    const expected = createHmac('sha256', this.checksumKey)
-      .update(signData)
-      .digest('hex');
+    const expected = createHmac('sha256', this.checksumKey).update(signData).digest('hex');
     if (expected !== provided) {
       this.logger.warn('PayOS webhook signature mismatch');
       return { ok: false };

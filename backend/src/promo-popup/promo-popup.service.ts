@@ -46,11 +46,7 @@ export class PromoPopupService {
           ? patch.ctaLabel.trim()
           : null;
     const trimmedCtaUrl =
-      patch.ctaUrl === undefined
-        ? undefined
-        : patch.ctaUrl?.trim()
-          ? patch.ctaUrl.trim()
-          : null;
+      patch.ctaUrl === undefined ? undefined : patch.ctaUrl?.trim() ? patch.ctaUrl.trim() : null;
 
     // Ensure the singleton row exists before applying the patch — the
     // `increment` operator below only works in `update`, not `create`.

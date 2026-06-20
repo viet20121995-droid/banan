@@ -36,7 +36,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         body = {
           error: {
             code: obj.code ?? exception.name,
-            message: Array.isArray(obj.message) ? obj.message.join('; ') : (obj.message ?? exception.message),
+            message: Array.isArray(obj.message)
+              ? obj.message.join('; ')
+              : (obj.message ?? exception.message),
             details: obj.details,
           },
         };

@@ -102,10 +102,8 @@ export class NotificationsService {
         select: { email: true, fullName: true },
       });
       if (!user) return;
-      const orderId =
-        typeof data?.orderId === 'string' ? (data.orderId as string) : undefined;
-      const orderCode =
-        typeof data?.code === 'string' ? (data.code as string) : undefined;
+      const orderId = typeof data?.orderId === 'string' ? (data.orderId as string) : undefined;
+      const orderCode = typeof data?.code === 'string' ? (data.code as string) : undefined;
       await this.email.sendOrderStatusEmail({
         toEmail: user.email,
         toName: user.fullName,
@@ -148,11 +146,7 @@ export class NotificationsService {
     return { recipients: users.length };
   }
 
-  async listForUser(
-    userId: string,
-    page = 1,
-    perPage = 30,
-  ) {
+  async listForUser(userId: string, page = 1, perPage = 30) {
     const skip = (page - 1) * perPage;
     const [items, total, unread] = await this.prisma.$transaction([
       this.prisma.notification.findMany({

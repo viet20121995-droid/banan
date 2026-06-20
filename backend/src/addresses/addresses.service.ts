@@ -46,11 +46,7 @@ export class AddressesService {
     });
   }
 
-  async update(
-    userId: string,
-    id: string,
-    dto: UpdateAddressDto,
-  ): Promise<Address> {
+  async update(userId: string, id: string, dto: UpdateAddressDto): Promise<Address> {
     await this.owned(userId, id);
     return this.prisma.$transaction(async (tx) => {
       if (dto.isDefault === true) {
@@ -63,24 +59,14 @@ export class AddressesService {
         where: { id },
         data: {
           ...(dto.label !== undefined ? { label: dto.label.trim() } : {}),
-          ...(dto.recipient !== undefined
-            ? { recipient: dto.recipient.trim() }
-            : {}),
+          ...(dto.recipient !== undefined ? { recipient: dto.recipient.trim() } : {}),
           ...(dto.phone !== undefined ? { phone: dto.phone.trim() } : {}),
           ...(dto.line1 !== undefined ? { line1: dto.line1.trim() } : {}),
-          ...(dto.line2 !== undefined
-            ? { line2: dto.line2.trim() || null }
-            : {}),
+          ...(dto.line2 !== undefined ? { line2: dto.line2.trim() || null } : {}),
           ...(dto.city !== undefined ? { city: dto.city.trim() } : {}),
-          ...(dto.district !== undefined
-            ? { district: dto.district.trim() || null }
-            : {}),
-          ...(dto.wardCode !== undefined
-            ? { wardCode: dto.wardCode.trim() || null }
-            : {}),
-          ...(dto.postalCode !== undefined
-            ? { postalCode: dto.postalCode.trim() || null }
-            : {}),
+          ...(dto.district !== undefined ? { district: dto.district.trim() || null } : {}),
+          ...(dto.wardCode !== undefined ? { wardCode: dto.wardCode.trim() || null } : {}),
+          ...(dto.postalCode !== undefined ? { postalCode: dto.postalCode.trim() || null } : {}),
           ...(dto.isDefault === true ? { isDefault: true } : {}),
         },
       });

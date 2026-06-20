@@ -1,11 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import {
-  LoyaltyEvent,
-  LoyaltyEventType,
-  MembershipTier,
-  Order,
-  Prisma,
-} from '@prisma/client';
+import { LoyaltyEvent, LoyaltyEventType, MembershipTier, Order, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -38,10 +32,7 @@ export class LoyaltyService {
    * Awards earn-points for a completed order. Idempotent — re-completing the
    * same order won't double-award (we check for an existing EARN event).
    */
-  async earnFor(
-    order: Order,
-    db?: Prisma.TransactionClient,
-  ): Promise<LoyaltyEvent | null> {
+  async earnFor(order: Order, db?: Prisma.TransactionClient): Promise<LoyaltyEvent | null> {
     const subtotal = Number(order.subtotal.toString());
     const points = Math.floor(subtotal / CONFIG.earnRatePerVnd);
     if (points <= 0) return null;

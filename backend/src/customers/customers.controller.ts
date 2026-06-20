@@ -96,16 +96,8 @@ export class CustomersController {
   }
 
   @Post('broadcast')
-  broadcast(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: BroadcastDto,
-  ) {
-    return this.customers.broadcast(
-      this.scope(user),
-      dto.title,
-      dto.body,
-      dto.tag,
-    );
+  broadcast(@CurrentUser() user: AuthPrincipal, @Body() dto: BroadcastDto) {
+    return this.customers.broadcast(this.scope(user), dto.title, dto.body, dto.tag);
   }
 
   @Post(':id/notify')
@@ -124,12 +116,7 @@ export class CustomersController {
     @Param('id') id: string,
     @Body() dto: AdjustPointsDto,
   ) {
-    return this.customers.adjustPoints(
-      this.scope(user),
-      id,
-      dto.delta,
-      dto.reason,
-    );
+    return this.customers.adjustPoints(this.scope(user), id, dto.delta, dto.reason);
   }
 
   @Patch(':id/notes')
@@ -138,12 +125,7 @@ export class CustomersController {
     @Param('id') id: string,
     @Body() dto: UpdateNotesDto,
   ) {
-    return this.customers.updateNotes(
-      this.scope(user),
-      id,
-      dto.notes,
-      dto.tags,
-    );
+    return this.customers.updateNotes(this.scope(user), id, dto.notes, dto.tags);
   }
 
   @Post(':id/coupon')

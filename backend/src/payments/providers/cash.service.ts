@@ -43,10 +43,7 @@ export class CashPaymentService {
   // `db` lets the caller run this inside its transaction so the cash-payment
   // state change commits atomically with the order status; defaults to the
   // base client for standalone use.
-  async markCollected(
-    orderId: string,
-    db: Prisma.TransactionClient = this.prisma,
-  ): Promise<void> {
+  async markCollected(orderId: string, db: Prisma.TransactionClient = this.prisma): Promise<void> {
     await db.payment.updateMany({
       where: { orderId, provider: 'CASH', status: 'AUTHORIZED' },
       data: { status: 'CAPTURED' },

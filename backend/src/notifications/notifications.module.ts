@@ -11,11 +11,7 @@ import { PushService } from './push.service';
 
 @Module({
   imports: [RealtimeModule],
-  controllers: [
-    NotificationsController,
-    MeDevicesController,
-    BroadcastController,
-  ],
+  controllers: [NotificationsController, MeDevicesController, BroadcastController],
   providers: [NotificationsService, EmailService, PushService],
   exports: [NotificationsService, EmailService],
 })

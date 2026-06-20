@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Banner } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,8 +26,7 @@ export class BannersService {
 
   /** Merchant — their store's banners + chain-wide (admin sees all). */
   async listForStore(storeId: string | null) {
-    const where =
-      storeId === null ? {} : { OR: [{ storeId }, { storeId: null }] };
+    const where = storeId === null ? {} : { OR: [{ storeId }, { storeId: null }] };
     const banners = await this.prisma.banner.findMany({
       where,
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
@@ -58,15 +53,9 @@ export class BannersService {
     const updated = await this.prisma.banner.update({
       where: { id },
       data: {
-        ...(dto.imageUrl !== undefined
-          ? { imageUrl: dto.imageUrl.trim() }
-          : {}),
-        ...(dto.title !== undefined
-          ? { title: dto.title.trim() || null }
-          : {}),
-        ...(dto.ctaUrl !== undefined
-          ? { ctaUrl: dto.ctaUrl.trim() || null }
-          : {}),
+        ...(dto.imageUrl !== undefined ? { imageUrl: dto.imageUrl.trim() } : {}),
+        ...(dto.title !== undefined ? { title: dto.title.trim() || null } : {}),
+        ...(dto.ctaUrl !== undefined ? { ctaUrl: dto.ctaUrl.trim() || null } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
@@ -102,9 +91,7 @@ export class BannersService {
       isActive: b.isActive,
       chainWide: b.storeId === null,
       editable:
-        viewerStoreId === undefined
-          ? true
-          : viewerStoreId === null || b.storeId === viewerStoreId,
+        viewerStoreId === undefined ? true : viewerStoreId === null || b.storeId === viewerStoreId,
     };
   }
 }

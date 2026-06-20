@@ -12,15 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import {
-  IsBoolean,
-  IsInt,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-  MinLength,
-} from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
@@ -111,10 +103,7 @@ export class MerchantBannersController {
   }
 
   @Post()
-  create(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: CreateBannerDto,
-  ) {
+  create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateBannerDto) {
     return this.banners.create(this.scope(user), dto);
   }
 

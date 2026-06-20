@@ -1,8 +1,4 @@
-import {
-  ACCEPTED_IMAGE_MIMES,
-  extForMime,
-  sniffImageBuffer,
-} from './image-validation';
+import { ACCEPTED_IMAGE_MIMES, extForMime, sniffImageBuffer } from './image-validation';
 
 /**
  * Locks the upload anti-spoof rules: a payload is accepted only if its real

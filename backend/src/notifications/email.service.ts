@@ -24,25 +24,19 @@ export class EmailService {
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     this.client = apiKey ? new Resend(apiKey) : null;
-    this.from =
-      this.config.get<string>('EMAIL_FROM') ?? 'Banan <onboarding@resend.dev>';
+    this.from = this.config.get<string>('EMAIL_FROM') ?? 'Banan <onboarding@resend.dev>';
     this.customerAppUrl =
-      this.config.get<string>('CUSTOMER_APP_BASE_URL') ??
-      'http://localhost:8081';
+      this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081';
     // Public API base for self-handled email links (newsletter confirm /
     // unsubscribe). Prefer PUBLIC_API_URL; else derive api.<BASE_DOMAIN>.
     const domain = this.config.get<string>('BASE_DOMAIN');
     this.apiUrl = (
       this.config.get<string>('PUBLIC_API_URL') ??
-      (domain
-        ? `https://api.${domain}/api/v1`
-        : 'http://localhost:3000/api/v1')
+      (domain ? `https://api.${domain}/api/v1` : 'http://localhost:3000/api/v1')
     ).replace(/\/$/, '');
 
     if (!this.client) {
-      this.logger.warn(
-        'RESEND_API_KEY not set — emails will be logged, not sent.',
-      );
+      this.logger.warn('RESEND_API_KEY not set — emails will be logged, not sent.');
     }
   }
 
@@ -69,18 +63,14 @@ export class EmailService {
       body: args.template.body,
       recipientName: args.toName,
       orderCode: args.orderCode,
-      orderUrl: args.orderId
-        ? `${this.customerAppUrl}/orders/${args.orderId}`
-        : null,
+      orderUrl: args.orderId ? `${this.customerAppUrl}/orders/${args.orderId}` : null,
     });
     const subject = args.orderCode
       ? `${args.template.title} · Đơn ${args.orderCode}`
       : args.template.title;
 
     if (!this.client) {
-      this.logger.log(
-        `[email dry-run] to=${args.toEmail} subject="${subject}"`,
-      );
+      this.logger.log(`[email dry-run] to=${args.toEmail} subject="${subject}"`);
       return;
     }
 
@@ -97,9 +87,7 @@ export class EmailService {
         );
       }
     } catch (err) {
-      this.logger.warn(
-        `Failed to send email to ${args.toEmail}: ${(err as Error).message}`,
-      );
+      this.logger.warn(`Failed to send email to ${args.toEmail}: ${(err as Error).message}`);
     }
   }
 
@@ -110,16 +98,10 @@ export class EmailService {
   /// false for a skipped/synthetic address, dry-run (no API key), provider
   /// error, or a thrown exception. Callers (e.g. campaign send) use this to
   /// count real sends instead of inflating the figure on failures/dry-runs.
-  async sendRaw(args: {
-    toEmail: string;
-    subject: string;
-    html: string;
-  }): Promise<boolean> {
+  async sendRaw(args: { toEmail: string; subject: string; html: string }): Promise<boolean> {
     if (!isRealEmail(args.toEmail)) return false;
     if (!this.client) {
-      this.logger.log(
-        `[email dry-run] to=${args.toEmail} subject="${args.subject}"`,
-      );
+      this.logger.log(`[email dry-run] to=${args.toEmail} subject="${args.subject}"`);
       return false;
     }
     try {
@@ -130,16 +112,12 @@ export class EmailService {
         html: args.html,
       });
       if (result.error) {
-        this.logger.warn(
-          `Resend error to ${args.toEmail}: ${result.error.message}`,
-        );
+        this.logger.warn(`Resend error to ${args.toEmail}: ${result.error.message}`);
         return false;
       }
       return true;
     } catch (err) {
-      this.logger.warn(
-        `Failed sending to ${args.toEmail}: ${(err as Error).message}`,
-      );
+      this.logger.warn(`Failed sending to ${args.toEmail}: ${(err as Error).message}`);
       return false;
     }
   }
@@ -172,14 +150,10 @@ export class EmailService {
         html,
       });
       if (result.error) {
-        this.logger.warn(
-          `Resend error (reset) to ${args.toEmail}: ${result.error.message}`,
-        );
+        this.logger.warn(`Resend error (reset) to ${args.toEmail}: ${result.error.message}`);
       }
     } catch (err) {
-      this.logger.warn(
-        `Failed sending reset to ${args.toEmail}: ${(err as Error).message}`,
-      );
+      this.logger.warn(`Failed sending reset to ${args.toEmail}: ${(err as Error).message}`);
     }
   }
 
@@ -287,10 +261,7 @@ function renderOrderEmail(args: {
 
 /// Password-reset email — same Banan-branded shell with a prominent
 /// "Đặt lại mật khẩu" button and a 60-minute expiry note.
-function renderResetEmail(args: {
-  recipientName: string;
-  resetUrl: string;
-}): string {
+function renderResetEmail(args: { recipientName: string; resetUrl: string }): string {
   const url = escapeHtml(args.resetUrl);
   return `<!doctype html>
 <html lang="vi">

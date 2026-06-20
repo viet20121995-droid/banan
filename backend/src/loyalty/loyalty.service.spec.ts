@@ -17,7 +17,13 @@ function makeService(balance: number, opts: { decrementBlocked?: boolean } = {})
       }),
       // Guarded decrement: applies only when the balance covers it (gte).
       updateMany: jest.fn(
-        ({ where, data }: { where: { pointsBalance?: { gte?: number } }; data: { pointsBalance?: { increment?: number } } }) => {
+        ({
+          where,
+          data,
+        }: {
+          where: { pointsBalance?: { gte?: number } };
+          data: { pointsBalance?: { increment?: number } };
+        }) => {
           const gte = where?.pointsBalance?.gte;
           if (opts.decrementBlocked || (gte !== undefined && current < gte)) {
             return Promise.resolve({ count: 0 });
@@ -29,11 +35,7 @@ function makeService(balance: number, opts: { decrementBlocked?: boolean } = {})
       ),
     },
     loyaltyEvent: {
-      create: jest
-        .fn()
-        .mockImplementation(({ data }) =>
-          Promise.resolve({ ...data, id: 'e1' }),
-        ),
+      create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...data, id: 'e1' })),
     },
   };
   const prisma = {
@@ -48,9 +50,9 @@ function makeService(balance: number, opts: { decrementBlocked?: boolean } = {})
 describe('LoyaltyService.adminAdjust', () => {
   it('rejects a zero / non-integer delta', async () => {
     const { svc } = makeService(100);
-    await expect(
-      svc.adminAdjust({ userId: 'u1', delta: 0, reason: 'x' }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.adminAdjust({ userId: 'u1', delta: 0, reason: 'x' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('rejects an adjustment that would go negative', async () => {

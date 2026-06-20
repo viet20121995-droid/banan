@@ -33,13 +33,8 @@ export class AddressesController {
   }
 
   @Post()
-  async create(
-    @CurrentUser() user: AuthPrincipal,
-    @Body() dto: CreateAddressDto,
-  ) {
-    return AddressesController.view(
-      await this.addresses.create(user.sub, dto),
-    );
+  async create(@CurrentUser() user: AuthPrincipal, @Body() dto: CreateAddressDto) {
+    return AddressesController.view(await this.addresses.create(user.sub, dto));
   }
 
   @Patch(':id')
@@ -48,28 +43,18 @@ export class AddressesController {
     @Param('id') id: string,
     @Body() dto: UpdateAddressDto,
   ) {
-    return AddressesController.view(
-      await this.addresses.update(user.sub, id, dto),
-    );
+    return AddressesController.view(await this.addresses.update(user.sub, id, dto));
   }
 
   @Post(':id/default')
   @HttpCode(HttpStatus.OK)
-  async setDefault(
-    @CurrentUser() user: AuthPrincipal,
-    @Param('id') id: string,
-  ) {
-    return AddressesController.view(
-      await this.addresses.setDefault(user.sub, id),
-    );
+  async setDefault(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
+    return AddressesController.view(await this.addresses.setDefault(user.sub, id));
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(
-    @CurrentUser() user: AuthPrincipal,
-    @Param('id') id: string,
-  ): Promise<void> {
+  async remove(@CurrentUser() user: AuthPrincipal, @Param('id') id: string): Promise<void> {
     await this.addresses.remove(user.sub, id);
   }
 

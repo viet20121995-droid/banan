@@ -15,10 +15,7 @@ import { RefundsService } from './refunds.service';
  *  - inside an interactive tx it must NOT swallow the violation (that would
  *    poison the caller's transaction).
  */
-function makeService(refundMock: {
-  findFirst: jest.Mock;
-  create: jest.Mock;
-}) {
+function makeService(refundMock: { findFirst: jest.Mock; create: jest.Mock }) {
   const prisma = { refund: refundMock };
   const realtime = { emit: jest.fn() };
   const noop = {} as never;
@@ -43,10 +40,7 @@ describe('RefundsService.createRequestTx', () => {
     const findFirst = jest.fn().mockResolvedValue(null);
     const create = jest.fn().mockResolvedValue({ id: 'r1' });
     const { svc } = makeService({ findFirst, create });
-    const res = await svc.createRequestTx(
-      { refund: { findFirst, create } } as never,
-      args,
-    );
+    const res = await svc.createRequestTx({ refund: { findFirst, create } } as never, args);
     expect(res.created).toBe(true);
     expect(create).toHaveBeenCalledTimes(1);
   });
@@ -55,10 +49,7 @@ describe('RefundsService.createRequestTx', () => {
     const findFirst = jest.fn().mockResolvedValue({ id: 'r-existing' });
     const create = jest.fn();
     const { svc } = makeService({ findFirst, create });
-    const res = await svc.createRequestTx(
-      { refund: { findFirst, create } } as never,
-      args,
-    );
+    const res = await svc.createRequestTx({ refund: { findFirst, create } } as never, args);
     expect(res).toEqual({ refund: { id: 'r-existing' }, created: false });
     expect(create).not.toHaveBeenCalled();
   });

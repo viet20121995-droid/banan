@@ -27,11 +27,7 @@ export class ReportsService {
   /// Builds the canonical date range — used by every endpoint so the
   /// query semantics stay consistent ("from 2026-05-01 to 2026-05-31"
   /// means *every order placed on those days* inclusive).
-  parseRange(input: {
-    from?: string;
-    to?: string;
-    storeId?: string;
-  }): ReportRange {
+  parseRange(input: { from?: string; to?: string; storeId?: string }): ReportRange {
     if (!input.from || !input.to) {
       throw new BadRequestException({
         code: 'RANGE_REQUIRED',
@@ -112,10 +108,7 @@ export class ReportsService {
       totals.coupons += num(o.couponDiscount);
       totals.pointsBurned += num(o.pointsDiscount);
     }
-    totals.avgOrderValue =
-      totals.completed > 0
-        ? Math.round(totals.revenue / totals.completed)
-        : 0;
+    totals.avgOrderValue = totals.completed > 0 ? Math.round(totals.revenue / totals.completed) : 0;
 
     // Daily revenue series (ICT day).
     const dailyMap = new Map<string, { revenue: number; orders: number }>();
@@ -140,8 +133,7 @@ export class ReportsService {
     const paymentMethods: Record<string, number> = {};
     for (const o of orders) {
       for (const p of o.payments) {
-        paymentMethods[p.provider] =
-          (paymentMethods[p.provider] ?? 0) + 1;
+        paymentMethods[p.provider] = (paymentMethods[p.provider] ?? 0) + 1;
       }
     }
 

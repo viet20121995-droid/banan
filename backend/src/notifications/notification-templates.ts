@@ -22,8 +22,7 @@ const ORDER_STATUS_BODY: Record<OrderStatus, (code: string) => string> = {
   PENDING: (c) => `Đã tạo đơn ${c}.`,
   ACCEPTED: (c) => `Đơn ${c} của bạn đã được tiếp nhận.`,
   IN_PREPARATION: (c) => `Chúng tôi đang chuẩn bị đơn ${c}.`,
-  SENT_TO_KITCHEN: (c) =>
-    `Đơn ${c} đang được làm tại bếp trung tâm.`,
+  SENT_TO_KITCHEN: (c) => `Đơn ${c} đang được làm tại bếp trung tâm.`,
   READY_FOR_PICKUP: (c) => `Đơn ${c} đã sẵn sàng để lấy!`,
   DELIVERING: (c) => `Đơn ${c} đang trên đường giao!`,
   COMPLETED: (c) => `Cảm ơn bạn đã đặt đơn ${c}. Chúc ngon miệng!`,
@@ -37,10 +36,7 @@ const KITCHEN_STATUS_LABEL: Record<KitchenStatus, string> = {
   READY_DISPATCH: 'Sẵn sàng giao đi',
 };
 
-export function orderStatusNotification(
-  code: string,
-  status: OrderStatus,
-): NotificationTemplate {
+export function orderStatusNotification(code: string, status: OrderStatus): NotificationTemplate {
   return {
     type: 'order.status_changed',
     title: ORDER_STATUS_LABEL[status],
