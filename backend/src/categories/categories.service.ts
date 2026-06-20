@@ -26,9 +26,11 @@ export class CategoriesService {
 
   /** Customer home — categories pinned to home, each with a handful of
    *  available products for a featured strip (replaces the old Collection
-   *  home strips). Empty pinned categories are skipped. */
+   *  home strips). Empty pinned categories are skipped. Products are decorated
+   *  with isBirthdayCake (= the category's flag, so the cake wizard fires from a
+   *  strip too) + review summary, matching the /products endpoints. */
   async homePinned() {
-    return this.prisma.category.findMany({
+    const categories = await this.prisma.category.findMany({
       where: {
         isPinnedToHome: true,
         products: { some: { isAvailable: true } },
@@ -45,6 +47,43 @@ export class CategoriesService {
         },
       },
     });
+    const summaries = await this.reviewSummaries(
+      categories.flatMap((c) => c.products.map((p) => p.id)),
+    );
+    return categories.map((c) => ({
+      ...c,
+      products: c.products.map((p) => ({
+        ...p,
+        // Every product in this strip belongs to category c, so its birthday
+        // status is c's flag.
+        isBirthdayCake: c.isBirthdayCakeCategory,
+        averageRating: summaries[p.id]?.averageRating ?? 0,
+        reviewCount: summaries[p.id]?.reviewCount ?? 0,
+      })),
+    }));
+  }
+
+  /** Published-review avg + count per product. Inlined (not ReviewsService) to
+   *  avoid a circular module dependency, mirroring ProductsService. */
+  private async reviewSummaries(
+    productIds: string[],
+  ): Promise<Record<string, { averageRating: number; reviewCount: number }>> {
+    if (productIds.length === 0) return {};
+    const rows = await this.prisma.review.groupBy({
+      by: ['productId'],
+      where: { productId: { in: productIds }, status: 'PUBLISHED' },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+    return Object.fromEntries(
+      rows.map((r) => [
+        r.productId,
+        {
+          averageRating: r._avg.rating ?? 0,
+          reviewCount: r._count.rating ?? 0,
+        },
+      ]),
+    );
   }
 
   async findOne(id: string) {
@@ -55,7 +94,16 @@ export class CategoriesService {
 
   async create(dto: CreateCategoryDto) {
     try {
-      return await this.prisma.category.create({ data: dto });
+      return await this.prisma.$transaction(async (tx) => {
+        // At most one birthday-cake category — clear the flag elsewhere first.
+        if (dto.isBirthdayCakeCategory === true) {
+          await tx.category.updateMany({
+            where: { isBirthdayCakeCategory: true },
+            data: { isBirthdayCakeCategory: false },
+          });
+        }
+        return tx.category.create({ data: dto });
+      });
     } catch (e) {
       this.rethrowSlugConflict(e);
     }
@@ -64,7 +112,15 @@ export class CategoriesService {
   async update(id: string, dto: UpdateCategoryDto) {
     await this.findOne(id);
     try {
-      return await this.prisma.category.update({ where: { id }, data: dto });
+      return await this.prisma.$transaction(async (tx) => {
+        if (dto.isBirthdayCakeCategory === true) {
+          await tx.category.updateMany({
+            where: { isBirthdayCakeCategory: true, id: { not: id } },
+            data: { isBirthdayCakeCategory: false },
+          });
+        }
+        return tx.category.update({ where: { id }, data: dto });
+      });
     } catch (e) {
       this.rethrowSlugConflict(e);
     }

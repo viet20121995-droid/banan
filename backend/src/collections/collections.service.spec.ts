@@ -153,7 +153,9 @@ describe('CollectionsService.findOnePublic (customer availability filter)', () =
           ],
         }),
       },
-      deliveryConfig: { findUnique: jest.fn().mockResolvedValue(null) },
+      // birthdayCakeProductIds now queries product.findMany (category-flag
+      // based) instead of deliveryConfig — return [] so no birthday decoration.
+      product: { findMany: jest.fn().mockResolvedValue([]) },
     };
     return new CollectionsService(prisma as unknown as PrismaService);
   }

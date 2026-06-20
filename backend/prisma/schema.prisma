@@ -295,6 +295,10 @@ model Category {
   /// home page (replacing the old Collection strips). All categories always
   /// appear as menu filter chips regardless of this flag.
   isPinnedToHome Boolean @default(false)
+  /// At most ONE category is the "birthday cake" category. Products in it get
+  /// isBirthdayCake=true (drives the cake-personalization wizard + the
+  /// birthday delivery-fee tier). Replaces the old Collection-slug mechanism.
+  isBirthdayCakeCategory Boolean @default(false)
   products  Product[]
 }
 

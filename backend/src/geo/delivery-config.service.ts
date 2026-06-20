@@ -67,16 +67,16 @@ export class DeliveryConfigService {
     return sameWard ? config.standardFeeSameWardVnd : config.standardFeeOtherWardVnd;
   }
 
-  /// True when any of the given product ids belongs to the birthday-cake
-  /// collection (matched by `birthdayCakeCollectionSlug` on the config).
-  async cartHasBirthdayCake(productIds: string[], config?: DeliveryConfig): Promise<boolean> {
+  /// True when any of the given product ids is a "birthday cake" — i.e. its
+  /// Category is flagged `isBirthdayCakeCategory`. Drives the birthday delivery
+  /// fee tier. (`config` is accepted for call-site compatibility but no longer
+  /// used — detection moved from a Collection slug to the Category flag.)
+  async cartHasBirthdayCake(productIds: string[], _config?: DeliveryConfig): Promise<boolean> {
     if (productIds.length === 0) return false;
-    const slug = (config ?? (await this.get())).birthdayCakeCollectionSlug;
-    if (!slug) return false;
-    const count = await this.prisma.collectionItem.count({
+    const count = await this.prisma.product.count({
       where: {
-        productId: { in: productIds },
-        collection: { slug },
+        id: { in: productIds },
+        category: { isBirthdayCakeCategory: true },
       },
     });
     return count > 0;

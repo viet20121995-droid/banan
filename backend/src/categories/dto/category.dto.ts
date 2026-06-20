@@ -33,6 +33,10 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsBoolean()
   isPinnedToHome?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isBirthdayCakeCategory?: boolean;
 }
 
 /** New display order: the full list of category ids in the desired order. */
@@ -66,4 +70,8 @@ export class UpdateCategoryDto {
   @IsOptional()
   @IsBoolean()
   isPinnedToHome?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isBirthdayCakeCategory?: boolean;
 }
