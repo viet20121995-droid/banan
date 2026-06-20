@@ -42,6 +42,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
   final _slug = TextEditingController();
   String? _coverUrl;
   bool _isPinnedToHome = false;
+  bool _isBirthdayCakeCategory = false;
   int _sortOrder = 0;
 
   bool _saving = false;
@@ -62,6 +63,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
     _slug.text = c.slug;
     _coverUrl = c.imageUrl;
     _isPinnedToHome = c.isPinnedToHome;
+    _isBirthdayCakeCategory = c.isBirthdayCakeCategory;
     _sortOrder = c.sortOrder;
     setState(() {});
   }
@@ -78,6 +80,7 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
       slug: _slug.text.trim(),
       imageUrl: _coverUrl,
       isPinnedToHome: _isPinnedToHome,
+      isBirthdayCakeCategory: _isBirthdayCakeCategory,
       sortOrder: _sortOrder,
     );
 
@@ -167,11 +170,14 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                       children: [
                         TextFormField(
                           controller: _name,
-                          maxLength: 120,
+                          maxLength: 80,
                           decoration: const InputDecoration(labelText: 'Tên'),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Bắt buộc'
-                              : null,
+                          validator: (v) {
+                            final t = (v ?? '').trim();
+                            if (t.isEmpty) return 'Bắt buộc';
+                            if (t.length > 80) return 'Tối đa 80 ký tự';
+                            return null;
+                          },
                           onChanged: (v) {
                             if (_slug.text.isEmpty) {
                               _slug.text = _slugify(v);
@@ -181,15 +187,18 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                         const SizedBox(height: BananSpacing.md),
                         TextFormField(
                           controller: _slug,
-                          maxLength: 160,
+                          maxLength: 80,
                           decoration: const InputDecoration(
                             labelText: 'Slug URL',
                             helperText:
-                                'chữ thường, dấu gạch, duy nhất theo cửa hàng',
+                                'chữ thường, dấu gạch, duy nhất toàn hệ thống',
                           ),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Bắt buộc'
-                              : null,
+                          validator: (v) {
+                            final t = (v ?? '').trim();
+                            if (t.isEmpty) return 'Bắt buộc';
+                            if (t.length > 80) return 'Tối đa 80 ký tự';
+                            return null;
+                          },
                         ),
                         const SizedBox(height: BananSpacing.lg),
                         CoverImagePicker(
@@ -214,6 +223,19 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
                           value: _isPinnedToHome,
                           onChanged: (v) =>
                               setState(() => _isPinnedToHome = v),
+                        ),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Đây là danh mục Bánh sinh nhật'),
+                          subtitle: const Text(
+                            'Chỉ một danh mục được đặt làm danh mục Bánh sinh '
+                            'nhật. Sản phẩm trong danh mục này sẽ có trình '
+                            'tuỳ chỉnh bánh (cake personalization wizard) ở '
+                            'trang chi tiết của khách.',
+                          ),
+                          value: _isBirthdayCakeCategory,
+                          onChanged: (v) =>
+                              setState(() => _isBirthdayCakeCategory = v),
                         ),
                         const SizedBox(height: BananSpacing.sm),
                         Row(
@@ -245,10 +267,43 @@ class _CategoryEditorScreenState extends ConsumerState<CategoryEditorScreen> {
     );
   }
 
-  String _slugify(String s) => s
+  String _slugify(String s) => _foldVietnamese(s)
       .toLowerCase()
       .replaceAll(RegExp('[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
+
+  /// Folds Vietnamese diacritics to plain ASCII so slugs come out as
+  /// "banh-kem" instead of "b-nh-kem". Covers all tone/vowel marks plus đ/Đ.
+  static String _foldVietnamese(String s) {
+    const map = {
+      'a': 'àáạảãâầấậẩẫăằắặẳẵ',
+      'e': 'èéẹẻẽêềếệểễ',
+      'i': 'ìíịỉĩ',
+      'o': 'òóọỏõôồốộổỗơờớợởỡ',
+      'u': 'ùúụủũưừứựửữ',
+      'y': 'ỳýỵỷỹ',
+      'd': 'đ',
+    };
+    final buf = StringBuffer();
+    for (final ch in s.runes) {
+      final c = String.fromCharCode(ch);
+      final lower = c.toLowerCase();
+      String? base;
+      for (final entry in map.entries) {
+        if (entry.value.contains(lower)) {
+          base = entry.key;
+          break;
+        }
+      }
+      if (base == null) {
+        buf.write(c);
+      } else {
+        // Preserve original case (uppercase variants fold the same way).
+        buf.write(c == lower ? base : base.toUpperCase());
+      }
+    }
+    return buf.toString();
+  }
 }
 
 class _Section extends StatelessWidget {

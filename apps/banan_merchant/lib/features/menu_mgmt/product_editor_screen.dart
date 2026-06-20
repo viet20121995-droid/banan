@@ -42,6 +42,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
   late final TextEditingController _prep;
   late final TextEditingController _leadHours;
   late final TextEditingController _dailyMax;
+  late final TextEditingController _flavorPick;
   String? _categoryId;
   bool _available = true;
   bool _seasonal = false;
@@ -49,6 +50,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
   List<int> _availableDow = [];
   List<String> _images = [];
   List<String> _tags = [];
+  /// Macaron flavour-composer options. Empty = composer off.
+  List<String> _flavorOptions = [];
   List<VariantDraft> _variants = [VariantDraft(size: '6"', flavor: 'Classic')];
   bool _saving = false;
   bool _initialized = false;
@@ -64,6 +67,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _prep = TextEditingController(text: '60');
     _leadHours = TextEditingController();
     _dailyMax = TextEditingController();
+    _flavorPick = TextEditingController();
   }
 
   @override
@@ -75,6 +79,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _prep.dispose();
     _leadHours.dispose();
     _dailyMax.dispose();
+    _flavorPick.dispose();
     super.dispose();
   }
 
@@ -94,6 +99,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _availableDow = List.of(p.availableDaysOfWeek);
     _images = List.of(p.images);
     _tags = List.of(p.tags);
+    _flavorPick.text = p.flavorPickCount?.toString() ?? '';
+    _flavorOptions = List.of(p.flavorOptions);
     _variants = p.variants
         .map(
           (v) => VariantDraft(
@@ -167,6 +174,10 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
 
     final leadRaw = _leadHours.text.trim();
     final dailyRaw = _dailyMax.text.trim();
+    final flavorPickRaw = _flavorPick.text.trim();
+    // 0 / empty = composer off. Only carry options when the composer is on.
+    final flavorPick = flavorPickRaw.isEmpty ? 0 : int.tryParse(flavorPickRaw) ?? 0;
+    final composerOn = flavorPick > 0 && _flavorOptions.isNotEmpty;
     final draft = ProductDraft(
       categoryId: _categoryId!,
       name: _name.text.trim(),
@@ -182,6 +193,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       leadTimeHours: leadRaw.isEmpty ? null : int.tryParse(leadRaw),
       availableDaysOfWeek: List.of(_availableDow)..sort(),
       dailyMaxQuantity: dailyRaw.isEmpty ? null : int.tryParse(dailyRaw),
+      flavorPickCount: flavorPick,
+      flavorOptions: composerOn ? List.of(_flavorOptions) : const [],
     );
 
     final repo = ref.read(catalogRepositoryProvider);
@@ -516,6 +529,49 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                         ),
                       ],
                     ),
+                    _Section(
+                      title: 'Chọn vị (macaron)',
+                      children: [
+                        Text(
+                          'Dành cho set macaron / bánh nhiều vị. Khách sẽ chọn '
+                          'đúng số vị bên dưới từ danh sách vị có sẵn trước khi '
+                          'thêm vào giỏ. Để 0 (hoặc bỏ trống) nếu sản phẩm '
+                          'thường, không có chọn vị.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                        TextFormField(
+                          controller: _flavorPick,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Số vị khách phải chọn',
+                            helperText:
+                                '0 = tắt chọn vị. Ví dụ set 6 macaron → nhập 6.',
+                          ),
+                          validator: (v) {
+                            final t = (v ?? '').trim();
+                            if (t.isEmpty) return null;
+                            final n = int.tryParse(t);
+                            if (n == null || n < 0) {
+                              return 'Nhập số nguyên ≥ 0';
+                            }
+                            return null;
+                          },
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                        Text(
+                          'Danh sách vị',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: BananSpacing.xs),
+                        _FlavorOptionsInput(
+                          options: _flavorOptions,
+                          onChanged: (next) =>
+                              setState(() => _flavorOptions = next),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: BananSpacing.xxxl),
                   ],
                 ),
@@ -748,6 +804,86 @@ class _TagsInputState extends State<_TagsInput> {
             ),
           ),
           enabled: widget.tags.length < 8,
+          textInputAction: TextInputAction.done,
+          onSubmitted: _add,
+        ),
+      ],
+    );
+  }
+}
+
+/// Editable list of macaron flavour names — chips + an add field. Mirrors the
+/// custom-tag input pattern. Duplicates are ignored; order is preserved.
+class _FlavorOptionsInput extends StatefulWidget {
+  const _FlavorOptionsInput({required this.options, required this.onChanged});
+
+  final List<String> options;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  State<_FlavorOptionsInput> createState() => _FlavorOptionsInputState();
+}
+
+class _FlavorOptionsInputState extends State<_FlavorOptionsInput> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _add(String raw) {
+    final v = raw.trim();
+    if (v.isEmpty) return;
+    if (widget.options.contains(v)) {
+      _controller.clear();
+      return;
+    }
+    widget.onChanged([...widget.options, v]);
+    _controller.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.options.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: BananSpacing.sm),
+            child: Text(
+              'Chưa có vị nào. Thêm các vị như "Trà xanh", "Socola", "Dâu"…',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(bottom: BananSpacing.sm),
+            child: Wrap(
+              spacing: BananSpacing.sm,
+              runSpacing: BananSpacing.sm,
+              children: [
+                for (final f in widget.options)
+                  InputChip(
+                    label: Text(f),
+                    onDeleted: () => widget.onChanged(
+                      widget.options.where((x) => x != f).toList(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        TextField(
+          controller: _controller,
+          decoration: InputDecoration(
+            labelText: 'Thêm vị',
+            hintText: 'vd. Trà xanh, Socola',
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () => _add(_controller.text),
+            ),
+          ),
           textInputAction: TextInputAction.done,
           onSubmitted: _add,
         ),

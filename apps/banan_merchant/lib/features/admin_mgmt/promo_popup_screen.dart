@@ -261,7 +261,7 @@ class _FormState extends ConsumerState<_Form> {
                         maxLength: 500,
                         decoration: const InputDecoration(
                           labelText: 'Liên kết khi bấm',
-                          hintText: 'https://… hoặc /collections/birthday-cakes',
+                          hintText: 'https://… hoặc /product/<id>',
                         ),
                       ),
                     ],

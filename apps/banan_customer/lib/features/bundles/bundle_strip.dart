@@ -30,39 +30,94 @@ class BundleStrip extends ConsumerWidget {
       orElse: () => const SizedBox.shrink(),
       data: (bundles) {
         if (bundles.isEmpty) return const SizedBox.shrink();
-        final fmt = NumberFormat.currency(
-          locale: 'vi_VN',
-          symbol: '₫',
-          decimalDigits: 0,
-        );
-        return Padding(
-          padding: const EdgeInsets.only(bottom: BananSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SectionHeader(
-                overline: 'Tiết kiệm hơn',
-                title: 'Combo nổi bật',
-                subtitle: 'Đặt set có sẵn — rẻ hơn 10-20% so với mua lẻ.',
-              ),
-              SizedBox(
-                height: 270,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: BananSpacing.lg,
-                  ),
-                  itemCount: bundles.length,
-                  separatorBuilder: (_, __) =>
-                      const SizedBox(width: BananSpacing.md),
-                  itemBuilder: (context, i) =>
-                      _BundleCard(bundle: bundles[i], fmt: fmt),
-                ),
-              ),
-            ],
-          ),
+        return _BundlesCarousel(
+          overline: 'Tiết kiệm hơn',
+          title: 'Combo nổi bật',
+          subtitle: 'Đặt set có sẵn — rẻ hơn 10-20% so với mua lẻ.',
+          bundles: bundles,
         );
       },
+    );
+  }
+}
+
+/// Horizontal carousel of every ACTIVE combo (pinned + unpinned), so active
+/// combos that aren't featured on home are still browsable. Auto-hides when
+/// there are no active combos. Reuses the same card as [BundleStrip].
+class AllBundlesStrip extends ConsumerWidget {
+  const AllBundlesStrip({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pinned = ref.watch(homeBundlesProvider).valueOrNull ?? const [];
+    final async = ref.watch(allBundlesProvider);
+    return async.maybeWhen(
+      orElse: () => const SizedBox.shrink(),
+      data: (all) {
+        if (all.isEmpty) return const SizedBox.shrink();
+        // Drop the ones already shown in "Combo nổi bật" so the two strips
+        // don't repeat the same cards. Hide the section if nothing's left.
+        final pinnedIds = pinned.map((b) => b.id).toSet();
+        final rest = all.where((b) => !pinnedIds.contains(b.id)).toList();
+        if (rest.isEmpty) return const SizedBox.shrink();
+        return _BundlesCarousel(
+          overline: 'Combo',
+          title: 'Tất cả combo',
+          subtitle: 'Mọi set đang bán — chọn combo bạn thích.',
+          bundles: rest,
+        );
+      },
+    );
+  }
+}
+
+/// Shared layout for a labelled horizontal combo carousel.
+class _BundlesCarousel extends StatelessWidget {
+  const _BundlesCarousel({
+    required this.overline,
+    required this.title,
+    required this.subtitle,
+    required this.bundles,
+  });
+
+  final String overline;
+  final String title;
+  final String subtitle;
+  final List<Bundle> bundles;
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = NumberFormat.currency(
+      locale: 'vi_VN',
+      symbol: '₫',
+      decimalDigits: 0,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: BananSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            overline: overline,
+            title: title,
+            subtitle: subtitle,
+          ),
+          SizedBox(
+            height: 270,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(
+                horizontal: BananSpacing.lg,
+              ),
+              itemCount: bundles.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: BananSpacing.md),
+              itemBuilder: (context, i) =>
+                  _BundleCard(bundle: bundles[i], fmt: fmt),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -305,12 +305,15 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
               iconSelected: Icons.confirmation_number,
               route: '/coupons',
             ),
-          const _NavItem(
-            label: 'Chương trình ưu đãi',
-            icon: Icons.redeem_outlined,
-            iconSelected: Icons.redeem,
-            route: '/marketing',
-          ),
+          // Loyalty / rewards programs are chain-wide admin config; the
+          // backend gates writes on owner/admin, so staff would hit a 403.
+          if (isAdmin || isOwner)
+            const _NavItem(
+              label: 'Chương trình ưu đãi',
+              icon: Icons.redeem_outlined,
+              iconSelected: Icons.redeem,
+              route: '/marketing',
+            ),
           const _NavItem(
             label: 'Popup quảng cáo',
             icon: Icons.ad_units_outlined,
@@ -406,18 +409,22 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
               iconSelected: Icons.local_shipping,
               route: '/admin/delivery-config',
             ),
-          const _NavItem(
-            label: 'Hiển thị (tồn kho…)',
-            icon: Icons.visibility_outlined,
-            iconSelected: Icons.visibility,
-            route: '/admin/display',
-          ),
-          const _NavItem(
-            label: 'Nội dung trang',
-            icon: Icons.article_outlined,
-            iconSelected: Icons.article,
-            route: '/settings/content',
-          ),
+          // Chain-wide display prefs + editorial page content are owner/admin
+          // config — staff hit a 403 on the underlying endpoints.
+          if (isAdmin || isOwner)
+            const _NavItem(
+              label: 'Hiển thị (tồn kho…)',
+              icon: Icons.visibility_outlined,
+              iconSelected: Icons.visibility,
+              route: '/admin/display',
+            ),
+          if (isAdmin || isOwner)
+            const _NavItem(
+              label: 'Nội dung trang',
+              icon: Icons.article_outlined,
+              iconSelected: Icons.article,
+              route: '/settings/content',
+            ),
           if (isAdmin)
             const _NavItem(
               label: 'Tài khoản',

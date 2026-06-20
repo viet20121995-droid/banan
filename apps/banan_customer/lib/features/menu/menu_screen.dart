@@ -29,16 +29,6 @@ import 'menu_controller.dart';
 import 'promo_popup_dialog.dart';
 import 'pwa_install.dart';
 
-/// Pinned collections shown as horizontal carousels at the top of the menu.
-final homeCollectionsProvider = FutureProvider<List<Collection>>((ref) async {
-  final repo = ref.watch(collectionsRepositoryProvider);
-  final res = await repo.homeCollections();
-  return res.when(
-    success: (list) => list,
-    failure: (_) => const [],
-  );
-});
-
 /// Merchant-managed hero banners for the home carousel.
 final homeBannersProvider = FutureProvider<List<HomeBanner>>((ref) async {
   final res = await ref.watch(bannersRepositoryProvider).publicList();
@@ -1104,9 +1094,7 @@ class _BodyState extends ConsumerState<_Body> {
     return RefreshIndicator(
       onRefresh: () async {
         await onRetry();
-        ref
-          ..invalidate(homeCollectionsProvider)
-          ..invalidate(homeThreadsProvider);
+        ref.invalidate(homeThreadsProvider);
       },
       child: CustomScrollView(
         controller: _scrollCtrl,
@@ -1144,6 +1132,7 @@ class _BodyState extends ConsumerState<_Body> {
               const SliverToBoxAdapter(child: _OrderAgainStrip()),
               SliverToBoxAdapter(child: _ThreadsStrip()),
               const SliverToBoxAdapter(child: BundleStrip()),
+              const SliverToBoxAdapter(child: AllBundlesStrip()),
               SliverToBoxAdapter(child: _PinnedCategories()),
             ],
             if (showHomeContent &&
@@ -1286,12 +1275,10 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
     final width = MediaQuery.sizeOf(context).width;
     final height = width < 700 ? 220.0 : 360.0;
 
-    // Prefer merchant-managed banners; otherwise fall back to promo posts +
-    // pinned collections; finally a branded slide so the hero is never empty.
+    // Prefer merchant-managed banners; otherwise fall back to promo posts;
+    // finally a branded slide so the hero is never empty.
     final banners = ref.watch(homeBannersProvider).valueOrNull ?? const [];
     final threads = ref.watch(homeThreadsProvider).valueOrNull ?? const [];
-    final collections =
-        ref.watch(homeCollectionsProvider).valueOrNull ?? const [];
     final slides = <({String? image, String title})>[
       if (banners.isNotEmpty)
         for (final b in banners)
@@ -1300,9 +1287,6 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
         for (final t in threads)
           if (t.gallery.isNotEmpty)
             (image: t.gallery.first, title: t.title),
-        for (final c in collections)
-          if ((c.imageUrl ?? '').isNotEmpty)
-            (image: c.imageUrl, title: c.name),
       ],
     ];
     if (slides.isEmpty) {
@@ -1957,30 +1941,6 @@ class _PinnedCategories extends ConsumerWidget {
   }
 }
 
-/// Pinned collections — each one renders as its own horizontal product carousel.
-/// Retained for reference; the home page now uses [_PinnedCategories]. Kept so
-/// the collection code stays buildable without being deleted.
-// ignore: unused_element
-class _PinnedCollections extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(homeCollectionsProvider);
-    return async.maybeWhen(
-      orElse: () => const SizedBox.shrink(),
-      data: (collections) {
-        final visible = collections.where((c) => c.products.isNotEmpty).toList();
-        if (visible.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final c in visible) _CollectionStrip(collection: c),
-          ],
-        );
-      },
-    );
-  }
-}
-
 /// Top-level helper shared by every product surface (menu grid, collection
 /// carousels, search results) so the quick-add UX is identical everywhere:
 /// single-variant → straight to cart; multi-variant → bottom sheet picker.
@@ -2138,82 +2098,8 @@ void _confirmAddToCart({
   );
 }
 
-class _CollectionStrip extends ConsumerWidget {
-  const _CollectionStrip({required this.collection});
-  final Collection collection;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final products = collection.products;
-    final session = ref.watch(authSessionProvider).valueOrNull;
-    final wishlistAsync = ref.watch(wishlistIdsProvider);
-    final showStock = ref
-            .watch(displayConfigProvider)
-            .valueOrNull
-            ?.showStockToCustomers ??
-        false;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: BananSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(
-            overline: 'Bộ sưu tập',
-            title: collection.name,
-            subtitle: (collection.description ?? '').isNotEmpty
-                ? collection.description
-                : null,
-          ),
-          SizedBox(
-            height: 230,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: products.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(width: BananSpacing.md),
-              itemBuilder: (context, i) {
-                final p = products[i];
-                return SizedBox(
-                  width: 180,
-                  child: ProductCard(
-                    name: p.name,
-                    imageUrl: p.coverImage,
-                    minPrice: p.minPrice,
-                    hasPriceRange: p.hasPriceRange,
-                    seasonal: p.isSeasonal,
-                    tags: p.tags,
-                    averageRating: p.averageRating,
-                    reviewCount: p.reviewCount,
-                    stockRemaining: showStock ? p.totalLimitedStock : null,
-                    soldOut: showStock && p.isSoldOut,
-                    isWishlisted: isWishlisted(wishlistAsync, p.id),
-                    onToggleWishlist: session == null
-                        ? null
-                        : () => ref
-                            .read(wishlistIdsProvider.notifier)
-                            .toggle(p.id),
-                    onTap: () => context.push('/product/${p.id}'),
-                    onQuickAdd: (showStock && p.isSoldOut)
-                        ? null
-                        : () => quickAddToCart(
-                              context: context,
-                              ref: ref,
-                              product: p,
-                            ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Horizontal product carousel for one pinned category — mirrors
-/// [_CollectionStrip] but is driven by a [Category] (title = category name,
-/// items = category.products).
+/// Horizontal product carousel for one pinned category — driven by a
+/// [Category] (title = category name, items = category.products).
 class _CategoryStrip extends ConsumerWidget {
   const _CategoryStrip({required this.category});
   final Category category;

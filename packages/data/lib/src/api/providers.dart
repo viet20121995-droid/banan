@@ -205,6 +205,18 @@ final Provider<BundlesApi> bundlesApiProvider = Provider<BundlesApi>(
   (ref) => BundlesApi(ref.watch(dioProvider)),
 );
 
+/// Every ACTIVE combo (GET /bundles) — drives the customer "all combos"
+/// browsing surface so active-but-unpinned bundles are discoverable, unlike
+/// the home strip which only shows pinned ones. Falls back to empty on error.
+final FutureProvider<List<Bundle>> allBundlesProvider =
+    FutureProvider<List<Bundle>>((ref) async {
+  final res = await ref.watch(bundlesApiProvider).list();
+  return res.when(
+    success: (list) => list,
+    failure: (_) => const [],
+  );
+});
+
 /// Reactive snapshot of the display config — every widget that gates UI
 /// on a preference (e.g. stock badges) watches this. Refetches when the
 /// merchant toggles a value (provider invalidated by the admin screen).

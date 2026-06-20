@@ -23,7 +23,7 @@ class WishlistScreen extends ConsumerWidget {
               'Đăng nhập để giữ danh sách bánh yêu thích đồng bộ giữa các thiết bị.',
           icon: Icons.favorite_border_rounded,
           action: FilledButton(
-            onPressed: () => context.push('/auth/login'),
+            onPressed: () => context.push('/login'),
             child: const Text('Đăng nhập'),
           ),
         ),

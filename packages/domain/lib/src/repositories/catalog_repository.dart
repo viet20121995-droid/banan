@@ -23,6 +23,8 @@ class ProductDraft {
     this.leadTimeHours,
     this.availableDaysOfWeek = const [],
     this.dailyMaxQuantity,
+    this.flavorPickCount,
+    this.flavorOptions = const [],
   });
 
   String categoryId;
@@ -48,6 +50,13 @@ class ProductDraft {
   int? leadTimeHours;
   List<int> availableDaysOfWeek;
   int? dailyMaxQuantity;
+
+  /// Macaron-set composer. When non-null and > 0, the customer must pick
+  /// exactly this many flavours from [flavorOptions]. 0/null = off.
+  int? flavorPickCount;
+
+  /// Selectable flavour names for the composer. Empty = no composer.
+  List<String> flavorOptions;
 }
 
 class VariantDraft {
@@ -91,6 +100,7 @@ class CategoryDraft {
     this.imageUrl,
     this.sortOrder = 0,
     this.isPinnedToHome = false,
+    this.isBirthdayCakeCategory = false,
   });
 
   final String name;
@@ -98,6 +108,7 @@ class CategoryDraft {
   final String? imageUrl;
   final int sortOrder;
   final bool isPinnedToHome;
+  final bool isBirthdayCakeCategory;
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -105,6 +116,7 @@ class CategoryDraft {
         if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
         'sortOrder': sortOrder,
         'isPinnedToHome': isPinnedToHome,
+        'isBirthdayCakeCategory': isBirthdayCakeCategory,
       };
 }
 

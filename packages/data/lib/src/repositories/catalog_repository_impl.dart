@@ -182,6 +182,8 @@ class CatalogRepositoryImpl implements CatalogRepository {
       'leadTimeHours': d.leadTimeHours,
       'availableDaysOfWeek': d.availableDaysOfWeek,
       'dailyMaxQuantity': d.dailyMaxQuantity,
+      if (d.flavorPickCount != null) 'flavorPickCount': d.flavorPickCount,
+      if (d.flavorOptions.isNotEmpty) 'flavorOptions': d.flavorOptions,
       'variants': d.variants
           .map(
             (v) => {
