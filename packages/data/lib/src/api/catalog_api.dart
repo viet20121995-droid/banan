@@ -52,6 +52,95 @@ class CatalogApi {
     }
   }
 
+  /// Pinned home categories (each WITH a `products` array). Public endpoint.
+  Future<Result<List<CategoryDto>, AppFailure>> homeCategories() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>('/categories/home');
+      final list = (res.data?['data'] as List?) ?? const [];
+      return Result.success(
+        list
+            .map((e) => CategoryDto.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  Future<Result<CategoryDto, AppFailure>> createCategory(
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/categories',
+        data: body,
+      );
+      if (res.statusCode != 200 && res.statusCode != 201) {
+        return Result.failure(mapHttpStatusToFailure(res));
+      }
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      if (data == null) return Result.failure(mapHttpStatusToFailure(res));
+      return Result.success(CategoryDto.fromJson(data));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  Future<Result<CategoryDto, AppFailure>> updateCategory(
+    String id,
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/categories/$id',
+        data: body,
+      );
+      if (res.statusCode != 200) {
+        return Result.failure(mapHttpStatusToFailure(res));
+      }
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      if (data == null) return Result.failure(mapHttpStatusToFailure(res));
+      return Result.success(CategoryDto.fromJson(data));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  Future<Result<void, AppFailure>> deleteCategory(String id) async {
+    try {
+      final res = await _dio.delete<dynamic>('/categories/$id');
+      final code = res.statusCode ?? 0;
+      if (code >= 200 && code < 300) return const Result.success(null);
+      return Result.failure(mapHttpStatusToFailure(res));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  Future<Result<void, AppFailure>> reorderCategories(List<String> ids) async {
+    try {
+      final res = await _dio.patch<dynamic>(
+        '/categories/reorder',
+        data: {'ids': ids},
+      );
+      final code = res.statusCode ?? 0;
+      if (code >= 200 && code < 300) return const Result.success(null);
+      return Result.failure(mapHttpStatusToFailure(res));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
   Future<Result<({List<ProductDto> items, int page, int perPage, int total}),
       AppFailure>> products({
     String? categoryId,

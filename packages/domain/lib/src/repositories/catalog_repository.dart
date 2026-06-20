@@ -81,8 +81,50 @@ class UploadResult {
   final String mimeType;
 }
 
+/// Input shape for category create / update. `toJson` only emits the fields
+/// the merchant actually set — mirrors the partial-body contract on the
+/// backend's `POST /categories` and `PATCH /categories/:id`.
+class CategoryDraft {
+  const CategoryDraft({
+    required this.name,
+    required this.slug,
+    this.imageUrl,
+    this.sortOrder = 0,
+    this.isPinnedToHome = false,
+  });
+
+  final String name;
+  final String slug;
+  final String? imageUrl;
+  final int sortOrder;
+  final bool isPinnedToHome;
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'slug': slug,
+        if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
+        'sortOrder': sortOrder,
+        'isPinnedToHome': isPinnedToHome,
+      };
+}
+
 abstract class CatalogRepository {
   Future<Result<List<Category>, AppFailure>> categories();
+
+  /// Customer home strips — pinned categories that have ≥1 available
+  /// product, each carrying its `products` array.
+  Future<Result<List<Category>, AppFailure>> homeCategories();
+
+  Future<Result<Category, AppFailure>> createCategory(CategoryDraft draft);
+  Future<Result<Category, AppFailure>> updateCategory(
+    String id,
+    CategoryDraft draft,
+  );
+  Future<Result<void, AppFailure>> deleteCategory(String id);
+
+  /// Persists the given category ordering — `sortOrder` becomes each id's
+  /// index in [ids].
+  Future<Result<void, AppFailure>> reorderCategories(List<String> ids);
 
   /// Public catalog listing — only available products.
   Future<Result<ProductPage, AppFailure>> products({

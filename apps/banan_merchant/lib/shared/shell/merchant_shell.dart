@@ -255,16 +255,19 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
             iconSelected: Icons.menu_book,
             route: '/menu',
           ),
-          // Catalog content (collections, combos, bulk product tools) is now
+          // Catalog content (categories, combos, bulk product tools) is now
           // chain-wide and ADMIN-managed — shown to admin, hidden from merchant
           // branches. Products above stay visible to merchants (read-only).
           if (isAdmin)
             const _NavItem(
-              label: 'Bộ sưu tập',
-              icon: Icons.collections_bookmark_outlined,
-              iconSelected: Icons.collections_bookmark,
-              route: '/collections',
+              label: 'Danh mục',
+              icon: Icons.category_outlined,
+              iconSelected: Icons.category,
+              route: '/categories',
             ),
+          // "Bộ sưu tập" (Collections) nav item retired — superseded by
+          // pinned categories on the customer home. Routes/screens left
+          // dormant so existing deep links still resolve.
           if (isAdmin)
             const _NavItem(
               label: 'Combo',

@@ -1,5 +1,7 @@
 import 'package:banan_domain/banan_domain.dart';
 
+import 'product_dto.dart';
+
 class CategoryDto {
   const CategoryDto({
     required this.id,
@@ -7,6 +9,8 @@ class CategoryDto {
     required this.slug,
     this.imageUrl,
     this.sortOrder = 0,
+    this.isPinnedToHome = false,
+    this.products = const [],
   });
 
   factory CategoryDto.fromJson(Map<String, dynamic> json) {
@@ -16,6 +20,11 @@ class CategoryDto {
       slug: json['slug'] as String,
       imageUrl: json['imageUrl'] as String?,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      isPinnedToHome: json['isPinnedToHome'] as bool? ?? false,
+      products: (json['products'] as List?)
+              ?.map((e) => ProductDto.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
     );
   }
 
@@ -24,6 +33,8 @@ class CategoryDto {
   final String slug;
   final String? imageUrl;
   final int sortOrder;
+  final bool isPinnedToHome;
+  final List<ProductDto> products;
 
   Category toDomain() => Category(
         id: id,
@@ -31,5 +42,7 @@ class CategoryDto {
         slug: slug,
         imageUrl: imageUrl,
         sortOrder: sortOrder,
+        isPinnedToHome: isPinnedToHome,
+        products: products.map((p) => p.toDomain()).toList(),
       );
 }

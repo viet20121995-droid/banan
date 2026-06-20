@@ -267,6 +267,18 @@ final FutureProvider<List<Category>> categoriesProvider =
   );
 });
 
+/// Pinned home categories — each carries its own `products` array, rendered as
+/// horizontal strips on the customer home page. Invalidate on catalog change.
+final FutureProvider<List<Category>> pinnedCategoriesProvider =
+    FutureProvider<List<Category>>((ref) async {
+  final repo = ref.watch(catalogRepositoryProvider);
+  final result = await repo.homeCategories();
+  return result.when(
+    success: (list) => list,
+    failure: (f) => throw Exception(f.message ?? f.code),
+  );
+});
+
 /// Orders API + repository (customer + merchant flows).
 final Provider<OrdersApi> ordersApiProvider = Provider<OrdersApi>(
   (ref) => OrdersApi(ref.watch(dioProvider)),

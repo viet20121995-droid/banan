@@ -1,4 +1,14 @@
-import { IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class CreateCategoryDto {
   @IsString()
@@ -19,6 +29,18 @@ export class CreateCategoryDto {
   @IsInt()
   @Min(0)
   sortOrder?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isPinnedToHome?: boolean;
+}
+
+/** New display order: the full list of category ids in the desired order. */
+export class ReorderCategoriesDto {
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  ids!: string[];
 }
 
 export class UpdateCategoryDto {
@@ -40,4 +62,8 @@ export class UpdateCategoryDto {
   @IsInt()
   @Min(0)
   sortOrder?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isPinnedToHome?: boolean;
 }

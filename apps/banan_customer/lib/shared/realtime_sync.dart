@@ -25,6 +25,7 @@ class RealtimeCatalogSync extends ConsumerWidget {
           case 'catalog.changed':
             ref.invalidate(menuControllerProvider);
             ref.invalidate(categoriesProvider);
+            ref.invalidate(pinnedCategoriesProvider);
             ref.invalidate(homeCollectionsProvider);
             ref.invalidate(homeBannersProvider);
             ref.invalidate(homeThreadsProvider);

@@ -17,6 +17,37 @@ class CatalogRepositoryImpl implements CatalogRepository {
   }
 
   @override
+  Future<Result<List<Category>, AppFailure>> homeCategories() async {
+    final res = await _api.homeCategories();
+    return res.map((dtos) => dtos.map((d) => d.toDomain()).toList());
+  }
+
+  @override
+  Future<Result<Category, AppFailure>> createCategory(CategoryDraft draft) async {
+    final res = await _api.createCategory(draft.toJson());
+    return res.map((d) => d.toDomain());
+  }
+
+  @override
+  Future<Result<Category, AppFailure>> updateCategory(
+    String id,
+    CategoryDraft draft,
+  ) async {
+    final res = await _api.updateCategory(id, draft.toJson());
+    return res.map((d) => d.toDomain());
+  }
+
+  @override
+  Future<Result<void, AppFailure>> deleteCategory(String id) {
+    return _api.deleteCategory(id);
+  }
+
+  @override
+  Future<Result<void, AppFailure>> reorderCategories(List<String> ids) {
+    return _api.reorderCategories(ids);
+  }
+
+  @override
   Future<Result<ProductPage, AppFailure>> products({
     String? categoryId,
     String? q,

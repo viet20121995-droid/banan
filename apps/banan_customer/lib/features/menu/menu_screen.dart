@@ -1144,7 +1144,7 @@ class _BodyState extends ConsumerState<_Body> {
               const SliverToBoxAdapter(child: _OrderAgainStrip()),
               SliverToBoxAdapter(child: _ThreadsStrip()),
               const SliverToBoxAdapter(child: BundleStrip()),
-              SliverToBoxAdapter(child: _PinnedCollections()),
+              SliverToBoxAdapter(child: _PinnedCategories()),
             ],
             if (showHomeContent &&
                 state.loaded &&
@@ -1933,7 +1933,34 @@ class _OrderAgainCard extends ConsumerWidget {
   }
 }
 
+/// Pinned categories — each one renders as its own horizontal product carousel
+/// on the home page (driven by `pinnedCategoriesProvider`, which carries each
+/// category's `products`).
+class _PinnedCategories extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(pinnedCategoriesProvider);
+    return async.maybeWhen(
+      orElse: () => const SizedBox.shrink(),
+      data: (categories) {
+        final visible =
+            categories.where((c) => c.products.isNotEmpty).toList();
+        if (visible.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final c in visible) _CategoryStrip(category: c),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// Pinned collections — each one renders as its own horizontal product carousel.
+/// Retained for reference; the home page now uses [_PinnedCategories]. Kept so
+/// the collection code stays buildable without being deleted.
+// ignore: unused_element
 class _PinnedCollections extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2136,6 +2163,79 @@ class _CollectionStrip extends ConsumerWidget {
             subtitle: (collection.description ?? '').isNotEmpty
                 ? collection.description
                 : null,
+          ),
+          SizedBox(
+            height: 230,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: products.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: BananSpacing.md),
+              itemBuilder: (context, i) {
+                final p = products[i];
+                return SizedBox(
+                  width: 180,
+                  child: ProductCard(
+                    name: p.name,
+                    imageUrl: p.coverImage,
+                    minPrice: p.minPrice,
+                    hasPriceRange: p.hasPriceRange,
+                    seasonal: p.isSeasonal,
+                    tags: p.tags,
+                    averageRating: p.averageRating,
+                    reviewCount: p.reviewCount,
+                    stockRemaining: showStock ? p.totalLimitedStock : null,
+                    soldOut: showStock && p.isSoldOut,
+                    isWishlisted: isWishlisted(wishlistAsync, p.id),
+                    onToggleWishlist: session == null
+                        ? null
+                        : () => ref
+                            .read(wishlistIdsProvider.notifier)
+                            .toggle(p.id),
+                    onTap: () => context.push('/product/${p.id}'),
+                    onQuickAdd: (showStock && p.isSoldOut)
+                        ? null
+                        : () => quickAddToCart(
+                              context: context,
+                              ref: ref,
+                              product: p,
+                            ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Horizontal product carousel for one pinned category — mirrors
+/// [_CollectionStrip] but is driven by a [Category] (title = category name,
+/// items = category.products).
+class _CategoryStrip extends ConsumerWidget {
+  const _CategoryStrip({required this.category});
+  final Category category;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final products = category.products;
+    final session = ref.watch(authSessionProvider).valueOrNull;
+    final wishlistAsync = ref.watch(wishlistIdsProvider);
+    final showStock = ref
+            .watch(displayConfigProvider)
+            .valueOrNull
+            ?.showStockToCustomers ??
+        false;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: BananSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            overline: 'Danh mục',
+            title: category.name,
           ),
           SizedBox(
             height: 230,

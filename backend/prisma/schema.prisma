@@ -291,6 +291,10 @@ model Category {
   slug      String    @unique
   imageUrl  String?
   sortOrder Int       @default(0)
+  /// When true, the category is featured as a product strip on the customer
+  /// home page (replacing the old Collection strips). All categories always
+  /// appear as menu filter chips regardless of this flag.
+  isPinnedToHome Boolean @default(false)
   products  Product[]
 }
 

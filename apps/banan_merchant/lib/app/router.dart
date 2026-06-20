@@ -13,6 +13,8 @@ import '../features/bulk_tools/bulk_tools_screen.dart';
 import '../features/bundles_mgmt/bundle_editor_screen.dart';
 import '../features/bundles_mgmt/bundles_list_screen.dart';
 import '../features/campaigns_mgmt/campaigns_screen.dart';
+import '../features/categories_mgmt/categories_list_screen.dart';
+import '../features/categories_mgmt/category_editor_screen.dart';
 import '../features/collections_mgmt/collection_editor_screen.dart';
 import '../features/content_mgmt/site_content_editor_screen.dart';
 import '../features/marketing_mgmt/marketing_screen.dart';
@@ -93,6 +95,19 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/collections',
         builder: (_, __) => const CollectionsListScreen(),
+      ),
+      GoRoute(
+        path: '/categories',
+        builder: (_, __) => const CategoriesListScreen(),
+      ),
+      GoRoute(
+        path: '/categories/new',
+        builder: (_, __) => const CategoryEditorScreen(),
+      ),
+      GoRoute(
+        path: '/categories/:id/edit',
+        builder: (context, state) =>
+            CategoryEditorScreen(categoryId: state.pathParameters['id']),
       ),
       GoRoute(
         path: '/bundles',

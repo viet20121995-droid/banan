@@ -16,7 +16,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 
 import { CategoriesService } from './categories.service';
-import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
+import { CreateCategoryDto, ReorderCategoriesDto, UpdateCategoryDto } from './dto/category.dto';
 
 @ApiTags('categories')
 @Controller({ path: 'categories', version: '1' })
@@ -29,6 +29,14 @@ export class CategoriesController {
     return this.categories.findAll();
   }
 
+  /** Customer home — pinned categories with a few products each (declared
+   *  before :id so "home" isn't captured as an id). */
+  @Public()
+  @Get('home')
+  home() {
+    return this.categories.homePinned();
+  }
+
   @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
@@ -39,6 +47,14 @@ export class CategoriesController {
   @Post()
   create(@Body() dto: CreateCategoryDto) {
     return this.categories.create(dto);
+  }
+
+  /** Drag-to-reorder: full id list in the new order (before :id). */
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Patch('reorder')
+  reorder(@Body() dto: ReorderCategoriesDto) {
+    return this.categories.reorder(dto.ids);
   }
 
   @Roles(Role.ADMIN)
