@@ -581,33 +581,39 @@ export class OrdersService {
         }
       }
 
-      // Re-read the products + variants FRESH inside the tx — the availability +
-      // stockMode checked before the transaction can be stale. If an admin set a
-      // product/variant unavailable, or flipped a variant UNLIMITED→LIMITED, at
-      // checkout time, the pre-tx snapshot would let the order through without
-      // decrementing stock (oversell). Validate + build the decrement plan from
-      // the fresh state instead.
+      // Lock the involved product + variant rows FOR UPDATE and read their
+      // CURRENT state. A plain re-read isn't enough — an admin could flip a
+      // variant UNLIMITED→LIMITED or set it unavailable between the read and the
+      // order being created, and we'd skip the stock decrement (oversell) or
+      // accept an unavailable item. FOR UPDATE holds the rows to commit, so the
+      // admin's UPDATE blocks until this checkout finishes.
+      //
+      // Lock order: products (id-sorted) THEN variants (id-sorted) — the admin
+      // edit path locks the product row (product.update) before its variant rows
+      // (reconcileVariants), so taking the same order here is deadlock-free. A
+      // variant in the cart implies its product is too, so the two phases can't
+      // interleave across transactions.
+      const lineProductIds = [...new Set(lineCreates.map((l) => l.productId))].sort();
+      const lineVariantIds = [
+        ...new Set(lineCreates.map((l) => l.variantId).filter((v): v is string => !!v)),
+      ].sort();
       const freshProducts = new Map(
         (
-          await tx.product.findMany({
-            where: { id: { in: [...new Set(lineCreates.map((l) => l.productId))] } },
-            select: { id: true, isAvailable: true },
-          })
+          await tx.$queryRaw<Array<{ id: string; isAvailable: boolean }>>`
+            SELECT "id", "isAvailable" FROM "Product"
+            WHERE "id" IN (${Prisma.join(lineProductIds)})
+            ORDER BY "id" FOR UPDATE`
         ).map((p) => [p.id, p]),
       );
       const freshVariants = new Map(
-        (
-          await tx.productVariant.findMany({
-            where: {
-              id: {
-                in: [
-                  ...new Set(lineCreates.map((l) => l.variantId).filter((v): v is string => !!v)),
-                ],
-              },
-            },
-            select: { id: true, stockMode: true, isAvailable: true },
-          })
-        ).map((v) => [v.id, v]),
+        lineVariantIds.length === 0
+          ? []
+          : (
+              await tx.$queryRaw<Array<{ id: string; stockMode: string; isAvailable: boolean }>>`
+            SELECT "id", "stockMode", "isAvailable" FROM "ProductVariant"
+            WHERE "id" IN (${Prisma.join(lineVariantIds)})
+            ORDER BY "id" FOR UPDATE`
+            ).map((v) => [v.id, v]),
       );
 
       // Race-safe stock decrement for LIMITED variants — a conditional
