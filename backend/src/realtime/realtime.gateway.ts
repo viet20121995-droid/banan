@@ -42,8 +42,7 @@ const WS_ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? '')
 // production an empty/unset CORS_ORIGINS fails CLOSED for browser origins —
 // matching the HTTP layer (main.ts), which treats an empty allowlist as
 // "deny all cross-origin". This keeps the WS boundary consistent with HTTP.
-const WS_ALLOW_ALL =
-  WS_ALLOWED_ORIGINS.length === 0 && process.env.NODE_ENV !== 'production';
+const WS_ALLOW_ALL = WS_ALLOWED_ORIGINS.length === 0 && process.env.NODE_ENV !== 'production';
 
 @WebSocketGateway({
   cors: {
@@ -106,22 +105,14 @@ export class RealtimeGateway implements OnGatewayConnection {
     client.data = data;
 
     await client.join(`user:${data.userId}`);
-    if (
-      (data.role === 'MERCHANT_OWNER' || data.role === 'MERCHANT_STAFF') &&
-      data.storeId
-    ) {
+    if ((data.role === 'MERCHANT_OWNER' || data.role === 'MERCHANT_STAFF') && data.storeId) {
       await client.join(`store:${data.storeId}`);
     }
-    if (
-      (data.role === 'KITCHEN_MANAGER' || data.role === 'KITCHEN_STAFF') &&
-      data.kitchenId
-    ) {
+    if ((data.role === 'KITCHEN_MANAGER' || data.role === 'KITCHEN_STAFF') && data.kitchenId) {
       await client.join(`kitchen:${data.kitchenId}`);
     }
 
-    this.logger.debug(
-      `socket ${client.id} connected as ${data.role} ${data.userId}`,
-    );
+    this.logger.debug(`socket ${client.id} connected as ${data.role} ${data.userId}`);
   }
 
   @SubscribeMessage('order:subscribe')
@@ -153,9 +144,7 @@ export class RealtimeGateway implements OnGatewayConnection {
         !!order.kitchenId &&
         data.kitchenId === order.kitchenId);
     if (!allowed) {
-      this.logger.warn(
-        `socket ${client.id} (${data.userId}) denied order:subscribe ${orderId}`,
-      );
+      this.logger.warn(`socket ${client.id} (${data.userId}) denied order:subscribe ${orderId}`);
       return;
     }
     await client.join(`order:${orderId}`);
@@ -198,9 +187,7 @@ export class RealtimeGateway implements OnGatewayConnection {
         }
       }
     } catch (err) {
-      this.logger.warn(
-        `evictStaleKitchenSubscribers(${orderId}) failed: ${String(err)}`,
-      );
+      this.logger.warn(`evictStaleKitchenSubscribers(${orderId}) failed: ${String(err)}`);
     }
   }
 }

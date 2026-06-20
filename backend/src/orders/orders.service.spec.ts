@@ -18,10 +18,7 @@ import { OrdersService } from './orders.service';
 type GuestArgs = { fullName: string; phone: string; email?: string };
 type UpsertResult = { userId: string; createdNew: boolean };
 
-function makeService(prismaUser: {
-  findUnique?: jest.Mock;
-  create?: jest.Mock;
-}) {
+function makeService(prismaUser: { findUnique?: jest.Mock; create?: jest.Mock }) {
   const prisma = {
     user: {
       findUnique: prismaUser.findUnique ?? jest.fn().mockResolvedValue(null),
@@ -55,10 +52,7 @@ const upsert = (svc: OrdersService, args: GuestArgs): Promise<UpsertResult> =>
   ).upsertGuestCustomer(args);
 
 /** Route findUnique by which unique key the call used (phone vs email). */
-function findUniqueRouter(opts: {
-  byPhone?: unknown;
-  byEmail?: unknown;
-}): jest.Mock {
+function findUniqueRouter(opts: { byPhone?: unknown; byEmail?: unknown }): jest.Mock {
   return jest.fn((args: { where: { phone?: string; email?: string } }) => {
     if (args.where.phone !== undefined) {
       return Promise.resolve(opts.byPhone ?? null);
@@ -73,9 +67,7 @@ function findUniqueRouter(opts: {
 async function expectPhoneHasAccount(p: Promise<unknown>): Promise<void> {
   await expect(p).rejects.toBeInstanceOf(BadRequestException);
   await p.catch((e: BadRequestException) => {
-    expect((e.getResponse() as { code?: string }).code).toBe(
-      'PHONE_HAS_ACCOUNT',
-    );
+    expect((e.getResponse() as { code?: string }).code).toBe('PHONE_HAS_ACCOUNT');
   });
 }
 
@@ -126,9 +118,7 @@ describe('OrdersService.upsertGuestCustomer (anti-takeover)', () => {
       create,
     });
 
-    await expectPhoneHasAccount(
-      upsert(svc, { fullName: 'Kẻ Gian', phone: '0900111222' }),
-    );
+    await expectPhoneHasAccount(upsert(svc, { fullName: 'Kẻ Gian', phone: '0900111222' }));
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -141,9 +131,7 @@ describe('OrdersService.upsertGuestCustomer (anti-takeover)', () => {
       create,
     });
 
-    await expectPhoneHasAccount(
-      upsert(svc, { fullName: 'Ai Đó', phone: '0900333444' }),
-    );
+    await expectPhoneHasAccount(upsert(svc, { fullName: 'Ai Đó', phone: '0900333444' }));
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -212,9 +200,7 @@ describe('OrdersService.transition (status-guarded)', () => {
     };
     const prisma = {
       order: { findUnique: jest.fn().mockResolvedValue(order) },
-      $transaction: jest.fn(
-        (cb: (t: unknown) => unknown, _opts?: unknown) => cb(tx),
-      ),
+      $transaction: jest.fn((cb: (t: unknown) => unknown, _opts?: unknown) => cb(tx)),
     };
     const noop = {} as never;
     const svc = new OrdersService(
@@ -235,9 +221,9 @@ describe('OrdersService.transition (status-guarded)', () => {
 
   it('lost race (status-guard count 0) → throws, runs NO side-effects', async () => {
     const m = makeTxService(0);
-    await expect(
-      m.svc.transition('o1', 'CANCELLED', ADMIN),
-    ).rejects.toMatchObject({ response: { code: 'ORDER_INVALID_TRANSITION' } });
+    await expect(m.svc.transition('o1', 'CANCELLED', ADMIN)).rejects.toMatchObject({
+      response: { code: 'ORDER_INVALID_TRANSITION' },
+    });
     expect(m.tx.order.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'o1', status: 'PENDING' } }),
     );
@@ -291,9 +277,9 @@ describe('OrdersService.dispatchFromKitchen (no resurrect of a cancelled order)'
       customerId: 'c1',
       storeId: 's1',
     });
-    await expect(
-      m.svc.dispatchFromKitchen('o1', ADMIN),
-    ).rejects.toMatchObject({ response: { code: 'KITCHEN_NOT_READY' } });
+    await expect(m.svc.dispatchFromKitchen('o1', ADMIN)).rejects.toMatchObject({
+      response: { code: 'KITCHEN_NOT_READY' },
+    });
     // Threw before the transaction → the order is never flipped back to a live
     // status (no resurrection).
     expect(m.prisma.$transaction).not.toHaveBeenCalled();
@@ -384,12 +370,7 @@ describe('OrdersService.assertProductsAcceptingOrder (aggregated timeline)', () 
   const run = (products: P[], at: Date, placedAt: Date, scheduled: boolean) =>
     (
       OrdersService.prototype as unknown as {
-        assertProductsAcceptingOrder(
-          p: P[],
-          at: Date,
-          placedAt: Date,
-          s: boolean,
-        ): Promise<void>;
+        assertProductsAcceptingOrder(p: P[], at: Date, placedAt: Date, s: boolean): Promise<void>;
       }
     ).assertProductsAcceptingOrder.call({}, products, at, placedAt, scheduled);
 
@@ -434,9 +415,7 @@ describe('OrdersService.assertProductsAcceptingOrder (aggregated timeline)', () 
   it('reports DAY_UNAVAILABLE (not lead) when the chosen day is wrong, even if lead would also fail', async () => {
     // Item sells only Sat/Sun and needs 48h. On a Wednesday order, the day
     // constraint takes precedence and lead time is not double-reported.
-    const products: P[] = [
-      { id: 'x', name: 'X', leadTimeHours: 48, availableDaysOfWeek: [0, 6] },
-    ];
+    const products: P[] = [{ id: 'x', name: 'X', leadTimeHours: 48, availableDaysOfWeek: [0, 6] }];
     const err = await run(products, placedAt, placedAt, true).catch((e) => e);
     const body = (err as BadRequestException).getResponse() as {
       details: { items: Array<{ reason: string }>; earliestLeadHours?: number };
@@ -478,7 +457,10 @@ describe('OrdersService.expandLineInputs (combo expansion + pricing)', () => {
   ): { lines: Array<Record<string, unknown>>; bundleDiscount: Prisma.Decimal } =>
     (
       OrdersService.prototype as unknown as {
-        expandLineInputs(i: unknown, b: unknown): {
+        expandLineInputs(
+          i: unknown,
+          b: unknown,
+        ): {
           lines: Array<Record<string, unknown>>;
           bundleDiscount: Prisma.Decimal;
         };
@@ -490,8 +472,16 @@ describe('OrdersService.expandLineInputs (combo expansion + pricing)', () => {
     name: 'Combo A+B',
     priceVnd: 100000,
     items: [
-      { quantity: 1, product: { id: 'p1', basePrice: dec(60000), variants: [{ id: 'p1v', priceDelta: dec(0) }] }, variant: null },
-      { quantity: 1, product: { id: 'p2', basePrice: dec(60000), variants: [{ id: 'p2v', priceDelta: dec(0) }] }, variant: null },
+      {
+        quantity: 1,
+        product: { id: 'p1', basePrice: dec(60000), variants: [{ id: 'p1v', priceDelta: dec(0) }] },
+        variant: null,
+      },
+      {
+        quantity: 1,
+        product: { id: 'p2', basePrice: dec(60000), variants: [{ id: 'p2v', priceDelta: dec(0) }] },
+        variant: null,
+      },
     ],
   };
 
@@ -501,7 +491,12 @@ describe('OrdersService.expandLineInputs (combo expansion + pricing)', () => {
       new Map(),
     );
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatchObject({ productId: 'x', variantId: 'xv', quantity: 3, fromBundle: false });
+    expect(lines[0]).toMatchObject({
+      productId: 'x',
+      variantId: 'xv',
+      quantity: 3,
+      fromBundle: false,
+    });
     expect(bundleDiscount.toNumber()).toBe(0);
   });
 
@@ -534,12 +529,22 @@ describe('OrdersService.expandLineInputs (combo expansion + pricing)', () => {
       items: [
         {
           quantity: 1,
-          product: { id: 'p', basePrice: dec(40000), variants: [{ id: 'small', priceDelta: dec(0) }, { id: 'big', priceDelta: dec(20000) }] },
+          product: {
+            id: 'p',
+            basePrice: dec(40000),
+            variants: [
+              { id: 'small', priceDelta: dec(0) },
+              { id: 'big', priceDelta: dec(20000) },
+            ],
+          },
           variant: { id: 'big', priceDelta: dec(20000) }, // explicit → 60k
         },
       ],
     };
-    const { lines, bundleDiscount } = expand([{ productId: 'c', quantity: 1 }], new Map([['c', combo]]));
+    const { lines, bundleDiscount } = expand(
+      [{ productId: 'c', quantity: 1 }],
+      new Map([['c', combo]]),
+    );
     expect(lines[0]).toMatchObject({ productId: 'p', variantId: 'big', quantity: 1 });
     expect(bundleDiscount.toNumber()).toBe(10000); // 60k − 50k
   });
@@ -569,7 +574,9 @@ describe('OrdersService.expandLineInputs (combo expansion + pricing)', () => {
     const broken = {
       name: 'Broken',
       priceVnd: 10000,
-      items: [{ quantity: 1, product: { id: 'p', basePrice: dec(10000), variants: [] }, variant: null }],
+      items: [
+        { quantity: 1, product: { id: 'p', basePrice: dec(10000), variants: [] }, variant: null },
+      ],
     };
     expect(() => expand([{ productId: 'b', quantity: 1 }], new Map([['b', broken]]))).toThrow(
       BadRequestException,
@@ -593,9 +600,7 @@ describe('OrdersService.assertDailyCaps (per-product daily order cap)', () => {
     return {
       $executeRaw: jest.fn().mockResolvedValue(0),
       orderItem: {
-        aggregate: jest
-          .fn()
-          .mockResolvedValue({ _sum: { quantity: existing } }),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { quantity: existing } }),
       },
     };
   }
@@ -656,12 +661,7 @@ describe('OrdersService.assertDailyCaps (per-product daily order cap)', () => {
   it('is a no-op (no lock, no query) when nothing in the order is capped', async () => {
     const tx = txWith(0);
     await expect(
-      call(
-        tx,
-        [{ id: 'p1', name: 'Tart', dailyMaxQuantity: null }],
-        new Map([['p1', 5]]),
-        DAY,
-      ),
+      call(tx, [{ id: 'p1', name: 'Tart', dailyMaxQuantity: null }], new Map([['p1', 5]]), DAY),
     ).resolves.toBeUndefined();
     expect(tx.$executeRaw).not.toHaveBeenCalled();
     expect(tx.orderItem.aggregate).not.toHaveBeenCalled();
@@ -679,12 +679,8 @@ describe('OrdersService.assertDailyCaps (per-product daily order cap)', () => {
       new Date('2026-06-20T18:30:00Z'),
     );
     const where = tx.orderItem.aggregate.mock.calls[0][0].where;
-    expect(where.order.OR[0].scheduledFor.gte.toISOString()).toBe(
-      '2026-06-20T17:00:00.000Z',
-    );
-    expect(where.order.OR[0].scheduledFor.lt.toISOString()).toBe(
-      '2026-06-21T17:00:00.000Z',
-    );
+    expect(where.order.OR[0].scheduledFor.gte.toISOString()).toBe('2026-06-20T17:00:00.000Z');
+    expect(where.order.OR[0].scheduledFor.lt.toISOString()).toBe('2026-06-21T17:00:00.000Z');
     // The lock key carries the VN calendar date, not the UTC one.
     expect(tx.$executeRaw.mock.calls[0][1]).toBe('daily:p1:2026-06-21');
   });
@@ -706,11 +702,7 @@ describe('OrdersService.assertDailyCaps (per-product daily order cap)', () => {
       DAY, // 2026-06-20 10:00 VN → dayKey 2026-06-20
     );
     const lockKeys = tx.$executeRaw.mock.calls.map((c: unknown[]) => c[1]);
-    expect(lockKeys).toEqual([
-      'daily:p1:2026-06-20',
-      'daily:p2:2026-06-20',
-      'daily:p3:2026-06-20',
-    ]);
+    expect(lockKeys).toEqual(['daily:p1:2026-06-20', 'daily:p2:2026-06-20', 'daily:p3:2026-06-20']);
   });
 });
 
@@ -724,10 +716,7 @@ describe('OrdersService.assertBundlesUnchanged (combo re-validation in tx)', () 
   const call = (tx: unknown, bundleById: Map<string, unknown>): Promise<void> =>
     (
       OrdersService.prototype as unknown as {
-        assertBundlesUnchanged(
-          t: unknown,
-          b: Map<string, unknown>,
-        ): Promise<void>;
+        assertBundlesUnchanged(t: unknown, b: Map<string, unknown>): Promise<void>;
       }
     ).assertBundlesUnchanged.call({}, tx, bundleById);
 
@@ -754,9 +743,7 @@ describe('OrdersService.assertBundlesUnchanged (combo re-validation in tx)', () 
         { productId: 'p1', variantId: 'v1', quantity: 1 },
       ],
     });
-    await expect(
-      call(tx, new Map([['b1', snapshot]])),
-    ).resolves.toBeUndefined();
+    await expect(call(tx, new Map([['b1', snapshot]]))).resolves.toBeUndefined();
     // Took the per-combo advisory lock before reading.
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
   });

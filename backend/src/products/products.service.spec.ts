@@ -9,11 +9,7 @@ import { ProductsService } from './products.service';
  * a hand-mocked transaction client.
  */
 describe('ProductsService.reconcileVariants (combo variant-pin protection)', () => {
-  const call = (
-    tx: unknown,
-    productId: string,
-    variants: unknown,
-  ): Promise<void> =>
+  const call = (tx: unknown, productId: string, variants: unknown): Promise<void> =>
     (
       ProductsService.prototype as unknown as {
         reconcileVariants(t: unknown, p: string, v: unknown): Promise<void>;
@@ -29,15 +25,13 @@ describe('ProductsService.reconcileVariants (combo variant-pin protection)', () 
         create: jest.fn(),
       },
       bundleItem: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue([{ bundle: { name: 'Combo Tết' } }]),
+        findMany: jest.fn().mockResolvedValue([{ bundle: { name: 'Combo Tết' } }]),
       },
     };
     // Incoming keeps only v1 → v2 would be deleted, but v2 is pinned by a combo.
-    await expect(
-      call(tx, 'p1', [{ id: 'v1', size: 'S', flavor: 'A' }]),
-    ).rejects.toMatchObject({ response: { code: 'VARIANT_PINNED_BY_BUNDLE' } });
+    await expect(call(tx, 'p1', [{ id: 'v1', size: 'S', flavor: 'A' }])).rejects.toMatchObject({
+      response: { code: 'VARIANT_PINNED_BY_BUNDLE' },
+    });
     expect(tx.productVariant.deleteMany).not.toHaveBeenCalled();
   });
 

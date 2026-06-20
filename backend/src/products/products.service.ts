@@ -238,9 +238,7 @@ export class ProductsService {
       .map((id) => byId.get(id))
       .filter((p): p is NonNullable<typeof p> => p != null);
 
-    const summaries = await this.reviewSummariesForProducts(
-      ordered.map((p) => p.id),
-    );
+    const summaries = await this.reviewSummariesForProducts(ordered.map((p) => p.id));
     return ordered.map((p) => ({
       ...p,
       averageRating: summaries[p.id]?.averageRating ?? 0,
@@ -377,21 +375,41 @@ export class ProductsService {
     });
   }
 
+  /// Deactivates every combo that contains the given product (it can no longer
+  /// be fulfilled). Takes each affected combo's `bundle:<id>` advisory lock
+  /// first, in sorted id order, so it serialises with an in-flight checkout
+  /// that re-validates the combo (orders.service.assertBundlesUnchanged) and
+  /// stays deadlock-free. Must run inside a transaction.
+  private async deactivateBundlesContaining(
+    tx: Prisma.TransactionClient,
+    productId: string,
+  ): Promise<void> {
+    const affected = await tx.bundle.findMany({
+      where: { items: { some: { productId } } },
+      select: { id: true },
+    });
+    const ids = affected.map((b) => b.id).sort();
+    if (ids.length === 0) return;
+    for (const bid of ids) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'bundle:' + bid}, 0))`;
+    }
+    await tx.bundle.updateMany({
+      where: { id: { in: ids } },
+      data: { isActive: false },
+    });
+  }
+
   private async reconcileVariants(
     tx: Prisma.TransactionClient,
     productId: string,
     variants: VariantInputDto[],
   ) {
-    const incomingIds = new Set(
-      variants.filter((v) => v.id).map((v) => v.id!),
-    );
+    const incomingIds = new Set(variants.filter((v) => v.id).map((v) => v.id!));
     const existing = await tx.productVariant.findMany({
       where: { productId },
       select: { id: true },
     });
-    const toDelete = existing
-      .filter((v) => !incomingIds.has(v.id))
-      .map((v) => v.id);
+    const toDelete = existing.filter((v) => !incomingIds.has(v.id)).map((v) => v.id);
 
     if (toDelete.length > 0) {
       // A combo (BundleItem) can pin a specific variant. The DB FK is
@@ -422,9 +440,7 @@ export class ProductsService {
         size: v.size,
         flavor: v.flavor,
         priceDelta: new Prisma.Decimal(v.priceDelta ?? 0),
-        stockMode: (v.stockQty == null ? 'UNLIMITED' : 'LIMITED') as
-          | 'UNLIMITED'
-          | 'LIMITED',
+        stockMode: (v.stockQty == null ? 'UNLIMITED' : 'LIMITED') as 'UNLIMITED' | 'LIMITED',
         stockQty: v.stockQty ?? null,
         isAvailable: v.isAvailable ?? true,
       };
@@ -452,20 +468,17 @@ export class ProductsService {
       where: { productId: id },
     });
     if (orderRefs > 0) {
-      await this.prisma.$transaction([
-        this.prisma.collectionItem.deleteMany({ where: { productId: id } }),
+      await this.prisma.$transaction(async (tx) => {
+        await tx.collectionItem.deleteMany({ where: { productId: id } });
         // A combo containing this product can no longer be fulfilled — deactivate
         // it so it stops showing on the storefront (otherwise it stays "buyable"
         // and every checkout fails with a confusing product-level error).
-        this.prisma.bundle.updateMany({
-          where: { items: { some: { productId: id } } },
-          data: { isActive: false },
-        }),
-        this.prisma.product.update({
+        await this.deactivateBundlesContaining(tx, id);
+        await tx.product.update({
           where: { id },
           data: { isAvailable: false },
-        }),
-      ]);
+        });
+      });
       return { deleted: false, archived: true };
     }
     try {
@@ -477,22 +490,16 @@ export class ProductsService {
     } catch (e) {
       // Defensive: any lingering FK still leaves the merchant with a
       // working "delete" by archiving the product.
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2003'
-      ) {
-        await this.prisma.$transaction([
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        await this.prisma.$transaction(async (tx) => {
           // Same as the order-ref archive path: a combo containing this product
           // can't be fulfilled, so deactivate it alongside archiving.
-          this.prisma.bundle.updateMany({
-            where: { items: { some: { productId: id } } },
-            data: { isActive: false },
-          }),
-          this.prisma.product.update({
+          await this.deactivateBundlesContaining(tx, id);
+          await tx.product.update({
             where: { id },
             data: { isAvailable: false },
-          }),
-        ]);
+          });
+        });
         return { deleted: false, archived: true };
       }
       throw e;

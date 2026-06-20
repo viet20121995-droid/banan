@@ -28,16 +28,7 @@ import { RefundsService } from '../refunds/refunds.service';
 
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { generateOrderCode } from './order-code';
-import {
-  canCustomerCancel,
-  isAllowedKitchenTransition,
-  isAllowedTransition,
-} from './order-status';
-
-/// Default fee when the routing failed (no ward / no coords). Kept very
-/// conservative — the admin-tunable DeliveryConfig is the real pricing
-/// source once a ward is resolved.
-const DELIVERY_FEE_FALLBACK = 0;
+import { canCustomerCancel, isAllowedKitchenTransition, isAllowedTransition } from './order-status';
 
 /// A bundle shaped just enough to price its expansion — structurally satisfied
 /// by the Prisma bundle when fetched with items.product.variants + items.variant.
@@ -46,13 +37,11 @@ type BundleForExpansion = {
   priceVnd: number;
   items: ReadonlyArray<{
     quantity: number;
-    product:
-      | {
-          id: string;
-          basePrice: Prisma.Decimal;
-          variants: ReadonlyArray<{ id: string; priceDelta: Prisma.Decimal }>;
-        }
-      | null;
+    product: {
+      id: string;
+      basePrice: Prisma.Decimal;
+      variants: ReadonlyArray<{ id: string; priceDelta: Prisma.Decimal }>;
+    } | null;
     variant: { id: string; priceDelta: Prisma.Decimal } | null;
   }>;
 };
@@ -227,14 +216,9 @@ export class OrdersService {
 
     // Expand combos into product line inputs at REGULAR prices + the combo
     // savings (see expandLineInputs). Plain product lines pass through.
-    const { lines: expandedLines, bundleDiscount } = this.expandLineInputs(
-      dto.items,
-      bundleById,
-    );
+    const { lines: expandedLines, bundleDiscount } = this.expandLineInputs(dto.items, bundleById);
 
-    const productStoreIds = new Set(
-      [...productById.values()].map((p) => p.storeId),
-    );
+    const productStoreIds = new Set([...productById.values()].map((p) => p.storeId));
     if (productStoreIds.size !== 1) {
       throw new BadRequestException({
         code: 'CART_MULTI_STORE',
@@ -275,9 +259,7 @@ export class OrdersService {
         storeId = dStore.id;
       } else {
         // Auto-route to nearest open branch by ward centroid.
-        const routed = await this.storeRouter.pickNearestDeliveryStore(
-          dto.address?.wardCode,
-        );
+        const routed = await this.storeRouter.pickNearestDeliveryStore(dto.address?.wardCode);
         if (routed) {
           storeId = routed.storeId;
         }
@@ -362,9 +344,10 @@ export class OrdersService {
         if (have < demand) {
           throw new BadRequestException({
             code: 'OUT_OF_STOCK',
-            message: have <= 0
-              ? `"${product.name}" đã hết hàng.`
-              : `"${product.name}" chỉ còn ${have} cái — vui lòng giảm số lượng.`,
+            message:
+              have <= 0
+                ? `"${product.name}" đã hết hàng.`
+                : `"${product.name}" chỉ còn ${have} cái — vui lòng giảm số lượng.`,
           });
         }
       }
@@ -376,19 +359,9 @@ export class OrdersService {
       // Combo-expanded lines carry no personalization (the combo fixes its
       // contents), so skip the flavour-composition check for them — otherwise a
       // combo containing a flavour-pick product would always fail.
-      if (
-        !input.fromBundle &&
-        product.flavorPickCount &&
-        product.flavorPickCount > 0
-      ) {
-        const flavors = (input.personalization?.flavors ?? {}) as Record<
-          string,
-          number
-        >;
-        const total = Object.values(flavors).reduce(
-          (s, n) => s + (Number(n) || 0),
-          0,
-        );
+      if (!input.fromBundle && product.flavorPickCount && product.flavorPickCount > 0) {
+        const flavors = (input.personalization?.flavors ?? {}) as Record<string, number>;
+        const total = Object.values(flavors).reduce((s, n) => s + (Number(n) || 0), 0);
         const need = product.flavorPickCount * input.quantity;
         if (total !== need) {
           throw new BadRequestException({
@@ -435,16 +408,10 @@ export class OrdersService {
 
     // Delivery fee keys off the REAL products in the order (combo-expanded
     // included) — e.g. the birthday-cake tier — so resolve from the line set.
-    const orderedProductIds = [
-      ...new Set(lineCreates.map((l) => l.productId)),
-    ];
+    const orderedProductIds = [...new Set(lineCreates.map((l) => l.productId))];
     const deliveryFeeVndRaw =
       dto.fulfillmentType === 'DELIVERY'
-        ? await this.computeDeliveryFee(
-            storeId,
-            dto.address?.wardCode,
-            orderedProductIds,
-          )
+        ? await this.computeDeliveryFee(storeId, dto.address?.wardCode, orderedProductIds)
         : 0;
     const deliveryFee = new Prisma.Decimal(deliveryFeeVndRaw);
 
@@ -482,8 +449,7 @@ export class OrdersService {
     });
     const campaignDiscountVnd = Math.min(promo.discountVnd, subtotalAfterBundleVnd);
     // Subtotal after BOTH the combo discount and the auto-promo discount.
-    const subtotalAfterCampaign =
-      subtotalAfterBundleVnd - campaignDiscountVnd;
+    const subtotalAfterCampaign = subtotalAfterBundleVnd - campaignDiscountVnd;
 
     let couponDiscountVnd = 0;
     let couponId: string | null = null;
@@ -506,8 +472,7 @@ export class OrdersService {
       const card = await this.prisma.giftCard.findUnique({
         where: { code: giftCardCode },
       });
-      const expired =
-        card?.expiresAt != null && card.expiresAt.getTime() < Date.now();
+      const expired = card?.expiresAt != null && card.expiresAt.getTime() < Date.now();
       if (!card || !card.isActive || expired || card.balanceVnd <= 0) {
         throw new BadRequestException({
           code: 'GIFT_CARD_INVALID',
@@ -524,22 +489,14 @@ export class OrdersService {
     // direct order would.
     const qtyByProduct = new Map<string, number>();
     for (const l of expandedLines) {
-      qtyByProduct.set(
-        l.productId,
-        (qtyByProduct.get(l.productId) ?? 0) + l.quantity,
-      );
+      qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.quantity);
     }
 
     const created = await this.prisma.$transaction(async (tx) => {
       // Daily order cap (Product.dailyMaxQuantity). Enforced first, inside the
       // tx with a per-(product, fulfilment-date) advisory lock, so concurrent
       // checkouts can't both slip past the cap. No-op for uncapped products.
-      await this.assertDailyCaps(
-        tx,
-        [...productById.values()],
-        qtyByProduct,
-        targetAt,
-      );
+      await this.assertDailyCaps(tx, [...productById.values()], qtyByProduct, targetAt);
 
       // Combo (bundle) read happened BEFORE this tx; re-validate each ordered
       // combo here under a per-combo advisory lock so a concurrent admin edit
@@ -580,8 +537,8 @@ export class OrdersService {
       // Never spend a pre-existing account's points on an unverified guest
       // order that merely matched its phone number.
       const requestedPoints = guestBoundToExisting
-          ? 0
-          : Math.max(0, Math.floor(dto.pointsToRedeem ?? 0));
+        ? 0
+        : Math.max(0, Math.floor(dto.pointsToRedeem ?? 0));
       let pointsRedeemed = 0;
       let pointsDiscount = new Prisma.Decimal(0);
       if (requestedPoints > 0) {
@@ -589,19 +546,10 @@ export class OrdersService {
           where: { id: customerId },
           select: { pointsBalance: true },
         });
-        const totalBeforePointsVnd = Math.round(
-          Number(totalBeforePoints.toString()),
-        );
-        const maxByValue = Math.floor(
-          totalBeforePointsVnd / LOYALTY_CONFIG.redemptionValueVnd,
-        );
-        pointsRedeemed = Math.max(
-          0,
-          Math.min(requestedPoints, lu.pointsBalance, maxByValue),
-        );
-        pointsDiscount = new Prisma.Decimal(
-          pointsRedeemed * LOYALTY_CONFIG.redemptionValueVnd,
-        );
+        const totalBeforePointsVnd = Math.round(Number(totalBeforePoints.toString()));
+        const maxByValue = Math.floor(totalBeforePointsVnd / LOYALTY_CONFIG.redemptionValueVnd);
+        pointsRedeemed = Math.max(0, Math.min(requestedPoints, lu.pointsBalance, maxByValue));
+        pointsDiscount = new Prisma.Decimal(pointsRedeemed * LOYALTY_CONFIG.redemptionValueVnd);
       }
 
       const totalAfterPoints = totalBeforePoints.minus(pointsDiscount);
@@ -615,8 +563,7 @@ export class OrdersService {
         const card = await tx.giftCard.findUnique({
           where: { code: giftCardCode },
         });
-        const expired =
-          card?.expiresAt != null && card.expiresAt.getTime() < Date.now();
+        const expired = card?.expiresAt != null && card.expiresAt.getTime() < Date.now();
         if (!card || !card.isActive || expired || card.balanceVnd <= 0) {
           throw new BadRequestException({ code: 'GIFT_CARD_INVALID' });
         }
@@ -641,9 +588,7 @@ export class OrdersService {
       for (const line of lineCreates) {
         const variantId = line.variantId;
         if (!variantId) continue;
-        const variant = productById
-          .get(line.productId)!
-          .variants.find((v) => v.id === variantId);
+        const variant = productById.get(line.productId)!.variants.find((v) => v.id === variantId);
         if (!variant || variant.stockMode !== 'LIMITED') continue;
         const updated = await tx.productVariant.updateMany({
           where: {
@@ -689,14 +634,10 @@ export class OrdersService {
           notes: dto.notes,
           isGift: dto.isGift ?? false,
           giftMessage: dto.isGift ? dto.giftMessage?.trim() || null : null,
-          giftRecipientName: dto.isGift
-            ? dto.giftRecipientName?.trim() || null
-            : null,
-          giftRecipientPhone: dto.isGift
-            ? dto.giftRecipientPhone?.trim() || null
-            : null,
-          giftWrap: dto.isGift ? dto.giftWrap ?? false : false,
-          hidePrice: dto.isGift ? dto.hidePrice ?? false : false,
+          giftRecipientName: dto.isGift ? dto.giftRecipientName?.trim() || null : null,
+          giftRecipientPhone: dto.isGift ? dto.giftRecipientPhone?.trim() || null : null,
+          giftWrap: dto.isGift ? (dto.giftWrap ?? false) : false,
+          hidePrice: dto.isGift ? (dto.hidePrice ?? false) : false,
           requestVatInvoice: dto.requestVatInvoice ?? false,
           invoiceCompanyName: dto.invoiceCompanyName?.trim() || null,
           invoiceTaxId: dto.invoiceTaxId?.trim() || null,
@@ -749,8 +690,7 @@ export class OrdersService {
     // When a gift card fully covers the order, there's nothing left to charge
     // a gateway for — route to the cash provider (records a 0₫ payment) so we
     // never hand VNPay/Stripe a zero amount.
-    const effectiveMethod =
-      Number(created.total.toString()) <= 0 ? 'CASH' : dto.paymentMethod;
+    const effectiveMethod = Number(created.total.toString()) <= 0 ? 'CASH' : dto.paymentMethod;
     let paymentInstructions;
     try {
       paymentInstructions = await this.payments.initiate({
@@ -789,8 +729,7 @@ export class OrdersService {
       );
       throw new BadRequestException({
         code: 'PAYMENT_INIT_FAILED',
-        message:
-          'Không khởi tạo được thanh toán. Đơn hàng đã được huỷ, vui lòng thử lại.',
+        message: 'Không khởi tạo được thanh toán. Đơn hàng đã được huỷ, vui lòng thử lại.',
       });
     }
 
@@ -923,82 +862,85 @@ export class OrdersService {
         message: `Cannot move from ${order.status} to ${toStatus}.`,
       });
     }
-    const txResult = await this.prisma.$transaction(async (tx) => {
-      // Status-GUARDED update: only transition if the order is still in the
-      // exact status we validated against. Two concurrent transitions (e.g. a
-      // double cancel) would otherwise both pass isAllowedTransition and both
-      // run the side-effects below (double refund/restock/reverse). The loser
-      // sees count 0, throws, rolls back, and never reaches side-effects.
-      const res = await tx.order.updateMany({
-        where: { id, status: order.status },
-        data: {
-          status: toStatus,
-          // A cancel can land while the order is still live at the kitchen
-          // (SENT_TO_KITCHEN, kitchenStatus=PREPARING/…). Clear the kitchen
-          // status here so a cancelled order never carries an orphaned live
-          // kanban state — preserving the invariant the kitchen-transition
-          // guards rely on ("only SENT_TO_KITCHEN orders carry kitchenStatus").
-          ...(toStatus === 'CANCELLED' && { kitchenStatus: null }),
-        },
-      });
-      if (res.count === 0) {
-        throw new BadRequestException({
-          code: 'ORDER_INVALID_TRANSITION',
-          message: `Order is no longer in ${order.status}.`,
+    const txResult = await this.prisma.$transaction(
+      async (tx) => {
+        // Status-GUARDED update: only transition if the order is still in the
+        // exact status we validated against. Two concurrent transitions (e.g. a
+        // double cancel) would otherwise both pass isAllowedTransition and both
+        // run the side-effects below (double refund/restock/reverse). The loser
+        // sees count 0, throws, rolls back, and never reaches side-effects.
+        const res = await tx.order.updateMany({
+          where: { id, status: order.status },
+          data: {
+            status: toStatus,
+            // A cancel can land while the order is still live at the kitchen
+            // (SENT_TO_KITCHEN, kitchenStatus=PREPARING/…). Clear the kitchen
+            // status here so a cancelled order never carries an orphaned live
+            // kanban state — preserving the invariant the kitchen-transition
+            // guards rely on ("only SENT_TO_KITCHEN orders carry kitchenStatus").
+            ...(toStatus === 'CANCELLED' && { kitchenStatus: null }),
+          },
         });
-      }
-      await tx.orderStatusEvent.create({
-        data: {
-          orderId: id,
-          fromStatus: order.status,
-          toStatus,
-          actorId: actor.sub,
-          note,
-        },
-      });
-      // DB side-effects run in the SAME transaction as the status change, so
-      // the status flip and every money-state award/reversal commit (or roll
-      // back) atomically. Previously these ran AFTER commit — a failure there
-      // left the order terminal with the work half-done, and the status guard
-      // blocked any retry. External effects (refund-request rows, realtime,
-      // push) stay after the commit; they don't corrupt money state if they
-      // fail and are independently retryable/idempotent.
-      const createdRefunds: Refund[] = [];
-      if (toStatus === 'COMPLETED') {
-        await this.payments.onOrderCompleted(id, tx);
-        await this.loyalty.earnFor(order, tx);
-      } else if (toStatus === 'CANCELLED') {
-        await this.loyalty.refundRedemption(id, tx);
-        const { capturedPayments } = await this.payments.onOrderCancelled(id, tx);
-        await this.restoreInventory(id, tx);
-        await this.restoreGiftCard(id, tx);
-        // Release coupon + campaign usage so a cancelled order doesn't burn the
-        // customer's coupon or a campaign's allowance (mirrors points/stock/
-        // gift card being restored above).
-        await this.coupons.reverseRedemption(id, tx);
-        await this.promotions.reverseUsage(id, tx);
-        // Open a refund row for each already-captured payment INSIDE this tx,
-        // so a cancelled order can never be left without its refund row (which
-        // the status guard would then block a retry from creating). Realtime
-        // emit is deferred until after commit.
-        for (const payment of capturedPayments) {
-          const { refund, created } = await this.refunds.createRequestTx(tx, {
-            order,
-            payment,
-            reason: note ?? 'Order cancelled',
-            requestedById: actor.sub,
-            inInteractiveTx: true,
+        if (res.count === 0) {
+          throw new BadRequestException({
+            code: 'ORDER_INVALID_TRANSITION',
+            message: `Order is no longer in ${order.status}.`,
           });
-          if (created) createdRefunds.push(refund);
         }
-      }
+        await tx.orderStatusEvent.create({
+          data: {
+            orderId: id,
+            fromStatus: order.status,
+            toStatus,
+            actorId: actor.sub,
+            note,
+          },
+        });
+        // DB side-effects run in the SAME transaction as the status change, so
+        // the status flip and every money-state award/reversal commit (or roll
+        // back) atomically. Previously these ran AFTER commit — a failure there
+        // left the order terminal with the work half-done, and the status guard
+        // blocked any retry. External effects (refund-request rows, realtime,
+        // push) stay after the commit; they don't corrupt money state if they
+        // fail and are independently retryable/idempotent.
+        const createdRefunds: Refund[] = [];
+        if (toStatus === 'COMPLETED') {
+          await this.payments.onOrderCompleted(id, tx);
+          await this.loyalty.earnFor(order, tx);
+        } else if (toStatus === 'CANCELLED') {
+          await this.loyalty.refundRedemption(id, tx);
+          const { capturedPayments } = await this.payments.onOrderCancelled(id, tx);
+          await this.restoreInventory(id, tx);
+          await this.restoreGiftCard(id, tx);
+          // Release coupon + campaign usage so a cancelled order doesn't burn the
+          // customer's coupon or a campaign's allowance (mirrors points/stock/
+          // gift card being restored above).
+          await this.coupons.reverseRedemption(id, tx);
+          await this.promotions.reverseUsage(id, tx);
+          // Open a refund row for each already-captured payment INSIDE this tx,
+          // so a cancelled order can never be left without its refund row (which
+          // the status guard would then block a retry from creating). Realtime
+          // emit is deferred until after commit.
+          for (const payment of capturedPayments) {
+            const { refund, created } = await this.refunds.createRequestTx(tx, {
+              order,
+              payment,
+              reason: note ?? 'Order cancelled',
+              requestedById: actor.sub,
+              inInteractiveTx: true,
+            });
+            if (created) createdRefunds.push(refund);
+          }
+        }
 
-      const next = await tx.order.findUniqueOrThrow({
-        where: { id },
-        include: ORDER_INCLUDE,
-      });
-      return { order: next, createdRefunds };
-    }, { timeout: 15_000 });
+        const next = await tx.order.findUniqueOrThrow({
+          where: { id },
+          include: ORDER_INCLUDE,
+        });
+        return { order: next, createdRefunds };
+      },
+      { timeout: 15_000 },
+    );
     const updated = txResult.order;
 
     // Post-commit: emit realtime for refund rows created inside the tx (the
@@ -1007,11 +949,7 @@ export class OrdersService {
       this.refunds.notifyCreated(refund);
     }
 
-    const rooms = [
-      `order:${id}`,
-      `user:${order.customerId}`,
-      `store:${order.storeId}`,
-    ];
+    const rooms = [`order:${id}`, `user:${order.customerId}`, `store:${order.storeId}`];
     if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
     this.realtime.emit(rooms, 'order.status_changed', {
       orderId: id,
@@ -1031,7 +969,11 @@ export class OrdersService {
     return updated;
   }
 
-  async customerCancel(id: string, customerId: string, reason?: string): Promise<OrderWithIncludes> {
+  async customerCancel(
+    id: string,
+    customerId: string,
+    reason?: string,
+  ): Promise<OrderWithIncludes> {
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: ORDER_INCLUDE,
@@ -1110,7 +1052,10 @@ export class OrdersService {
   ): Promise<OrderWithIncludes> {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { ...ORDER_INCLUDE, store: { select: { id: true, name: true, slug: true, defaultKitchenId: true } } },
+      include: {
+        ...ORDER_INCLUDE,
+        store: { select: { id: true, name: true, slug: true, defaultKitchenId: true } },
+      },
     });
     if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
     this.assertCanWrite(order, actor);
@@ -1138,10 +1083,7 @@ export class OrdersService {
     // target kitchen). The common merchant path passes no kitchenId and falls
     // back to the store default, so this adds zero overhead for it.
     if (opts.kitchenId) {
-      if (
-        actor.role !== Role.ADMIN &&
-        opts.kitchenId !== order.store.defaultKitchenId
-      ) {
+      if (actor.role !== Role.ADMIN && opts.kitchenId !== order.store.defaultKitchenId) {
         throw new ForbiddenException({
           code: 'KITCHEN_NOT_ALLOWED',
           message: 'Bạn chỉ có thể chuyển đơn tới bếp của cửa hàng mình.',
@@ -1192,12 +1134,7 @@ export class OrdersService {
     });
 
     this.realtime.emit(
-      [
-        `order:${id}`,
-        `user:${order.customerId}`,
-        `store:${order.storeId}`,
-        `kitchen:${kitchenId}`,
-      ],
+      [`order:${id}`, `user:${order.customerId}`, `store:${order.storeId}`, `kitchen:${kitchenId}`],
       'order.status_changed',
       {
         orderId: id,
@@ -1294,11 +1231,7 @@ export class OrdersService {
       where: { id },
       include: ORDER_INCLUDE,
     });
-    const rooms = [
-      `order:${id}`,
-      `user:${order.customerId}`,
-      `store:${order.storeId}`,
-    ];
+    const rooms = [`order:${id}`, `user:${order.customerId}`, `store:${order.storeId}`];
     if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
     this.realtime.emit(rooms, 'order.kitchen_status_changed', {
       orderId: id,
@@ -1336,10 +1269,7 @@ export class OrdersService {
     // Must still be live at the kitchen. Guarding on the *actual* SENT_TO_KITCHEN
     // status (not order.status) prevents resurrecting an order that was
     // cancelled while it still carried kitchenStatus=READY_DISPATCH.
-    if (
-      order.status !== 'SENT_TO_KITCHEN' ||
-      order.kitchenStatus !== 'READY_DISPATCH'
-    ) {
+    if (order.status !== 'SENT_TO_KITCHEN' || order.kitchenStatus !== 'READY_DISPATCH') {
       throw new BadRequestException({
         code: 'KITCHEN_NOT_READY',
         message: 'Order is not a live SENT_TO_KITCHEN card at READY_DISPATCH.',
@@ -1386,11 +1316,7 @@ export class OrdersService {
       return next;
     });
 
-    const rooms = [
-      `order:${id}`,
-      `user:${order.customerId}`,
-      `store:${order.storeId}`,
-    ];
+    const rooms = [`order:${id}`, `user:${order.customerId}`, `store:${order.storeId}`];
     if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
     this.realtime.emit(rooms, 'order.status_changed', {
       orderId: id,
@@ -1545,9 +1471,7 @@ export class OrdersService {
     }
 
     // 4) Opening hours — same logic as before but on the expanded check.
-    const hours = store.openingHours as
-      | Record<string, [string, string][]>
-      | null;
+    const hours = store.openingHours as Record<string, [string, string][]> | null;
     if (!hours || Object.keys(hours).length === 0) return; // 24/7
 
     const toMin = (hhmm: string) => {
@@ -1562,9 +1486,7 @@ export class OrdersService {
     const key = dayKeys[vn.getUTCDay()];
     const minutes = vn.getUTCHours() * 60 + vn.getUTCMinutes();
     const todays = hours[key] ?? [];
-    const isOpen = todays.some(
-      ([o, c]) => minutes >= toMin(o) && minutes <= toMin(c),
-    );
+    const isOpen = todays.some(([o, c]) => minutes >= toMin(o) && minutes <= toMin(c));
     if (isOpen) return;
 
     // Find the next opening datetime within the next 8 days.
@@ -1691,7 +1613,12 @@ export class OrdersService {
    * `ORDER_ITEMS_TIMELINE` error carrying machine-readable `details.items`.
    */
   private async assertProductsAcceptingOrder(
-    products: { id: string; name: string; leadTimeHours: number | null; availableDaysOfWeek: number[] }[],
+    products: {
+      id: string;
+      name: string;
+      leadTimeHours: number | null;
+      availableDaysOfWeek: number[];
+    }[],
     at: Date,
     placedAt: Date,
     scheduled: boolean,
@@ -1779,9 +1706,9 @@ export class OrdersService {
    *   - picks the under/over band by comparing haversine distance from
    *     the fulfilling store to the address ward centroid
    *
-   * Falls back to `DELIVERY_FEE_FALLBACK` only when ward / store coords
-   * are missing — the routing already prefers stores with coords, so this
-   * branch is rarely hit in practice.
+   * Falls back to a zero fee only when ward / store coords are missing — the
+   * routing already prefers stores with coords, so this branch is rarely hit
+   * in practice.
    */
   private async computeDeliveryFee(
     storeId: string,
@@ -1789,26 +1716,16 @@ export class OrdersService {
     productIds: string[],
   ): Promise<number> {
     const cfg = await this.deliveryConfig.get();
-    const hasBirthdayCake = await this.deliveryConfig.cartHasBirthdayCake(
-      productIds,
-      cfg,
-    );
+    const hasBirthdayCake = await this.deliveryConfig.cartHasBirthdayCake(productIds, cfg);
     // No customer ward → treat as "other ward" so we never undercharge.
     if (!wardCode) {
-      return hasBirthdayCake
-        ? cfg.birthdayCakeFeeOtherWardVnd
-        : cfg.standardFeeOtherWardVnd;
+      return hasBirthdayCake ? cfg.birthdayCakeFeeOtherWardVnd : cfg.standardFeeOtherWardVnd;
     }
     const store = await this.prisma.store.findUnique({
       where: { id: storeId },
       select: { wardCode: true },
     });
-    return this.deliveryConfig.feeFor(
-      cfg,
-      wardCode,
-      store?.wardCode ?? null,
-      hasBirthdayCake,
-    );
+    return this.deliveryConfig.feeFor(cfg, wardCode, store?.wardCode ?? null, hasBirthdayCake);
   }
 
   /// Enforces store's minimum order subtotal (₫). 0 = no minimum.
@@ -1852,8 +1769,7 @@ export class OrdersService {
       if (existing.claimed || existing.role !== 'CUSTOMER') {
         throw new BadRequestException({
           code: 'PHONE_HAS_ACCOUNT',
-          message:
-            'Số điện thoại này đã có tài khoản. Vui lòng đăng nhập để đặt hàng.',
+          message: 'Số điện thoại này đã có tài khoản. Vui lòng đăng nhập để đặt hàng.',
         });
       }
       return { userId: existing.id, createdNew: false };
@@ -1867,9 +1783,10 @@ export class OrdersService {
           select: { id: true },
         })) !== null
       : false;
-    const finalEmail = normalisedEmail && !emailInUse
-      ? normalisedEmail
-      : `guest+${randomBytes(8).toString('hex')}@banan.local`;
+    const finalEmail =
+      normalisedEmail && !emailInUse
+        ? normalisedEmail
+        : `guest+${randomBytes(8).toString('hex')}@banan.local`;
 
     const password = randomBytes(24).toString('base64url');
     const passwordHash = await bcrypt.hash(password, 12);
@@ -1946,15 +1863,13 @@ export class OrdersService {
       if (!fresh || !fresh.isActive) {
         throw new BadRequestException({
           code: 'BUNDLE_UNAVAILABLE',
-          message:
-            'Một combo trong giỏ vừa ngừng bán. Vui lòng kiểm tra lại giỏ hàng.',
+          message: 'Một combo trong giỏ vừa ngừng bán. Vui lòng kiểm tra lại giỏ hàng.',
         });
       }
       if (fingerprint(fresh) !== fingerprint(bundleById.get(id)!)) {
         throw new BadRequestException({
           code: 'BUNDLE_CHANGED',
-          message:
-            'Một combo trong giỏ vừa được cập nhật. Vui lòng tải lại giỏ và đặt lại.',
+          message: 'Một combo trong giỏ vừa được cập nhật. Vui lòng tải lại giỏ và đặt lại.',
         });
       }
     }
@@ -1980,9 +1895,7 @@ export class OrdersService {
     // take the per-product advisory locks in the SAME order — otherwise order1
     // (locks A then B) and order2 (locks B then A) could deadlock.
     const capped = products
-      .filter(
-        (p) => p.dailyMaxQuantity != null && (qtyByProduct.get(p.id) ?? 0) > 0,
-      )
+      .filter((p) => p.dailyMaxQuantity != null && (qtyByProduct.get(p.id) ?? 0) > 0)
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     if (capped.length === 0) return;
 
@@ -1994,11 +1907,8 @@ export class OrdersService {
     const shifted = new Date(targetAt.getTime() + VN_OFFSET_MS);
     const dayKey = shifted.toISOString().slice(0, 10); // VN calendar date
     const dayStart = new Date(
-      Date.UTC(
-        shifted.getUTCFullYear(),
-        shifted.getUTCMonth(),
-        shifted.getUTCDate(),
-      ) - VN_OFFSET_MS,
+      Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) -
+        VN_OFFSET_MS,
     );
     const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
 

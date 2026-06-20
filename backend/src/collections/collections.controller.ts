@@ -72,10 +72,7 @@ export class MerchantCollectionsController {
   // can still LIST/view (read-only), but not create/edit/delete.
   @Roles(Role.ADMIN)
   @Post()
-  async create(
-    @CurrentUser() _user: AuthPrincipal,
-    @Body() dto: CreateCollectionDto,
-  ) {
+  async create(@CurrentUser() _user: AuthPrincipal, @Body() dto: CreateCollectionDto) {
     const storeId = await this.collections.catalogStoreId();
     return this.collections.create(storeId, dto);
   }

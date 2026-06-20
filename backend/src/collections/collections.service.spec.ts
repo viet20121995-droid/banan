@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import type { PrismaService } from '../prisma/prisma.service';
@@ -54,9 +50,7 @@ describe('CollectionsService.addItems', () => {
       items: [],
     });
     prisma.product.count.mockResolvedValue(3); // p1, p2, p3 all exist
-    prisma.collectionItem.findMany.mockResolvedValue([
-      { productId: 'p1', sortOrder: 0 },
-    ]);
+    prisma.collectionItem.findMany.mockResolvedValue([{ productId: 'p1', sortOrder: 0 }]);
     prisma.collection.findUniqueOrThrow.mockResolvedValue({
       id: 'c1',
       items: [],
@@ -107,9 +101,7 @@ describe('CollectionsService.addItems', () => {
       items: [],
     });
 
-    await expect(
-      service.addItems('c1', 's2', ['p1']),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.addItems('c1', 's2', ['p1'])).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -121,9 +113,9 @@ describe('CollectionsService.addItems', () => {
     });
     prisma.product.count.mockResolvedValue(1); // only 1 of 2 ids found
 
-    await expect(
-      service.addItems('c1', 's1', ['p1', 'gone']),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.addItems('c1', 's1', ['p1', 'gone'])).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -177,10 +169,7 @@ describe('CollectionsService.findOnePublic (customer availability filter)', () =
       sub: 'a1',
       storeId: null,
     } as never);
-    expect(res.items.map((i: { product: { id: string } }) => i.product.id)).toEqual([
-      'p1',
-      'p2',
-    ]);
+    expect(res.items.map((i: { product: { id: string } }) => i.product.id)).toEqual(['p1', 'p2']);
   });
 });
 
@@ -200,8 +189,8 @@ describe('CollectionsService slug-conflict mapping', () => {
       collection: { create: jest.fn().mockRejectedValue(p2002) },
     };
     const service = new CollectionsService(prisma as unknown as PrismaService);
-    await expect(
-      service.create('s1', { name: 'X', slug: 'dup' } as never),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.create('s1', { name: 'X', slug: 'dup' } as never)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 });

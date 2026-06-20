@@ -86,9 +86,9 @@ export class CollectionsService {
   /// membership query across all the given collections) so the customer
   /// cake-personalization wizard fires from home strips and collection
   /// pages too — matching the menu grid's quick-add behaviour.
-  private async applyBirthdayFlag<
-    C extends { items: Array<{ product: { id: string } }> },
-  >(collections: C[]): Promise<C[]> {
+  private async applyBirthdayFlag<C extends { items: Array<{ product: { id: string } }> }>(
+    collections: C[],
+  ): Promise<C[]> {
     const ids: string[] = [];
     for (const c of collections) {
       for (const it of c.items) ids.push(it.product.id);
@@ -96,8 +96,7 @@ export class CollectionsService {
     const birthdayIds = await birthdayCakeProductIds(this.prisma, ids);
     for (const c of collections) {
       for (const it of c.items) {
-        (it.product as Record<string, unknown>).isBirthdayCake =
-          birthdayIds.has(it.product.id);
+        (it.product as Record<string, unknown>).isBirthdayCake = birthdayIds.has(it.product.id);
       }
     }
     return collections;
@@ -253,10 +252,7 @@ export class CollectionsService {
             where: {
               collectionId: id,
               productId: {
-                notIn:
-                  incomingProductIds.length > 0
-                    ? incomingProductIds
-                    : ['__none__'],
+                notIn: incomingProductIds.length > 0 ? incomingProductIds : ['__none__'],
               },
             },
           });
@@ -293,11 +289,7 @@ export class CollectionsService {
    *  from the menu list. Idempotent: products already in the collection are
    *  skipped; new ones go after the current max sortOrder. Scope-checked via
    *  findOne so a merchant can only add to their own store's collection. */
-  async addItems(
-    id: string,
-    storeIdScope: string | null,
-    productIds: string[],
-  ) {
+  async addItems(id: string, storeIdScope: string | null, productIds: string[]) {
     await this.findOne(id, storeIdScope);
     const ids = [...new Set(productIds)];
     if (ids.length === 0) return this.findOne(id, storeIdScope);

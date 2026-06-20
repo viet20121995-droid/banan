@@ -9,11 +9,7 @@ import { Prisma } from '@prisma/client';
 import { resolveCatalogStoreId } from '../common/catalog-store';
 import { PrismaService } from '../prisma/prisma.service';
 
-import {
-  BundleItemInputDto,
-  CreateBundleDto,
-  UpdateBundleDto,
-} from './dto';
+import { BundleItemInputDto, CreateBundleDto, UpdateBundleDto } from './dto';
 
 const BUNDLE_INCLUDE = {
   items: {
@@ -44,10 +40,7 @@ export class BundlesService {
     return this.prisma.bundle.findMany({
       where: { isActive: true },
       include: BUNDLE_INCLUDE,
-      orderBy: [
-        { sortOrder: 'asc' },
-        { createdAt: 'desc' },
-      ],
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
   }
 
@@ -55,10 +48,7 @@ export class BundlesService {
     return this.prisma.bundle.findMany({
       where: { isActive: true, isPinnedToHome: true },
       include: BUNDLE_INCLUDE,
-      orderBy: [
-        { sortOrder: 'asc' },
-        { createdAt: 'desc' },
-      ],
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
   }
 
@@ -82,10 +72,7 @@ export class BundlesService {
     return this.prisma.bundle.findMany({
       where: storeIdScope ? { storeId: storeIdScope } : undefined,
       include: BUNDLE_INCLUDE,
-      orderBy: [
-        { sortOrder: 'asc' },
-        { createdAt: 'desc' },
-      ],
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
   }
 
@@ -125,10 +112,7 @@ export class BundlesService {
       });
       return bundle;
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException({
           code: 'BUNDLE_SLUG_TAKEN',
           message: 'Slug đã tồn tại — chọn slug khác.',
@@ -151,10 +135,7 @@ export class BundlesService {
           variantId: it.variantId ?? undefined,
           quantity: it.quantity,
         }));
-      await this.assertItemsValid(
-        itemsForCheck,
-        dto.priceVnd ?? existing.priceVnd,
-      );
+      await this.assertItemsValid(itemsForCheck, dto.priceVnd ?? existing.priceVnd);
     }
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -197,10 +178,7 @@ export class BundlesService {
         });
       });
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException({
           code: 'BUNDLE_SLUG_TAKEN',
           message: 'Slug đã tồn tại — chọn slug khác.',
@@ -212,7 +190,13 @@ export class BundlesService {
 
   async remove(id: string, storeIdScope: string | null) {
     await this.findOneForMerchant(id, storeIdScope);
-    await this.prisma.bundle.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      // Serialise the delete against an in-flight checkout of this combo (the
+      // order tx takes the same `bundle:<id>` lock and re-validates), so the
+      // combo can't vanish between the order's re-check and its commit.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'bundle:' + id}, 0))`;
+      await tx.bundle.delete({ where: { id } });
+    });
   }
 
   /// De-duplicates the item list by (productId, variantId) — defensive
@@ -246,10 +230,7 @@ export class BundlesService {
   /// default variant), and the flat combo price never EXCEEDS the à-la-carte
   /// sum — a combo is a deal, not a markup; otherwise order creation would
   /// silently charge the higher regular sum (the discount clamps at 0).
-  private async assertItemsValid(
-    items: BundleItemInputDto[],
-    priceVnd: number,
-  ): Promise<void> {
+  private async assertItemsValid(items: BundleItemInputDto[], priceVnd: number): Promise<void> {
     const ids = Array.from(new Set(items.map((i) => i.productId)));
     const products = await this.prisma.product.findMany({
       where: { id: { in: ids } },
@@ -291,9 +272,7 @@ export class BundlesService {
         dayConstrained.push(product.availableDaysOfWeek);
       }
       regular = regular.plus(
-        new Prisma.Decimal(product.basePrice)
-          .plus(variant.priceDelta)
-          .times(it.quantity),
+        new Prisma.Decimal(product.basePrice).plus(variant.priceDelta).times(it.quantity),
       );
     }
     // A combo whose parts share NO common selling day can never be fulfilled
@@ -330,8 +309,7 @@ export class BundlesService {
     const bundle = await this.findOne(bundleId);
     let regular = 0;
     for (const item of bundle.items) {
-      const variant =
-        item.variant ?? item.product.variants[0];
+      const variant = item.variant ?? item.product.variants[0];
       if (!variant) continue;
       const basePrice = Number(item.product.basePrice.toString());
       const delta = Number(variant.priceDelta.toString());
