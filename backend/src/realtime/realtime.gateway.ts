@@ -76,9 +76,12 @@ export class RealtimeGateway implements OnGatewayConnection {
     // guest see a merchant's product / price / popup change without refresh.
     await client.join('public');
 
-    const raw =
-      (client.handshake.auth as { token?: string } | undefined)?.token ??
-      (client.handshake.query?.token as string | undefined);
+    // Token comes ONLY from handshake.auth (sent in the WS upgrade payload, like
+    // an Authorization header). We deliberately do NOT read it from the query
+    // string — query-string tokens leak into proxy / CDN / browser logs (OWASP).
+    // Every first-party client uses setAuth({token}), so nothing depends on the
+    // query fallback.
+    const raw = (client.handshake.auth as { token?: string } | undefined)?.token;
     // Anonymous (guest) connection — public room only, no user/role rooms.
     if (!raw) {
       this.logger.debug(`socket ${client.id} connected anonymously (public)`);
