@@ -23,6 +23,14 @@ interface IssuedTokens {
   user: User;
 }
 
+/**
+ * A fixed, valid bcrypt hash (of a throwaway value) compared against when no
+ * account matches the login identifier, so a failed login does the SAME bcrypt
+ * work whether or not the account exists — defeating timing-based account
+ * enumeration. Only its validity as a real bcrypt hash matters, not the value.
+ */
+const DUMMY_PASSWORD_HASH = '$2b$12$BJD8.q0e8QtO9aU3OUqfJuhwl7rwnxh2mYHL4T6C5DfylunDJK9e.';
+
 @Injectable()
 export class AuthService {
   private static readonly BCRYPT_ROUNDS = 12;
@@ -69,10 +77,14 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: { OR: [{ email: value }, { phone: dto.emailOrPhone }] },
     });
-    if (!user) throw this.invalidCredentials();
-
-    const ok = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!ok) throw this.invalidCredentials();
+    // Always run a bcrypt comparison — against a dummy hash when the account
+    // doesn't exist — so a wrong password and a non-existent account take the
+    // same time (no timing-based user enumeration). The disabled check stays
+    // AFTER the password check, so a locked account is only revealed to someone
+    // who already has the correct password (keeps the helpful staff message
+    // without leaking account existence to an attacker who doesn't).
+    const ok = await bcrypt.compare(dto.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    if (!user || !ok) throw this.invalidCredentials();
     if (!user.isActive) throw this.accountDisabled();
 
     return this.issueSession(user, deviceId);
@@ -97,10 +109,20 @@ export class AuthService {
       });
     }
     if (!record.user.isActive) throw this.accountDisabled();
-    await this.prisma.refreshToken.update({
-      where: { id: record.id },
+    // Atomically claim the rotation: a refresh token is single-use, so only the
+    // first of two concurrent uses wins the revoke (count===1) and gets a fresh
+    // pair; a racing replay gets count===0 and is rejected. A plain update-by-id
+    // would let both concurrent uses mint valid sessions from one token (TOCTOU).
+    const claim = await this.prisma.refreshToken.updateMany({
+      where: { id: record.id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    if (claim.count === 0) {
+      throw new UnauthorizedException({
+        code: 'AUTH_REFRESH_INVALID',
+        message: 'Refresh token invalid or expired.',
+      });
+    }
     return this.issueSession(record.user, deviceId ?? record.deviceId ?? undefined);
   }
 

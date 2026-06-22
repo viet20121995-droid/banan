@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 
 import { Public } from '../auth/decorators/public.decorator';
 
@@ -11,7 +12,9 @@ import { ContactDto } from './dto/contact.dto';
 export class ContactController {
   constructor(private readonly contact: ContactService) {}
 
-  /** Public support contact form. Rate-limited by the global throttler. */
+  /** Public support contact form. Tightly rate-limited (spam / abuse / DB
+   *  bloat from a public free-text endpoint). */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Public()
   @Post()
   @HttpCode(HttpStatus.OK)

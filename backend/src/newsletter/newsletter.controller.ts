@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import type { Response } from 'express';
 
@@ -21,7 +22,9 @@ export class NewsletterController {
   ) {}
 
   /// Public subscribe — called from the customer footer + popup. Always
-  /// returns 200 (idempotent on already-confirmed addresses).
+  /// returns 200 (idempotent on already-confirmed addresses). Tightly
+  /// rate-limited: it's public and reveals subscription state, so cap probing.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Public()
   @Post('subscribe')
   subscribe(@Body() dto: SubscribeDto) {
