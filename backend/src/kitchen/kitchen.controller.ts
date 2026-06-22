@@ -41,11 +41,19 @@ export class KitchenController {
     @CurrentUser() user: AuthPrincipal,
     @Query('kitchenStatus') kitchenStatus?: KitchenStatus,
     @Query('includeDoneToday') includeDoneToday?: string,
+    @Query('kitchenId') kitchenIdParam?: string,
   ) {
-    if (!user.kitchenId && user.role !== Role.ADMIN) {
+    // KITCHEN_* users are scoped to their own kitchen (from the JWT) and cannot
+    // override it. An ADMIN has no kitchen, so they MUST pass ?kitchenId= to
+    // pick a queue — otherwise listForKitchen(null) would query
+    // `WHERE kitchenId IS NULL` and surface UNROUTED orders instead of a real
+    // kitchen's kanban (mirrors the admin ?kitchenId= rule in analytics).
+    const kitchenId =
+      user.kitchenId ?? (user.role === Role.ADMIN ? kitchenIdParam : undefined);
+    if (!kitchenId) {
       throw new BadRequestException({ code: 'NO_KITCHEN_ASSIGNED' });
     }
-    return this.orders.listForKitchen(user.kitchenId!, {
+    return this.orders.listForKitchen(kitchenId, {
       status: kitchenStatus,
       includeDoneToday: includeDoneToday === '1' || includeDoneToday === 'true',
     });
