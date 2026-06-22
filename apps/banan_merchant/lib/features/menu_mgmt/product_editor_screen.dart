@@ -175,7 +175,9 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     final leadRaw = _leadHours.text.trim();
     final dailyRaw = _dailyMax.text.trim();
     final flavorPickRaw = _flavorPick.text.trim();
-    // 0 / empty = composer off. Only carry options when the composer is on.
+    // 0 / empty = composer off. When off we send flavorPickCount = null (NOT 0):
+    // the backend DTO is @Min(2), so a 0 would 400 the whole save. Options are
+    // only carried when the composer is on.
     final flavorPick = flavorPickRaw.isEmpty ? 0 : int.tryParse(flavorPickRaw) ?? 0;
     final composerOn = flavorPick > 0 && _flavorOptions.isNotEmpty;
     final draft = ProductDraft(
@@ -193,7 +195,9 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       leadTimeHours: leadRaw.isEmpty ? null : int.tryParse(leadRaw),
       availableDaysOfWeek: List.of(_availableDow)..sort(),
       dailyMaxQuantity: dailyRaw.isEmpty ? null : int.tryParse(dailyRaw),
-      flavorPickCount: flavorPick,
+      // null (not 0) when the composer is off, so the @Min(2) backend rule is
+      // skipped (@IsOptional). A count is only sent for a real macaron set.
+      flavorPickCount: composerOn ? flavorPick : null,
       flavorOptions: composerOn ? List.of(_flavorOptions) : const [],
     );
 
@@ -550,10 +554,17 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                           ),
                           validator: (v) {
                             final t = (v ?? '').trim();
-                            if (t.isEmpty) return null;
+                            if (t.isEmpty) return null; // trống = tắt
                             final n = int.tryParse(t);
                             if (n == null || n < 0) {
                               return 'Nhập số nguyên ≥ 0';
+                            }
+                            // Backend yêu cầu ≥ 2 (set nhiều vị). 0 = tắt; 1 vô nghĩa.
+                            if (n == 1) {
+                              return 'Nhập 0 để tắt, hoặc từ 2 trở lên';
+                            }
+                            if (n >= 2 && _flavorOptions.isEmpty) {
+                              return 'Đã đặt số vị — hãy thêm danh sách vị bên dưới';
                             }
                             return null;
                           },

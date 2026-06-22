@@ -82,7 +82,6 @@ class _FormState extends ConsumerState<_Form> {
   late TextEditingController _stdOther;
   late TextEditingController _cakeSame;
   late TextEditingController _cakeOther;
-  late TextEditingController _slug;
   bool _saving = false;
 
   @override
@@ -100,8 +99,6 @@ class _FormState extends ConsumerState<_Form> {
     _cakeOther = TextEditingController(
       text: widget.initial.birthdayCakeFeeOtherWardVnd.toString(),
     );
-    _slug =
-        TextEditingController(text: widget.initial.birthdayCakeCollectionSlug);
   }
 
   @override
@@ -110,7 +107,6 @@ class _FormState extends ConsumerState<_Form> {
     _stdOther.dispose();
     _cakeSame.dispose();
     _cakeOther.dispose();
-    _slug.dispose();
     super.dispose();
   }
 
@@ -123,7 +119,6 @@ class _FormState extends ConsumerState<_Form> {
               int.tryParse(_cakeSame.text.trim()),
           birthdayCakeFeeOtherWardVnd:
               int.tryParse(_cakeOther.text.trim()),
-          birthdayCakeCollectionSlug: _slug.text.trim(),
         );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -167,9 +162,10 @@ class _FormState extends ConsumerState<_Form> {
                       'cửa hàng nhận đơn. Trùng phường = phí "Cùng phường"; '
                       'khác phường = phí "Phường khác".',
                   child: Text(
-                    'Khi đơn có ít nhất 1 sản phẩm thuộc bộ sưu tập bánh '
-                    'sinh nhật (slug bên dưới), áp dụng biểu phí "Bánh '
-                    'sinh nhật" thay vì "Sản phẩm thường".',
+                    'Khi đơn có ít nhất 1 sản phẩm thuộc danh mục Bánh sinh '
+                    'nhật, áp dụng biểu phí "Bánh sinh nhật" thay vì "Sản '
+                    'phẩm thường". Danh mục này được đặt ở mục Danh mục — bật '
+                    '"Đây là danh mục Bánh sinh nhật".',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,
                     ),
@@ -178,7 +174,7 @@ class _FormState extends ConsumerState<_Form> {
                 _Section(
                   title: 'Sản phẩm thường',
                   description:
-                      'Áp dụng cho mọi đơn không có bánh thuộc bộ sưu tập '
+                      'Áp dụng cho mọi đơn không có bánh thuộc danh mục Bánh '
                       'sinh nhật. Đặt 0₫ ở mục "Cùng phường" để miễn phí '
                       'giao hàng nội phường.',
                   child: Column(
@@ -198,10 +194,12 @@ class _FormState extends ConsumerState<_Form> {
                   ),
                 ),
                 _Section(
-                  title: 'Bộ sưu tập bánh sinh nhật',
+                  title: 'Bánh sinh nhật',
                   description:
                       'Bánh sinh nhật cồng kềnh và dễ vỡ — phí thường cao '
-                      'hơn sản phẩm thường ở cả hai band.',
+                      'hơn sản phẩm thường ở cả hai band. Sản phẩm được tính '
+                      'là bánh sinh nhật khi thuộc danh mục Bánh sinh nhật '
+                      '(đặt ở mục Danh mục).',
                   child: Column(
                     children: [
                       _FeeField(
@@ -214,16 +212,6 @@ class _FormState extends ConsumerState<_Form> {
                         controller: _cakeOther,
                         label: 'Phường khác',
                         fmt: fmt,
-                      ),
-                      const SizedBox(height: BananSpacing.sm),
-                      TextField(
-                        controller: _slug,
-                        decoration: const InputDecoration(
-                          labelText: 'Slug bộ sưu tập',
-                          helperText:
-                              'Mặc định: home-birthday-cakes. Đổi nếu bạn '
-                              'dùng tên khác.',
-                        ),
                       ),
                     ],
                   ),

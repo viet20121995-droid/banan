@@ -97,6 +97,11 @@ export class CategoriesService {
       return await this.prisma.$transaction(async (tx) => {
         // At most one birthday-cake category — clear the flag elsewhere first.
         if (dto.isBirthdayCakeCategory === true) {
+          // Serialize concurrent birthday-flag writers: clear-then-set is not
+          // atomic across transactions under READ COMMITTED, so without this
+          // two simultaneous flag-sets could both commit true. Lock released
+          // automatically at transaction end.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('category:birthday-flag', 0))`;
           await tx.category.updateMany({
             where: { isBirthdayCakeCategory: true },
             data: { isBirthdayCakeCategory: false },
@@ -114,6 +119,9 @@ export class CategoriesService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         if (dto.isBirthdayCakeCategory === true) {
+          // See create(): serialize birthday-flag writers so two concurrent
+          // sets can't both end up flagged.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('category:birthday-flag', 0))`;
           await tx.category.updateMany({
             where: { isBirthdayCakeCategory: true, id: { not: id } },
             data: { isBirthdayCakeCategory: false },
