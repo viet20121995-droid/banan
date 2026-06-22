@@ -627,7 +627,10 @@ class _RecommendationsSection extends ConsumerWidget {
             Text('Khách cũng mua', style: theme.textTheme.titleLarge),
             const SizedBox(height: BananSpacing.md),
             SizedBox(
-              height: 280,
+              // Match the home category strips (180×230, no tagline). The card's
+              // natural height (4:3 image + name + 2-line tagline + tags + price)
+              // overflowed the old 280 box at width 200, clipping the price row.
+              height: 230,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: items.length,
@@ -636,11 +639,10 @@ class _RecommendationsSection extends ConsumerWidget {
                 itemBuilder: (context, i) {
                   final p = items[i];
                   return SizedBox(
-                    width: 200,
+                    width: 180,
                     child: ProductCard(
                       name: p.name,
                       imageUrl: p.coverImage,
-                      tagline: p.description,
                       tags: p.tags,
                       minPrice: p.minPrice,
                       hasPriceRange: p.hasPriceRange,
