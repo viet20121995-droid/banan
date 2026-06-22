@@ -80,8 +80,19 @@ export class PaymentsService {
       );
       return;
     }
-    if (args.paidAmountVnd != null) {
+    {
       const expected = Math.round(Number(payment.amount.toString()));
+      // Fail closed: a redirect provider must report a settlement amount we can
+      // cross-check. Stripe's session.amount_total is nullable; treat a missing
+      // amount as a refusal rather than silently capturing an unverified sum.
+      // (PayOS/MoMo always pass a concrete amount, so this only guards the
+      // abnormal Stripe-null case.)
+      if (args.paidAmountVnd == null) {
+        this.logger.error(
+          `No provider amount on payment ${payment.id} (expected ${expected}) — refusing to capture`,
+        );
+        return;
+      }
       if (Math.round(args.paidAmountVnd) !== expected) {
         this.logger.error(
           `Amount mismatch on payment ${payment.id}: provider reports ${args.paidAmountVnd}, expected ${expected} — refusing to capture`,

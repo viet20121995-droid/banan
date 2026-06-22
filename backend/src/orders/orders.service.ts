@@ -452,6 +452,7 @@ export class OrdersService {
     const subtotalAfterCampaign = subtotalAfterBundleVnd - campaignDiscountVnd;
 
     let couponDiscountVnd = 0;
+    let couponAppliesToDelivery = false;
     let couponId: string | null = null;
     if (dto.couponCode && !guestBoundToExisting) {
       const v = await this.coupons.validate({
@@ -462,6 +463,7 @@ export class OrdersService {
         storeId,
       });
       couponDiscountVnd = v.discountVnd;
+      couponAppliesToDelivery = v.appliesToDelivery;
       couponId = v.coupon.id;
     }
 
@@ -527,8 +529,16 @@ export class OrdersService {
       // are consistent — failures roll everything back.
       const couponDiscount = new Prisma.Decimal(couponDiscountVnd);
 
+      // Apply the coupon to the correct bucket: a FREE_DELIVERY coupon discounts
+      // the DELIVERY fee; every other coupon discounts the GOODS subtotal.
+      // Splitting prevents the Math.max(0, goods − discount) clamp from
+      // swallowing a free-delivery discount on a small-goods / large-delivery
+      // cart (the customer would otherwise overpay the delivery fee).
+      const goodsCouponVnd = couponAppliesToDelivery ? 0 : couponDiscountVnd;
+      const deliveryCouponVnd = couponAppliesToDelivery ? couponDiscountVnd : 0;
       const totalBeforePoints = new Prisma.Decimal(
-        Math.max(0, subtotalAfterCampaign - couponDiscountVnd) + deliveryFeeVnd,
+        Math.max(0, subtotalAfterCampaign - goodsCouponVnd) +
+          Math.max(0, deliveryFeeVnd - deliveryCouponVnd),
       );
       // Loyalty redemption: the customer chooses how many Micho to spend.
       // Capped at their balance and at the order value (never below 0). The
@@ -546,7 +556,10 @@ export class OrdersService {
           where: { id: customerId },
           select: { pointsBalance: true },
         });
-        const totalBeforePointsVnd = Math.round(Number(totalBeforePoints.toString()));
+        // Floor, not round: never let points redeem more than the integer VND
+        // actually owed. Prices are Decimal(12,2) so the total can be fractional;
+        // a round() could round up and over-redeem, driving the total negative.
+        const totalBeforePointsVnd = Math.floor(Number(totalBeforePoints.toString()));
         const maxByValue = Math.floor(totalBeforePointsVnd / LOYALTY_CONFIG.redemptionValueVnd);
         pointsRedeemed = Math.max(0, Math.min(requestedPoints, lu.pointsBalance, maxByValue));
         pointsDiscount = new Prisma.Decimal(pointsRedeemed * LOYALTY_CONFIG.redemptionValueVnd);
@@ -567,8 +580,11 @@ export class OrdersService {
         if (!card || !card.isActive || expired || card.balanceVnd <= 0) {
           throw new BadRequestException({ code: 'GIFT_CARD_INVALID' });
         }
-        const totalVnd = Math.round(Number(totalAfterPoints.toString()));
-        giftCardAmountVnd = Math.min(card.balanceVnd, totalVnd);
+        // Floor, not round: cap the gift-card debit to the integer VND owed.
+        // Prices are Decimal(12,2) so totalAfterPoints can be fractional; a
+        // round() could debit MORE than the total and make it negative.
+        const totalFloorVnd = Math.max(0, Math.floor(Number(totalAfterPoints.toString())));
+        giftCardAmountVnd = Math.min(card.balanceVnd, totalFloorVnd);
         if (giftCardAmountVnd > 0) {
           const dec = await tx.giftCard.updateMany({
             where: { id: card.id, balanceVnd: { gte: giftCardAmountVnd } },

@@ -164,13 +164,24 @@ export class RefundsService {
         message: 'Only REQUESTED refunds can be approved.',
       });
     }
-    const approved = await this.prisma.refund.update({
-      where: { id },
-      data: {
-        status: 'APPROVED',
-        approvedById: actor.sub,
-      },
+    // Atomically claim the REQUESTED→APPROVED transition. A plain check-then-act
+    // (read status, then unconditional update-by-id) is NOT race-safe: two
+    // concurrent approvals (double-click / retry / two devices) would both pass
+    // the in-memory guard above, both call process(), and the provider would be
+    // refunded TWICE — real money out. The guarded updateMany + count===0 is
+    // row-lock-safe (EvalPlanQual re-checks the status predicate), so exactly
+    // one approval wins and reaches process().
+    const claim = await this.prisma.refund.updateMany({
+      where: { id, status: 'REQUESTED' },
+      data: { status: 'APPROVED', approvedById: actor.sub },
     });
+    if (claim.count === 0) {
+      throw new BadRequestException({
+        code: 'REFUND_NOT_REQUESTED',
+        message: 'Only REQUESTED refunds can be approved.',
+      });
+    }
+    const approved = await this.prisma.refund.findUniqueOrThrow({ where: { id } });
     this.emit(approved);
 
     // Kick off provider-side refund. The processed status (COMPLETED) is set
@@ -185,14 +196,21 @@ export class RefundsService {
     if (refund.status !== 'REQUESTED') {
       throw new BadRequestException({ code: 'REFUND_NOT_REQUESTED' });
     }
-    const rejected = await this.prisma.refund.update({
-      where: { id },
+    // Same guarded transition as approve(): makes approve/reject mutually
+    // exclusive on a REQUESTED refund, so a racing approve can't move money
+    // while reject overwrites the row to REJECTED (inconsistent paid-yet-rejected).
+    const claim = await this.prisma.refund.updateMany({
+      where: { id, status: 'REQUESTED' },
       data: {
         status: 'REJECTED',
         approvedById: actor.sub,
         reason: reason ? `${refund.reason} · rejected: ${reason}` : refund.reason,
       },
     });
+    if (claim.count === 0) {
+      throw new BadRequestException({ code: 'REFUND_NOT_REQUESTED' });
+    }
+    const rejected = await this.prisma.refund.findUniqueOrThrow({ where: { id } });
     this.emit(rejected);
     return rejected;
   }

@@ -172,11 +172,13 @@ describe('PaymentsService.applyCapture', () => {
     expect(m.notifications.sendToUser).not.toHaveBeenCalled();
   });
 
-  it('amount not provided → capture proceeds (amount check skipped)', async () => {
+  it('amount not provided → capture refused (unverifiable amount, fail closed)', async () => {
     const m = makeService({ payment: payment('INITIATED') });
     await capture(m.svc, null);
-    expect(m.updateMany).toHaveBeenCalledTimes(1);
-    expect(m.realtime.emit).toHaveBeenCalledTimes(1);
+    // A redirect provider must report a settlement amount we can cross-check;
+    // a missing amount is treated as a refusal rather than an unchecked capture.
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.realtime.emit).not.toHaveBeenCalled();
   });
 
   it('late capture on a CANCELLED order → auto-opens a refund, no "captured" notify', async () => {
