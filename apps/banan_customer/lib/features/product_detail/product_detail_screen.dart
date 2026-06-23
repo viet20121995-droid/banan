@@ -641,6 +641,19 @@ class _RecommendationsSectionState
       orElse: () => const SizedBox.shrink(),
       data: (items) {
         if (items.isEmpty) return const SizedBox.shrink();
+        // Warm the cover-image cache for EVERY recommendation up-front. Without
+        // this, cards peeking at the right edge render as empty cream frames
+        // until their image lazily loads — which looks broken. Cheap + idempotent
+        // (precacheImage dedupes against the image cache).
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          for (final p in items) {
+            final url = p.coverImage;
+            if (url != null && url.isNotEmpty) {
+              precacheImage(NetworkImage(url), context);
+            }
+          }
+        });
         final session = ref.watch(authSessionProvider).valueOrNull;
         final wishlistAsync = ref.watch(wishlistIdsProvider);
         final showStock = ref
