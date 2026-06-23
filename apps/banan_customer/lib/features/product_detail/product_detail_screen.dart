@@ -602,14 +602,41 @@ final _recommendationsProvider =
 /// "Khách cũng mua" horizontal carousel — shown between the buy panel
 /// and the reviews on every product detail. Silently hides when there
 /// are no recommendations (cold-start / brand-new product).
-class _RecommendationsSection extends ConsumerWidget {
+class _RecommendationsSection extends ConsumerStatefulWidget {
   const _RecommendationsSection({required this.productId});
   final String productId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_RecommendationsSection> createState() =>
+      _RecommendationsSectionState();
+}
+
+class _RecommendationsSectionState
+    extends ConsumerState<_RecommendationsSection> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Scroll by [delta] px (≈ 2 cards), clamped to the scroll extent.
+  void _nudge(double delta) {
+    if (!_scroll.hasClients) return;
+    final target =
+        (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent);
+    _scroll.animateTo(
+      target,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final async = ref.watch(_recommendationsProvider(productId));
+    final async = ref.watch(_recommendationsProvider(widget.productId));
     return async.maybeWhen(
       orElse: () => const SizedBox.shrink(),
       data: (items) {
@@ -621,6 +648,11 @@ class _RecommendationsSection extends ConsumerWidget {
                 .valueOrNull
                 ?.showStockToCustomers ??
             false;
+        // Desktop/web has no swipe gesture, so overlay prev/next arrows.
+        // Mobile keeps touch-swipe (arrows hidden on narrow viewports). Each
+        // tap advances ≈ 2 cards.
+        const step = (180 + BananSpacing.md) * 2;
+        final showArrows = MediaQuery.sizeOf(context).width >= 640;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -631,41 +663,125 @@ class _RecommendationsSection extends ConsumerWidget {
               // natural height (4:3 image + name + 2-line tagline + tags + price)
               // overflowed the old 280 box at width 200, clipping the price row.
               height: 230,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: items.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(width: BananSpacing.md),
-                itemBuilder: (context, i) {
-                  final p = items[i];
-                  return SizedBox(
-                    width: 180,
-                    child: ProductCard(
-                      name: p.name,
-                      imageUrl: p.coverImage,
-                      tags: p.tags,
-                      minPrice: p.minPrice,
-                      hasPriceRange: p.hasPriceRange,
-                      seasonal: p.isSeasonal,
-                      averageRating: p.averageRating,
-                      reviewCount: p.reviewCount,
-                      stockRemaining: showStock ? p.totalLimitedStock : null,
-                      soldOut: showStock && p.isSoldOut,
-                      isWishlisted: isWishlisted(wishlistAsync, p.id),
-                      onToggleWishlist: session == null
-                          ? null
-                          : () => ref
-                              .read(wishlistIdsProvider.notifier)
-                              .toggle(p.id),
-                      onTap: () => context.push('/product/${p.id}'),
+              child: Stack(
+                children: [
+                  ListView.separated(
+                    controller: _scroll,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(width: BananSpacing.md),
+                    itemBuilder: (context, i) {
+                      final p = items[i];
+                      return SizedBox(
+                        width: 180,
+                        child: ProductCard(
+                          name: p.name,
+                          imageUrl: p.coverImage,
+                          tags: p.tags,
+                          minPrice: p.minPrice,
+                          hasPriceRange: p.hasPriceRange,
+                          seasonal: p.isSeasonal,
+                          averageRating: p.averageRating,
+                          reviewCount: p.reviewCount,
+                          stockRemaining:
+                              showStock ? p.totalLimitedStock : null,
+                          soldOut: showStock && p.isSoldOut,
+                          isWishlisted: isWishlisted(wishlistAsync, p.id),
+                          onToggleWishlist: session == null
+                              ? null
+                              : () => ref
+                                  .read(wishlistIdsProvider.notifier)
+                                  .toggle(p.id),
+                          onTap: () => context.push('/product/${p.id}'),
+                        ),
+                      );
+                    },
+                  ),
+                  if (showArrows)
+                    Positioned.fill(
+                      child: AnimatedBuilder(
+                        animation: _scroll,
+                        builder: (context, _) {
+                          final hasClients = _scroll.hasClients;
+                          final maxExtent = hasClients
+                              ? _scroll.position.maxScrollExtent
+                              : 0.0;
+                          // Nothing to scroll → no arrows.
+                          if (hasClients && maxExtent <= 0) {
+                            return const SizedBox.shrink();
+                          }
+                          final offset = hasClients ? _scroll.offset : 0.0;
+                          final atStart = offset <= 1;
+                          final atEnd = hasClients && offset >= maxExtent - 1;
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _CarouselArrow(
+                                icon: Icons.chevron_left_rounded,
+                                hidden: atStart,
+                                onTap: () => _nudge(-step),
+                              ),
+                              _CarouselArrow(
+                                icon: Icons.chevron_right_rounded,
+                                hidden: atEnd,
+                                onTap: () => _nudge(step),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
-                  );
-                },
+                ],
               ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Circular prev/next control overlaid on a horizontal carousel. [hidden]
+/// fades it out + disables taps at the start/end of the scroll range.
+class _CarouselArrow extends StatelessWidget {
+  const _CarouselArrow({
+    required this.icon,
+    required this.onTap,
+    this.hidden = false,
+  });
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool hidden;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AnimatedOpacity(
+      opacity: hidden ? 0 : 1,
+      duration: const Duration(milliseconds: 150),
+      child: IgnorePointer(
+        ignoring: hidden,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: BananSpacing.xs),
+            child: Material(
+              color: theme.colorScheme.surface,
+              shape: const CircleBorder(),
+              elevation: 3,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onTap,
+                child: SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Icon(icon, size: 26, color: theme.colorScheme.primary),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
