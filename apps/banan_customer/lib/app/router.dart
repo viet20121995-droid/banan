@@ -1,10 +1,10 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/addresses/addresses_screen.dart';
+import '../features/auth/auth_slider_screen.dart';
 import '../features/auth/change_email_confirm_screen.dart';
 import '../features/auth/change_password_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
@@ -207,54 +207,17 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
           params: state.uri.queryParameters,
         ),
       ),
+      // Combined sign-in / sign-up with the two-panel sliding design. Toggling
+      // between the two is internal state (no route change); `?next=` on /login
+      // is still honoured by the redirect once the session updates. The
+      // "Quên mật khẩu?" link lives inside the sign-in panel.
       GoRoute(
         path: _login,
-        builder: (context, state) {
-          // Carry `?next=` through to the register screen so users who
-          // bounce between login/register still end up where they wanted.
-          final next = state.uri.queryParameters['next'];
-          final regPath = next == null
-              ? _register
-              : '$_register?next=${Uri.encodeComponent(next)}';
-          return Stack(
-            children: [
-              LoginScreen(
-                title: 'Banan Fukuoka Saigon',
-                subtitle: "Sign in to order today's creations.",
-                showRegisterLink: true,
-                onRegisterTapped: () => context.go(regPath),
-              ),
-              // "Forgot password?" link pinned below the centred login form.
-              // LoginScreen is a shared widget without a slot for it, so we
-              // overlay it here in the customer route.
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 24,
-                child: SafeArea(
-                  child: Center(
-                    child: TextButton(
-                      onPressed: () => context.push(_forgotPassword),
-                      child: const Text('Quên mật khẩu?'),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+        builder: (_, __) => const AuthSliderScreen(),
       ),
       GoRoute(
         path: _register,
-        builder: (context, state) {
-          final next = state.uri.queryParameters['next'];
-          final loginPath = next == null
-              ? _login
-              : '$_login?next=${Uri.encodeComponent(next)}';
-          return RegisterScreen(
-            onBackToLogin: () => context.go(loginPath),
-          );
-        },
+        builder: (_, __) => const AuthSliderScreen(initialSignUp: true),
       ),
       GoRoute(
         path: _forgotPassword,
