@@ -6,6 +6,21 @@
 # Set BASE_DOMAIN in infra/.env.prod (e.g. banan.com). DNS: point @, www,
 # api, merchant, kitchen A-records at this server's public IP.
 
+# ── Flutter SPA serving + cache policy ────────────────────────────────────────
+# Flutter web does NOT content-hash main.dart.js / the service worker, so without
+# an explicit no-cache the browser keeps serving a STALE build after every deploy
+# (this is why "deploy had no effect"). Force-revalidate the entry files (the
+# Etag still yields cheap 304s when unchanged); the content-hashed assets under
+# assets/ + canvaskit/ keep their normal long caching.
+(flutter_spa) {
+	encode gzip zstd
+	@entry path /index.html /flutter_service_worker.js /flutter_bootstrap.js /version.json /main.dart.js /manifest.json
+	header @entry Cache-Control "no-cache, must-revalidate"
+	# SPA fallback — deep links (/faq, /product/..) served by index.html.
+	try_files {path} /index.html
+	file_server
+}
+
 # ── API ───────────────────────────────────────────────────────────────────────
 api.{$BASE_DOMAIN} {
 	encode gzip zstd
@@ -14,25 +29,18 @@ api.{$BASE_DOMAIN} {
 
 # ── Customer web (root + www) ─────────────────────────────────────────────────
 {$BASE_DOMAIN}, www.{$BASE_DOMAIN} {
-	encode gzip zstd
 	root * /srv/customer
-	# SPA fallback — deep links (/faq, /product/..) served by index.html.
-	try_files {path} /index.html
-	file_server
+	import flutter_spa
 }
 
 # ── Merchant web ──────────────────────────────────────────────────────────────
 merchant.{$BASE_DOMAIN} {
-	encode gzip zstd
 	root * /srv/merchant
-	try_files {path} /index.html
-	file_server
+	import flutter_spa
 }
 
 # ── Kitchen web ───────────────────────────────────────────────────────────────
 kitchen.{$BASE_DOMAIN} {
-	encode gzip zstd
 	root * /srv/kitchen
-	try_files {path} /index.html
-	file_server
+	import flutter_spa
 }
