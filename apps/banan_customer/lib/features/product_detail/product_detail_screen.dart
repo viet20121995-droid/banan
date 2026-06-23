@@ -661,91 +661,70 @@ class _RecommendationsSectionState
                 .valueOrNull
                 ?.showStockToCustomers ??
             false;
-        // Desktop/web has no swipe gesture, so overlay prev/next arrows.
-        // Mobile keeps touch-swipe (arrows hidden on narrow viewports). Each
-        // tap advances ≈ 2 cards.
+        // Desktop/web has no swipe gesture, so show prev/next buttons BESIDE
+        // the heading (never overlaid on the list — an overlay Stack here broke
+        // the layout on wide viewports). Hidden on mobile, which scrolls by
+        // touch. ~2 cards per tap.
         const step = (180 + BananSpacing.md) * 2;
         final showArrows = MediaQuery.sizeOf(context).width >= 640;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Khách cũng mua', style: theme.textTheme.titleLarge),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Khách cũng mua',
+                      style: theme.textTheme.titleLarge),
+                ),
+                if (showArrows) ...[
+                  _NavBtn(
+                    icon: Icons.chevron_left_rounded,
+                    onTap: () => _nudge(-step),
+                  ),
+                  const SizedBox(width: BananSpacing.sm),
+                  _NavBtn(
+                    icon: Icons.chevron_right_rounded,
+                    onTap: () => _nudge(step),
+                  ),
+                ],
+              ],
+            ),
             const SizedBox(height: BananSpacing.md),
             SizedBox(
-              // Match the home category strips (180×230, no tagline). The card's
-              // natural height (4:3 image + name + 2-line tagline + tags + price)
-              // overflowed the old 280 box at width 200, clipping the price row.
+              // 180×230, no tagline — matches the home category strips so the
+              // price row never clips.
               height: 230,
-              child: Stack(
-                children: [
-                  ListView.separated(
-                    controller: _scroll,
-                    scrollDirection: Axis.horizontal,
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(width: BananSpacing.md),
-                    itemBuilder: (context, i) {
-                      final p = items[i];
-                      return SizedBox(
-                        width: 180,
-                        child: ProductCard(
-                          name: p.name,
-                          imageUrl: p.coverImage,
-                          tags: p.tags,
-                          minPrice: p.minPrice,
-                          hasPriceRange: p.hasPriceRange,
-                          seasonal: p.isSeasonal,
-                          averageRating: p.averageRating,
-                          reviewCount: p.reviewCount,
-                          stockRemaining:
-                              showStock ? p.totalLimitedStock : null,
-                          soldOut: showStock && p.isSoldOut,
-                          isWishlisted: isWishlisted(wishlistAsync, p.id),
-                          onToggleWishlist: session == null
-                              ? null
-                              : () => ref
-                                  .read(wishlistIdsProvider.notifier)
-                                  .toggle(p.id),
-                          onTap: () => context.push('/product/${p.id}'),
-                        ),
-                      );
-                    },
-                  ),
-                  if (showArrows)
-                    Positioned.fill(
-                      child: AnimatedBuilder(
-                        animation: _scroll,
-                        builder: (context, _) {
-                          final hasClients = _scroll.hasClients;
-                          final maxExtent = hasClients
-                              ? _scroll.position.maxScrollExtent
-                              : 0.0;
-                          // Nothing to scroll → no arrows.
-                          if (hasClients && maxExtent <= 0) {
-                            return const SizedBox.shrink();
-                          }
-                          final offset = hasClients ? _scroll.offset : 0.0;
-                          final atStart = offset <= 1;
-                          final atEnd = hasClients && offset >= maxExtent - 1;
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _CarouselArrow(
-                                icon: Icons.chevron_left_rounded,
-                                hidden: atStart,
-                                onTap: () => _nudge(-step),
-                              ),
-                              _CarouselArrow(
-                                icon: Icons.chevron_right_rounded,
-                                hidden: atEnd,
-                                onTap: () => _nudge(step),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
+              child: ListView.separated(
+                controller: _scroll,
+                scrollDirection: Axis.horizontal,
+                itemCount: items.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(width: BananSpacing.md),
+                itemBuilder: (context, i) {
+                  final p = items[i];
+                  return SizedBox(
+                    width: 180,
+                    child: ProductCard(
+                      name: p.name,
+                      imageUrl: p.coverImage,
+                      tags: p.tags,
+                      minPrice: p.minPrice,
+                      hasPriceRange: p.hasPriceRange,
+                      seasonal: p.isSeasonal,
+                      averageRating: p.averageRating,
+                      reviewCount: p.reviewCount,
+                      stockRemaining: showStock ? p.totalLimitedStock : null,
+                      soldOut: showStock && p.isSoldOut,
+                      isWishlisted: isWishlisted(wishlistAsync, p.id),
+                      onToggleWishlist: session == null
+                          ? null
+                          : () => ref
+                              .read(wishlistIdsProvider.notifier)
+                              .toggle(p.id),
+                      onTap: () => context.push('/product/${p.id}'),
                     ),
-                ],
+                  );
+                },
               ),
             ),
           ],
@@ -755,44 +734,27 @@ class _RecommendationsSectionState
   }
 }
 
-/// Circular prev/next control overlaid on a horizontal carousel. [hidden]
-/// fades it out + disables taps at the start/end of the scroll range.
-class _CarouselArrow extends StatelessWidget {
-  const _CarouselArrow({
-    required this.icon,
-    required this.onTap,
-    this.hidden = false,
-  });
+/// Small circular prev/next button shown beside the "Khách cũng mua" heading
+/// on wide viewports (desktop has no swipe gesture). Plain — not overlaid.
+class _NavBtn extends StatelessWidget {
+  const _NavBtn({required this.icon, required this.onTap});
   final IconData icon;
   final VoidCallback onTap;
-  final bool hidden;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AnimatedOpacity(
-      opacity: hidden ? 0 : 1,
-      duration: const Duration(milliseconds: 150),
-      child: IgnorePointer(
-        ignoring: hidden,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: BananSpacing.xs),
-            child: Material(
-              color: theme.colorScheme.surface,
-              shape: const CircleBorder(),
-              elevation: 3,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onTap,
-                child: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: Icon(icon, size: 26, color: theme.colorScheme.primary),
-                ),
-              ),
-            ),
-          ),
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: const CircleBorder(),
+      elevation: 1,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(icon, size: 22, color: theme.colorScheme.primary),
         ),
       ),
     );
