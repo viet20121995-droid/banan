@@ -101,16 +101,38 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(BananSpacing.lg),
-            child: LayoutBuilder(
-              builder: (context, _) {
-                final wide = MediaQuery.sizeOf(context).width >= 820;
-                return wide ? _wideCard(theme) : _narrowCard(theme);
-              },
+        child: Stack(
+          children: [
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(BananSpacing.lg),
+                child: LayoutBuilder(
+                  builder: (context, _) {
+                    final wide = MediaQuery.sizeOf(context).width >= 820;
+                    return wide ? _wideCard(theme) : _narrowCard(theme);
+                  },
+                ),
+              ),
             ),
-          ),
+            // Guests reach /login while browsing (a protected-route redirect or
+            // the menu's sign-in button) — give them a way back to the shop
+            // instead of a dead-end. Pop to the previous page, or fall back home.
+            Positioned(
+              top: BananSpacing.xs,
+              left: BananSpacing.xs,
+              child: TextButton.icon(
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/');
+                  }
+                },
+                icon: const Icon(Icons.arrow_back, size: 20),
+                label: const Text('Quay lại cửa hàng'),
+              ),
+            ),
+          ],
         ),
       ),
     );
