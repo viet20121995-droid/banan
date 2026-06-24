@@ -713,11 +713,11 @@ class _BestSellersList extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        items[i]['productName'] as String,
+                        items[i]['productName'] as String? ?? '—',
                         style: theme.textTheme.titleSmall,
                       ),
                       Text(
-                        '${items[i]['unitsSold']} đã bán · ${fmt.format(items[i]['revenue'])}',
+                        '${(items[i]['unitsSold'] as num?)?.toInt() ?? 0} đã bán · ${fmt.format((items[i]['revenue'] as num?) ?? 0)}',
                         style: theme.textTheme.bodySmall,
                       ),
                     ],

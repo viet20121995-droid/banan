@@ -20,6 +20,7 @@ class ReviewsApi {
         '/reviews/product/$productId',
         queryParameters: {'page': page, 'perPage': perPage},
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       final meta = res.data?['meta'] as Map<String, dynamic>? ?? const {};
       final sum = res.data?['summary'] as Map<String, dynamic>?;
@@ -52,6 +53,7 @@ class ReviewsApi {
       final res = await _dio.get<Map<String, dynamic>>(
         '/reviews/mine/order/$orderId',
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw.map((e) => _fromJson(e as Map<String, dynamic>)).toList(),
@@ -120,6 +122,7 @@ class ReviewsApi {
           'perPage': perPage,
         },
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       final meta = res.data?['meta'] as Map<String, dynamic>? ?? const {};
       return Result.success(

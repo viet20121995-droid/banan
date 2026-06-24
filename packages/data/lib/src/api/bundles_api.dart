@@ -15,6 +15,7 @@ class BundlesApi {
   Future<Result<List<Bundle>, AppFailure>> list() async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/bundles');
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw.map((e) => _fromJson(e as Map<String, dynamic>)).toList(),
@@ -29,6 +30,7 @@ class BundlesApi {
   Future<Result<List<Bundle>, AppFailure>> home() async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/bundles/home');
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw.map((e) => _fromJson(e as Map<String, dynamic>)).toList(),
@@ -59,6 +61,7 @@ class BundlesApi {
     try {
       final res =
           await _dio.get<Map<String, dynamic>>('/merchant/bundles');
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw.map((e) => _fromJson(e as Map<String, dynamic>)).toList(),

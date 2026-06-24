@@ -11,6 +11,7 @@ class AddressesApi {
   Future<Result<List<AddressDto>, AppFailure>> list() async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/addresses');
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw

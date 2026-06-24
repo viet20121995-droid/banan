@@ -88,6 +88,7 @@ class CollectionsApi {
         path,
         queryParameters: query,
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw

@@ -20,6 +20,7 @@ class WishlistApi {
         '/wishlist',
         queryParameters: {'page': page, 'perPage': perPage},
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw.map((e) => _fromJson(e as Map<String, dynamic>)).toList(),

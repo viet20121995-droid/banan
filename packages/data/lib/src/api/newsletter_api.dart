@@ -173,6 +173,7 @@ class NewsletterApi {
           'perPage': perPage,
         },
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       final meta = res.data?['meta'] as Map<String, dynamic>? ?? const {};
       final stats = res.data?['stats'] as Map<String, dynamic>? ?? const {};
@@ -281,6 +282,7 @@ class NewsletterApi {
       final res = await _dio.get<Map<String, dynamic>>(
         '/merchant/newsletter/campaigns',
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw

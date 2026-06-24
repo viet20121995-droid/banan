@@ -171,6 +171,7 @@ class CatalogApi {
           'perPage': perPage,
         },
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final data = res.data?['data'] as List? ?? const [];
       final meta = res.data?['meta'] as Map<String, dynamic>? ?? const {};
       _lastWasCached = false;
@@ -242,6 +243,7 @@ class CatalogApi {
         '/products/$productId/recommendations',
         queryParameters: {'limit': limit},
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw

@@ -12,6 +12,7 @@ class MerchantCouponsApi {
     try {
       final res =
           await _dio.get<Map<String, dynamic>>('/merchant/coupons');
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw

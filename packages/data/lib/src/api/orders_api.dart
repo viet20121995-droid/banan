@@ -148,6 +148,7 @@ class OrdersApi {
           if (includeDoneToday) 'includeDoneToday': '1',
         },
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw
@@ -198,6 +199,7 @@ class OrdersApi {
         path,
         queryParameters: query,
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       final meta = res.data?['meta'] as Map<String, dynamic>? ?? const {};
       return Result.success((

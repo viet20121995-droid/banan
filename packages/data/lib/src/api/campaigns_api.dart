@@ -19,6 +19,7 @@ class CampaignsApi {
         '/merchant/campaigns',
         queryParameters: type == null ? null : {'type': type},
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw

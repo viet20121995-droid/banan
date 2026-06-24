@@ -46,6 +46,19 @@ AppFailure mapHttpStatusToFailure(Response<dynamic> res) {
   );
 }
 
+/// True when [res] carries a 2xx status. Dio's `validateStatus` (< 500) lets
+/// 4xx responses through as *normal* responses (not exceptions), so any list
+/// endpoint MUST check this before reading `data`: an error envelope
+/// (`{ error: { code, message } }`) has no `data` key, so `res.data?['data']
+/// as List? ?? const []` would silently yield an empty list — masking a
+/// 401/403/500 as "no results" and showing a misleading empty state instead of
+/// the real error. Guard list reads with:
+///   `if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));`
+bool isOk(Response<dynamic> res) {
+  final code = res.statusCode ?? 0;
+  return code >= 200 && code < 300;
+}
+
 /// Parses the `{ items, earliestLeadHours }` payload of an
 /// `ORDER_ITEMS_TIMELINE` error into a typed [OrderTimelineFailure]. Falls back
 /// to an item-less failure (still carrying the message) if details are absent.

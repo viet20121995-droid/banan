@@ -15,6 +15,7 @@ class NotificationsApi {
         '/me/notifications',
         queryParameters: {'page': page, 'perPage': perPage},
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       final meta = res.data?['meta'] as Map<String, dynamic>? ?? const {};
       return Result.success((

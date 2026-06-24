@@ -25,6 +25,7 @@ class AdminApi {
           'perPage': perPage,
         },
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       final meta = res.data?['meta'] as Map<String, dynamic>?;
       return Result.success(
@@ -123,6 +124,7 @@ class AdminApi {
   Future<Result<List<OrgOption>, AppFailure>> _options(String path) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(path);
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
         raw
