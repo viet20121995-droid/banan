@@ -121,8 +121,26 @@ export class CouponsService {
 
     const coupon = await args.tx.coupon.findUniqueOrThrow({
       where: { id: args.couponId },
-      select: { maxRedemptions: true, perUserLimit: true, redemptions: true },
+      select: {
+        startsAt: true,
+        endsAt: true,
+        isActive: true,
+        maxRedemptions: true,
+        perUserLimit: true,
+        redemptions: true,
+      },
     });
+    // Re-check the active window + isActive INSIDE the tx: validate() ran before
+    // the order transaction opened, so the coupon could have expired, not yet
+    // started, or been deactivated in the gap (TOCTOU). Throwing rolls back the
+    // order.
+    const now = new Date();
+    if (!coupon.isActive || now < coupon.startsAt || now > coupon.endsAt) {
+      throw new BadRequestException({
+        code: 'COUPON_EXPIRED',
+        message: 'This coupon is not active right now.',
+      });
+    }
     if (coupon.maxRedemptions !== null && coupon.redemptions >= coupon.maxRedemptions) {
       throw new BadRequestException({
         code: 'COUPON_LIMIT_REACHED',

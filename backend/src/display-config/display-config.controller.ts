@@ -49,7 +49,10 @@ export class DisplayConfigController {
     return this.cfg.get();
   }
 
-  @Roles(Role.ADMIN, Role.MERCHANT_OWNER)
+  // DisplayConfig is a chain-wide singleton (contact info + stock toggle shown
+  // to every customer), so writes are ADMIN-only — a MERCHANT_OWNER must not
+  // change the global contact widget for all stores.
+  @Roles(Role.ADMIN)
   @Patch()
   update(@Body() dto: UpdateDisplayConfigDto) {
     return this.cfg.update(dto);

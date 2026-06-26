@@ -114,9 +114,17 @@ describe('CouponsService.recordRedemption (authoritative, race-safe)', () => {
     tx: tx as never,
   });
 
+  // An in-window, active coupon — recordRedemption re-checks the window inside
+  // the tx (TOCTOU guard), so the mock must carry these fields.
+  const active = {
+    isActive: true,
+    startsAt: new Date(Date.now() - 86_400_000),
+    endsAt: new Date(Date.now() + 86_400_000),
+  };
+
   it('takes a per-coupon advisory lock, then records + increments', async () => {
     const m = makeTx({
-      coupon: { maxRedemptions: 100, perUserLimit: 1, redemptions: 5 },
+      coupon: { ...active, maxRedemptions: 100, perUserLimit: 1, redemptions: 5 },
     });
     await makeService(null).recordRedemption(callArgs(m.tx));
     // Advisory lock acquired before the checks.
@@ -130,7 +138,7 @@ describe('CouponsService.recordRedemption (authoritative, race-safe)', () => {
 
   it('throws COUPON_LIMIT_REACHED at the global cap (no create)', async () => {
     const m = makeTx({
-      coupon: { maxRedemptions: 100, perUserLimit: 0, redemptions: 100 },
+      coupon: { ...active, maxRedemptions: 100, perUserLimit: 0, redemptions: 100 },
     });
     await expect(makeService(null).recordRedemption(callArgs(m.tx))).rejects.toMatchObject({
       response: { code: 'COUPON_LIMIT_REACHED' },
@@ -141,7 +149,7 @@ describe('CouponsService.recordRedemption (authoritative, race-safe)', () => {
 
   it('throws COUPON_USER_LIMIT when the per-user cap is reached (no create)', async () => {
     const m = makeTx({
-      coupon: { maxRedemptions: null, perUserLimit: 1, redemptions: 3 },
+      coupon: { ...active, maxRedemptions: null, perUserLimit: 1, redemptions: 3 },
       userCount: 1,
     });
     await expect(makeService(null).recordRedemption(callArgs(m.tx))).rejects.toMatchObject({
@@ -152,10 +160,27 @@ describe('CouponsService.recordRedemption (authoritative, race-safe)', () => {
 
   it('unlimited coupon (no caps) → always records', async () => {
     const m = makeTx({
-      coupon: { maxRedemptions: null, perUserLimit: 0, redemptions: 999 },
+      coupon: { ...active, maxRedemptions: null, perUserLimit: 0, redemptions: 999 },
     });
     await makeService(null).recordRedemption(callArgs(m.tx));
     expect(m.create).toHaveBeenCalledTimes(1);
     expect(m.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-checks the window inside the tx: a coupon that expired since validate() is rejected (TOCTOU)', async () => {
+    const m = makeTx({
+      coupon: {
+        ...active,
+        endsAt: new Date(Date.now() - 1000), // expired in the gap after validate()
+        maxRedemptions: null,
+        perUserLimit: 0,
+        redemptions: 0,
+      },
+    });
+    await expect(makeService(null).recordRedemption(callArgs(m.tx))).rejects.toMatchObject({
+      response: { code: 'COUPON_EXPIRED' },
+    });
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
   });
 });

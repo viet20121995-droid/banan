@@ -84,6 +84,10 @@ export class AdminPromoPopupController {
     return this.svc.get();
   }
 
+  // The popup is a single chain-wide record shown to ALL customers, so writes
+  // are ADMIN-only — a MERCHANT_OWNER must not mutate it or force a re-display
+  // chain-wide. (GET stays readable to merchant for a preview.)
+  @Roles(Role.ADMIN)
   @Patch()
   update(@Body() dto: UpdatePromoPopupDto) {
     return this.svc.update(dto);
@@ -92,6 +96,7 @@ export class AdminPromoPopupController {
   /// Force a re-display for every customer — bumps `version`. The frontend
   /// stores the last seen version per device; bumping it surfaces the
   /// popup again even for customers who previously dismissed.
+  @Roles(Role.ADMIN)
   @Post('bump')
   bump() {
     return this.svc.update({ bumpVersion: true });

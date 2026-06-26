@@ -32,8 +32,8 @@ export class MerchantGiftCardsController {
   constructor(private readonly cards: GiftCardsService) {}
 
   @Get()
-  list() {
-    return this.cards.list();
+  list(@CurrentUser() user: AuthPrincipal) {
+    return this.cards.list(user);
   }
 
   @Post()
@@ -48,7 +48,7 @@ export class MerchantGiftCardsController {
 
   @Patch(':id/deactivate')
   @HttpCode(HttpStatus.OK)
-  deactivate(@Param('id') id: string) {
-    return this.cards.deactivate(id);
+  deactivate(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
+    return this.cards.deactivate(id, user);
   }
 }

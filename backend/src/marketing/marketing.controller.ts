@@ -33,6 +33,10 @@ export class MerchantMarketingController {
     return this.marketing.get();
   }
 
+  // Chain-wide marketing config — ADMIN-only to WRITE. A MERCHANT_OWNER must
+  // not flip referral / rewards / gift-card / subscription programs for the
+  // whole chain (the singleton affects every store + customer).
+  @Roles(Role.ADMIN)
   @Patch('config')
   @HttpCode(HttpStatus.OK)
   update(@Body() dto: UpdateMarketingDto) {

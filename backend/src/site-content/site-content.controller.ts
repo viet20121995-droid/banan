@@ -33,6 +33,10 @@ export class MerchantSiteContentController {
     return this.content.get(key);
   }
 
+  // FAQ / About are chain-wide singletons served publicly to all customers,
+  // so writes are ADMIN-only — a MERCHANT_OWNER must not edit/deface global
+  // site content. (GET stays readable to merchant.)
+  @Roles(Role.ADMIN)
   @Patch(':key')
   @HttpCode(HttpStatus.OK)
   update(@Param('key') key: string, @Body() dto: UpdateSiteContentDto) {

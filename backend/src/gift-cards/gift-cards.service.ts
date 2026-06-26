@@ -1,6 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 
+import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { PrismaService } from '../prisma/prisma.service';
 
 // Unambiguous charset (no 0/O/1/I) for human-readable codes.
@@ -46,13 +53,22 @@ export class GiftCardsService {
     });
   }
 
-  async list() {
-    return this.prisma.giftCard.findMany({ orderBy: { createdAt: 'desc' } });
+  /** ADMIN sees every card; a merchant sees only the cards THEY issued. The
+   *  GiftCard has no store FK (a card is chain-wide by design), so we scope by
+   *  issuer to stop one merchant enumerating every card in the system. */
+  async list(user: AuthPrincipal) {
+    const where = user.role === Role.ADMIN ? {} : { issuedById: user.sub };
+    return this.prisma.giftCard.findMany({ where, orderBy: { createdAt: 'desc' } });
   }
 
-  async deactivate(id: string) {
+  async deactivate(id: string, user: AuthPrincipal) {
     const card = await this.prisma.giftCard.findUnique({ where: { id } });
     if (!card) throw new NotFoundException({ code: 'GIFT_CARD_NOT_FOUND' });
+    // Only an admin, or the merchant who issued the card, may toggle it —
+    // RolesGuard checks role only, not ownership.
+    if (user.role !== Role.ADMIN && card.issuedById !== user.sub) {
+      throw new ForbiddenException({ code: 'GIFT_CARD_NOT_YOURS' });
+    }
     return this.prisma.giftCard.update({
       where: { id },
       data: { isActive: !card.isActive },

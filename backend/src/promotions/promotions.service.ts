@@ -441,7 +441,19 @@ export class PromotionsService {
     return this.prisma.campaign.findUnique({ where: { id } });
   }
 
-  create(dto: CreateCampaignDto) {
+  /** A campaign may target a specific store (null = chain-wide). Verify the
+   *  referenced store exists so an admin typo fails with a clean 400 instead of
+   *  an opaque FK 500. (Campaigns are ADMIN-only by design.) */
+  private async assertStore(storeId?: string | null): Promise<void> {
+    if (!storeId) return;
+    const exists = await this.prisma.store.count({ where: { id: storeId } });
+    if (!exists) {
+      throw new BadRequestException({ code: 'STORE_NOT_FOUND', message: 'Cửa hàng không tồn tại.' });
+    }
+  }
+
+  async create(dto: CreateCampaignDto) {
+    await this.assertStore(dto.storeId);
     return this.prisma.campaign.create({
       data: {
         type: dto.type,
@@ -459,7 +471,8 @@ export class PromotionsService {
     });
   }
 
-  update(id: string, dto: UpdateCampaignDto) {
+  async update(id: string, dto: UpdateCampaignDto) {
+    if (dto.storeId !== undefined) await this.assertStore(dto.storeId);
     const data: Prisma.CampaignUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name.trim();
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
