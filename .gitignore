@@ -24,6 +24,7 @@ android/local.properties
 node_modules/
 dist/
 coverage/
+.pnpm-store/
 *.log
 .env
 .env.local

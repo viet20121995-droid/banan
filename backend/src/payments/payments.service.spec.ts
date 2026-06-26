@@ -28,7 +28,7 @@ function payment(status: string, amount: number | string = 50000): PaymentRow {
   return {
     id: 'p1',
     orderId: 'o1',
-    provider: 'PAYOS',
+    provider: 'NINEPAY',
     providerRef: 'PR-1',
     amount,
     currency: 'VND',
@@ -64,13 +64,12 @@ function makeService(opts: {
   const realtime = { emit: jest.fn() };
   const notifications = { sendToUser: jest.fn().mockResolvedValue(undefined) };
   const noop = {} as never;
-  // ctor: prisma, cash, stripe, payos, momo, realtime, notifications
+  // ctor: prisma, cash, stripe, momo, ninepay, realtime, notifications
   const svc = new PaymentsService(
     prisma as never,
-    noop,
-    noop,
-    noop,
-    noop,
+    noop, // cash
+    noop, // stripe
+    noop, // momo
     noop, // ninepay
     realtime as never,
     notifications as never,
@@ -88,7 +87,7 @@ function makeService(opts: {
 
 const capture = (svc: PaymentsService, paidAmountVnd: number | null | undefined) =>
   svc.applyCapture({
-    provider: 'PAYOS' as never,
+    provider: 'NINEPAY' as never,
     providerRef: 'PR-1',
     paidAmountVnd,
     payload: { ok: true },
@@ -117,11 +116,19 @@ describe('PaymentsService.applyCapture', () => {
     expect(m.realtime.emit).toHaveBeenCalledTimes(1);
   });
 
-  it('VOIDED + correct amount → no update, no emit, no notify', async () => {
-    const m = makeService({ payment: payment('VOIDED') });
+  it('VOIDED + correct amount (stranded capture) → flips to CAPTURED + opens auto-refund', async () => {
+    const m = makeService({
+      payment: payment('VOIDED'),
+      order: { id: 'o1', status: 'CANCELLED', storeId: 's1' },
+    });
     await capture(m.svc, 50000);
-    expect(m.updateMany).not.toHaveBeenCalled();
-    expect(m.realtime.emit).not.toHaveBeenCalled();
+    // Money was really collected on a payment we had locally voided (order
+    // cancelled, then a late "paid" callback). Record it (CAPTURED) and open a
+    // staff refund so the funds aren't stranded at the provider.
+    expect(m.updateMany).toHaveBeenCalledTimes(1);
+    expect(m.updateMany.mock.calls[0][0].data.status).toBe('CAPTURED');
+    expect(m.refundCreate).toHaveBeenCalledTimes(1);
+    expect(m.refundCreate.mock.calls[0][0].data.status).toBe('REQUESTED');
     expect(m.notifications.sendToUser).not.toHaveBeenCalled();
   });
 
@@ -232,10 +239,9 @@ function makeRefundService(opts: { refund?: RefundRow | null; refundUpdateCount?
   const noop = {} as never;
   const svc = new PaymentsService(
     prisma as never,
-    noop,
-    noop,
-    noop,
-    noop,
+    noop, // cash
+    noop, // stripe
+    noop, // momo
     noop, // ninepay
     realtime as never,
     notifications as never,
@@ -308,7 +314,6 @@ describe('PaymentsService.applyRefundSettled', () => {
 
 function validateSvc(enabled: {
   stripe?: boolean;
-  payos?: boolean;
   momo?: boolean;
   ninepay?: boolean;
 }) {
@@ -316,9 +321,8 @@ function validateSvc(enabled: {
   return new PaymentsService(
     noop, // prisma
     { validateAllowed: jest.fn() } as never, // cash
-    { enabled: enabled.stripe ?? false } as never,
-    { enabled: enabled.payos ?? false } as never,
-    { enabled: enabled.momo ?? false } as never,
+    { enabled: enabled.stripe ?? false } as never, // stripe
+    { enabled: enabled.momo ?? false } as never, // momo
     { enabled: enabled.ninepay ?? false } as never, // ninepay
     noop, // realtime
     noop, // notifications
@@ -327,15 +331,19 @@ function validateSvc(enabled: {
 
 describe('PaymentsService.validate (provider availability — blocks before order creation)', () => {
   it('throws PAYMENT_PROVIDER_UNAVAILABLE for an online provider that is not configured', () => {
-    const svc = validateSvc({ payos: false });
-    expect(() => svc.validate('PAYOS' as never, 'PICKUP')).toThrow();
+    const svc = validateSvc({ stripe: false });
+    expect(() => svc.validate('STRIPE' as never, 'PICKUP')).toThrow();
     try {
-      svc.validate('PAYOS' as never, 'PICKUP');
+      svc.validate('STRIPE' as never, 'PICKUP');
     } catch (e) {
       expect((e as { response?: { code?: string } }).response?.code).toBe(
         'PAYMENT_PROVIDER_UNAVAILABLE',
       );
     }
+  });
+
+  it('PAYOS (legacy, removed) is no longer a selectable provider → unavailable', () => {
+    expect(() => validateSvc({}).validate('PAYOS' as never, 'PICKUP')).toThrow();
   });
 
   it('allows a configured online provider', () => {

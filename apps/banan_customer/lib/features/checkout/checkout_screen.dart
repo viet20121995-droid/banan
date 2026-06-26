@@ -406,7 +406,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           return;
         }
 
-        // Redirect-based payment (PayOS / MoMo / Stripe): navigate the SAME
+        // Redirect-based payment (9Pay / MoMo / Stripe): navigate the SAME
         // tab to the gateway. A new-tab popup ('_blank') gets silently
         // blocked by the browser because this runs after an `await` (no
         // longer a direct user gesture) — which looked like "nothing

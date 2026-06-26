@@ -22,13 +22,12 @@ import { Public } from '../auth/decorators/public.decorator';
 import { PaymentsService } from './payments.service';
 import { MoMoPaymentService } from './providers/momo.service';
 import { NinePayPaymentService } from './providers/ninepay.service';
-import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
 
 // Webhook + IPN endpoints are called by upstream providers and can fire in
-// bursts — the global throttler would falsely rate-limit them. Skip throttling
-// on the whole controller; signature verification is the real gate.
-@SkipThrottle()
+// bursts, so @SkipThrottle() is applied PER-METHOD to the server-to-server
+// webhook/IPN POSTs only — browser-facing GET return endpoints stay throttled.
+// Signature/checksum verification is the real gate on the webhooks.
 @ApiTags('payments')
 @Controller({ path: 'payments', version: '1' })
 export class PaymentsController {
@@ -36,7 +35,6 @@ export class PaymentsController {
 
   constructor(
     private readonly stripe: StripePaymentService,
-    private readonly payos: PayOSPaymentService,
     private readonly momo: MoMoPaymentService,
     private readonly ninepay: NinePayPaymentService,
     private readonly payments: PaymentsService,
@@ -44,6 +42,7 @@ export class PaymentsController {
   ) {}
 
   /** Stripe-Signature is required for verification. Stripe sends raw JSON. */
+  @SkipThrottle()
   @Public()
   @Post('stripe/webhook')
   @HttpCode(HttpStatus.OK)
@@ -81,52 +80,6 @@ export class PaymentsController {
   }
 
   /**
-   * PayOS redirects the customer's browser back here after checkout. This is
-   * UX only — we just bounce to the customer app with a status. The DB state
-   * is set authoritatively by the webhook below.
-   */
-  @Public()
-  @Get('payos/return')
-  payosReturn(@Query() query: Record<string, string>, @Res() res: Response) {
-    const customerBase =
-      this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081';
-    // PayOS appends e.g. ?code=00&status=PAID&cancel=false&orderCode=...
-    const cancelled = query['cancel'] === 'true' || query['status'] === 'CANCELLED';
-    const status = !cancelled && query['code'] === '00' ? 'success' : 'failed';
-    res.redirect(
-      `${customerBase}/payments/return/payos?status=${status}&orderCode=${query['orderCode'] ?? ''}`,
-    );
-  }
-
-  /** Authoritative server-to-server webhook from PayOS (signed JSON POST). */
-  @Public()
-  @Post('payos/webhook')
-  @HttpCode(HttpStatus.OK)
-  async payosWebhook(@Body() body: Record<string, unknown>): Promise<{ success: boolean }> {
-    const verified = this.payos.verifyWebhook(body);
-    if (!verified.ok || !verified.orderCode) {
-      // PayOS sends a test ping with a dummy payload when you register the
-      // webhook — acknowledge it so the dashboard accepts the URL.
-      return { success: true };
-    }
-    if (verified.paid) {
-      await this.payments.applyCapture({
-        provider: 'PAYOS',
-        providerRef: verified.orderCode,
-        paidAmountVnd: verified.amountVnd,
-        payload: body,
-      });
-    } else {
-      await this.payments.applyFailure({
-        provider: 'PAYOS',
-        providerRef: verified.orderCode,
-        payload: body,
-      });
-    }
-    return { success: true };
-  }
-
-  /**
    * 9Pay redirects the customer's browser back here after checkout (GET with
    * `result` + `checksum` query params). UX only — we verify, look up the
    * order so we can deep-link to it, and bounce to the customer app. The DB
@@ -153,13 +106,20 @@ export class PaymentsController {
           provider: 'NINEPAY',
           providerRef: verified.invoiceNo,
           paidAmountVnd: verified.amountVnd,
-          payload: query,
+          currency: verified.currency || undefined,
+          // Store only the validated fields, not the raw checksum-bearing query.
+          payload: {
+            source: 'return',
+            invoiceNo: verified.invoiceNo,
+            outcome: verified.outcome,
+            amountVnd: verified.amountVnd,
+          },
         });
       } else if (verified.outcome === 'failed') {
         await this.payments.applyFailure({
           provider: 'NINEPAY',
           providerRef: verified.invoiceNo,
-          payload: query,
+          payload: { source: 'return', invoiceNo: verified.invoiceNo, outcome: verified.outcome },
         });
       }
     }
@@ -185,6 +145,7 @@ export class PaymentsController {
    * or leave it INITIATED for a pending (2/3) result. Always 200 so 9Pay's retry
    * re-delivers the final status instead of treating it as a hard error.
    */
+  @SkipThrottle()
   @Public()
   @Post('ninepay/ipn')
   @HttpCode(HttpStatus.OK)
@@ -193,8 +154,9 @@ export class PaymentsController {
   ): Promise<{ status: string }> {
     const verified = this.ninepay.verifyResult(body);
     if (!verified.ok || !verified.invoiceNo) {
-      // Acknowledge so 9Pay doesn't hammer retries; signature/checksum failures
-      // are logged inside verifyResult.
+      // Acknowledge so 9Pay doesn't hammer retries; a checksum failure here is
+      // logged at ERROR inside verifyResult (it may mean a wrong/rotated
+      // NINEPAY_CHECKSUM_KEY — watch for stranded INITIATED payments).
       return { status: 'success' };
     }
     if (verified.outcome === 'paid') {
@@ -202,13 +164,19 @@ export class PaymentsController {
         provider: 'NINEPAY',
         providerRef: verified.invoiceNo,
         paidAmountVnd: verified.amountVnd,
-        payload: body,
+        currency: verified.currency || undefined,
+        payload: {
+          source: 'ipn',
+          invoiceNo: verified.invoiceNo,
+          outcome: verified.outcome,
+          amountVnd: verified.amountVnd,
+        },
       });
     } else if (verified.outcome === 'failed') {
       await this.payments.applyFailure({
         provider: 'NINEPAY',
         providerRef: verified.invoiceNo,
-        payload: body,
+        payload: { source: 'ipn', invoiceNo: verified.invoiceNo, outcome: verified.outcome },
       });
     }
     // 'pending' → no state change; 9Pay re-IPNs the final status on settlement.
@@ -216,6 +184,7 @@ export class PaymentsController {
   }
 
   /** MoMo authoritative IPN. */
+  @SkipThrottle()
   @Public()
   @Post('momo/ipn')
   @HttpCode(HttpStatus.NO_CONTENT)

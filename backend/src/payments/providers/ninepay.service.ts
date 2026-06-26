@@ -5,23 +5,24 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
- * 9Pay (9pay.vn) Payment Gateway integration — replaces the previous PayOS flow.
+ * 9Pay (9pay.vn) Payment Gateway integration — the active online provider.
  * Docs: https://developers.9pay.vn
  *
- * Create flow (Redirect model, server-to-server):
- *   1. Build the canonicalized param string
- *      `merchantKey=…&invoice_no=…&amount=…&description=…&return_url=…`
- *      (exact documented order, raw values).
- *   2. baseEncode = base64(canonicalized).
- *   3. signature = base64(HMAC-SHA256("POST\n{createUrl}\n{time}\n{canonicalized}",
- *      SECRET key)).
- *   4. POST baseEncode to `{endpoint}/payments/create` with headers
- *      `Authorization: Signature Algorithm=HS256, Credential={merchantKey},
- *      SignedHeaders=, Signature={signature}` and `Date: {time}`.
- *   5. 9Pay returns the hosted-checkout URL; we redirect the customer there.
+ * Create flow (BROWSER REDIRECT model — there is NO server-to-server POST):
+ *   1. Build the request params object
+ *      `{ merchantKey, time, invoice_no, amount, description, return_url }`.
+ *   2. baseEncode = base64(JSON.stringify(params)).
+ *   3. canonical = buildHttpQuery(params) = keys sorted alphabetically and
+ *      URL-encoded (URLSearchParams). `time` rides INSIDE the params/baseEncode.
+ *   4. signature = base64(HMAC-SHA256("POST\n{createUrl}\n{time}\n{canonical}",
+ *      SECRET key)). The signing URI is `/payments/create` even though the buyer
+ *      is sent to `/portal`.
+ *   5. Redirect the browser to `{endpoint}/portal?` + buildHttpQuery({ baseEncode,
+ *      signature }) — we construct this URL ourselves; nothing is POSTed.
  *
  * 9Pay then POSTs a server-to-server IPN (x-www-form-urlencoded: `result` +
- * `checksum` + `version`). We verify `checksum == UPPER(sha256(result +
+ * `checksum` + `version`) AND redirects the browser back to the return URL with
+ * the same `result` + `checksum`. We verify `checksum == UPPER(sha256(result +
  * CHECKSUM key))`, decode `result` (base64 JSON), and read `status`: 5 = PAID,
  * 6/8/9 = FINAL failed/cancelled/rejected, 2/3 (or anything else) = pending (we
  * leave the payment INITIATED so the later success callback can still capture).
@@ -171,6 +172,7 @@ export class NinePayPaymentService {
     invoiceNo?: string;
     outcome?: 'paid' | 'failed' | 'pending';
     amountVnd?: number;
+    currency?: string;
   } {
     if (!this.enabled) return { ok: false };
     const result = body?.result;
@@ -188,7 +190,13 @@ export class NinePayPaymentService {
     const provided = Buffer.from(String(checksum).toUpperCase(), 'utf8');
     const expectedBuf = Buffer.from(expected, 'utf8');
     if (provided.length !== expectedBuf.length || !timingSafeEqual(provided, expectedBuf)) {
-      this.logger.warn('9Pay checksum mismatch');
+      // ERROR, not warn: a mismatch is either a forged callback OR a wrong/
+      // rotated NINEPAY_CHECKSUM_KEY. The latter strands every payment at
+      // INITIATED (we ACK 200 so 9Pay stops retrying), so it must be loud
+      // enough for ops/alerting to catch.
+      this.logger.error(
+        '9Pay checksum verification FAILED — forged callback or wrong/rotated NINEPAY_CHECKSUM_KEY; payment will NOT be captured',
+      );
       return { ok: false };
     }
 
@@ -196,7 +204,7 @@ export class NinePayPaymentService {
     try {
       data = JSON.parse(Buffer.from(result, 'base64').toString('utf8')) as Record<string, unknown>;
     } catch {
-      this.logger.warn('9Pay result is not valid base64 JSON');
+      this.logger.error('9Pay result passed checksum but is not valid base64 JSON');
       return { ok: false };
     }
 
@@ -217,6 +225,10 @@ export class NinePayPaymentService {
       invoiceNo: String(data['invoice_no'] ?? data['invoiceNo'] ?? ''),
       outcome,
       amountVnd: Number(data['amount'] ?? 0),
+      // Pass currency through IF 9Pay includes one, so applyCapture's currency
+      // cross-check can run (defense-in-depth). Undefined when absent — the
+      // check is then skipped and the amount cross-check still applies.
+      currency: data['currency'] != null ? String(data['currency']) : undefined,
     };
   }
 
@@ -232,6 +244,13 @@ export class NinePayPaymentService {
     if (!this.enabled) {
       this.logger.warn('9Pay refund requested without configuration');
     }
+    // Make the manual step explicit in the logs so a refund stuck in PROCESSING
+    // is traceable: staff must process it in the 9Pay dashboard / by bank
+    // transfer and then mark the Refund completed. We return completed:false so
+    // the Refund stays visible for that manual reconciliation.
+    this.logger.log(
+      '9Pay refund is MANUAL — process it in the 9Pay dashboard / bank transfer, then mark the Refund completed (returning completed:false).',
+    );
     return { completed: false };
   }
 }

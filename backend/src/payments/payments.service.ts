@@ -17,7 +17,6 @@ import type { PaymentInstructions } from './dto/payment-instructions';
 import { CashPaymentService } from './providers/cash.service';
 import { MoMoPaymentService } from './providers/momo.service';
 import { NinePayPaymentService } from './providers/ninepay.service';
-import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
 
 interface InitiateArgs {
@@ -34,7 +33,6 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly cash: CashPaymentService,
     private readonly stripe: StripePaymentService,
-    private readonly payos: PayOSPaymentService,
     private readonly momo: MoMoPaymentService,
     private readonly ninepay: NinePayPaymentService,
     private readonly realtime: RealtimeGateway,
@@ -43,7 +41,7 @@ export class PaymentsService {
 
   /**
    * Centralised online-capture path for all redirect providers (Stripe /
-   * PayOS / MoMo), called from their webhook/IPN handlers. Two guards the
+   * MoMo / 9Pay), called from their webhook/IPN handlers. Two guards the
    * per-provider `updateMany` was missing:
    *   1. status gate — only an INITIATED/AUTHORIZED payment can be captured,
    *      so a replayed or late webhook can't resurrect a VOIDED/REFUNDED one;
@@ -67,93 +65,129 @@ export class PaymentsService {
       this.logger.warn(`Capture for unknown ${args.provider} ref ${args.providerRef} — ignored`);
       return;
     }
-    if (payment.status !== 'INITIATED' && payment.status !== 'AUTHORIZED') {
-      this.logger.warn(
-        `Ignoring capture for payment ${payment.id} in terminal state ${payment.status}`,
-      );
-      return;
-    }
-    // Currency cross-check (defense-in-depth alongside the amount check, which
-    // is currency-blind). All orders are VND today, so a mismatch means a
-    // misconfigured provider account / unexpected settlement currency.
+
+    // Validate the provider-reported settlement BEFORE acting on it. These
+    // checks are status-independent (provider amount/currency vs what we
+    // charged), so they guard BOTH the normal capture and the stranded-VOIDED
+    // auto-refund path below. Fail closed on any mismatch.
     if (args.currency && args.currency.toUpperCase() !== payment.currency.toUpperCase()) {
       this.logger.error(
         `Currency mismatch on payment ${payment.id}: provider reports ${args.currency}, expected ${payment.currency} — refusing to capture`,
       );
       return;
     }
-    {
-      const expected = Math.round(Number(payment.amount.toString()));
-      // Fail closed: a redirect provider must report a settlement amount we can
-      // cross-check. Stripe's session.amount_total is nullable; treat a missing
-      // amount as a refusal rather than silently capturing an unverified sum.
-      // (PayOS/MoMo always pass a concrete amount, so this only guards the
-      // abnormal Stripe-null case.)
-      if (args.paidAmountVnd == null) {
-        this.logger.error(
-          `No provider amount on payment ${payment.id} (expected ${expected}) — refusing to capture`,
-        );
-        return;
-      }
-      if (Math.round(args.paidAmountVnd) !== expected) {
-        this.logger.error(
-          `Amount mismatch on payment ${payment.id}: provider reports ${args.paidAmountVnd}, expected ${expected} — refusing to capture`,
-        );
-        return;
-      }
-    }
-    const res = await this.prisma.payment.updateMany({
-      where: { id: payment.id, status: { in: ['INITIATED', 'AUTHORIZED'] } },
-      data: { status: 'CAPTURED', rawPayload: args.payload },
-    });
-    if (res.count === 0) return; // lost a race to a concurrent webhook
-
-    // A late webhook can capture a payment on an order the customer already
-    // cancelled (the cancel ran first and saw no captured payment to refund).
-    // The money is now at the provider against a cancelled order, so auto-open
-    // a refund for staff to process instead of leaving a stranded CAPTURED
-    // payment, and skip the celebratory "payment captured" customer ping.
-    const order = await this.prisma.order.findUnique({
-      where: { id: payment.orderId },
-      select: { id: true, status: true, storeId: true },
-    });
-    if (order && (order.status === 'CANCELLED' || order.status === 'REFUNDED')) {
+    const expected = Math.round(Number(payment.amount.toString()));
+    // A redirect provider must report a settlement amount we can cross-check.
+    // Treat a missing amount as a refusal rather than capturing an unverified
+    // sum (Stripe's session.amount_total is nullable).
+    if (args.paidAmountVnd == null) {
       this.logger.error(
-        `Captured ${args.provider} payment ${payment.id} on ${order.status} order ${order.id} — opening auto-refund`,
+        `No provider amount on payment ${payment.id} (expected ${expected}) — refusing to capture`,
       );
-      const already = await this.prisma.refund.findFirst({
-        where: { orderId: order.id, paymentId: payment.id },
-      });
-      if (!already) {
-        try {
-          await this.prisma.refund.create({
-            data: {
-              orderId: order.id,
-              paymentId: payment.id,
-              amount: payment.amount,
-              reason: `Auto: payment captured after order ${order.status}`,
-              status: 'REQUESTED',
-              requestedById: 'system',
-            },
-          });
-          this.realtime.emit([`store:${order.storeId}`], 'refund.auto_requested', {
-            orderId: order.id,
-            paymentId: payment.id,
-            at: new Date().toISOString(),
-          });
-        } catch (e) {
-          // The cancel path's refund row won the race (partial unique index on
-          // (orderId, paymentId) for non-REJECTED). That refund already covers
-          // this payment, so the duplicate is a no-op. Standalone create (not
-          // an interactive tx), so catching is safe.
-          if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')) {
-            throw e;
-          }
-        }
-      }
       return;
     }
-    await this.onCaptured(payment.orderId);
+    if (Math.round(args.paidAmountVnd) !== expected) {
+      this.logger.error(
+        `Amount mismatch on payment ${payment.id}: provider reports ${args.paidAmountVnd}, expected ${expected} — refusing to capture`,
+      );
+      return;
+    }
+
+    // Normal path: an open payment is captured.
+    if (payment.status === 'INITIATED' || payment.status === 'AUTHORIZED') {
+      const res = await this.prisma.payment.updateMany({
+        where: { id: payment.id, status: { in: ['INITIATED', 'AUTHORIZED'] } },
+        data: { status: 'CAPTURED', rawPayload: args.payload },
+      });
+      if (res.count === 0) return; // lost a race to a concurrent webhook
+
+      // A late webhook can capture a payment on an order the customer already
+      // cancelled (the cancel ran first and saw no captured payment to refund).
+      // The money is now at the provider against a cancelled order, so auto-open
+      // a refund for staff and skip the celebratory "payment captured" ping.
+      const order = await this.prisma.order.findUnique({
+        where: { id: payment.orderId },
+        select: { id: true, status: true, storeId: true },
+      });
+      if (order && (order.status === 'CANCELLED' || order.status === 'REFUNDED')) {
+        this.logger.error(
+          `Captured ${args.provider} payment ${payment.id} on ${order.status} order ${order.id} — opening auto-refund`,
+        );
+        await this.openAutoRefund(payment, order.storeId);
+        return;
+      }
+      await this.onCaptured(payment.orderId);
+      return;
+    }
+
+    // Stranded-capture path: we already VOIDED this payment locally because the
+    // order was cancelled (onOrderCancelled voids still-INITIATED online
+    // payments) — but the provider actually collected the money and sent a late
+    // "paid" callback. Without this branch applyCapture returned early and the
+    // funds sat at the provider with no CAPTURED record and no Refund, invisible
+    // to staff. Flip VOIDED → CAPTURED (the money is real; amount/currency were
+    // verified above) and auto-open a refund.
+    if (payment.status === 'VOIDED') {
+      const res = await this.prisma.payment.updateMany({
+        where: { id: payment.id, status: 'VOIDED' },
+        data: { status: 'CAPTURED', rawPayload: args.payload },
+      });
+      if (res.count === 0) return; // lost a race
+      const order = await this.prisma.order.findUnique({
+        where: { id: payment.orderId },
+        select: { id: true, status: true, storeId: true },
+      });
+      this.logger.error(
+        `Stranded ${args.provider} capture on VOIDED payment ${payment.id} (order ${payment.orderId}) — flipped to CAPTURED, opening auto-refund`,
+      );
+      await this.openAutoRefund(payment, order?.storeId ?? null);
+      return;
+    }
+
+    // Any other terminal state (CAPTURED replay / REFUNDED / FAILED): ignore.
+    this.logger.warn(
+      `Ignoring capture for payment ${payment.id} in terminal state ${payment.status}`,
+    );
+  }
+
+  /**
+   * Opens a staff-actionable refund for money captured against an order that
+   * should not have stayed paid — a cancelled/refunded order, or a payment we
+   * had locally VOIDED. Idempotent: the partial unique index on
+   * Refund(orderId, paymentId) for non-REJECTED rows means a concurrent
+   * cancel-path refund creation collides with P2002, which we treat as a no-op.
+   */
+  private async openAutoRefund(payment: Payment, storeId: string | null): Promise<void> {
+    const already = await this.prisma.refund.findFirst({
+      where: { orderId: payment.orderId, paymentId: payment.id },
+    });
+    if (already) return;
+    try {
+      await this.prisma.refund.create({
+        data: {
+          orderId: payment.orderId,
+          paymentId: payment.id,
+          amount: payment.amount,
+          reason: 'Auto: payment captured on a cancelled/voided order',
+          status: 'REQUESTED',
+          requestedById: 'system',
+        },
+      });
+      if (storeId) {
+        this.realtime.emit([`store:${storeId}`], 'refund.auto_requested', {
+          orderId: payment.orderId,
+          paymentId: payment.id,
+          at: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      // Cancel path's refund row won the race (partial unique index). The
+      // duplicate is a no-op. Standalone create (not an interactive tx), so
+      // catching is safe.
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')) {
+        throw e;
+      }
+    }
   }
 
   /** Marks a still-open payment FAILED (expired / declined webhook). */
@@ -268,13 +302,11 @@ export class PaymentsService {
     const enabled =
       method === 'STRIPE'
         ? this.stripe.enabled
-        : method === 'PAYOS'
-          ? this.payos.enabled
-          : method === 'MOMO'
-            ? this.momo.enabled
-            : method === 'NINEPAY'
-              ? this.ninepay.enabled
-              : false;
+        : method === 'MOMO'
+          ? this.momo.enabled
+          : method === 'NINEPAY'
+            ? this.ninepay.enabled
+            : false;
     if (!enabled) {
       throw new BadRequestException({
         code: 'PAYMENT_PROVIDER_UNAVAILABLE',
@@ -319,26 +351,6 @@ export class PaymentsService {
         }
         return {
           provider: 'STRIPE',
-          paymentId: result.paymentId,
-          redirectUrl: result.redirectUrl,
-        };
-      }
-      case 'PAYOS': {
-        const result = await this.payos.initiate({
-          orderId: order.id,
-          orderCode: order.code,
-          amount,
-          currency,
-        });
-        if ('configurationError' in result) {
-          return {
-            provider: 'PAYOS',
-            paymentId: '',
-            configurationError: result.configurationError,
-          };
-        }
-        return {
-          provider: 'PAYOS',
           paymentId: result.paymentId,
           redirectUrl: result.redirectUrl,
         };
@@ -418,7 +430,7 @@ export class PaymentsService {
       data: { status: 'VOIDED' },
     });
 
-    // Anything still CAPTURED (Stripe/PayOS/MoMo, or CASH after collection)
+    // Anything still CAPTURED (Stripe/MoMo/9Pay, or CASH after collection)
     // needs a refund — return so the caller can drive the Refund flow.
     const capturedPayments = await db.payment.findMany({
       where: { orderId, status: 'CAPTURED' },
@@ -429,7 +441,7 @@ export class PaymentsService {
   /**
    * Executes the provider-side refund for an approved Refund. Returns
    * `{ completed: true }` for synchronous providers (CASH); `false` for
-   * async ones (Stripe/PayOS/MoMo) — caller marks the refund PROCESSING
+   * async ones (Stripe/MoMo/9Pay) — caller marks the refund PROCESSING
    * and waits for the webhook / manual reconciliation.
    */
   async executeRefund(refund: Refund): Promise<{ completed: boolean; providerRef?: string }> {
@@ -453,7 +465,9 @@ export class PaymentsService {
           amountMinorUnits: Math.round(Number(refund.amount.toString())),
         });
       case 'PAYOS':
-        return this.payos.refund();
+        // Legacy PayOS payments (pre-9Pay) — the provider was removed; refunds
+        // are reconciled manually via bank transfer, the same posture PayOS had.
+        return { completed: false };
       case 'MOMO':
         return this.momo.refund();
       case 'NINEPAY':

@@ -47,7 +47,7 @@ class MerchantSummary {
     return const MerchantFulfillmentSplit();
   }
 
-  /// Completed-order counts grouped by payment provider (e.g. CASH, PAYOS).
+  /// Completed-order counts grouped by payment provider (e.g. CASH, NINEPAY).
   List<Map<String, dynamic>> get byPayment =>
       ((raw['byPayment'] as List?) ?? const [])
           .map((e) => Map<String, dynamic>.from(e as Map))

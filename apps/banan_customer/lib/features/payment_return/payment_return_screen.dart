@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// Lands here after Stripe / PayOS / MoMo redirects the customer back to
+/// Lands here after Stripe / 9Pay / MoMo redirects the customer back to
 /// the app. Server-side IPN/webhook is the source of truth for payment
 /// status — this page just bridges the redirect tab back into the app.
 class PaymentReturnScreen extends ConsumerStatefulWidget {

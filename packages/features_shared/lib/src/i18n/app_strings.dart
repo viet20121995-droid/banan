@@ -144,7 +144,6 @@ abstract class AppStrings {
   String get tomorrow;
   String inDays(int n);
   String get weWillText;
-  String get payosHint;
   String orderStatusLabel(OrderStatus status);
   String get orderTitle;
   String get backToMenu;
@@ -428,8 +427,6 @@ class _Vi extends AppStrings {
   String inDays(int n) => 'Sau $n ngày';
   @override
   String get weWillText => 'Chúng tôi sẽ nhắn cập nhật đơn vào số này.';
-  @override
-  String get payosHint => 'Quét QR / chuyển khoản ngân hàng';
   @override
   String orderStatusLabel(OrderStatus status) => switch (status) {
         OrderStatus.pending => 'Chờ xác nhận',
@@ -796,8 +793,6 @@ class _En extends AppStrings {
   String inDays(int n) => 'In $n days';
   @override
   String get weWillText => "We'll text you order updates at this number.";
-  @override
-  String get payosHint => 'Bank QR / transfer';
   @override
   String orderStatusLabel(OrderStatus status) => switch (status) {
         OrderStatus.pending => 'Pending',
