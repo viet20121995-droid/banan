@@ -95,16 +95,27 @@ export class NinePayPaymentService {
     const time = Math.floor(Date.now() / 1000); // 10-digit unix; must match Date header
 
     // Canonicalized resources — EXACT documented field order, raw (un-encoded)
-    // values. baseEncode is the base64 of this same string, so 9Pay reconstructs
-    // it from baseEncode and re-derives the signature → signing over `canonical`
-    // is self-consistent.
+    // values. This `key=value&…` form is used ONLY to compute the signature
+    // (developers.9pay.vn).
     const canonical =
       `merchantKey=${merchantKey}` +
       `&invoice_no=${invoiceNo}` +
       `&amount=${amount}` +
       `&description=${description}` +
       `&return_url=${returnUrl}`;
-    const baseEncode = Buffer.from(canonical, 'utf8').toString('base64');
+    // baseEncode (the actual data payload 9Pay decodes) is base64 of the JSON
+    // object — NOT the canonical string. Sending the canonical string as
+    // baseEncode made 9Pay reply "Request error - Wrong data".
+    const baseEncode = Buffer.from(
+      JSON.stringify({
+        merchantKey,
+        invoice_no: invoiceNo,
+        amount,
+        description,
+        return_url: returnUrl,
+      }),
+      'utf8',
+    ).toString('base64');
 
     // 9Pay Payment Gateway uses the REDIRECT model: the buyer's browser is sent
     // (GET) to the hosted checkout at `{base}/portal` with `baseEncode` +
