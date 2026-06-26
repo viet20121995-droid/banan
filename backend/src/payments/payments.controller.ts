@@ -141,6 +141,27 @@ export class PaymentsController {
     const customerBase =
       this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081';
     const verified = this.ninepay.verifyResult(query);
+    // The return carries the same checksum-signed result as the IPN, so treat it
+    // as authoritative too: capture/fail here as well. This makes the order flip
+    // to paid as soon as the buyer returns (not only when the IPN lands), and is
+    // safe because applyCapture is idempotent (status + amount guards) — a later
+    // IPN for the same payment is a no-op.
+    if (verified.ok && verified.invoiceNo) {
+      if (verified.paid) {
+        await this.payments.applyCapture({
+          provider: 'NINEPAY',
+          providerRef: verified.invoiceNo,
+          paidAmountVnd: verified.amountVnd,
+          payload: query,
+        });
+      } else {
+        await this.payments.applyFailure({
+          provider: 'NINEPAY',
+          providerRef: verified.invoiceNo,
+          payload: query,
+        });
+      }
+    }
     const status = verified.ok && verified.paid ? 'success' : 'failed';
     const orderId =
       verified.ok && verified.invoiceNo

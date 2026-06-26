@@ -1,4 +1,4 @@
-import { HttpException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, createHmac } from 'node:crypto';
 
@@ -105,34 +105,23 @@ export class NinePayPaymentService {
       `&description=${description}` +
       `&return_url=${returnUrl}`;
     const baseEncode = Buffer.from(canonical, 'utf8').toString('base64');
+
+    // 9Pay Payment Gateway uses the REDIRECT model: the buyer's browser is sent
+    // (GET) to the hosted checkout at `{base}/payments/create` with
+    // `baseEncode` + `signature` + `time` in the query string — NOT a
+    // server-to-server POST (that path 404s). `time` rides as a query param
+    // because a browser redirect has no `Date` header. Signature per
+    // developers.9pay.vn: base64(HMAC-SHA256("POST\n{URI}\n{time}\n{canonical}",
+    // secret)) where "POST" is the canonical method token and URI is the create
+    // URL. We just hand this URL to the app to open.
     const stringToSign = `POST\n${createUrl}\n${time}\n${canonical}`;
     const signature = createHmac('sha256', secretKey)
       .update(stringToSign, 'utf8')
       .digest('base64');
-
-    const res = await fetch(createUrl, {
-      method: 'POST',
-      // 9Pay answers the create with a redirect to the hosted checkout page;
-      // capture the Location instead of following it server-side.
-      redirect: 'manual',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        Authorization: `Signature Algorithm=HS256, Credential=${merchantKey}, SignedHeaders=, Signature=${signature}`,
-        Date: String(time),
-      },
-      body: new URLSearchParams({ baseEncode }).toString(),
-    });
-
-    const redirectUrl = await this.extractRedirectUrl(res);
-    if (!redirectUrl) {
-      this.logger.error(
-        `9Pay create failed: status=${res.status} body=${await this.safeText(res)}`,
-      );
-      throw new HttpException(
-        { code: 'NINEPAY_CREATE_FAILED', message: 'Không tạo được giao dịch 9Pay.' },
-        500,
-      );
-    }
+    const redirectUrl =
+      `${createUrl}?baseEncode=${encodeURIComponent(baseEncode)}` +
+      `&signature=${encodeURIComponent(signature)}` +
+      `&time=${time}`;
 
     const payment = await this.prisma.payment.create({
       data: {
@@ -142,47 +131,11 @@ export class NinePayPaymentService {
         amount: args.amount,
         currency: args.currency,
         status: 'INITIATED',
-        rawPayload: { invoiceNo, createUrl, redirectUrl },
+        rawPayload: { invoiceNo, createUrl, time },
       },
     });
 
     return { paymentId: payment.id, redirectUrl };
-  }
-
-  /**
-   * 9Pay's create response carries the hosted-checkout URL either as a 3xx
-   * `Location` redirect or (defensively) as a JSON field. Returns undefined if
-   * neither is present so the caller can fail closed.
-   */
-  private async extractRedirectUrl(res: Response): Promise<string | undefined> {
-    if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get('location');
-      if (loc) return loc;
-    }
-    const text = await this.safeText(res);
-    if (!text) return undefined;
-    try {
-      const j = JSON.parse(text) as Record<string, unknown> & { data?: Record<string, unknown> };
-      const url =
-        (j['redirect_url'] as string | undefined) ??
-        (j['redirectUrl'] as string | undefined) ??
-        (j['url'] as string | undefined) ??
-        (j.data?.['redirect_url'] as string | undefined) ??
-        (j.data?.['url'] as string | undefined);
-      if (typeof url === 'string' && url.startsWith('http')) return url;
-    } catch {
-      // Not JSON — some flows return a bare URL string.
-      if (text.startsWith('http')) return text.trim();
-    }
-    return undefined;
-  }
-
-  private async safeText(res: Response): Promise<string> {
-    try {
-      return await res.text();
-    } catch {
-      return '';
-    }
   }
 
   /**
