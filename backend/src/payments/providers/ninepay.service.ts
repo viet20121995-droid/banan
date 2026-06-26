@@ -104,8 +104,10 @@ export class NinePayPaymentService {
       `&description=${description}` +
       `&return_url=${returnUrl}`;
     // baseEncode (the actual data payload 9Pay decodes) is base64 of the JSON
-    // object — NOT the canonical string. Sending the canonical string as
-    // baseEncode made 9Pay reply "Request error - Wrong data".
+    // object — NOT the canonical string. It must include EVERY required param,
+    // incl. `time` (a required field per 9Pay's doc); omitting it returns
+    // "Request error - Wrong data". The canonical above (sans time) is only for
+    // the signature, where time is the separate 3rd line.
     const baseEncode = Buffer.from(
       JSON.stringify({
         merchantKey,
@@ -113,6 +115,7 @@ export class NinePayPaymentService {
         amount,
         description,
         return_url: returnUrl,
+        time,
       }),
       'utf8',
     ).toString('base64');
