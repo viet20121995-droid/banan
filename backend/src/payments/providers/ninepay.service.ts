@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -22,9 +22,10 @@ import { PrismaService } from '../../prisma/prisma.service';
  *
  * 9Pay then POSTs a server-to-server IPN (x-www-form-urlencoded: `result` +
  * `checksum` + `version`). We verify `checksum == UPPER(sha256(result +
- * CHECKSUM key))`, decode `result` (base64 JSON), and a transaction is PAID when
- * `status === 5` (or `error_code === '000'`); 6/8/9 = failed/cancelled/rejected.
- * The browser return URL is UX-only — the IPN is authoritative.
+ * CHECKSUM key))`, decode `result` (base64 JSON), and read `status`: 5 = PAID,
+ * 6/8/9 = FINAL failed/cancelled/rejected, 2/3 (or anything else) = pending (we
+ * leave the payment INITIATED so the later success callback can still capture).
+ * Both the IPN and the browser return are authoritative (checksum-verified).
  *
  * Configure: NINEPAY_MERCHANT_KEY, NINEPAY_SECRET_KEY, NINEPAY_CHECKSUM_KEY
  * (+ optional NINEPAY_ENDPOINT [default SANDBOX], NINEPAY_RETURN_URL). Register
@@ -36,9 +37,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class NinePayPaymentService {
   private readonly logger = new Logger(NinePayPaymentService.name);
 
-  // 9Pay success markers in the decoded IPN/return `result`.
+  // 9Pay transaction-status markers in the decoded IPN/return `result`.
+  // `status` is the authoritative settlement signal — 5 = success, 6/8/9 =
+  // failed/cancelled/rejected (FINAL); 2/3 (or anything else) = pending. We must
+  // NOT treat pending as failure: FAILED is terminal and would block the later
+  // success callback, stranding a paid order.
   private static readonly STATUS_SUCCESS = 5;
-  private static readonly ERROR_CODE_SUCCESS = '000';
+  private static readonly STATUS_FINAL_FAILED: ReadonlySet<number> = new Set([6, 8, 9]);
 
   constructor(
     private readonly config: ConfigService,
@@ -164,7 +169,7 @@ export class NinePayPaymentService {
   verifyResult(body: { result?: string; checksum?: string }): {
     ok: boolean;
     invoiceNo?: string;
-    paid?: boolean;
+    outcome?: 'paid' | 'failed' | 'pending';
     amountVnd?: number;
   } {
     if (!this.enabled) return { ok: false };
@@ -172,11 +177,17 @@ export class NinePayPaymentService {
     const checksum = body?.checksum;
     if (!result || !checksum) return { ok: false };
 
+    // The checksum is the SOLE anti-forgery gate (both the IPN and the
+    // customer-controlled return URL capture on the strength of it), so compare
+    // it in constant time — same posture as the Stripe webhook. timingSafeEqual
+    // throws on unequal-length buffers, so guard the length first.
     const expected = createHash('sha256')
       .update(result + this.checksumKey)
       .digest('hex')
       .toUpperCase();
-    if (expected !== String(checksum).toUpperCase()) {
+    const provided = Buffer.from(String(checksum).toUpperCase(), 'utf8');
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    if (provided.length !== expectedBuf.length || !timingSafeEqual(provided, expectedBuf)) {
       this.logger.warn('9Pay checksum mismatch');
       return { ok: false };
     }
@@ -189,16 +200,22 @@ export class NinePayPaymentService {
       return { ok: false };
     }
 
+    // `status` is the single source of truth. 5 = paid; 6/8/9 = FINAL failure;
+    // everything else (2/3 processing, or anything unrecognized/missing) = pending
+    // — we must NOT mark those FAILED or the later success callback can't capture.
+    // (`error_code` is a transport-level marker, not settlement, so it is ignored.)
     const status = Number(data['status']);
-    const errorCode = String(data['error_code'] ?? data['errorCode'] ?? '');
-    const paid =
-      status === NinePayPaymentService.STATUS_SUCCESS ||
-      errorCode === NinePayPaymentService.ERROR_CODE_SUCCESS;
+    const outcome: 'paid' | 'failed' | 'pending' =
+      status === NinePayPaymentService.STATUS_SUCCESS
+        ? 'paid'
+        : NinePayPaymentService.STATUS_FINAL_FAILED.has(status)
+          ? 'failed'
+          : 'pending';
 
     return {
       ok: true,
       invoiceNo: String(data['invoice_no'] ?? data['invoiceNo'] ?? ''),
-      paid,
+      outcome,
       amountVnd: Number(data['amount'] ?? 0),
     };
   }

@@ -142,19 +142,20 @@ export class PaymentsController {
       this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081';
     const verified = this.ninepay.verifyResult(query);
     // The return carries the same checksum-signed result as the IPN, so treat it
-    // as authoritative too: capture/fail here as well. This makes the order flip
-    // to paid as soon as the buyer returns (not only when the IPN lands), and is
-    // safe because applyCapture is idempotent (status + amount guards) — a later
-    // IPN for the same payment is a no-op.
+    // as authoritative too: capture on 'paid', fail on FINAL failure. This flips
+    // the order to paid as soon as the buyer returns (not only when the IPN
+    // lands), and is safe because applyCapture is idempotent. A 'pending' result
+    // (status 2/3) leaves the payment INITIATED so the later final callback can
+    // still capture — failing it here would be terminal and strand a paid order.
     if (verified.ok && verified.invoiceNo) {
-      if (verified.paid) {
+      if (verified.outcome === 'paid') {
         await this.payments.applyCapture({
           provider: 'NINEPAY',
           providerRef: verified.invoiceNo,
           paidAmountVnd: verified.amountVnd,
           payload: query,
         });
-      } else {
+      } else if (verified.outcome === 'failed') {
         await this.payments.applyFailure({
           provider: 'NINEPAY',
           providerRef: verified.invoiceNo,
@@ -162,7 +163,13 @@ export class PaymentsController {
         });
       }
     }
-    const status = verified.ok && verified.paid ? 'success' : 'failed';
+    const status = !verified.ok
+      ? 'failed'
+      : verified.outcome === 'paid'
+        ? 'success'
+        : verified.outcome === 'failed'
+          ? 'failed'
+          : 'pending';
     const orderId =
       verified.ok && verified.invoiceNo
         ? await this.payments.findOrderIdByRef('NINEPAY', verified.invoiceNo)
@@ -174,7 +181,9 @@ export class PaymentsController {
   /**
    * Authoritative server-to-server IPN from 9Pay. Posted as
    * x-www-form-urlencoded with `result` + `checksum` (+ `version`); we verify
-   * the checksum and mark the Payment CAPTURED / FAILED.
+   * the checksum and mark the Payment CAPTURED (status 5) / FAILED (final 6/8/9),
+   * or leave it INITIATED for a pending (2/3) result. Always 200 so 9Pay's retry
+   * re-delivers the final status instead of treating it as a hard error.
    */
   @Public()
   @Post('ninepay/ipn')
@@ -188,20 +197,21 @@ export class PaymentsController {
       // are logged inside verifyResult.
       return { status: 'success' };
     }
-    if (verified.paid) {
+    if (verified.outcome === 'paid') {
       await this.payments.applyCapture({
         provider: 'NINEPAY',
         providerRef: verified.invoiceNo,
         paidAmountVnd: verified.amountVnd,
         payload: body,
       });
-    } else {
+    } else if (verified.outcome === 'failed') {
       await this.payments.applyFailure({
         provider: 'NINEPAY',
         providerRef: verified.invoiceNo,
         payload: body,
       });
     }
+    // 'pending' → no state change; 9Pay re-IPNs the final status on settlement.
     return { status: 'success' };
   }
 
