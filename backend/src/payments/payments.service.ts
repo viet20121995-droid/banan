@@ -16,6 +16,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import type { PaymentInstructions } from './dto/payment-instructions';
 import { CashPaymentService } from './providers/cash.service';
 import { MoMoPaymentService } from './providers/momo.service';
+import { NinePayPaymentService } from './providers/ninepay.service';
 import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
 
@@ -35,6 +36,7 @@ export class PaymentsService {
     private readonly stripe: StripePaymentService,
     private readonly payos: PayOSPaymentService,
     private readonly momo: MoMoPaymentService,
+    private readonly ninepay: NinePayPaymentService,
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationsService,
   ) {}
@@ -270,7 +272,9 @@ export class PaymentsService {
           ? this.payos.enabled
           : method === 'MOMO'
             ? this.momo.enabled
-            : false;
+            : method === 'NINEPAY'
+              ? this.ninepay.enabled
+              : false;
     if (!enabled) {
       throw new BadRequestException({
         code: 'PAYMENT_PROVIDER_UNAVAILABLE',
@@ -359,6 +363,26 @@ export class PaymentsService {
           redirectUrl: result.redirectUrl,
         };
       }
+      case 'NINEPAY': {
+        const result = await this.ninepay.initiate({
+          orderId: order.id,
+          orderCode: order.code,
+          amount,
+          currency,
+        });
+        if ('configurationError' in result) {
+          return {
+            provider: 'NINEPAY',
+            paymentId: '',
+            configurationError: result.configurationError,
+          };
+        }
+        return {
+          provider: 'NINEPAY',
+          paymentId: result.paymentId,
+          redirectUrl: result.redirectUrl,
+        };
+      }
       default:
         throw new BadRequestException({
           code: 'UNSUPPORTED_PAYMENT_METHOD',
@@ -388,7 +412,7 @@ export class PaymentsService {
     await db.payment.updateMany({
       where: {
         orderId,
-        provider: { in: ['STRIPE', 'PAYOS', 'MOMO'] },
+        provider: { in: ['STRIPE', 'PAYOS', 'MOMO', 'NINEPAY'] },
         status: 'INITIATED',
       },
       data: { status: 'VOIDED' },
@@ -432,6 +456,8 @@ export class PaymentsService {
         return this.payos.refund();
       case 'MOMO':
         return this.momo.refund();
+      case 'NINEPAY':
+        return this.ninepay.refund();
       default:
         throw new BadRequestException({ code: 'UNSUPPORTED_PROVIDER' });
     }
@@ -454,5 +480,18 @@ export class PaymentsService {
       where: { orderId, status: 'CAPTURED' },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Maps a provider's `providerRef` back to our orderId — used by browser
+   * return handlers (e.g. 9Pay) to deep-link the customer straight to their
+   * order. Returns null if no matching payment exists.
+   */
+  async findOrderIdByRef(provider: PaymentProvider, providerRef: string): Promise<string | null> {
+    const payment = await this.prisma.payment.findFirst({
+      where: { provider, providerRef },
+      select: { orderId: true },
+    });
+    return payment?.orderId ?? null;
   }
 }

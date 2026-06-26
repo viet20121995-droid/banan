@@ -21,6 +21,7 @@ import { Public } from '../auth/decorators/public.decorator';
 
 import { PaymentsService } from './payments.service';
 import { MoMoPaymentService } from './providers/momo.service';
+import { NinePayPaymentService } from './providers/ninepay.service';
 import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
 
@@ -37,6 +38,7 @@ export class PaymentsController {
     private readonly stripe: StripePaymentService,
     private readonly payos: PayOSPaymentService,
     private readonly momo: MoMoPaymentService,
+    private readonly ninepay: NinePayPaymentService,
     private readonly payments: PaymentsService,
     private readonly config: ConfigService,
   ) {}
@@ -122,6 +124,64 @@ export class PaymentsController {
       });
     }
     return { success: true };
+  }
+
+  /**
+   * 9Pay redirects the customer's browser back here after checkout (GET with
+   * `result` + `checksum` query params). UX only — we verify, look up the
+   * order so we can deep-link to it, and bounce to the customer app. The DB
+   * state is set authoritatively by the IPN below.
+   */
+  @Public()
+  @Get('ninepay/return')
+  async ninepayReturn(
+    @Query() query: Record<string, string>,
+    @Res() res: Response,
+  ): Promise<void> {
+    const customerBase =
+      this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081';
+    const verified = this.ninepay.verifyResult(query);
+    const status = verified.ok && verified.paid ? 'success' : 'failed';
+    const orderId =
+      verified.ok && verified.invoiceNo
+        ? await this.payments.findOrderIdByRef('NINEPAY', verified.invoiceNo)
+        : null;
+    const orderParam = orderId ? `&order_id=${orderId}` : '';
+    res.redirect(`${customerBase}/payments/return/ninepay?status=${status}${orderParam}`);
+  }
+
+  /**
+   * Authoritative server-to-server IPN from 9Pay. Posted as
+   * x-www-form-urlencoded with `result` + `checksum` (+ `version`); we verify
+   * the checksum and mark the Payment CAPTURED / FAILED.
+   */
+  @Public()
+  @Post('ninepay/ipn')
+  @HttpCode(HttpStatus.OK)
+  async ninepayIpn(
+    @Body() body: Record<string, string>,
+  ): Promise<{ status: string }> {
+    const verified = this.ninepay.verifyResult(body);
+    if (!verified.ok || !verified.invoiceNo) {
+      // Acknowledge so 9Pay doesn't hammer retries; signature/checksum failures
+      // are logged inside verifyResult.
+      return { status: 'success' };
+    }
+    if (verified.paid) {
+      await this.payments.applyCapture({
+        provider: 'NINEPAY',
+        providerRef: verified.invoiceNo,
+        paidAmountVnd: verified.amountVnd,
+        payload: body,
+      });
+    } else {
+      await this.payments.applyFailure({
+        provider: 'NINEPAY',
+        providerRef: verified.invoiceNo,
+        payload: body,
+      });
+    }
+    return { status: 'success' };
   }
 
   /** MoMo authoritative IPN. */

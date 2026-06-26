@@ -1307,13 +1307,15 @@ class _PaymentSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Cash on receipt (COD) is the active method until PayOS API keys are
-    // configured. Once PAYOS_CLIENT_ID / PAYOS_API_KEY / PAYOS_CHECKSUM_KEY
-    // are set in backend/.env(.prod) and the webhook URL is registered in the
-    // PayOS dashboard, enable online pay by adding its row here:
-    //   (PaymentMethod.payos, Icons.qr_code_2_outlined, 'Quét QR / chuyển khoản (PayOS)'),
+    // Online pay goes through 9Pay (QR / card / bank). It only completes once
+    // NINEPAY_MERCHANT_KEY / NINEPAY_SECRET_KEY / NINEPAY_CHECKSUM_KEY are set
+    // in backend/.env(.prod) and the IPN URL is registered in the 9Pay
+    // dashboard; until then the backend rejects it up-front (before any order is
+    // created) with a clear "phương thức chưa khả dụng" message, so cash stays
+    // the safe default.
     final options = <(PaymentMethod, IconData, String)>[
       (PaymentMethod.cash, Icons.payments_outlined, 'Trả tiền mặt khi nhận hàng'),
+      (PaymentMethod.ninepay, Icons.qr_code_2_outlined, 'Quét QR / Thẻ / Chuyển khoản (9Pay)'),
     ];
     return Column(
       children: [

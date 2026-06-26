@@ -71,6 +71,7 @@ function makeService(opts: {
     noop,
     noop,
     noop,
+    noop, // ninepay
     realtime as never,
     notifications as never,
   );
@@ -235,6 +236,7 @@ function makeRefundService(opts: { refund?: RefundRow | null; refundUpdateCount?
     noop,
     noop,
     noop,
+    noop, // ninepay
     realtime as never,
     notifications as never,
   );
@@ -304,7 +306,12 @@ describe('PaymentsService.applyRefundSettled', () => {
   });
 });
 
-function validateSvc(enabled: { stripe?: boolean; payos?: boolean; momo?: boolean }) {
+function validateSvc(enabled: {
+  stripe?: boolean;
+  payos?: boolean;
+  momo?: boolean;
+  ninepay?: boolean;
+}) {
   const noop = {} as never;
   return new PaymentsService(
     noop, // prisma
@@ -312,6 +319,7 @@ function validateSvc(enabled: { stripe?: boolean; payos?: boolean; momo?: boolea
     { enabled: enabled.stripe ?? false } as never,
     { enabled: enabled.payos ?? false } as never,
     { enabled: enabled.momo ?? false } as never,
+    { enabled: enabled.ninepay ?? false } as never, // ninepay
     noop, // realtime
     noop, // notifications
   );
@@ -332,6 +340,13 @@ describe('PaymentsService.validate (provider availability — blocks before orde
 
   it('allows a configured online provider', () => {
     expect(() => validateSvc({ stripe: true }).validate('STRIPE' as never, 'PICKUP')).not.toThrow();
+  });
+
+  it('NINEPAY blocks when unconfigured, allows when configured', () => {
+    expect(() => validateSvc({ ninepay: false }).validate('NINEPAY' as never, 'PICKUP')).toThrow();
+    expect(() =>
+      validateSvc({ ninepay: true }).validate('NINEPAY' as never, 'PICKUP'),
+    ).not.toThrow();
   });
 
   it('CASH is always allowed (delegates to cash policy, no enabled check)', () => {

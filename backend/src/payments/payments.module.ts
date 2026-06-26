@@ -7,6 +7,7 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { CashPaymentService } from './providers/cash.service';
 import { MoMoPaymentService } from './providers/momo.service';
+import { NinePayPaymentService } from './providers/ninepay.service';
 import { PayOSPaymentService } from './providers/payos.service';
 import { StripePaymentService } from './providers/stripe.service';
 
@@ -19,6 +20,7 @@ import { StripePaymentService } from './providers/stripe.service';
     StripePaymentService,
     PayOSPaymentService,
     MoMoPaymentService,
+    NinePayPaymentService,
   ],
   exports: [PaymentsService],
 })

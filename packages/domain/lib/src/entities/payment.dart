@@ -6,7 +6,8 @@ enum PaymentMethod {
   cash,
   stripe,
   payos,
-  momo;
+  momo,
+  ninepay;
 
   static PaymentMethod fromWire(String value) {
     switch (value) {
@@ -15,8 +16,10 @@ enum PaymentMethod {
       case 'STRIPE':
         return PaymentMethod.stripe;
       case 'PAYOS':
-      case 'VNPAY': // legacy rows (VNPay was replaced by PayOS)
         return PaymentMethod.payos;
+      case 'NINEPAY':
+      case 'VNPAY': // legacy rows (VNPay → PayOS → 9Pay)
+        return PaymentMethod.ninepay;
       case 'MOMO':
         return PaymentMethod.momo;
       default:
@@ -34,6 +37,8 @@ enum PaymentMethod {
         return 'PAYOS';
       case PaymentMethod.momo:
         return 'MOMO';
+      case PaymentMethod.ninepay:
+        return 'NINEPAY';
     }
   }
 
@@ -47,6 +52,8 @@ enum PaymentMethod {
         return 'PayOS · QR / Chuyển khoản';
       case PaymentMethod.momo:
         return 'MoMo';
+      case PaymentMethod.ninepay:
+        return '9Pay · QR / Thẻ / Chuyển khoản';
     }
   }
 

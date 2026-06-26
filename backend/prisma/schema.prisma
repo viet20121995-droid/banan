@@ -490,7 +490,8 @@ enum PaymentProvider {
   VNPAY // deprecated — replaced by PAYOS; value kept so existing rows/type stay valid
   MOMO
   CASH
-  PAYOS
+  PAYOS // deprecated — replaced by NINEPAY; value kept so existing rows/type stay valid
+  NINEPAY // 9Pay (9pay.vn) gateway — the active online provider
 }
 
 model PaymentMethod {
