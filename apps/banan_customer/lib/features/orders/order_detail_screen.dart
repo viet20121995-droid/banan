@@ -321,6 +321,7 @@ class _PaymentBanner extends StatelessWidget {
       PaymentStatus.voided => StatusIntent.neutral,
       PaymentStatus.authorized => StatusIntent.info,
       PaymentStatus.initiated => StatusIntent.warning,
+      PaymentStatus.unknown => StatusIntent.neutral,
     };
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -366,6 +367,7 @@ class _RefundBanner extends StatelessWidget {
       RefundStatus.processing => StatusIntent.progress,
       RefundStatus.completed => StatusIntent.success,
       RefundStatus.rejected => StatusIntent.danger,
+      RefundStatus.unknown => StatusIntent.neutral,
     };
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -561,6 +563,7 @@ class _PrepDepartmentBanner extends StatelessWidget {
       case KitchenStatus.readyDispatch:
         return 'Ready and on its way back to the store.';
       case null:
+      case KitchenStatus.unknown:
         return "We'll keep you posted as it moves through the kitchen.";
     }
   }

@@ -7,7 +7,11 @@ enum PaymentMethod {
   stripe,
   payos,
   momo,
-  ninepay;
+  ninepay,
+  // Fallback for any provider this (possibly older) client build doesn't know.
+  // fromWire NEVER throws — an unknown value here must not crash list parsing
+  // (a single un-mappable payment used to blow up the whole order list).
+  unknown;
 
   static PaymentMethod fromWire(String value) {
     switch (value) {
@@ -23,7 +27,7 @@ enum PaymentMethod {
       case 'MOMO':
         return PaymentMethod.momo;
       default:
-        throw FormatException('Unknown payment method: $value');
+        return PaymentMethod.unknown;
     }
   }
 
@@ -39,6 +43,8 @@ enum PaymentMethod {
         return 'MOMO';
       case PaymentMethod.ninepay:
         return 'NINEPAY';
+      case PaymentMethod.unknown:
+        return 'UNKNOWN';
     }
   }
 
@@ -54,6 +60,8 @@ enum PaymentMethod {
         return 'MoMo';
       case PaymentMethod.ninepay:
         return '9Pay · QR / Thẻ / Chuyển khoản';
+      case PaymentMethod.unknown:
+        return 'Thanh toán online';
     }
   }
 
@@ -67,7 +75,11 @@ enum PaymentStatus {
   captured,
   failed,
   voided,
-  refunded;
+  refunded,
+  // Fallback for a status this (possibly older) client build doesn't know.
+  // fromWire NEVER throws — every order embeds payments, so a single unknown
+  // payment status must not blank the whole order list.
+  unknown;
 
   static PaymentStatus fromWire(String value) {
     switch (value) {
@@ -84,7 +96,7 @@ enum PaymentStatus {
       case 'REFUNDED':
         return PaymentStatus.refunded;
       default:
-        throw FormatException('Unknown payment status: $value');
+        return PaymentStatus.unknown;
     }
   }
 
@@ -102,6 +114,8 @@ enum PaymentStatus {
         return 'Đã huỷ thanh toán';
       case PaymentStatus.refunded:
         return 'Đã hoàn tiền';
+      case PaymentStatus.unknown:
+        return 'Trạng thái khác';
     }
   }
 }

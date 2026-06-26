@@ -2,6 +2,23 @@ import 'package:banan_core/banan_core.dart';
 import 'package:banan_domain/banan_domain.dart';
 
 import '../api/orders_api.dart';
+import '../dtos/order_dto.dart';
+
+/// Converts order DTOs to domain, SKIPPING any single order that fails to parse
+/// (e.g. one carrying a brand-new enum value an older client build can't decode
+/// yet). One un-mappable order must never blank the whole list / kitchen queue —
+/// that was the failure mode behind the merchant orders spinner.
+List<Order> _safeOrders(List<OrderDto> dtos) {
+  final out = <Order>[];
+  for (final d in dtos) {
+    try {
+      out.add(d.toDomain());
+    } catch (_) {
+      // Drop the un-parseable order rather than failing the entire list.
+    }
+  }
+  return out;
+}
 
 class OrderRepositoryImpl implements OrderRepository {
   OrderRepositoryImpl(this._api);
@@ -27,7 +44,7 @@ class OrderRepositoryImpl implements OrderRepository {
     final res = await _api.myOrders(page: page, perPage: perPage);
     return res.map(
       (data) => OrderPage(
-        items: data.items.map((d) => d.toDomain()).toList(),
+        items: _safeOrders(data.items),
         page: data.page,
         perPage: data.perPage,
         total: data.total,
@@ -60,7 +77,7 @@ class OrderRepositoryImpl implements OrderRepository {
     );
     return res.map(
       (data) => OrderPage(
-        items: data.items.map((d) => d.toDomain()).toList(),
+        items: _safeOrders(data.items),
         page: data.page,
         perPage: data.perPage,
         total: data.total,
@@ -106,7 +123,7 @@ class OrderRepositoryImpl implements OrderRepository {
       kitchenStatus: status?.wire,
       includeDoneToday: includeDoneToday,
     );
-    return res.map((list) => list.map((d) => d.toDomain()).toList());
+    return res.map(_safeOrders);
   }
 
   @override

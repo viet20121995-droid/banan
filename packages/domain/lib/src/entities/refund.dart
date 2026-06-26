@@ -5,7 +5,10 @@ enum RefundStatus {
   approved,
   processing,
   completed,
-  rejected;
+  rejected,
+  // Fallback for an unknown status — refunds are embedded in every order, so a
+  // single un-mappable refund must not blank the whole order list. Never throws.
+  unknown;
 
   static RefundStatus fromWire(String value) {
     switch (value) {
@@ -20,7 +23,7 @@ enum RefundStatus {
       case 'REJECTED':
         return RefundStatus.rejected;
       default:
-        throw FormatException('Unknown refund status: $value');
+        return RefundStatus.unknown;
     }
   }
 
@@ -36,6 +39,8 @@ enum RefundStatus {
         return 'Đã hoàn tiền';
       case RefundStatus.rejected:
         return 'Bị từ chối';
+      case RefundStatus.unknown:
+        return 'Trạng thái khác';
     }
   }
 

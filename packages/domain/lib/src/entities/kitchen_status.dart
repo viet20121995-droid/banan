@@ -8,7 +8,12 @@
 enum KitchenStatus {
   pendingAck,
   preparing,
-  readyDispatch;
+  readyDispatch,
+  // Fallback for a stage this client build doesn't know (the kitchen workflow
+  // has changed before). Never throws; excluded from [orderedColumns] and has no
+  // [next], so an unfamiliar stage degrades quietly instead of blanking the
+  // whole kanban.
+  unknown;
 
   static KitchenStatus fromWire(String value) {
     switch (value) {
@@ -19,7 +24,7 @@ enum KitchenStatus {
       case 'READY_DISPATCH':
         return KitchenStatus.readyDispatch;
       default:
-        throw FormatException('Unknown kitchen status: $value');
+        return KitchenStatus.unknown;
     }
   }
 
@@ -31,6 +36,8 @@ enum KitchenStatus {
         return 'PREPARING';
       case KitchenStatus.readyDispatch:
         return 'READY_DISPATCH';
+      case KitchenStatus.unknown:
+        return 'UNKNOWN';
     }
   }
 
@@ -42,6 +49,8 @@ enum KitchenStatus {
         return 'Đang chuẩn bị';
       case KitchenStatus.readyDispatch:
         return 'Sẵn sàng giao';
+      case KitchenStatus.unknown:
+        return 'Khác';
     }
   }
 
@@ -53,6 +62,8 @@ enum KitchenStatus {
       case KitchenStatus.preparing:
         return KitchenStatus.readyDispatch;
       case KitchenStatus.readyDispatch:
+        return null;
+      case KitchenStatus.unknown:
         return null;
     }
   }

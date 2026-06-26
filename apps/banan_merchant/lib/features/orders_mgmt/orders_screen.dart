@@ -142,8 +142,12 @@ final storeOrdersControllerProvider = StateNotifierProvider.autoDispose<
       StoreOrdersController(ref.watch(orderRepositoryProvider));
   ref.listen<AsyncValue<RealtimeEvent>>(realtimeEventsProvider, (_, next) {
     next.whenData((event) {
-      if (event.event == 'order.created') {
-        // New order — chime + bump the attention counter, then refresh.
+      if (event.event == 'order.created' ||
+          event.event == 'order.payment_captured') {
+        // A new order, OR an online (9Pay) order that just got paid — both are
+        // freshly actionable for staff, so chime + bump the attention counter,
+        // then refresh. (Capture does not change order status, so without this
+        // a paid online order would only appear on the next manual refresh.)
         playNewOrderChime();
         controller.onNewOrder();
         controller.refresh();

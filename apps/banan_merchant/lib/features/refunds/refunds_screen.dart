@@ -270,6 +270,7 @@ class _Row extends StatelessWidget {
       RefundStatus.processing => StatusIntent.progress,
       RefundStatus.completed => StatusIntent.success,
       RefundStatus.rejected => StatusIntent.danger,
+      RefundStatus.unknown => StatusIntent.neutral,
     };
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
