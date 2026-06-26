@@ -19,6 +19,9 @@ class RefundRepositoryImpl implements RefundRepository {
       RefundStatus.processing => 'PROCESSING',
       RefundStatus.completed => 'COMPLETED',
       RefundStatus.rejected => 'REJECTED',
+      // No server-side filter value — a list build that doesn't recognise this
+      // status simply lists everything rather than sending a bogus filter.
+      RefundStatus.unknown => null,
       null => null,
     };
     final res = await _api.list(status: wire, page: page, perPage: perPage);
