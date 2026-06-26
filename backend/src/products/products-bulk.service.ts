@@ -84,6 +84,19 @@ export class ProductsBulkService {
         continue;
       }
 
+      // Also skip when a product with this NAME already exists (a different
+      // slug for the same cake would otherwise create a same-name duplicate
+      // that shows twice on the storefront — Product is unique on slug, not
+      // name). Keeps re-imports with renamed slugs idempotent.
+      const nameClash = await this.prisma.product.findFirst({
+        where: { storeId, name: { equals: name, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (nameClash) {
+        skipped++;
+        continue;
+      }
+
       try {
         await this.prisma.product.create({
           data: {

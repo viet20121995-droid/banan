@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 
 import { BundlesService } from '../bundles/bundles.service';
@@ -284,6 +289,23 @@ export class ProductsService {
   }
 
   async create(storeId: string, dto: CreateProductDto) {
+    // Guard against accidental same-name duplicates. Product is unique only on
+    // [storeId, slug], NOT name, so creating a cake that already exists with a
+    // different slug silently makes a second catalog row that renders twice on
+    // the storefront (the Birthday-collection duplicate incident). Block it
+    // up-front. Best-effort (no DB constraint — historical duplicates still
+    // exist as hidden rows, which a unique index could not coexist with).
+    const name = dto.name.trim();
+    const clash = await this.prisma.product.findFirst({
+      where: { storeId, name: { equals: name, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (clash) {
+      throw new ConflictException({
+        code: 'PRODUCT_NAME_TAKEN',
+        message: `Đã có sản phẩm tên "${name}". Hãy sửa sản phẩm hiện có thay vì tạo bản trùng.`,
+      });
+    }
     return this.prisma.product.create({
       data: {
         storeId,
