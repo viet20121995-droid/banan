@@ -1091,6 +1091,21 @@ class _BodyState extends ConsumerState<_Body> {
           child: Center(child: child),
         );
 
+    // On the home view the pinned-category strips (e.g. the Birthday strip)
+    // already feature their products, so drop those from the "Tất cả bánh" grid
+    // below — otherwise every product in a pinned category renders twice. When a
+    // category filter / search is active the strips are hidden, so the grid
+    // keeps the full result set.
+    final pinned = showHomeContent
+        ? ref.watch(pinnedCategoriesProvider).valueOrNull
+        : null;
+    final pinnedIds = (pinned == null || pinned.isEmpty)
+        ? const <String>{}
+        : {for (final c in pinned) for (final p in c.products) p.id};
+    final gridProducts = pinnedIds.isEmpty
+        ? state.products
+        : state.products.where((p) => !pinnedIds.contains(p.id)).toList();
+
     return RefreshIndicator(
       onRefresh: () async {
         await onRetry();
@@ -1137,7 +1152,7 @@ class _BodyState extends ConsumerState<_Body> {
             ],
             if (showHomeContent &&
                 state.loaded &&
-                state.products.isNotEmpty)
+                gridProducts.isNotEmpty)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.only(top: BananSpacing.lg),
@@ -1158,9 +1173,9 @@ class _BodyState extends ConsumerState<_Body> {
                   mainAxisSpacing: BananSpacing.lg,
                   childAspectRatio: 0.75,
                 ),
-                itemCount: state.products.length,
+                itemCount: gridProducts.length,
                 itemBuilder: (context, i) {
-                  final p = state.products[i];
+                  final p = gridProducts[i];
                   final session = ref.watch(authSessionProvider).valueOrNull;
                   final wishlistAsync = ref.watch(wishlistIdsProvider);
                   final showStock = ref
