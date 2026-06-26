@@ -107,19 +107,21 @@ export class NinePayPaymentService {
     const baseEncode = Buffer.from(canonical, 'utf8').toString('base64');
 
     // 9Pay Payment Gateway uses the REDIRECT model: the buyer's browser is sent
-    // (GET) to the hosted checkout at `{base}/payments/create` with
-    // `baseEncode` + `signature` + `time` in the query string — NOT a
-    // server-to-server POST (that path 404s). `time` rides as a query param
-    // because a browser redirect has no `Date` header. Signature per
-    // developers.9pay.vn: base64(HMAC-SHA256("POST\n{URI}\n{time}\n{canonical}",
-    // secret)) where "POST" is the canonical method token and URI is the create
-    // URL. We just hand this URL to the app to open.
+    // (GET) to the hosted checkout at `{base}/portal` with `baseEncode` +
+    // `signature` + `time` in the query string. (`/payments/create` 404s — that
+    // is only the canonical endpoint used for SIGNING; the actual landing page
+    // is `/portal`, confirmed to exist (401 without valid params).) `time` rides
+    // as a query param because a browser redirect has no `Date` header.
+    // Signature per developers.9pay.vn:
+    //   base64(HMAC-SHA256("POST\n{createUrl}\n{time}\n{canonical}", secret))
+    // where "POST" is the canonical method token and the URI is the create URL.
     const stringToSign = `POST\n${createUrl}\n${time}\n${canonical}`;
     const signature = createHmac('sha256', secretKey)
       .update(stringToSign, 'utf8')
       .digest('base64');
+    const portalUrl = `${this.baseUrl}/portal`;
     const redirectUrl =
-      `${createUrl}?baseEncode=${encodeURIComponent(baseEncode)}` +
+      `${portalUrl}?baseEncode=${encodeURIComponent(baseEncode)}` +
       `&signature=${encodeURIComponent(signature)}` +
       `&time=${time}`;
 
