@@ -94,15 +94,18 @@ export class NinePayPaymentService {
     const description = `Thanh toan don ${args.orderCode}`.slice(0, 255);
     const time = Math.floor(Date.now() / 1000); // 10-digit unix; must match Date header
 
-    // Canonicalized resources — EXACT documented field order, raw (un-encoded)
-    // values. This `key=value&…` form is used ONLY to compute the signature
-    // (developers.9pay.vn).
+    // Canonicalized resources for the signature — must mirror EXACTLY the fields
+    // (and order) inside `baseEncode`, because 9Pay rebuilds this string from the
+    // decoded baseEncode params to verify. Since `time` is part of baseEncode, it
+    // must appear here too — omitting it caused "Request error - Verify
+    // exception" (the data was accepted but the signature didn't match).
     const canonical =
       `merchantKey=${merchantKey}` +
       `&invoice_no=${invoiceNo}` +
       `&amount=${amount}` +
       `&description=${description}` +
-      `&return_url=${returnUrl}`;
+      `&return_url=${returnUrl}` +
+      `&time=${time}`;
     // baseEncode (the actual data payload 9Pay decodes) is base64 of the JSON
     // object — NOT the canonical string. It must include EVERY required param,
     // incl. `time` (a required field per 9Pay's doc); omitting it returns
