@@ -62,6 +62,20 @@ export class NinePayPaymentService {
     return this.config.get<string>('NINEPAY_CHECKSUM_KEY')!;
   }
 
+  /**
+   * Replicates 9Pay's sample `buildHttpQuery`: sort keys alphabetically,
+   * URL-encode, join with `&` (via URLSearchParams). Used for BOTH the signing
+   * canonical and the redirect query so they match what 9Pay reconstructs.
+   * (gitlab.com/9pay-sample/sample-javascript)
+   */
+  private static buildHttpQuery(data: Record<string, string | number>): string {
+    const q = new URLSearchParams();
+    for (const key of Object.keys(data).sort()) {
+      q.append(key, String(data[key]));
+    }
+    return q.toString();
+  }
+
   async initiate(args: {
     orderId: string;
     orderCode: string;
@@ -94,53 +108,37 @@ export class NinePayPaymentService {
     const description = `Thanh toan don ${args.orderCode}`.slice(0, 255);
     const time = Math.floor(Date.now() / 1000); // 10-digit unix; must match Date header
 
-    // Canonicalized resources for the signature — must mirror EXACTLY the fields
-    // (and order) inside `baseEncode`, because 9Pay rebuilds this string from the
-    // decoded baseEncode params to verify. Since `time` is part of baseEncode, it
-    // must appear here too — omitting it caused "Request error - Verify
-    // exception" (the data was accepted but the signature didn't match).
-    const canonical =
-      `merchantKey=${merchantKey}` +
-      `&invoice_no=${invoiceNo}` +
-      `&amount=${amount}` +
-      `&description=${description}` +
-      `&return_url=${returnUrl}` +
-      `&time=${time}`;
-    // baseEncode (the actual data payload 9Pay decodes) is base64 of the JSON
-    // object — NOT the canonical string. It must include EVERY required param,
-    // incl. `time` (a required field per 9Pay's doc); omitting it returns
-    // "Request error - Wrong data". The canonical above (sans time) is only for
-    // the signature, where time is the separate 3rd line.
-    const baseEncode = Buffer.from(
-      JSON.stringify({
-        merchantKey,
-        invoice_no: invoiceNo,
-        amount,
-        description,
-        return_url: returnUrl,
-        time,
-      }),
-      'utf8',
-    ).toString('base64');
+    // Request params. baseEncode is base64 of this JSON exactly (sent to 9Pay);
+    // the signature canonical is the SAME params SORTED by key and URL-encoded.
+    // Verified byte-for-byte against 9Pay's official sample
+    // (gitlab.com/9pay-sample/sample-javascript). The two details that are easy
+    // to miss: params MUST be sorted alphabetically AND URL-encoded (e.g.
+    // description=Thanh+toan+don+…, return_url=https%3A%2F%2F…).
+    const params: Record<string, string | number> = {
+      merchantKey,
+      time,
+      invoice_no: invoiceNo,
+      amount,
+      description,
+      return_url: returnUrl,
+    };
+    const baseEncode = Buffer.from(JSON.stringify(params), 'utf8').toString('base64');
 
-    // 9Pay Payment Gateway uses the REDIRECT model: the buyer's browser is sent
-    // (GET) to the hosted checkout at `{base}/portal` with `baseEncode` +
-    // `signature` + `time` in the query string. (`/payments/create` 404s — that
-    // is only the canonical endpoint used for SIGNING; the actual landing page
-    // is `/portal`, confirmed to exist (401 without valid params).) `time` rides
-    // as a query param because a browser redirect has no `Date` header.
-    // Signature per developers.9pay.vn:
-    //   base64(HMAC-SHA256("POST\n{createUrl}\n{time}\n{canonical}", secret))
-    // where "POST" is the canonical method token and the URI is the create URL.
+    // signature = base64(HMAC-SHA256("POST\n{createUrl}\n{time}\n{canonical}",
+    // secret)). The signing URI is `/payments/create` even though the buyer
+    // lands on `/portal`; the canonical is the sorted + URL-encoded query string.
+    const canonical = NinePayPaymentService.buildHttpQuery(params);
     const stringToSign = `POST\n${createUrl}\n${time}\n${canonical}`;
     const signature = createHmac('sha256', secretKey)
       .update(stringToSign, 'utf8')
       .digest('base64');
-    const portalUrl = `${this.baseUrl}/portal`;
+
+    // Redirect the browser to the hosted checkout `/portal` with ONLY baseEncode
+    // + signature (also sorted + URL-encoded). `time` rides INSIDE baseEncode —
+    // it is NOT a separate query param.
     const redirectUrl =
-      `${portalUrl}?baseEncode=${encodeURIComponent(baseEncode)}` +
-      `&signature=${encodeURIComponent(signature)}` +
-      `&time=${time}`;
+      `${this.baseUrl}/portal?` +
+      NinePayPaymentService.buildHttpQuery({ baseEncode, signature });
 
     const payment = await this.prisma.payment.create({
       data: {
