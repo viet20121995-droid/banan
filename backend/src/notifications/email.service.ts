@@ -82,12 +82,14 @@ export class EmailService {
         html,
       });
       if (result.error) {
-        this.logger.warn(
-          `Resend reported error sending to ${args.toEmail}: ${result.error.message}`,
+        this.logger.error(
+          `EMAIL SEND FAILED (order-status) to ${args.toEmail}: ${result.error.message}`,
         );
       }
     } catch (err) {
-      this.logger.warn(`Failed to send email to ${args.toEmail}: ${(err as Error).message}`);
+      this.logger.error(
+        `EMAIL SEND FAILED (order-status) to ${args.toEmail}: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -112,12 +114,12 @@ export class EmailService {
         html: args.html,
       });
       if (result.error) {
-        this.logger.warn(`Resend error to ${args.toEmail}: ${result.error.message}`);
+        this.logger.error(`EMAIL SEND FAILED (raw) to ${args.toEmail}: ${result.error.message}`);
         return false;
       }
       return true;
     } catch (err) {
-      this.logger.warn(`Failed sending to ${args.toEmail}: ${(err as Error).message}`);
+      this.logger.error(`EMAIL SEND FAILED (raw) to ${args.toEmail}: ${(err as Error).message}`);
       return false;
     }
   }
@@ -150,10 +152,14 @@ export class EmailService {
         html,
       });
       if (result.error) {
-        this.logger.warn(`Resend error (reset) to ${args.toEmail}: ${result.error.message}`);
+        this.logger.error(
+          `EMAIL SEND FAILED (password-reset) to ${args.toEmail}: ${result.error.message}`,
+        );
       }
     } catch (err) {
-      this.logger.warn(`Failed sending reset to ${args.toEmail}: ${(err as Error).message}`);
+      this.logger.error(
+        `EMAIL SEND FAILED (password-reset) to ${args.toEmail}: ${(err as Error).message}`,
+      );
     }
   }
 
