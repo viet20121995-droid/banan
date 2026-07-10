@@ -29,6 +29,9 @@ coverage/
 .env
 .env.local
 .env.*.local
+# Real secrets (prod DB/Redis passwords, 9Pay secret + checksum keys).
+# The .env*.example templates stay tracked.
+.env.prod
 
 # Prisma
 backend/prisma/migrations/dev.db*
