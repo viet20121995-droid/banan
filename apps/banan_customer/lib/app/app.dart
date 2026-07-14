@@ -27,7 +27,10 @@ class BananCustomerApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: BananTheme.light(),
       darkTheme: BananTheme.dark(),
-      themeMode: ThemeMode.system,
+      // Always render the brand's light theme — ignore the browser/OS dark-mode
+      // preference. The storefront is designed light; dark auto-switching washed
+      // out product photos and brand colors. (darkTheme kept for a future toggle.)
+      themeMode: ThemeMode.light,
       locale: locale,
       supportedLocales: const [Locale('vi'), Locale('en')],
       localizationsDelegates: const [
