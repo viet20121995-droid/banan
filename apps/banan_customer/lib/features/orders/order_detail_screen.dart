@@ -42,6 +42,19 @@ final _orderProvider =
   );
 });
 
+/// Public order tracking — fetches via the guest-accessible `/orders/:id/track`
+/// endpoint. No realtime subscription (the socket needs a session); the viewer
+/// refreshes via the retry button. Backs the `/track/:id` route.
+final _trackingProvider =
+    FutureProvider.autoDispose.family<Order, String>((ref, id) async {
+  final repo = ref.read(orderRepositoryProvider);
+  final result = await repo.tracking(id);
+  return result.when(
+    success: (o) => o,
+    failure: (f) => throw Exception(f.message ?? f.code),
+  );
+});
+
 class OrderDetailScreen extends ConsumerWidget {
   const OrderDetailScreen({required this.orderId, super.key});
 
@@ -88,11 +101,53 @@ class OrderDetailScreen extends ConsumerWidget {
   }
 }
 
+/// Public order tracking view. Reached via `/track/:id` — the merchant-shared
+/// link and the post-payment redirect for guests. Renders the full order
+/// read-only (no cancel/reorder) and needs no session.
+class OrderTrackingScreen extends ConsumerWidget {
+  const OrderTrackingScreen({required this.orderId, super.key});
+
+  final String orderId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final orderAsync = ref.watch(_trackingProvider(orderId));
+    final s = ref.watch(stringsProvider);
+    final fmt = NumberFormat.currency(
+      locale: 'vi_VN',
+      symbol: '₫',
+      decimalDigits: 0,
+    );
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(s.orderTitle),
+        leading: IconButton(
+          icon: const Icon(Icons.home_outlined),
+          tooltip: s.backToMenu,
+          onPressed: () => context.go('/'),
+        ),
+      ),
+      body: orderAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ErrorState(
+          message: e.toString(),
+          onRetry: () => ref.invalidate(_trackingProvider(orderId)),
+        ),
+        data: (order) => _Body(order: order, fmt: fmt, readOnly: true),
+      ),
+    );
+  }
+}
+
 class _Body extends ConsumerWidget {
-  const _Body({required this.order, required this.fmt});
+  const _Body({required this.order, required this.fmt, this.readOnly = false});
 
   final Order order;
   final NumberFormat fmt;
+
+  /// Public tracking mode (guest / merchant-shared link): hide the
+  /// account-only actions (cancel, reorder) that would 401 without a session.
+  final bool readOnly;
 
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {
     final s = ref.read(stringsProvider);
@@ -270,7 +325,7 @@ class _Body extends ConsumerWidget {
                 for (final event in order.statusEvents)
                   _TimelineRow(event: event),
                 const SizedBox(height: BananSpacing.xxl),
-                if (order.status.customerCanCancel) ...[
+                if (!readOnly && order.status.customerCanCancel) ...[
                   OutlinedButton.icon(
                     icon: const Icon(Icons.cancel_outlined),
                     label: Text(s.cancelOrder),
@@ -281,13 +336,16 @@ class _Body extends ConsumerWidget {
                 // One-tap reorder — populates the cart with every line
                 // from this order and jumps to checkout. Available on any
                 // status (even cancelled/completed) so customers can
-                // re-buy a past favorite quickly.
-                FilledButton.icon(
-                  icon: const Icon(Icons.refresh_outlined),
-                  label: const Text('Đặt lại đơn này'),
-                  onPressed: () => reorderOrder(context, ref, order),
-                ),
-                const SizedBox(height: BananSpacing.md),
+                // re-buy a past favorite quickly. Hidden on the public
+                // tracking link (no session to attach the cart to).
+                if (!readOnly) ...[
+                  FilledButton.icon(
+                    icon: const Icon(Icons.refresh_outlined),
+                    label: const Text('Đặt lại đơn này'),
+                    onPressed: () => reorderOrder(context, ref, order),
+                  ),
+                  const SizedBox(height: BananSpacing.md),
+                ],
                 // Always offer a clear next-action. The customer arrived
                 // via `context.go(...)` which reset the stack, so a normal
                 // back button wouldn't get them anywhere useful.

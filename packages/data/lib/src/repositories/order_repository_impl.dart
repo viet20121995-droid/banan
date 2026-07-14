@@ -59,6 +59,12 @@ class OrderRepositoryImpl implements OrderRepository {
   }
 
   @override
+  Future<Result<Order, AppFailure>> tracking(String id) async {
+    final res = await _api.track(id);
+    return res.map((d) => d.toDomain());
+  }
+
+  @override
   Future<Result<Order, AppFailure>> cancel(String id, {String? reason}) async {
     final res = await _api.cancel(id, reason: reason);
     return res.map((d) => d.toDomain());

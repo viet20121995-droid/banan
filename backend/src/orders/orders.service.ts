@@ -879,6 +879,21 @@ export class OrdersService {
     return order;
   }
 
+  /**
+   * Public tracking lookup — the order id (cuid) is the capability. No
+   * principal and NO ownership check (assertCanRead is deliberately skipped):
+   * the `/track` link is shared with guests who have no session. Same payload
+   * as findOne so the customer app can reuse the full order-detail view.
+   */
+  async trackByCapability(id: string): Promise<OrderWithIncludes> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: ORDER_INCLUDE,
+    });
+    if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
+    return order;
+  }
+
   async listForCustomer(customerId: string, page = 1, perPage = 20) {
     const skip = (page - 1) * perPage;
     const [items, total] = await this.prisma.$transaction([

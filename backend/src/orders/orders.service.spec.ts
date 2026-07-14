@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 // `nanoid` is ESM-only and is pulled in transitively (orders → payments →
@@ -775,5 +775,44 @@ describe('OrdersService.assertBundlesUnchanged (combo re-validation in tx)', () 
     await call(tx, new Map());
     expect(tx.$executeRaw).not.toHaveBeenCalled();
     expect(tx.bundle.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrdersService.trackByCapability (public tracking)', () => {
+  const noop = {} as never;
+  function serviceWithOrder(findUnique: jest.Mock) {
+    const prisma = { order: { findUnique } };
+    return new OrdersService(
+      prisma as never,
+      noop, // realtime
+      noop, // payments
+      noop, // refunds
+      noop, // loyalty
+      noop, // coupons
+      noop, // notifications
+      noop, // auth
+      noop, // storeRouter
+      noop, // deliveryConfig
+      noop, // promotions
+    );
+  }
+
+  it('returns the full order keyed only on the id — no principal, no ownership check', async () => {
+    // The unguessable order id IS the capability; this is what lets a guest (or
+    // anyone with the merchant-shared /track link) read the order. Full detail
+    // is intentional — do not add an ownership/principal gate here.
+    const order = { id: 'o1', code: 'BAN-1', address: { phone: '0900000000' } };
+    const findUnique = jest.fn().mockResolvedValue(order);
+    const svc = serviceWithOrder(findUnique);
+
+    await expect(svc.trackByCapability('o1')).resolves.toBe(order);
+    expect(findUnique.mock.calls[0][0].where).toEqual({ id: 'o1' });
+  });
+
+  it('throws NotFound when the id does not resolve', async () => {
+    const svc = serviceWithOrder(jest.fn().mockResolvedValue(null));
+    await expect(svc.trackByCapability('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

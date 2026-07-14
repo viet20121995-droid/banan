@@ -82,6 +82,9 @@ bool _isGuestAllowed(String loc) {
   if (loc.startsWith('/product/')) return true;
   if (loc.startsWith('/bundles/')) return true;
   if (loc.startsWith('/payments/return/')) return true;
+  // Public order tracking — the merchant-shared link + post-payment redirect.
+  // The order id in the path is the capability; no session required.
+  if (loc.startsWith('/track/')) return true;
   return false;
 }
 
@@ -199,6 +202,12 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
         path: '/orders/:id',
         builder: (context, state) =>
             OrderDetailScreen(orderId: state.pathParameters['id']!),
+      ),
+      // Public order tracking (guest-allowed). Same screen family, read-only.
+      GoRoute(
+        path: '/track/:id',
+        builder: (context, state) =>
+            OrderTrackingScreen(orderId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/payments/return/:provider',

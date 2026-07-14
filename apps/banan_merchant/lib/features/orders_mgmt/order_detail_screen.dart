@@ -354,7 +354,9 @@ class _CopyTrackingLinkButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final url = '${Env.customerAppUrl}/orders/$orderId';
+    // /track/:id is the public, guest-accessible tracking page — the customer
+    // this link is texted to has no session. (/orders/:id is auth-gated.)
+    final url = '${Env.customerAppUrl}/track/$orderId';
     return OutlinedButton.icon(
       onPressed: () async {
         await Clipboard.setData(ClipboardData(text: url));

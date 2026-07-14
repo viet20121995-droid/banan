@@ -88,6 +88,20 @@ class OrdersApi {
     }
   }
 
+  /// Public tracking — `/orders/:id/track` is guest-accessible (no bearer).
+  Future<Result<OrderDto, AppFailure>> track(String id) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>('/orders/$id/track');
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      if (data == null) return Result.failure(mapHttpStatusToFailure(res));
+      return Result.success(OrderDto.fromJson(data));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
   Future<Result<OrderDto, AppFailure>> cancel(String id, {String? reason}) =>
       _postOrder('/orders/$id/cancel', {if (reason != null) 'reason': reason});
 

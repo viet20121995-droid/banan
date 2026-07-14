@@ -63,6 +63,20 @@ export class OrdersController {
     return this.orders.findOne(id, user);
   }
 
+  /**
+   * Public order tracking by capability URL. The order id (a cuid) is the
+   * unguessable token — anyone with the link can view the order, by design:
+   * the merchant texts this link to the customer, and guests who checked out
+   * without an account have no session. Returns the full order (same payload
+   * as findOne) so the shared `/track/:id` page and the post-payment redirect
+   * can render delivery + payment detail without an auth bounce.
+   */
+  @Public()
+  @Get(':id/track')
+  track(@Param('id') id: string) {
+    return this.orders.trackByCapability(id);
+  }
+
   @Roles(Role.CUSTOMER)
   @Post(':id/cancel')
   cancel(@CurrentUser() user: AuthPrincipal, @Param('id') id: string, @Body() dto: CancelOrderDto) {

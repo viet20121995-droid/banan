@@ -214,6 +214,12 @@ abstract class OrderRepository {
   Future<Result<PlaceOrderResult, AppFailure>> placeOrder(NewOrder draft);
   Future<Result<OrderPage, AppFailure>> myOrders({int page = 1, int perPage = 20});
   Future<Result<Order, AppFailure>> order(String id);
+
+  /// Public tracking fetch — hits the guest-accessible `/orders/:id/track`
+  /// (no auth). Used by the merchant-shared link and the post-payment return
+  /// so a guest (or anyone with the link) can view the order without signing in.
+  Future<Result<Order, AppFailure>> tracking(String id);
+
   Future<Result<Order, AppFailure>> cancel(String id, {String? reason});
 
   // Merchant-side

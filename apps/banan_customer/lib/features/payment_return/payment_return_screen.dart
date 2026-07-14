@@ -31,12 +31,21 @@ class _PaymentReturnScreenState extends ConsumerState<PaymentReturnScreen> {
       await Future<void>.delayed(const Duration(milliseconds: 800));
       if (!mounted) return;
 
-      // /orders/:id is auth-gated. A guest who just paid has no session, so
-      // routing them there bounces them to /login (mirrors the returning-guest
-      // branch in checkout_screen). The server IPN already captured the
-      // payment, so confirm here and send them home instead.
       final session = ref.read(authRepositoryProvider).currentSession;
-      if (session == null) {
+      final orderId = widget.params['order_id'] ??
+          widget.params['orderId'] ??
+          widget.params['order'];
+
+      if (orderId != null && orderId.isNotEmpty) {
+        // Signed-in customers get the full order page (realtime + actions);
+        // guests get the public tracking view. /orders/:id is auth-gated and
+        // would bounce a guest to /login, even though the server IPN already
+        // captured the payment.
+        context.go(session != null ? '/orders/$orderId' : '/track/$orderId');
+      } else if (session != null) {
+        context.go('/orders');
+      } else {
+        // No order id to track and no session to list — confirm and go home.
         final status = widget.params['status'] ?? 'completed';
         final ok = status == 'success' || status == 'completed';
         ScaffoldMessenger.of(context).showSnackBar(
@@ -49,16 +58,6 @@ class _PaymentReturnScreenState extends ConsumerState<PaymentReturnScreen> {
           ),
         );
         context.go('/');
-        return;
-      }
-
-      final orderId = widget.params['order_id'] ??
-          widget.params['orderId'] ??
-          widget.params['order'];
-      if (orderId != null && orderId.isNotEmpty) {
-        context.go('/orders/$orderId');
-      } else {
-        context.go('/orders');
       }
     });
   }
