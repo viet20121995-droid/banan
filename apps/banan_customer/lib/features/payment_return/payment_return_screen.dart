@@ -1,3 +1,4 @@
+import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,6 +30,28 @@ class _PaymentReturnScreenState extends ConsumerState<PaymentReturnScreen> {
       // Tiny delay so the user sees the page briefly.
       await Future<void>.delayed(const Duration(milliseconds: 800));
       if (!mounted) return;
+
+      // /orders/:id is auth-gated. A guest who just paid has no session, so
+      // routing them there bounces them to /login (mirrors the returning-guest
+      // branch in checkout_screen). The server IPN already captured the
+      // payment, so confirm here and send them home instead.
+      final session = ref.read(authRepositoryProvider).currentSession;
+      if (session == null) {
+        final status = widget.params['status'] ?? 'completed';
+        final ok = status == 'success' || status == 'completed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ok
+                  ? 'Thanh toán thành công! Chúng tôi sẽ liên hệ xác nhận đơn của bạn.'
+                  : 'Thanh toán chưa hoàn tất. Vui lòng thử lại hoặc liên hệ cửa hàng.',
+            ),
+          ),
+        );
+        context.go('/');
+        return;
+      }
+
       final orderId = widget.params['order_id'] ??
           widget.params['orderId'] ??
           widget.params['order'];
