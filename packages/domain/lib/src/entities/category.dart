@@ -11,6 +11,7 @@ class Category extends Equatable {
     this.sortOrder = 0,
     this.isPinnedToHome = false,
     this.isBirthdayCakeCategory = false,
+    this.isHidden = false,
     this.products = const [],
   });
 
@@ -29,6 +30,11 @@ class Category extends Equatable {
   /// screen. At most one category carries this flag.
   final bool isBirthdayCakeCategory;
 
+  /// Hidden from the customer storefront entirely (chip, home strip, and all
+  /// its products). Merchant/admin still see it to unhide. Visible only in the
+  /// merchant category manager.
+  final bool isHidden;
+
   /// Up to a handful of available products, populated only by the
   /// `/categories/home` endpoint so the home strip can render its carousel.
   /// Empty for the plain chip listing.
@@ -43,6 +49,7 @@ class Category extends Equatable {
         sortOrder,
         isPinnedToHome,
         isBirthdayCakeCategory,
+        isHidden,
         products,
       ];
 }

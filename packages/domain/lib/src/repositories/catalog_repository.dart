@@ -121,7 +121,18 @@ class CategoryDraft {
 }
 
 abstract class CatalogRepository {
-  Future<Result<List<Category>, AppFailure>> categories();
+  /// [includeHidden] is honoured only for staff tokens — the merchant category
+  /// manager passes it to list + unhide hidden categories; customers omit it.
+  Future<Result<List<Category>, AppFailure>> categories({
+    bool includeHidden = false,
+  });
+
+  /// Quick list-level visibility toggle — PATCHes only `isHidden` without
+  /// touching the rest of the category.
+  Future<Result<Category, AppFailure>> setCategoryHidden(
+    String id, {
+    required bool hidden,
+  });
 
   /// Customer home strips — pinned categories that have ≥1 available
   /// product, each carrying its `products` array.

@@ -11,6 +11,7 @@ class CategoryDto {
     this.sortOrder = 0,
     this.isPinnedToHome = false,
     this.isBirthdayCakeCategory = false,
+    this.isHidden = false,
     this.products = const [],
   });
 
@@ -23,6 +24,7 @@ class CategoryDto {
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
       isPinnedToHome: json['isPinnedToHome'] as bool? ?? false,
       isBirthdayCakeCategory: json['isBirthdayCakeCategory'] as bool? ?? false,
+      isHidden: json['isHidden'] as bool? ?? false,
       products: (json['products'] as List?)
               ?.map((e) => ProductDto.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -37,6 +39,7 @@ class CategoryDto {
   final int sortOrder;
   final bool isPinnedToHome;
   final bool isBirthdayCakeCategory;
+  final bool isHidden;
   final List<ProductDto> products;
 
   Category toDomain() => Category(
@@ -47,6 +50,7 @@ class CategoryDto {
         sortOrder: sortOrder,
         isPinnedToHome: isPinnedToHome,
         isBirthdayCakeCategory: isBirthdayCakeCategory,
+        isHidden: isHidden,
         products: products.map((p) => p.toDomain()).toList(),
       );
 }

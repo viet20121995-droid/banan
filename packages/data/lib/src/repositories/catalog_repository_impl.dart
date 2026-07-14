@@ -11,9 +11,20 @@ class CatalogRepositoryImpl implements CatalogRepository {
   final CatalogApi _api;
 
   @override
-  Future<Result<List<Category>, AppFailure>> categories() async {
-    final res = await _api.categories();
+  Future<Result<List<Category>, AppFailure>> categories({
+    bool includeHidden = false,
+  }) async {
+    final res = await _api.categories(includeHidden: includeHidden);
     return res.map((dtos) => dtos.map((d) => d.toDomain()).toList());
+  }
+
+  @override
+  Future<Result<Category, AppFailure>> setCategoryHidden(
+    String id, {
+    required bool hidden,
+  }) async {
+    final res = await _api.updateCategory(id, {'isHidden': hidden});
+    return res.map((d) => d.toDomain());
   }
 
   @override

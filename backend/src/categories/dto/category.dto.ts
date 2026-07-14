@@ -37,6 +37,10 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsBoolean()
   isBirthdayCakeCategory?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isHidden?: boolean;
 }
 
 /** New display order: the full list of category ids in the desired order. */
@@ -74,4 +78,8 @@ export class UpdateCategoryDto {
   @IsOptional()
   @IsBoolean()
   isBirthdayCakeCategory?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isHidden?: boolean;
 }

@@ -17,9 +17,12 @@ const HOME_STRIP_LIMIT = 12;
 export class CategoriesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** All categories — the customer menu filter chips, ordered by sortOrder. */
-  findAll() {
+  /** All categories — the customer menu filter chips, ordered by sortOrder.
+   *  Customers get visible categories only; staff pass includeHidden to also
+   *  list hidden ones (so they can unhide). */
+  findAll(includeHidden = false) {
     return this.prisma.category.findMany({
+      where: includeHidden ? undefined : { isHidden: false },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
   }
@@ -33,6 +36,7 @@ export class CategoriesService {
     const categories = await this.prisma.category.findMany({
       where: {
         isPinnedToHome: true,
+        isHidden: false,
         products: { some: { isAvailable: true } },
       },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],

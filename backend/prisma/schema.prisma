@@ -299,6 +299,11 @@ model Category {
   /// isBirthdayCake=true (drives the cake-personalization wizard + the
   /// birthday delivery-fee tier). Replaces the old Collection-slug mechanism.
   isBirthdayCakeCategory Boolean @default(false)
+  /// Hidden categories vanish from the customer storefront entirely — no menu
+  /// chip, no home strip, and their products are excluded from every customer
+  /// product query (list, search, detail, recommendations). Merchant/admin
+  /// still see them (to unhide). Products are untouched; unhiding restores them.
+  isHidden  Boolean   @default(false)
   products  Product[]
 }
 

@@ -8,12 +8,15 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto, ReorderCategoriesDto, UpdateCategoryDto } from './dto/category.dto';
@@ -25,8 +28,17 @@ export class CategoriesController {
 
   @Public()
   @Get()
-  findAll() {
-    return this.categories.findAll();
+  findAll(
+    @CurrentUser() user?: AuthPrincipal,
+    @Query('includeHidden') includeHidden?: string,
+  ) {
+    // Only staff (merchant back-office) may list hidden categories; the public
+    // storefront always gets visible-only, even if it passes the flag.
+    const privileged =
+      user?.role === Role.ADMIN ||
+      user?.role === Role.MERCHANT_OWNER ||
+      user?.role === Role.MERCHANT_STAFF;
+    return this.categories.findAll(privileged && includeHidden === 'true');
   }
 
   /** Customer home — pinned categories with a few products each (declared

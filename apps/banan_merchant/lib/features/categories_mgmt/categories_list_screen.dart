@@ -44,10 +44,24 @@ class CategoriesController extends StateNotifier<CategoriesState> {
 
   Future<void> refresh() async {
     state = state.copyWith(loading: true, failure: null);
-    final res = await _repo.categories();
+    // Merchant manager lists hidden categories too (so they can be unhidden).
+    final res = await _repo.categories(includeHidden: true);
     res.when(
       success: (list) => state = state.copyWith(items: list, loading: false),
       failure: (f) => state = state.copyWith(loading: false, failure: f),
+    );
+  }
+
+  /// Toggles a category's storefront visibility. Returns null on success,
+  /// else the failure message.
+  Future<String?> toggleHidden(Category c) async {
+    final res = await _repo.setCategoryHidden(c.id, hidden: !c.isHidden);
+    return res.when(
+      success: (_) async {
+        await refresh();
+        return null;
+      },
+      failure: authFailureMessage,
     );
   }
 
@@ -179,9 +193,32 @@ class _Body extends StatelessWidget {
           onEdit: isAdmin ? () => context.push('/categories/${c.id}/edit') : null,
           onDelete:
               isAdmin ? () => _confirmDelete(context, controller, c) : null,
+          onToggleHidden:
+              isAdmin ? () => _toggleHidden(context, controller, c) : null,
         );
       },
     );
+  }
+
+  Future<void> _toggleHidden(
+    BuildContext context,
+    CategoriesController controller,
+    Category category,
+  ) async {
+    final error = await controller.toggleHidden(category);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            error ??
+                (category.isHidden
+                    ? 'Đã hiện lại danh mục "${category.name}".'
+                    : 'Đã ẩn danh mục "${category.name}" khỏi cửa hàng.'),
+          ),
+        ),
+      );
   }
 
   Future<void> _confirmDelete(
@@ -232,15 +269,17 @@ class _Row extends StatelessWidget {
     required this.isAdmin,
     required this.onEdit,
     required this.onDelete,
+    required this.onToggleHidden,
     super.key,
   });
 
   final Category category;
   final int index;
   final bool isAdmin;
-  // Null for non-admin (read-only): tap does nothing, delete button hidden.
+  // Null for non-admin (read-only): tap does nothing, action buttons hidden.
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onToggleHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -298,7 +337,25 @@ class _Row extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: BananSpacing.xs),
-                    if (category.isPinnedToHome)
+                    if (category.isHidden)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.visibility_off_outlined,
+                            size: 14,
+                            color: theme.colorScheme.error,
+                          ),
+                          const SizedBox(width: BananSpacing.xs),
+                          Text(
+                            'Đang ẩn khỏi cửa hàng',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.error,
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (category.isPinnedToHome)
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -326,6 +383,18 @@ class _Row extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onToggleHidden != null)
+                IconButton(
+                  icon: Icon(
+                    category.isHidden
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                  tooltip: category.isHidden
+                      ? 'Hiện lại trong cửa hàng'
+                      : 'Ẩn khỏi cửa hàng',
+                  onPressed: onToggleHidden,
+                ),
               if (onDelete != null)
                 IconButton(
                   icon: const Icon(Icons.delete_outline),

@@ -71,6 +71,8 @@ export class ProductsService {
 
     const where: Prisma.ProductWhereInput = {
       isAvailable: true,
+      // Products of a hidden category are excluded from the storefront.
+      category: { isHidden: false },
       ...(filters.categoryId && { categoryId: filters.categoryId }),
       ...(filters.storeId && { storeId: filters.storeId }),
       ...(filters.seasonal !== undefined && {
@@ -158,7 +160,9 @@ export class ProductsService {
       viewerRole === Role.MERCHANT_STAFF ||
       viewerRole === Role.ADMIN;
     const product = await this.prisma.product.findFirst({
-      where: privileged ? { id } : { id, isAvailable: true },
+      where: privileged
+        ? { id }
+        : { id, isAvailable: true, category: { isHidden: false } },
       include: PRODUCT_INCLUDE,
     });
     if (!product) throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND' });
@@ -244,7 +248,7 @@ export class ProductsService {
     if (topIds.length === 0) return [];
 
     const products = await this.prisma.product.findMany({
-      where: { id: { in: topIds }, isAvailable: true },
+      where: { id: { in: topIds }, isAvailable: true, category: { isHidden: false } },
       include: PRODUCT_INCLUDE,
     });
     // Keep the co-occurrence ordering.

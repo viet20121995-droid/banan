@@ -24,10 +24,18 @@ class CatalogApi {
   bool get lastWasCached => _lastWasCached;
   DateTime? get lastCacheTimestamp => _lastCacheTimestamp;
 
-  Future<Result<List<CategoryDto>, AppFailure>> categories() async {
-    const cacheKey = 'categories';
+  /// [includeHidden] is honoured only for staff tokens (merchant back-office),
+  /// so the manager can list + unhide hidden categories. Customers omit it and
+  /// the backend returns visible-only regardless.
+  Future<Result<List<CategoryDto>, AppFailure>> categories({
+    bool includeHidden = false,
+  }) async {
+    final cacheKey = includeHidden ? 'categories_all' : 'categories';
     try {
-      final res = await _dio.get<Map<String, dynamic>>('/categories');
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/categories',
+        queryParameters: includeHidden ? {'includeHidden': 'true'} : null,
+      );
       final list = (res.data?['data'] as List?) ?? const [];
       _lastWasCached = false;
       await _cache?.write(cacheKey, list);
