@@ -45,15 +45,14 @@ class _PaymentReturnScreenState extends ConsumerState<PaymentReturnScreen> {
       } else if (session != null) {
         context.go('/orders');
       } else {
-        // No order id to track and no session to list — confirm and go home.
-        final status = widget.params['status'] ?? 'completed';
-        final ok = status == 'success' || status == 'completed';
+        // No order id to track and no session to list. Payment status is
+        // verified server-side (IPN), never from the client URL — so don't
+        // assert success here (the `status` param is user-spoofable). Just
+        // acknowledge receipt and go home.
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              ok
-                  ? 'Thanh toán thành công! Chúng tôi sẽ liên hệ xác nhận đơn của bạn.'
-                  : 'Thanh toán chưa hoàn tất. Vui lòng thử lại hoặc liên hệ cửa hàng.',
+              'Đã nhận yêu cầu thanh toán. Chúng tôi sẽ xác nhận đơn của bạn qua email/điện thoại.',
             ),
           ),
         );
@@ -64,26 +63,25 @@ class _PaymentReturnScreenState extends ConsumerState<PaymentReturnScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final status = widget.params['status'] ?? 'completed';
-    final ok = status == 'success' || status == 'completed';
+    // Deliberately neutral. The authoritative payment status comes from the
+    // server-backed page this bridge redirects to (/track or /orders) — never
+    // from the client-controlled `status` URL param, which is spoofable. So we
+    // show a plain "processing" state instead of a (fakeable) success tick.
     return Scaffold(
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              ok ? Icons.check_circle_outline : Icons.error_outline,
-              size: 56,
-              color:
-                  ok ? BananColors.success : Theme.of(context).colorScheme.error,
+            const SizedBox(
+              width: 40,
+              height: 40,
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
             const SizedBox(height: BananSpacing.md),
             Text(
-              ok ? 'Đã xác nhận thanh toán' : 'Thanh toán chưa hoàn tất',
+              'Đang xử lý thanh toán…',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: BananSpacing.sm),
-            const Text('Đang chuyển sang đơn hàng của bạn…'),
           ],
         ),
       ),

@@ -63,7 +63,9 @@ export class EmailService {
       body: args.template.body,
       recipientName: args.toName,
       orderCode: args.orderCode,
-      orderUrl: args.orderId ? `${this.customerAppUrl}/orders/${args.orderId}` : null,
+      // Guest-public tracking route: order emails go to guests who have no
+      // session, so /orders/:id (auth-gated) would bounce them to /login.
+      orderUrl: args.orderId ? `${this.customerAppUrl}/track/${args.orderId}` : null,
     });
     const subject = args.orderCode
       ? `${args.template.title} · Đơn ${args.orderCode}`

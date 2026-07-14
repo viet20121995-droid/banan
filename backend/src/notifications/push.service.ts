@@ -65,7 +65,10 @@ export class PushService {
       return base + p;
     }
     if (typeof data?.orderId === 'string' && data.orderId) {
-      return `${base}/orders/${data.orderId}`;
+      // Guest-public tracking route — a guest's device has no session, so
+      // /orders/:id would bounce the click-through to /login. Explicit
+      // linkPath senders (above) can still target an authed path.
+      return `${base}/track/${data.orderId}`;
     }
     return base || '/';
   }

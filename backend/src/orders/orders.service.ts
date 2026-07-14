@@ -68,6 +68,42 @@ const ORDER_INCLUDE = {
 
 type OrderWithIncludes = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE }>;
 
+// Public order-tracking include (GET /orders/:id/track). The tracking link is
+// shared with guests, so it must NOT ship gateway internals that even the
+// customer's own app never parses: Payment.rawPayload (verbatim 9Pay/MoMo/
+// Stripe webhook body — signatures, account ids) and providerRef, plus the
+// Refund's staff actor ids + refund provider ref. Narrow payments/refunds to
+// exactly the fields the client DTOs read; everything else mirrors ORDER_INCLUDE.
+const TRACK_INCLUDE = {
+  ...ORDER_INCLUDE,
+  payments: {
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      provider: true,
+      status: true,
+      amount: true,
+      currency: true,
+      createdAt: true,
+    },
+  },
+  refunds: {
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      orderId: true,
+      paymentId: true,
+      amount: true,
+      reason: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+} satisfies Prisma.OrderInclude;
+
+type OrderTrackPayload = Prisma.OrderGetPayload<{ include: typeof TRACK_INCLUDE }>;
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -885,10 +921,10 @@ export class OrdersService {
    * the `/track` link is shared with guests who have no session. Same payload
    * as findOne so the customer app can reuse the full order-detail view.
    */
-  async trackByCapability(id: string): Promise<OrderWithIncludes> {
+  async trackByCapability(id: string): Promise<OrderTrackPayload> {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: ORDER_INCLUDE,
+      include: TRACK_INCLUDE,
     });
     if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
     return order;

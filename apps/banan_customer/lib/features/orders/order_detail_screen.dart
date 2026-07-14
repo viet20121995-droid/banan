@@ -280,6 +280,7 @@ class _Body extends ConsumerWidget {
                     order: order,
                     item: item,
                     fmt: fmt,
+                    readOnly: readOnly,
                   ),
                 const Divider(height: BananSpacing.xl),
                 _Line(label: s.subtotal, value: fmt.format(order.subtotal)),
@@ -942,10 +943,15 @@ class _OrderItemRow extends ConsumerWidget {
     required this.order,
     required this.item,
     required this.fmt,
+    this.readOnly = false,
   });
   final Order order;
   final OrderItem item;
   final NumberFormat fmt;
+
+  /// Public tracking mode (guest): the review action posts to a CUSTOMER-only
+  /// endpoint, so hide it and skip the auth-only my-reviews fetch.
+  final bool readOnly;
 
   bool get _canReview =>
       order.status == OrderStatus.readyForPickup ||
@@ -955,8 +961,12 @@ class _OrderItemRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final mineAsync = ref.watch(_myReviewsForOrderProvider(order.id));
-    final mine = mineAsync.valueOrNull ?? const <Review>[];
+    // Guests (readOnly) can't own reviews here and the endpoint is auth-gated —
+    // don't fire the request just to 401 on every item.
+    final mine = readOnly
+        ? const <Review>[]
+        : ref.watch(_myReviewsForOrderProvider(order.id)).valueOrNull ??
+            const <Review>[];
     Review? existing;
     for (final r in mine) {
       if (r.productId == item.productId) {
@@ -984,7 +994,7 @@ class _OrderItemRow extends ConsumerWidget {
                 if (item.personalization != null &&
                     item.personalization!.isNotEmpty)
                   _PersonalizationSummary(payload: item.personalization!),
-                if (_canReview)
+                if (_canReview && !readOnly)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: TextButton.icon(
