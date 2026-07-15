@@ -1,6 +1,7 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -53,20 +54,66 @@ class CheckoutCrossSell extends ConsumerWidget {
           children: [
             Text('Thêm vào đơn 🧁', style: theme.textTheme.titleMedium),
             const SizedBox(height: BananSpacing.sm),
-            SizedBox(
-              height: 208,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: suggestions.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(width: BananSpacing.sm),
-                itemBuilder: (context, i) =>
-                    _Card(product: suggestions[i], fmt: fmt),
-              ),
-            ),
+            _SuggestionStrip(items: suggestions, fmt: fmt),
           ],
         );
       },
+    );
+  }
+}
+
+/// Horizontal suggestion strip with an always-visible scrollbar and mouse-drag
+/// enabled — on web a horizontal ListView doesn't scroll by drag/wheel by
+/// default, so customers couldn't reach the later cards. Stateful only to own
+/// the ScrollController the Scrollbar + ListView share.
+class _SuggestionStrip extends StatefulWidget {
+  const _SuggestionStrip({required this.items, required this.fmt});
+  final List<Product> items;
+  final NumberFormat fmt;
+
+  @override
+  State<_SuggestionStrip> createState() => _SuggestionStripState();
+}
+
+class _SuggestionStripState extends State<_SuggestionStrip> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(
+        dragDevices: {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.trackpad,
+        },
+      ),
+      child: Scrollbar(
+        controller: _controller,
+        thumbVisibility: true,
+        child: Padding(
+          // Room below the cards so the scrollbar thumb doesn't overlap them.
+          padding: const EdgeInsets.only(bottom: BananSpacing.md),
+          child: SizedBox(
+            height: 208,
+            child: ListView.separated(
+              controller: _controller,
+              scrollDirection: Axis.horizontal,
+              itemCount: widget.items.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: BananSpacing.sm),
+              itemBuilder: (context, i) =>
+                  _Card(product: widget.items[i], fmt: widget.fmt),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
