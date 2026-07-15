@@ -521,7 +521,14 @@ export class ProductsService {
     id: string,
     storeId: string | null,
   ): Promise<{ deleted: boolean; archived: boolean }> {
-    const existing = await this.findOne(id);
+    // Look up WITHOUT the storefront availability/visibility filter that
+    // findOne() applies to unprivileged callers — remove() must work on
+    // archived products (isAvailable=false) and products of a hidden category
+    // too (e.g. force-deleting a hidden category), which findOne() would 404.
+    const existing = await this.prisma.product.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND' });
+    }
     if (storeId && existing.storeId !== storeId) {
       throw new BadRequestException({ code: 'PRODUCT_NOT_IN_STORE' });
     }
