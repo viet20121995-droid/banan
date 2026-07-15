@@ -760,7 +760,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         labelText: s.notesOptional,
                       ),
                     ),
-                    const SizedBox(height: BananSpacing.xl),
+                  ],
+                );
+                // Optional order extras (VAT invoice, gift wrap) — rarely used,
+                // so they live at the bottom of the right rail instead of
+                // stretching the main form.
+                final extras = Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     _VatInvoiceSection(
                       enabled: _requestVatInvoice,
                       onToggle: (v) =>
@@ -770,7 +777,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       address: _invoiceAddress,
                       email: _invoiceEmail,
                     ),
-                    const SizedBox(height: BananSpacing.xl),
+                    const SizedBox(height: BananSpacing.md),
                     _GiftSection(
                       enabled: _isGift,
                       onToggle: (v) => setState(() => _isGift = v),
@@ -878,6 +885,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     summary,
                     const SizedBox(height: BananSpacing.xl),
                     crossSell,
+                    const SizedBox(height: BananSpacing.xl),
+                    extras,
                   ],
                 );
                 return Center(

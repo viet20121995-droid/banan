@@ -81,124 +81,66 @@ class _PickupStorePickerState extends ConsumerState<PickupStorePicker> {
             });
           }
         }
+        // Compact dropdown instead of a stack of branch cards — a checkout
+        // with 4+ branches shouldn't cost 4 screen-heights. Selected branch's
+        // address shows as a helper line below.
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final store in stores)
-              Padding(
-                padding: const EdgeInsets.only(bottom: BananSpacing.sm),
-                child: _StoreOption(
-                  store: store,
-                  selected: store.id == widget.selectedId,
-                  // Disable selection when this branch isn't accepting
-                  // pickup; the badge inside the tile explains why.
-                  onTap: store.acceptsPickup
-                      ? () => widget.onSelect(store.id)
-                      : null,
+            InputDecorator(
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.storefront_outlined),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: BananSpacing.md,
+                  vertical: 2,
                 ),
               ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _StoreOption extends StatelessWidget {
-  const _StoreOption({
-    required this.store,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final Store store;
-  final bool selected;
-
-  /// Null = this branch is paused and can't be selected. The tile renders
-  /// dimmed with a "Đang tạm nghỉ" badge instead.
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final disabled = onTap == null;
-    return Opacity(
-      opacity: disabled ? 0.55 : 1,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BananRadii.rmd,
-        child: Container(
-          padding: const EdgeInsets.all(BananSpacing.md),
-          decoration: BoxDecoration(
-            borderRadius: BananRadii.rmd,
-            color: selected
-                ? theme.colorScheme.primary.withValues(alpha: 0.08)
-                : theme.colorScheme.surface,
-            border: Border.all(
-              color: selected
-                  ? theme.colorScheme.primary
-                  : (theme.dividerTheme.color ?? Colors.black12),
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                disabled
-                    ? Icons.block
-                    : (selected
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_off),
-                color: disabled
-                    ? theme.colorScheme.outline
-                    : (selected
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.outline),
-                size: 22,
-              ),
-              const SizedBox(width: BananSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            store.name,
-                            style: theme.textTheme.titleSmall,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: BananSpacing.sm),
-                        if (disabled)
-                          _PausedChip(reason: store.pauseReason)
-                        else
-                          _OpenClosedChip(open: store.isOpenNow),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      store.address,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    if (disabled && (store.pauseReason?.isNotEmpty ?? false))
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          store.pauseReason!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontStyle: FontStyle.italic,
-                          ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: widget.selectedId,
+                  isExpanded: true,
+                  isDense: true,
+                  items: [
+                    for (final store in stores)
+                      DropdownMenuItem(
+                        value: store.id,
+                        enabled: store.acceptsPickup,
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                store.name,
+                                style: theme.textTheme.titleSmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: BananSpacing.sm),
+                            if (!store.acceptsPickup)
+                              _PausedChip(reason: store.pauseReason)
+                            else
+                              _OpenClosedChip(open: store.isOpenNow),
+                          ],
                         ),
                       ),
                   ],
+                  onChanged: (id) {
+                    if (id != null) widget.onSelect(id);
+                  },
                 ),
               ),
+            ),
+            if (sel != null && sel.address.isNotEmpty) ...[
+              const SizedBox(height: BananSpacing.xs),
+              Text(
+                sel.address,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline),
+              ),
             ],
-          ),
-        ),
-      ),
+          ],
+        );
+      },
     );
   }
 }
