@@ -185,7 +185,7 @@ class _StoreOption extends StatelessWidget {
                         ),
                         const SizedBox(width: BananSpacing.sm),
                         if (disabled)
-                          _PausedChip(reason: store.pauseReason)
+                          const _PausedChip()
                         else
                           _OpenClosedChip(open: store.isOpenNow),
                       ],
@@ -198,6 +198,21 @@ class _StoreOption extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    // Why this branch is paused (e.g. "Hết nguyên liệu"), when
+                    // the merchant set a reason. Only shown for paused tiles.
+                    if (disabled && (store.pauseReason?.isNotEmpty ?? false))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          store.pauseReason!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontStyle: FontStyle.italic,
+                            color: theme.colorScheme.outline,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -211,8 +226,7 @@ class _StoreOption extends StatelessWidget {
 
 /// "Đang tạm nghỉ" badge shown on a paused branch tile.
 class _PausedChip extends StatelessWidget {
-  const _PausedChip({this.reason});
-  final String? reason;
+  const _PausedChip();
 
   @override
   Widget build(BuildContext context) {
