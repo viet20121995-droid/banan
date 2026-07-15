@@ -576,10 +576,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         child: ListView(
           padding: const EdgeInsets.all(BananSpacing.lg),
           children: [
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: Column(
+            Builder(
+              builder: (context) {
+                // Wide screens (desktop) get a 2-column layout: the form on the
+                // left, the order summary as a right rail — so the total stays
+                // in view without scrolling to the bottom. Narrow stays single.
+                final wide = MediaQuery.sizeOf(context).width >= 960;
+                final form = Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (_timeline != null)
@@ -851,18 +854,39 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       hidePrice: _hidePrice,
                       onHidePrice: (v) => setState(() => _hidePrice = v),
                     ),
-                    const SizedBox(height: BananSpacing.xxl),
-                    _Summary(
-                      cart: cart,
-                      fee: fee,
-                      couponDiscount: couponDiscount,
-                      pointsDiscount: pointsDiscount,
-                      total: total,
-                      fmt: fmt,
-                    ),
                   ],
-                ),
-              ),
+                );
+                final summary = _Summary(
+                  cart: cart,
+                  fee: fee,
+                  couponDiscount: couponDiscount,
+                  pointsDiscount: pointsDiscount,
+                  total: total,
+                  fmt: fmt,
+                );
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: wide ? 1120 : 720),
+                    child: wide
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(flex: 3, child: form),
+                              const SizedBox(width: BananSpacing.xl),
+                              Expanded(flex: 2, child: summary),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              form,
+                              const SizedBox(height: BananSpacing.xxl),
+                              summary,
+                            ],
+                          ),
+                  ),
+                );
+              },
             ),
           ],
         ),

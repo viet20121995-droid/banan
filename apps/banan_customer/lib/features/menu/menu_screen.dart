@@ -2099,16 +2099,10 @@ void _confirmAddToCart({
   final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();
   messenger.showSnackBar(
     SnackBar(
+      // No "Xem giỏ" action here — the persistent cart FAB on this screen
+      // already offers it, so the action would be a duplicate.
       content: Text('Đã thêm ${product.name} vào giỏ.'),
       duration: const Duration(seconds: 2),
-      action: SnackBarAction(
-        label: 'Xem giỏ',
-        onPressed: () {
-          // Hide before nav so the snackbar doesn't follow the user.
-          messenger.hideCurrentSnackBar();
-          context.push('/cart');
-        },
-      ),
     ),
   );
 }
