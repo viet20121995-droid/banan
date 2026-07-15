@@ -49,8 +49,8 @@ class CatalogRepositoryImpl implements CatalogRepository {
   }
 
   @override
-  Future<Result<void, AppFailure>> deleteCategory(String id) {
-    return _api.deleteCategory(id);
+  Future<Result<void, AppFailure>> deleteCategory(String id, {bool force = false}) {
+    return _api.deleteCategory(id, force: force);
   }
 
   @override

@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { ProductsService } from '../products/products.service';
 
 import type { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 
@@ -15,7 +16,10 @@ const HOME_STRIP_LIMIT = 12;
 
 @Injectable()
 export class CategoriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly products: ProductsService,
+  ) {}
 
   /** All categories — the customer menu filter chips, ordered by sortOrder.
    *  Customers get visible categories only; staff pass includeHidden to also
@@ -163,6 +167,44 @@ export class CategoriesService {
         code: 'CATEGORY_HAS_PRODUCTS',
         message: `Danh mục còn ${productCount} sản phẩm — hãy chuyển sản phẩm sang danh mục khác trước khi xoá.`,
       });
+    }
+    await this.prisma.category.delete({ where: { id } });
+  }
+
+  /**
+   * Force-delete: remove the category AND its products in one action. Products
+   * that appear in an order can't be hard-deleted (OrderItem.product is
+   * Restrict — deleting would destroy order history), so we refuse the whole
+   * operation rather than partially wipe; the merchant should hide the category
+   * instead. Order-free products are removed via ProductsService.remove (which
+   * cleans their FKs + deactivates affected bundles), then the now-empty
+   * category is deleted.
+   *
+   * ponytail: the per-product removes aren't in one transaction with the
+   * category delete — acceptable for an admin cleanup action (re-run is safe);
+   * wrap in a single tx if this ever needs to be atomic.
+   */
+  async removeWithProducts(id: string, storeId: string | null) {
+    await this.findOne(id);
+    const products = await this.prisma.product.findMany({
+      where: { categoryId: id },
+      select: { id: true },
+    });
+    const ids = products.map((p) => p.id);
+    if (ids.length > 0) {
+      const inOrders = await this.prisma.orderItem.count({
+        where: { productId: { in: ids } },
+      });
+      if (inOrders > 0) {
+        throw new BadRequestException({
+          code: 'CATEGORY_PRODUCTS_IN_ORDERS',
+          message:
+            'Danh mục có sản phẩm đã phát sinh đơn hàng — không thể xoá (sẽ mất lịch sử đơn). Hãy ẩn danh mục thay vì xoá.',
+        });
+      }
+      for (const pid of ids) {
+        await this.products.remove(pid, storeId);
+      }
     }
     await this.prisma.category.delete({ where: { id } });
   }

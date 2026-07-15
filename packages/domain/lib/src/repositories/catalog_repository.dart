@@ -143,7 +143,9 @@ abstract class CatalogRepository {
     String id,
     CategoryDraft draft,
   );
-  Future<Result<void, AppFailure>> deleteCategory(String id);
+  /// [force] also removes the category's products (order-free ones are hard-
+  /// deleted; the backend refuses if any product already appears in an order).
+  Future<Result<void, AppFailure>> deleteCategory(String id, {bool force});
 
   /// Persists the given category ordering — `sortOrder` becomes each id's
   /// index in [ids].

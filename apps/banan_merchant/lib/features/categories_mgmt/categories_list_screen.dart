@@ -88,8 +88,8 @@ class CategoriesController extends StateNotifier<CategoriesState> {
 
   /// Deletes a category. Returns null on success, otherwise the failure
   /// message (e.g. CATEGORY_HAS_PRODUCTS) so the UI can show it.
-  Future<String?> delete(String id) async {
-    final res = await _repo.deleteCategory(id);
+  Future<String?> delete(String id, {bool force = false}) async {
+    final res = await _repo.deleteCategory(id, force: force);
     return res.when(
       success: (_) async {
         await refresh();
@@ -226,39 +226,47 @@ class _Body extends StatelessWidget {
     CategoriesController controller,
     Category category,
   ) async {
-    final confirm = await showDialog<bool>(
+    final choice = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
         title: Text('Xoá "${category.name}"?'),
         content: const Text(
-          'Danh mục sẽ bị gỡ. Chỉ xoá được khi không còn sản phẩm nào '
-          'thuộc danh mục này.',
+          'Chỉ xoá được danh mục khi không còn sản phẩm. Nếu còn sản phẩm, '
+          'chọn "Xoá cả sản phẩm" để xoá luôn — sản phẩm đã có trong đơn hàng '
+          'sẽ được giữ lại và chặn xoá (hãy ẩn danh mục trong trường hợp đó).',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Huỷ'),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'normal'),
+            child: const Text('Chỉ xoá danh mục'),
+          ),
           FilledButton.tonal(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Xoá'),
+            onPressed: () => Navigator.pop(context, 'force'),
+            child: const Text('Xoá cả sản phẩm'),
           ),
         ],
       ),
     );
-    if (confirm ?? false) {
-      final error = await controller.delete(category.id);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-        ..removeCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              error ?? 'Đã xoá danh mục "${category.name}".',
-            ),
+    if (choice == null) return;
+    final force = choice == 'force';
+    final error = await controller.delete(category.id, force: force);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            error ??
+                (force
+                    ? 'Đã xoá danh mục "${category.name}" và sản phẩm của nó.'
+                    : 'Đã xoá danh mục "${category.name}".'),
           ),
-        );
-    }
+        ),
+      );
   }
 }
 

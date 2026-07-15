@@ -78,7 +78,15 @@ export class CategoriesController {
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.categories.remove(id);
+  remove(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id') id: string,
+    @Query('force') force?: string,
+  ) {
+    // force=true also hard-deletes the category's products (admin is chain-wide
+    // → storeId null; ProductsService still enforces per-product order safety).
+    return force === 'true'
+      ? this.categories.removeWithProducts(id, user.storeId ?? null)
+      : this.categories.remove(id);
   }
 }

@@ -120,9 +120,17 @@ class CatalogApi {
     }
   }
 
-  Future<Result<void, AppFailure>> deleteCategory(String id) async {
+  /// [force] also hard-deletes the category's products (order-free ones);
+  /// the backend refuses if any product is already in an order.
+  Future<Result<void, AppFailure>> deleteCategory(
+    String id, {
+    bool force = false,
+  }) async {
     try {
-      final res = await _dio.delete<dynamic>('/categories/$id');
+      final res = await _dio.delete<dynamic>(
+        '/categories/$id',
+        queryParameters: force ? {'force': 'true'} : null,
+      );
       final code = res.statusCode ?? 0;
       if (code >= 200 && code < 300) return const Result.success(null);
       return Result.failure(mapHttpStatusToFailure(res));
