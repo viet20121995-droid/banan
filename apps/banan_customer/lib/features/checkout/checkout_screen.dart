@@ -32,7 +32,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   // Seeded from the menu-screen Pickup/Delivery choice in initState so the
   // customer doesn't have to pick fulfillment twice.
   late FulfillmentType _fulfillment;
-  PaymentMethod _paymentMethod = PaymentMethod.cash;
+  // Online-only: COD (cash) is disabled, 9Pay is the sole method.
+  PaymentMethod _paymentMethod = PaymentMethod.ninepay;
   final _recipient = TextEditingController();
   final _phone = TextEditingController();
   final _line1 = TextEditingController();
@@ -1362,8 +1363,8 @@ class _PaymentSelector extends ConsumerWidget {
     // dashboard; until then the backend rejects it up-front (before any order is
     // created) with a clear "phương thức chưa khả dụng" message, so cash stays
     // the safe default.
+    // COD disabled — 9Pay only. (Re-add the cash tuple here to bring it back.)
     final options = <(PaymentMethod, IconData, String)>[
-      (PaymentMethod.cash, Icons.payments_outlined, 'Trả tiền mặt khi nhận hàng'),
       (PaymentMethod.ninepay, Icons.qr_code_2_outlined, 'Quét QR / Thẻ / Chuyển khoản (9Pay)'),
     ];
     return Column(
