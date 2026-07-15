@@ -103,7 +103,7 @@ class _BundleBody extends ConsumerWidget {
           label: 'Xem giỏ',
           onPressed: () {
             messenger.hideCurrentSnackBar();
-            context.push('/cart');
+            context.push('/checkout');
           },
         ),
       ),

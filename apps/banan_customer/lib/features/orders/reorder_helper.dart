@@ -142,5 +142,5 @@ Future<void> reorderOrder(
   );
 
   if (!context.mounted) return;
-  context.go('/cart');
+  context.go('/checkout');
 }

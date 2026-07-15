@@ -182,7 +182,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 // Hide before nav so the snackbar doesn't
                                 // tail into the cart screen.
                                 messenger.hideCurrentSnackBar();
-                                context.push('/cart');
+                                context.push('/checkout');
                               },
                             ),
                           ),

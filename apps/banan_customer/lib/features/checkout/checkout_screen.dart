@@ -17,7 +17,6 @@ import 'fulfillment_preference.dart';
 import 'fulfillment_widgets.dart';
 import 'order_draft.dart';
 
-const _deliveryFee = 30000.0;
 const _vndPerPoint = 100;
 
 class CheckoutScreen extends ConsumerStatefulWidget {
@@ -1454,6 +1453,9 @@ class _Summary extends ConsumerWidget {
         children: [
           Text(s.summary, style: theme.textTheme.titleLarge),
           const SizedBox(height: BananSpacing.md),
+          // Inline quantity editing so the cart is merged into checkout —
+          // there is no separate cart step. `−` at quantity 1 removes the line
+          // (setQuantity(0) deletes it).
           for (final item in cart.items)
             Padding(
               padding: const EdgeInsets.only(bottom: BananSpacing.xs),
@@ -1461,12 +1463,36 @@ class _Summary extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      '${item.quantity}× ${item.productName}',
-                      maxLines: 1,
+                      item.productName,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Text(fmt.format(item.lineTotal)),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Giảm',
+                    icon: const Icon(Icons.remove_circle_outline, size: 20),
+                    onPressed: () => ref
+                        .read(cartControllerProvider.notifier)
+                        .setQuantity(item.key, item.quantity - 1),
+                  ),
+                  Text('${item.quantity}', style: theme.textTheme.titleMedium),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Tăng',
+                    icon: const Icon(Icons.add_circle_outline, size: 20),
+                    onPressed: () => ref
+                        .read(cartControllerProvider.notifier)
+                        .setQuantity(item.key, item.quantity + 1),
+                  ),
+                  const SizedBox(width: BananSpacing.sm),
+                  SizedBox(
+                    width: 88,
+                    child: Text(
+                      fmt.format(item.lineTotal),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
                 ],
               ),
             ),

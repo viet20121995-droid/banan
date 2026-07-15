@@ -102,7 +102,7 @@ class MenuScreen extends ConsumerWidget {
       floatingActionButton: cart.isEmpty
           ? null
           : FloatingActionButton.extended(
-              onPressed: () => context.push('/cart'),
+              onPressed: () => context.push('/checkout'),
               icon: const Icon(Icons.shopping_basket_rounded),
               label: Text(s.viewCart(cart.itemCount)),
             ),
@@ -684,7 +684,7 @@ class _CartButton extends ConsumerWidget {
       icon: Icons.shopping_basket_rounded,
       tooltip: ref.watch(stringsProvider).cart,
       count: itemCount,
-      onPressed: () => GoRouter.of(context).push('/cart'),
+      onPressed: () => GoRouter.of(context).push('/checkout'),
     );
   }
 }

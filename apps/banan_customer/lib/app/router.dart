@@ -131,7 +131,14 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
           productId: state.pathParameters['id']!,
         ),
       ),
-      GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
+      // Cart is merged into checkout — one screen. Any /cart link (bookmarks,
+      // old deep links) forwards to /checkout, which now hosts the editable
+      // items + fulfillment + all the order form.
+      GoRoute(
+        path: '/cart',
+        redirect: (_, __) => '/checkout',
+        builder: (_, __) => const CartScreen(),
+      ),
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
       GoRoute(
         path: '/locations',
