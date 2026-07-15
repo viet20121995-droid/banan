@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../addresses/addresses_screen.dart' show myAddressesProvider;
 import '../cart/cart_controller.dart';
+import 'checkout_cross_sell.dart';
 import 'fulfillment_preference.dart';
 import 'fulfillment_widgets.dart';
 import 'order_draft.dart';
@@ -744,78 +745,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       ),
                     ],
                     const SizedBox(height: BananSpacing.xl),
-                    Text(s.savings, style: theme.textTheme.titleLarge),
-                    const SizedBox(height: BananSpacing.md),
-                    _CouponField(
-                      controller: _coupon,
-                      applied: _appliedCoupon,
-                      validating: _validatingCoupon,
-                      error: _couponError,
-                      onApply: () => _applyCoupon(cart.subtotal, fee),
-                      onClear: () => setState(() {
-                        _coupon.clear();
-                        _appliedCoupon = null;
-                        _couponError = null;
-                      }),
-                      fmt: fmt,
-                    ),
-                    const SizedBox(height: BananSpacing.md),
-                    // Gift card redemption.
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _giftCtrl,
-                            textCapitalization:
-                                TextCapitalization.characters,
-                            decoration: const InputDecoration(
-                              labelText: 'Mã thẻ quà tặng',
-                              prefixIcon: Icon(Icons.card_giftcard_outlined),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: BananSpacing.sm),
-                        FilledButton(
-                          onPressed: _giftBusy ? null : _applyGiftCard,
-                          child: Text(_giftBusy ? '…' : 'Áp dụng'),
-                        ),
-                      ],
-                    ),
-                    if (_giftCode != null && _giftBalance != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: BananSpacing.xs),
-                        child: Text(
-                          'Thẻ $_giftCode · số dư ${fmt.format(_giftBalance)} '
-                          '— trừ ${fmt.format(giftPreview)} vào đơn này.',
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: BananColors.success),
-                        ),
-                      ),
-                    if (_giftMsg != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: BananSpacing.xs),
-                        child: Text(
-                          _giftMsg!,
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: theme.colorScheme.error),
-                        ),
-                      ),
-                    // Loyalty point redemption — only for a logged-in customer
-                    // who actually has points. Guests + zero-balance accounts
-                    // never see this block.
-                    if (membership != null && membership.balance > 0) ...[
-                      const SizedBox(height: BananSpacing.lg),
-                      _PointsRedeemer(
-                        balance: membership.balance,
-                        max: maxRedeemable,
-                        value: pointsActuallyUsed,
-                        vndPerPoint: _vndPerPoint,
-                        onChanged: (v) =>
-                            setState(() => _pointsToRedeem = v),
-                        fmt: fmt,
-                      ),
-                    ],
-                    const SizedBox(height: BananSpacing.xl),
                     Text(s.payment, style: theme.textTheme.titleLarge),
                     const SizedBox(height: BananSpacing.md),
                     _PaymentSelector(
@@ -855,6 +784,78 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     ),
                   ],
                 );
+                // Savings (coupon / gift card / points) move to the right rail
+                // next to the total they affect, so the left form stays short.
+                final savings = Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(s.savings, style: theme.textTheme.titleLarge),
+                    const SizedBox(height: BananSpacing.md),
+                    _CouponField(
+                      controller: _coupon,
+                      applied: _appliedCoupon,
+                      validating: _validatingCoupon,
+                      error: _couponError,
+                      onApply: () => _applyCoupon(cart.subtotal, fee),
+                      onClear: () => setState(() {
+                        _coupon.clear();
+                        _appliedCoupon = null;
+                        _couponError = null;
+                      }),
+                      fmt: fmt,
+                    ),
+                    const SizedBox(height: BananSpacing.md),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _giftCtrl,
+                            textCapitalization: TextCapitalization.characters,
+                            decoration: const InputDecoration(
+                              labelText: 'Mã thẻ quà tặng',
+                              prefixIcon: Icon(Icons.card_giftcard_outlined),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: BananSpacing.sm),
+                        FilledButton(
+                          onPressed: _giftBusy ? null : _applyGiftCard,
+                          child: Text(_giftBusy ? '…' : 'Áp dụng'),
+                        ),
+                      ],
+                    ),
+                    if (_giftCode != null && _giftBalance != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: BananSpacing.xs),
+                        child: Text(
+                          'Thẻ $_giftCode · số dư ${fmt.format(_giftBalance)} '
+                          '— trừ ${fmt.format(giftPreview)} vào đơn này.',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: BananColors.success),
+                        ),
+                      ),
+                    if (_giftMsg != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: BananSpacing.xs),
+                        child: Text(
+                          _giftMsg!,
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.error),
+                        ),
+                      ),
+                    if (membership != null && membership.balance > 0) ...[
+                      const SizedBox(height: BananSpacing.lg),
+                      _PointsRedeemer(
+                        balance: membership.balance,
+                        max: maxRedeemable,
+                        value: pointsActuallyUsed,
+                        vndPerPoint: _vndPerPoint,
+                        onChanged: (v) => setState(() => _pointsToRedeem = v),
+                        fmt: fmt,
+                      ),
+                    ],
+                  ],
+                );
                 final summary = _Summary(
                   cart: cart,
                   fee: fee,
@@ -862,6 +863,22 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   pointsDiscount: pointsDiscount,
                   total: total,
                   fmt: fmt,
+                );
+                final crossSell = cart.items.isEmpty
+                    ? const SizedBox.shrink()
+                    : CheckoutCrossSell(
+                        seedProductId: cart.items.first.productId,
+                        fmt: fmt,
+                      );
+                final rail = Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    savings,
+                    const SizedBox(height: BananSpacing.xl),
+                    summary,
+                    const SizedBox(height: BananSpacing.xl),
+                    crossSell,
+                  ],
                 );
                 return Center(
                   child: ConstrainedBox(
@@ -872,15 +889,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                             children: [
                               Expanded(flex: 3, child: form),
                               const SizedBox(width: BananSpacing.xl),
-                              Expanded(flex: 2, child: summary),
+                              Expanded(flex: 2, child: rail),
                             ],
                           )
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               form,
-                              const SizedBox(height: BananSpacing.xxl),
-                              summary,
+                              const SizedBox(height: BananSpacing.xl),
+                              rail,
                             ],
                           ),
                   ),
