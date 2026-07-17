@@ -8,28 +8,35 @@ values out of the source; a number copied into a doc goes stale silently.
 
 ---
 
-## 1. Backups — none exist yet
+## 1. Backups
 
-**The biggest gap in the whole setup.** Postgres is a container on a single VPS
-with its data in the `pgdata` Docker volume (`docker-compose.prod.yml`). There
-is no dump, no snapshot, no replica, no cron — nothing in this repo can bring
-back an order, a customer, or a loyalty balance if that volume dies.
+Postgres is a container on a single VPS with its data in the `pgdata` Docker
+volume (`docker-compose.prod.yml`) — no replica, no failover. Backups are the
+only thing standing between a dead box and every order, customer and loyalty
+balance. Nothing else on this list matters as much.
 
-Nothing else on this list matters as much.
+`infra/backup-db.sh` dumps, verifies the archive is readable, and prunes; it
+refuses to prune when the dump failed, so a broken run can't quietly age out
+the good copies. `infra/restore-db.sh` does the drill and the real recovery.
 
 ```bash
-# On the VPS. User/db come from infra/.env.prod.
-docker exec banan-postgres-1 pg_dump -U <user> -d <db> --format=custom \
-  > /opt/banan/backups/banan-$(date +%F).dump
+# On the VPS — daily at 03:00.
+crontab -e
+0 3 * * * bash /opt/banan/infra/backup-db.sh >> /opt/banan/backups/backup.log 2>&1
 ```
 
-- [ ] Run it on a daily cron, and prune old dumps so the disk survives.
-- [ ] Copy each dump **off the box** — a backup on the database's own disk is
-      not a backup.
-- [ ] **Restore one into a throwaway container and count rows.** A dump nobody
-      has restored is a hope.
+- [ ] Cron installed, and `backups/backup.log` actually shows daily `ok:` lines
+      a week later. A backup job nobody watches is one that stopped in March.
+- [ ] **`BACKUP_REMOTE` set** so dumps land off the box. Until then the backup
+      dies with the server it was protecting against — this is the one step
+      that makes the rest worth anything.
+- [ ] **Run the drill:** `bash infra/restore-db.sh --verify <dump>` and check
+      the row counts look like production. A dump nobody has restored is a
+      hope, not a backup. Repeat monthly.
 - [ ] Say out loud how much data you accept losing, and set the cadence from
       that answer rather than from what's convenient.
+- [ ] Know that `--into-prod` exists and what it costs, *before* the night you
+      need it.
 
 ## 2. Migration drift
 
