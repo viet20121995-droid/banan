@@ -21,6 +21,11 @@
 # table", not against losing the server.
 set -euo pipefail
 
+# A dump is every user, order, payment and loyalty balance in one file. Without
+# this it inherits the cron user's umask — 022 for root, i.e. mode 644, readable
+# by any local user or process on the box.
+umask 077
+
 BACKUP_DIR=${BACKUP_DIR:-/opt/banan/backups}
 RETAIN_DAYS=${RETAIN_DAYS:-14}
 CONTAINER=${CONTAINER:-banan-postgres-1}
@@ -29,6 +34,9 @@ BACKUP_REMOTE=${BACKUP_REMOTE:-}
 log() { echo "[$(date +'%F %T')] $*"; }
 
 mkdir -p "$BACKUP_DIR"
+# umask only governs what this run creates — chmod also repairs a directory
+# that already existed with looser permissions.
+chmod 700 "$BACKUP_DIR"
 out="$BACKUP_DIR/banan-$(date +%F-%H%M).dump"
 tmp="$out.partial"
 
@@ -59,6 +67,10 @@ log "ok: $(du -h "$out" | cut -f1) $out"
 # was insuring against.
 log "pruning dumps older than ${RETAIN_DAYS}d"
 find "$BACKUP_DIR" -maxdepth 1 -name 'banan-*.dump' -mtime "+$RETAIN_DAYS" -print -delete
+
+# Tighten whatever survived, so dumps written before the umask above was added
+# get repaired too instead of sitting at 644 forever.
+find "$BACKUP_DIR" -maxdepth 1 -name 'banan-*.dump' -exec chmod 600 {} +
 
 # A failed off-box copy still has to be loud — it just must not take the local
 # dump or the prune down with it. Non-zero exit so cron/monitoring can see it.
