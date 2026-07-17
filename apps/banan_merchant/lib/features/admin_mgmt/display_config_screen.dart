@@ -4,6 +4,7 @@ import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/read_only_banner.dart';
 import '../../shared/shell/merchant_shell.dart';
 
 /// Admin/merchant-owner config for customer-facing display preferences.
@@ -56,6 +57,11 @@ class _DisplayConfigScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final async = ref.watch(displayConfigProvider);
+    // GET is @Public but `@Patch()` on DisplayConfigController is
+    // @Roles(ADMIN) — this is one chain-wide singleton shown to every
+    // customer, so an owner may look but not touch.
+    final canEdit =
+        ref.watch(authSessionProvider).valueOrNull?.user.role.isAdmin ?? false;
 
     return MerchantShell(
       title: 'Tuỳ chỉnh hiển thị',
@@ -72,6 +78,12 @@ class _DisplayConfigScreenState
             child: ListView(
               padding: const EdgeInsets.all(BananSpacing.lg),
               children: [
+                if (!canEdit)
+                  const ReadOnlyBanner(
+                    'Bạn xem được cấu hình này nhưng không sửa được — nó áp '
+                    'dụng cho toàn chuỗi và mọi khách hàng, nên chỉ quản trị '
+                    'viên (ADMIN) mới đổi được.',
+                  ),
                 Container(
                   padding: const EdgeInsets.all(BananSpacing.lg),
                   decoration: BoxDecoration(
@@ -105,7 +117,7 @@ class _DisplayConfigScreenState
                         contentPadding: EdgeInsets.zero,
                         value: cfg.showStockToCustomers,
                         onChanged:
-                            _saving ? null : _toggleStock,
+                            (_saving || !canEdit) ? null : _toggleStock,
                         title: Text(
                           cfg.showStockToCustomers
                               ? 'Đang hiển thị'
@@ -129,7 +141,7 @@ class _DisplayConfigScreenState
                   ),
                 ),
                 const SizedBox(height: BananSpacing.lg),
-                _ContactChannelsBlock(initial: cfg),
+                _ContactChannelsBlock(initial: cfg, canEdit: canEdit),
                 const SizedBox(height: BananSpacing.lg),
                 Text(
                   'Lưu ý: chức năng quản lý kho (tự trừ khi đặt, chặn bán '
@@ -153,8 +165,11 @@ class _DisplayConfigScreenState
 /// FAB. Saves the whole bundle at once with one PATCH — clearing a
 /// field (empty string) removes that channel from the customer's sheet.
 class _ContactChannelsBlock extends ConsumerStatefulWidget {
-  const _ContactChannelsBlock({required this.initial});
+  const _ContactChannelsBlock({required this.initial, required this.canEdit});
   final DisplayConfig initial;
+
+  /// Same @Roles(ADMIN) PATCH as the toggle above — read-only for everyone else.
+  final bool canEdit;
 
   @override
   ConsumerState<_ContactChannelsBlock> createState() =>
@@ -241,6 +256,7 @@ class _ContactChannelsBlockState
           const SizedBox(height: BananSpacing.md),
           TextField(
             controller: _zalo,
+            enabled: widget.canEdit,
             decoration: const InputDecoration(
               labelText: 'Zalo OA ID',
               hintText: 'vd 4040891234567890',
@@ -252,6 +268,7 @@ class _ContactChannelsBlockState
           const SizedBox(height: BananSpacing.sm),
           TextField(
             controller: _phone,
+            enabled: widget.canEdit,
             keyboardType: TextInputType.phone,
             decoration: const InputDecoration(
               labelText: 'Số điện thoại',
@@ -262,6 +279,7 @@ class _ContactChannelsBlockState
           const SizedBox(height: BananSpacing.sm),
           TextField(
             controller: _messenger,
+            enabled: widget.canEdit,
             decoration: const InputDecoration(
               labelText: 'Facebook Messenger ID',
               hintText: 'username trên facebook.com/<username>',
@@ -271,6 +289,7 @@ class _ContactChannelsBlockState
           const SizedBox(height: BananSpacing.sm),
           TextField(
             controller: _email,
+            enabled: widget.canEdit,
             keyboardType: TextInputType.emailAddress,
             decoration: const InputDecoration(
               labelText: 'Email hỗ trợ',
@@ -282,7 +301,7 @@ class _ContactChannelsBlockState
           Align(
             alignment: Alignment.centerRight,
             child: FilledButton.icon(
-              onPressed: _saving ? null : _save,
+              onPressed: (_saving || !widget.canEdit) ? null : _save,
               icon: _saving
                   ? const SizedBox(
                       width: 16,

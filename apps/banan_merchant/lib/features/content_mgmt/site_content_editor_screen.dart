@@ -5,6 +5,7 @@ import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/read_only_banner.dart';
 import '../../shared/shell/merchant_shell.dart';
 
 /// Cài đặt → Nội dung trang: merchant/admin chỉnh sửa FAQ + trang "Về Banan"
@@ -133,9 +134,16 @@ class _FaqEditorState extends ConsumerState<_FaqEditor> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
+    final canEdit =
+        ref.watch(authSessionProvider).valueOrNull?.user.role.isAdmin ?? false;
     return ListView(
       padding: const EdgeInsets.all(BananSpacing.lg),
       children: [
+        if (!canEdit)
+          const ReadOnlyBanner(
+            'Bạn xem được nội dung này nhưng không sửa được — nó hiển thị trên '
+            'site của toàn chuỗi nên chỉ quản trị viên (ADMIN) mới đổi được.',
+          ),
         Text(
           'Câu hỏi thường gặp hiển thị cho khách ở trang /faq. Kéo thêm/bớt '
           'câu hỏi rồi bấm Lưu.',
@@ -159,7 +167,7 @@ class _FaqEditorState extends ConsumerState<_FaqEditor> {
                       IconButton(
                         icon: const Icon(Icons.delete_outline),
                         tooltip: 'Xoá',
-                        onPressed: () => setState(() {
+                        onPressed: !canEdit ? null : () => setState(() {
                           _rows.removeAt(i).dispose();
                           if (_rows.isEmpty) _rows.add(_Pair('', ''));
                         }),
@@ -168,11 +176,13 @@ class _FaqEditorState extends ConsumerState<_FaqEditor> {
                   ),
                   TextField(
                     controller: _rows[i].c1,
+                    enabled: canEdit,
                     decoration: const InputDecoration(labelText: 'Câu hỏi'),
                   ),
                   const SizedBox(height: BananSpacing.xs),
                   TextField(
                     controller: _rows[i].c2,
+                    enabled: canEdit,
                     decoration: const InputDecoration(labelText: 'Trả lời'),
                     minLines: 2,
                     maxLines: 6,
@@ -182,13 +192,13 @@ class _FaqEditorState extends ConsumerState<_FaqEditor> {
             ),
           ),
         OutlinedButton.icon(
-          onPressed: () => setState(() => _rows.add(_Pair('', ''))),
+          onPressed: !canEdit ? null : () => setState(() => _rows.add(_Pair('', ''))),
           icon: const Icon(Icons.add),
           label: const Text('Thêm câu hỏi'),
         ),
         const SizedBox(height: BananSpacing.md),
         FilledButton.icon(
-          onPressed: _busy ? null : _save,
+          onPressed: (_busy || !canEdit) ? null : _save,
           icon: _busy
               ? const SizedBox(
                   width: 16,
@@ -291,9 +301,16 @@ class _AboutEditorState extends ConsumerState<_AboutEditor> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
+    final canEdit =
+        ref.watch(authSessionProvider).valueOrNull?.user.role.isAdmin ?? false;
     return ListView(
       padding: const EdgeInsets.all(BananSpacing.lg),
       children: [
+        if (!canEdit)
+          const ReadOnlyBanner(
+            'Bạn xem được nội dung này nhưng không sửa được — nó hiển thị trên '
+            'site của toàn chuỗi nên chỉ quản trị viên (ADMIN) mới đổi được.',
+          ),
         Text(
           'Nội dung trang "Về Banan" (/about). Mỗi mục có tiêu đề + nội dung; '
           'xuống dòng 2 lần để tách đoạn.',
@@ -303,6 +320,7 @@ class _AboutEditorState extends ConsumerState<_AboutEditor> {
         const SizedBox(height: BananSpacing.md),
         TextField(
           controller: _intro,
+          enabled: canEdit,
           decoration: const InputDecoration(
             labelText: 'Giới thiệu (intro)',
             alignLabelWithHint: true,
@@ -328,7 +346,7 @@ class _AboutEditorState extends ConsumerState<_AboutEditor> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline),
-                        onPressed: () => setState(() {
+                        onPressed: !canEdit ? null : () => setState(() {
                           _sections.removeAt(i).dispose();
                           if (_sections.isEmpty) _sections.add(_Pair('', ''));
                         }),
@@ -337,11 +355,13 @@ class _AboutEditorState extends ConsumerState<_AboutEditor> {
                   ),
                   TextField(
                     controller: _sections[i].c1,
+                    enabled: canEdit,
                     decoration: const InputDecoration(labelText: 'Tiêu đề mục'),
                   ),
                   const SizedBox(height: BananSpacing.xs),
                   TextField(
                     controller: _sections[i].c2,
+                    enabled: canEdit,
                     decoration: const InputDecoration(labelText: 'Nội dung'),
                     minLines: 3,
                     maxLines: 10,
@@ -351,13 +371,13 @@ class _AboutEditorState extends ConsumerState<_AboutEditor> {
             ),
           ),
         OutlinedButton.icon(
-          onPressed: () => setState(() => _sections.add(_Pair('', ''))),
+          onPressed: !canEdit ? null : () => setState(() => _sections.add(_Pair('', ''))),
           icon: const Icon(Icons.add),
           label: const Text('Thêm mục'),
         ),
         const SizedBox(height: BananSpacing.md),
         FilledButton.icon(
-          onPressed: _busy ? null : _save,
+          onPressed: (_busy || !canEdit) ? null : _save,
           icon: _busy
               ? const SizedBox(
                   width: 16,

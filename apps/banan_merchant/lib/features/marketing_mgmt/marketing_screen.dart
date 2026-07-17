@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../shared/read_only_banner.dart';
 import '../../shared/shell/merchant_shell.dart';
 
 /// Admin/owner control center for the 5 marketing programs. Each program
@@ -137,6 +138,12 @@ class _MarketingScreenState extends ConsumerState<MarketingScreen> {
   void _toast(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
+  /// `merchant/marketing` lets ADMIN + MERCHANT_OWNER read the config, but
+  /// `@Patch('config')` is @Roles(ADMIN). Without this an owner could fill the
+  /// whole form in and only learn on save that it was never theirs to change.
+  /// Assigned per-build; every `_section` below is built from within `build`.
+  bool _canEdit = false;
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -145,11 +152,19 @@ class _MarketingScreenState extends ConsumerState<MarketingScreen> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
+    _canEdit =
+        ref.watch(authSessionProvider).valueOrNull?.user.role.isAdmin ?? false;
     return MerchantShell(
       title: 'Chương trình Marketing',
       body: ListView(
         padding: const EdgeInsets.all(BananSpacing.lg),
         children: [
+          if (!_canEdit)
+            const ReadOnlyBanner(
+              'Bạn xem được cấu hình này nhưng không sửa được — các chương '
+              'trình marketing áp dụng cho toàn hệ thống nên chỉ quản trị '
+              'viên (ADMIN) mới đổi được.',
+            ),
           Text(
             'Mỗi chương trình mặc định TẮT (khách không thấy). Bật + cấu hình '
             'khi doanh nghiệp sẵn sàng triển khai.',
@@ -204,7 +219,9 @@ class _MarketingScreenState extends ConsumerState<MarketingScreen> {
                     ],
                   ),
                 ),
-                Switch(value: value, onChanged: onToggle),
+                // Null disables both, so a non-admin can read the config but
+                // can't start a change the backend will refuse.
+                Switch(value: value, onChanged: _canEdit ? onToggle : null),
               ],
             ),
             const SizedBox(height: BananSpacing.sm),
@@ -213,7 +230,7 @@ class _MarketingScreenState extends ConsumerState<MarketingScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
-                onPressed: onSave,
+                onPressed: _canEdit ? onSave : null,
                 icon: const Icon(Icons.save_outlined, size: 18),
                 label: const Text('Lưu'),
               ),
