@@ -69,13 +69,18 @@ Building by hand (the script already does this):
 $API = "https://api.banancakes.vn/api/v1"
 $WS  = "https://api.banancakes.vn"
 
-cd apps/banan_customer   # merchant / kitchen: drop the CUSTOMER_APP_URL line
+cd apps/banan_customer   # or banan_merchant / banan_kitchen
 flutter build web --release `
   --dart-define=BANAN_API_BASE_URL=$API `
   --dart-define=BANAN_WS_URL=$WS `
   --dart-define=BANAN_CUSTOMER_APP_URL=https://banancakes.vn `
   --dart-define=BANAN_ENV=prod
 ```
+
+Pass all four to **every** app. `BANAN_CUSTOMER_APP_URL` looks customer-only but
+merchant's order detail builds the customer's tracking link from it
+(`<customerAppUrl>/track/<id>`) — omit it there and staff hand out
+`http://localhost:8081/track/…`, a link that opens only on their own machine.
 
 Check the bundle before shipping it — expect hits for the API, zero for the
 other two:
