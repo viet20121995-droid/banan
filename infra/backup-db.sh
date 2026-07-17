@@ -48,18 +48,32 @@ docker exec -i "$CONTAINER" pg_restore --list > /dev/null < "$tmp"
 mv "$tmp" "$out"
 log "ok: $(du -h "$out" | cut -f1) $out"
 
+# Only reached when today's dump verified. `set -e` means a failure above exits
+# first, so a bad run can never prune the good dumps it failed to replace, and
+# the .partial file is left behind as evidence.
+#
+# Pruning happens before the off-box copy, and deliberately does not depend on
+# it: retention is about this disk. If prune waited on a remote that was down
+# for a fortnight, the dumps would pile up until the disk filled — and a full
+# disk takes Postgres with it, which is a worse outage than the one the backup
+# was insuring against.
+log "pruning dumps older than ${RETAIN_DAYS}d"
+find "$BACKUP_DIR" -maxdepth 1 -name 'banan-*.dump' -mtime "+$RETAIN_DAYS" -print -delete
+
+# A failed off-box copy still has to be loud — it just must not take the local
+# dump or the prune down with it. Non-zero exit so cron/monitoring can see it.
+rc=0
 if [ -n "$BACKUP_REMOTE" ]; then
   log "copying off-box -> $BACKUP_REMOTE"
-  scp -q "$out" "$BACKUP_REMOTE/"
-  log "off-box copy done"
+  if scp -q "$out" "$BACKUP_REMOTE/"; then
+    log "off-box copy done"
+  else
+    log "ERROR: off-box copy to $BACKUP_REMOTE failed — the dump exists only on this server"
+    rc=1
+  fi
 else
   log "WARNING: BACKUP_REMOTE unset — this dump only exists on this server"
 fi
 
-# Only reached when today's dump verified. `set -e` means a failure above exits
-# first, so a bad run can never prune the good dumps it failed to replace, and
-# the .partial file is left behind as evidence.
-log "pruning dumps older than ${RETAIN_DAYS}d"
-find "$BACKUP_DIR" -maxdepth 1 -name 'banan-*.dump' -mtime "+$RETAIN_DAYS" -print -delete
-
 log "done"
+exit "$rc"

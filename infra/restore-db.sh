@@ -49,18 +49,32 @@ case "$mode" in
       "dropdb -U \"\$POSTGRES_USER\" --if-exists $SCRATCH_DB"
     docker exec "$CONTAINER" sh -c \
       "createdb -U \"\$POSTGRES_USER\" $SCRATCH_DB"
-    # pg_restore exits non-zero on benign notices (missing roles etc.), so let
-    # it fail soft here and judge the restore by the row counts below instead.
+    # --single-transaction: all-or-nothing, so a half-restored scratch db can
+    # never be mistaken for a good one. --no-owner/--no-privileges drop the
+    # role errors that would otherwise be the only "benign" failures here, so
+    # any non-zero exit now means the dump really is unusable — the whole point
+    # of the drill is to find that out here rather than during a recovery.
+    status=0
     docker exec -i "$CONTAINER" sh -c \
-      "pg_restore -U \"\$POSTGRES_USER\" -d $SCRATCH_DB --no-owner --no-privileges" \
-      < "$dump" || log "pg_restore reported issues — read the counts carefully"
+      "pg_restore -U \"\$POSTGRES_USER\" -d $SCRATCH_DB \
+         --single-transaction --exit-on-error --no-owner --no-privileges" \
+      < "$dump" || status=$?
 
-    log "row counts in the restored copy:"
-    counts_sql
+    if [ "$status" -eq 0 ]; then
+      log "row counts in the restored copy:"
+      counts_sql
+    else
+      # The transaction rolled back, so the scratch db is empty — counting rows
+      # would only print zeroes and muddy the verdict.
+      log "FAILED: pg_restore exited $status. This dump is NOT a usable backup."
+    fi
 
     docker exec "$CONTAINER" sh -c \
       "dropdb -U \"\$POSTGRES_USER\" --if-exists $SCRATCH_DB"
-    log "scratch db dropped. If those numbers look like production, the dump is good."
+    log "scratch db dropped."
+    [ "$status" -eq 0 ] && \
+      log "If those numbers look like production, the dump is good."
+    exit "$status"
     ;;
 
   --into-prod)
@@ -74,8 +88,15 @@ case "$mode" in
     [ "$confirm" = "banan" ] || { echo "aborted"; exit 1; }
 
     log "restoring into the live database"
+    # --single-transaction is what makes this safe to attempt at all: without
+    # it pg_restore keeps going after an error, and --clean means it has
+    # already dropped tables by then — a failure halfway would leave prod as a
+    # mix of old, new and missing tables. Wrapped in one transaction, a failed
+    # restore rolls back and leaves the database exactly as it was.
     docker exec -i "$CONTAINER" sh -c \
-      'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --no-privileges' \
+      'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+         --single-transaction --exit-on-error \
+         --clean --if-exists --no-owner --no-privileges' \
       < "$dump"
     log "restored. Start the backend and check the site:"
     log "  docker compose --env-file infra/.env.prod -f docker-compose.prod.yml start backend"
