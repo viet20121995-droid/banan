@@ -37,6 +37,7 @@ class WishlistApi {
   Future<Result<Set<String>, AppFailure>> ids() async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/wishlist/ids');
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final data = res.data?['data'] as Map<String, dynamic>?;
       final list = (data?['productIds'] as List?)?.cast<String>() ?? const [];
       return Result.success(list.toSet());

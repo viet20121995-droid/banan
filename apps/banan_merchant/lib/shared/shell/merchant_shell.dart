@@ -288,9 +288,10 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
         label: 'MARKETING',
         icon: Icons.sell_outlined,
         items: [
-          // Promotions / campaigns — admin-managed chain-wide programs.
-          // Backend gates this on the ADMIN role; owners see it too.
-          if (isAdmin || isOwner)
+          // Promotions / campaigns — chain-wide programs. `merchant/campaigns`
+          // is @Roles(ADMIN) at the class level, so an owner 403s on the list
+          // itself, not just on save. Don't offer what they can't open.
+          if (isAdmin)
             const _NavItem(
               label: 'Khuyến mãi',
               icon: Icons.sell_outlined,
@@ -314,12 +315,14 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
               iconSelected: Icons.redeem,
               route: '/marketing',
             ),
-          const _NavItem(
-            label: 'Popup quảng cáo',
-            icon: Icons.ad_units_outlined,
-            iconSelected: Icons.ad_units,
-            route: '/admin/promo-popup',
-          ),
+          // `admin/promo-popup` is @Roles(ADMIN, MERCHANT_OWNER) — staff 403s.
+          if (isAdmin || isOwner)
+            const _NavItem(
+              label: 'Popup quảng cáo',
+              icon: Icons.ad_units_outlined,
+              iconSelected: Icons.ad_units,
+              route: '/admin/promo-popup',
+            ),
           const _NavItem(
             label: 'Banner',
             icon: Icons.photo_library_outlined,

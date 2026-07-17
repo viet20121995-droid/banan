@@ -49,6 +49,7 @@ class StoreSettingsApi {
       final res = await _dio.get<Map<String, dynamic>>(
         '/merchant/store/blackouts',
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = (res.data?['data'] as List?) ?? const [];
       return Result.success(
         raw
@@ -103,6 +104,7 @@ class StoreSettingsApi {
               .toList(),
         },
       );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final data = res.data?['data'] as Map<String, dynamic>?;
       final added = (data?['added'] as num?)?.toInt() ?? 0;
       return Result.success(added);
