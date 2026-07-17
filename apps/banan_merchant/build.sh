@@ -14,6 +14,6 @@ git config --global --add safe.directory "$HOME/flutter" || true
 flutter --version
 flutter pub get
 flutter build web --release \
-  --dart-define=BANAN_API_BASE_URL=https://api.banan.com/api/v1 \
-  --dart-define=BANAN_WS_URL=https://api.banan.com \
-  --dart-define=BANAN_ENV=production
+  --dart-define=BANAN_API_BASE_URL=https://api.banancakes.vn/api/v1 \
+  --dart-define=BANAN_WS_URL=https://api.banancakes.vn \
+  --dart-define=BANAN_ENV=prod

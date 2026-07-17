@@ -2,7 +2,10 @@
 # Cloudflare Pages build for the Banan CUSTOMER web app.
 #   Build command:           bash apps/banan_customer/build.sh
 #   Build output directory:  apps/banan_customer/build/web
-# Edit the domains below to match production before first deploy.
+#
+# BANAN_WS_URL is https://, NOT wss:// — socket_io_client negotiates the
+# upgrade itself, and Dart's Uri.port resolves wss:// to port 0, which kills
+# realtime. BANAN_ENV must be the literal "prod" (Env.isProd compares to it).
 set -e
 cd "$(dirname "$0")"
 
@@ -16,7 +19,7 @@ git config --global --add safe.directory "$HOME/flutter" || true
 flutter --version
 flutter pub get
 flutter build web --release \
-  --dart-define=BANAN_API_BASE_URL=https://api.banan.com/api/v1 \
-  --dart-define=BANAN_WS_URL=https://api.banan.com \
-  --dart-define=BANAN_CUSTOMER_APP_URL=https://banan.com \
-  --dart-define=BANAN_ENV=production
+  --dart-define=BANAN_API_BASE_URL=https://api.banancakes.vn/api/v1 \
+  --dart-define=BANAN_WS_URL=https://api.banancakes.vn \
+  --dart-define=BANAN_CUSTOMER_APP_URL=https://banancakes.vn \
+  --dart-define=BANAN_ENV=prod

@@ -57,18 +57,24 @@ After deploy:
 Each app is a static `build/web/` directory after `flutter build web`. We push
 those to Cloudflare Pages.
 
-```pwsh
-# From repo root.
-$API = "https://banan-api.fly.dev/api/v1"
-$WS  = "wss://banan-api.fly.dev"
+> **BANAN_WS_URL is an `https://` URL, not `wss://`.** socket_io_client takes
+> the plain origin and negotiates the upgrade itself. Dart's `Uri.port` only
+> knows default ports for http/https, so a `wss://` value parses to port **0**
+> and every socket attempt fails against `…:0` — realtime dies silently while
+> the rest of the app looks fine.
 
-# Customer
+```pwsh
+# From repo root. These are the LIVE production values.
+$API = "https://api.banancakes.vn/api/v1"
+$WS  = "https://api.banancakes.vn"
+
+# Customer — note the extra CUSTOMER_APP_URL define.
 cd apps/banan_customer
 flutter build web --release `
   --dart-define=BANAN_API_BASE_URL=$API `
   --dart-define=BANAN_WS_URL=$WS `
+  --dart-define=BANAN_CUSTOMER_APP_URL=https://banancakes.vn `
   --dart-define=BANAN_ENV=prod
-wrangler pages deploy build/web --project-name=customer-banan
 
 # Merchant
 cd ../banan_merchant
@@ -76,7 +82,6 @@ flutter build web --release `
   --dart-define=BANAN_API_BASE_URL=$API `
   --dart-define=BANAN_WS_URL=$WS `
   --dart-define=BANAN_ENV=prod
-wrangler pages deploy build/web --project-name=merchant-banan
 
 # Kitchen
 cd ../banan_kitchen
@@ -84,8 +89,39 @@ flutter build web --release `
   --dart-define=BANAN_API_BASE_URL=$API `
   --dart-define=BANAN_WS_URL=$WS `
   --dart-define=BANAN_ENV=prod
-wrangler pages deploy build/web --project-name=kitchen-banan
 ```
+
+**Never build without the defines.** They are compiled in, so a bare
+`flutter build web` silently bakes the `Env` fallbacks (`http://localhost:3000`)
+and every visitor's browser then calls *their own* machine — the site loads but
+shows "Cannot reach the kitchen". Check before shipping:
+
+```pwsh
+# Expect: >0 api hits, 0 localhost hits, 0 wss hits.
+Select-String -Path build\web\main.dart.js -Pattern 'api.banancakes.vn' -AllMatches |
+  Measure-Object | Select-Object Count
+Select-String -Path build\web\main.dart.js -Pattern 'localhost:3000','wss://' -AllMatches |
+  Measure-Object | Select-Object Count
+```
+
+### Shipping the bundle to the VPS
+
+The apps are served by Caddy from `/opt/banan/web/{customer,merchant,kitchen}`
+(mounted read-only into the container as `/srv/*`), not Cloudflare Pages:
+
+```pwsh
+tar czf banan-web-customer.tgz --force-local -C apps/banan_customer/build/web .
+scp banan-web-customer.tgz banan:/tmp/
+```
+```bash
+cd /opt/banan
+rm -rf web/customer && mkdir -p web/customer
+tar xzf /tmp/banan-web-customer.tgz -C web/customer && rm -f /tmp/banan-web-customer.tgz
+docker compose --env-file infra/.env.prod -f docker-compose.prod.yml restart caddy
+```
+
+Verify in an Incognito window — the service worker serves the previous bundle
+to a normal reload, so a hard refresh is not enough to prove a deploy landed.
 
 After deploy, Cloudflare shows you the three URLs:
 
