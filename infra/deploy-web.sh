@@ -36,7 +36,24 @@ build_and_upload() {
   )
   echo "▶ Uploading $remoteName → $SERVER:$REMOTE_DIR/$remoteName …"
   scp "/tmp/banan-web-$remoteName.tgz" "$SERVER:/tmp/"
-  ssh "$SERVER" "rm -rf '$REMOTE_DIR/$remoteName' && mkdir -p '$REMOTE_DIR/$remoteName' && tar xzf '/tmp/banan-web-$remoteName.tgz' -C '$REMOTE_DIR/$remoteName' && rm -f '/tmp/banan-web-$remoteName.tgz'"
+  # Unpack into a staging dir and prove it holds a real bundle BEFORE touching
+  # what Caddy is serving. The obvious `rm -rf && tar xzf` deletes the live site
+  # first and only then finds out the tarball is missing or truncated — which
+  # takes the storefront down and leaves nothing to roll back to.
+  ssh "$SERVER" "
+    set -e
+    d='$REMOTE_DIR/$remoteName'
+    t=/tmp/banan-web-$remoteName.tgz
+    test -s \"\$t\"
+    rm -rf \"\$d.new\" && mkdir -p \"\$d.new\"
+    tar xzf \"\$t\" -C \"\$d.new\"
+    test -s \"\$d.new/main.dart.js\"
+    rm -rf \"\$d\" && mv \"\$d.new\" \"\$d\"
+    rm -f \"\$t\"
+  " || {
+    echo "✖ $remoteName failed to deploy — the live copy was left untouched" >&2
+    return 1
+  }
   rm -f "/tmp/banan-web-$remoteName.tgz"
 }
 

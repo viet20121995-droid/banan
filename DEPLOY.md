@@ -88,16 +88,39 @@ grep -c 'wss://'            build/web/main.dart.js   # 0
 
 ### Shipping one app by hand
 
+On your machine (PowerShell):
+
 ```pwsh
 tar czf banan-web-customer.tgz --force-local -C apps/banan_customer/build/web .
 scp banan-web-customer.tgz banan:/tmp/
 ```
+
+On the server (`ssh banan`). **Unpack and check before replacing what's live** —
+`rm -rf web/customer && tar xzf …` deletes the running site first and only then
+discovers the tarball is missing (a previous deploy removes it from /tmp) or
+truncated, which serves an empty directory to every customer:
+
 ```bash
 cd /opt/banan
-rm -rf web/customer && mkdir -p web/customer
-tar xzf /tmp/banan-web-customer.tgz -C web/customer && rm -f /tmp/banan-web-customer.tgz
+a=customer
+test -s /tmp/banan-web-$a.tgz || echo "no tarball — scp it first"
+rm -rf web/$a.new && mkdir -p web/$a.new
+tar xzf /tmp/banan-web-$a.tgz -C web/$a.new
+test -s web/$a.new/main.dart.js && rm -rf web/$a && mv web/$a.new web/$a
+rm -f /tmp/banan-web-$a.tgz
 docker compose --env-file infra/.env.prod -f docker-compose.prod.yml restart caddy
 ```
+
+Confirm the bundle that landed is the one you built — compare against
+`md5sum apps/banan_customer/build/web/main.dart.js` locally:
+
+```bash
+md5sum web/*/main.dart.js
+```
+
+Don't verify by grepping the bundle for on-screen Vietnamese: dart2js escapes
+non-ASCII, so "Popup quảng cáo" is stored as `Popup quảng c\xe1o` and a
+literal search returns nothing even on a correct build.
 
 ---
 
