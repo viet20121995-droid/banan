@@ -58,6 +58,10 @@ const WS_ALLOW_ALL = WS_ALLOWED_ORIGINS.length === 0 && process.env.NODE_ENV !==
     },
   },
 })
+/// Single-instance only: rooms live in this process's memory, so a second
+/// backend replica would broadcast to just its own clients — half the
+/// merchants would stop seeing orders appear, with nothing in the logs.
+/// Scaling out needs `@socket.io/redis-adapter` first (Redis is already here).
 export class RealtimeGateway implements OnGatewayConnection {
   private readonly logger = new Logger(RealtimeGateway.name);
 

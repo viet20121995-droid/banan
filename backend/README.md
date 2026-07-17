@@ -36,7 +36,7 @@ All passwords: `banan123`
 - `kitchen@banan.local` (KITCHEN_MANAGER, Banan Central Kitchen)
 - `customer@banan.local` (CUSTOMER, Gold tier)
 
-## Roadmap
+## Deploying
 
-The backend module structure grows with the milestones in `../docs/05-roadmap.md`.
-M0 ships health check + Prisma plumbing only. M1 adds auth.
+`../DEPLOY.md` covers backend + web deploys; `../docs/07-production-checklist.md`
+covers backups, migration drift, and the rest of going live.

@@ -1,80 +1,117 @@
-# 07 — Production Checklist
+# Production checklist
 
-Pre-flight before any environment that takes real money. Tick every box.
+How to *deploy* is [DEPLOY.md](../DEPLOY.md). This is what to settle around it —
+the things that bite once real money and real customers are involved.
 
-## Security
+This file points at where the truth lives rather than restating it. Read the
+values out of the source; a number copied into a doc goes stale silently.
 
-- [ ] `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` rotated to 64+ random bytes.
-- [ ] `CORS_ORIGINS` lists only the production hostnames (no `localhost`).
-- [ ] Helmet defaults enabled — verify `Content-Security-Policy` is on (it is by default in `main.ts`).
-- [ ] Postgres user has the minimum privileges needed (no SUPERUSER).
-- [ ] S3 bucket is private; public reads come via the CDN base URL only.
-- [ ] Stripe webhook signing secret matches the live endpoint.
-- [ ] All payment webhooks verify signatures (already done — confirm `STRIPE_WEBHOOK_SECRET`, `VNPAY_HASH_SECRET`, `MOMO_SECRET_KEY` are all set).
-- [ ] Rate limits tuned: 5/min register, 10/min login, 30/min refresh; 120/min everywhere else; webhooks bypass throttling.
-- [ ] No raw card data on our servers — Stripe Checkout / VNPay / MoMo handle PAN.
-- [ ] Token storage: refresh tokens hashed at rest (already done with sha256 in `auth.service`).
-- [ ] Refresh-token rotation enabled — re-using a revoked refresh fails.
+---
 
-## Database
+## 1. Backups — none exist yet
 
-- [ ] `prisma migrate deploy` clean — no pending migrations.
-- [ ] `prisma migrate diff` against the production schema produces zero drift.
-- [ ] Indexes verified: `Order(customerId, createdAt)`, `Order(storeId, status)`, `Order(kitchenId, kitchenStatus)`, `Notification(userId, createdAt)`, etc.
-- [ ] Backups enabled with PITR ≥ 7 days.
-- [ ] A nightly `pg_dump` to S3 is configured (defense in depth).
+**The biggest gap in the whole setup.** Postgres is a container on a single VPS
+with its data in the `pgdata` Docker volume (`docker-compose.prod.yml`). There
+is no dump, no snapshot, no replica, no cron — nothing in this repo can bring
+back an order, a customer, or a loyalty balance if that volume dies.
 
-## API
+Nothing else on this list matters as much.
 
-- [ ] `/health` returns 200 with `{ ok: true }` against prod DB.
-- [ ] Swagger is **disabled** in prod (`main.ts` already gates on `NODE_ENV !== 'production'`).
-- [ ] `x-request-id` is being set + echoed in responses.
-- [ ] Pino redactions cover `Authorization` + `Cookie` headers (already done).
-- [ ] All payment webhooks reachable from the internet (no auth, signature-gated).
+```bash
+# On the VPS. User/db come from infra/.env.prod.
+docker exec banan-postgres-1 pg_dump -U <user> -d <db> --format=custom \
+  > /opt/banan/backups/banan-$(date +%F).dump
+```
 
-## Flutter web
+- [ ] Run it on a daily cron, and prune old dumps so the disk survives.
+- [ ] Copy each dump **off the box** — a backup on the database's own disk is
+      not a backup.
+- [ ] **Restore one into a throwaway container and count rows.** A dump nobody
+      has restored is a hope.
+- [ ] Say out loud how much data you accept losing, and set the cadence from
+      that answer rather than from what's convenient.
 
-- [ ] Built with `--release --dart-define=BANAN_ENV=prod`.
-- [ ] No dev print statements; logger gated to WARNING+ in prod (`Env.isProd`).
-- [ ] go_router fallback hits `index.html` for unknown routes (Pages / Vercel SPA mode).
-- [ ] Service worker (default Flutter web) versioned per build.
-- [ ] App icons + favicon swapped from Flutter defaults.
+## 2. Migration drift
 
-## Money flow
+Migrations run automatically on boot (`prisma migrate deploy`) — which is
+exactly why drift hurts: a bad one fails *while the backend starts*, so it
+surfaces as a container that won't come up, with the site down.
 
-- [ ] Stripe test charge runs end-to-end through the live webhook.
-- [ ] Refund on a captured Stripe charge marks the Payment row REFUNDED.
-- [ ] CASH order completes → cash payment row flips CAPTURED automatically on `OrdersService.transition('COMPLETED')`.
-- [ ] Cancelled-with-captured-payment creates a `Refund` row in `REQUESTED`.
+```bash
+npx prisma migrate diff \
+  --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma
+```
 
-## Loyalty / coupons
+- [ ] Diff prod against `schema.prisma` before deploying a schema change.
+- [ ] Dump first (§1) before any migration that drops or rewrites a column.
+- [ ] Watch `logs --tail=50 backend` through the restart instead of assuming.
 
-- [ ] Earn rate (10,000 VND per point) and redemption value (100 VND per point) confirmed with finance.
-- [ ] Coupon `perUserLimit` enforced (CouponRedemption row inserts in same transaction as the order).
-- [ ] Tier thresholds (`gold: 1000`, `platinum: 5000`) confirmed.
+## 3. Secrets and access
 
-## Realtime
+- [ ] **Rotate anything pasted into a chat, ticket, or email** — 9Pay secret +
+      checksum keys, dashboard passwords. Rotation is what undoes an exposure;
+      deleting the message is not.
+- [ ] 2FA on the 9Pay merchant dashboard.
+- [ ] `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`: long, random, prod-only.
+- [ ] `CORS_ORIGINS` lists prod hosts only (`infra/.env.prod.example`).
+- [ ] Swagger stays off in prod (`main.ts` gates on `NODE_ENV`).
+- [ ] Postgres user isn't a superuser, and its port isn't published to the
+      internet (`docker-compose.prod.yml`).
+- [ ] SSH key-only; root login and password auth disabled.
+- [ ] `ufw` default-deny inbound, only 22/80/443 open.
+- [ ] `fail2ban` + `unattended-upgrades` installed.
 
-- [ ] Socket.IO endpoint reachable through the LB (check WS upgrade headers).
-- [ ] Customer / merchant / kitchen rooms are joined automatically per role.
-- [ ] Realtime events arrive within 1s of the underlying state change in a 3-machine cluster.
+## 4. Money constants — confirm with a human
 
-## Observability
+These decide what customers pay and earn. They live in code, not config, and
+ship wrong quietly because nothing fails loudly.
 
-- [ ] `LOG_LEVEL=info` in prod.
-- [ ] Sentry receives a manually-thrown error.
-- [ ] Alerts configured for: `5xx > 1%`, `connection failures`, `webhook signature mismatches`.
-- [ ] Health check is the platform's primary readiness probe.
+- [ ] Loyalty earn rate, redemption value, tier thresholds —
+      `backend/src/loyalty/loyalty.service.ts`.
+- [ ] The points-to-đồng rate at checkout (`_vndPerPoint` in
+      `checkout_screen.dart`) **agrees with the backend's**. The backend is
+      authoritative, so a mismatch shows one discount and charges another.
+- [ ] Delivery fee tiers + free-delivery threshold — admin `DeliveryConfig`.
+- [ ] Per-user and total coupon limits are enforced for the coupons you intend
+      to publish — `backend/src/coupons/coupons.service.ts`.
 
-## App stores (when shipping mobile)
+## 5. Payments
 
-- [ ] Privacy policy URL filled in for both stores.
-- [ ] Test account credentials submitted with the review.
-- [ ] App tracking transparency strings populated (iOS).
-- [ ] Push notification permission prompt hooked up (after first sign-in for best opt-in rate).
+- [ ] `NINEPAY_ENDPOINT` is `https://payment.9pay.vn`, not the sandbox.
+- [ ] The production merchant key is in place — it differs from sandbox.
+- [ ] 9Pay has registered the IPN + return URLs (listed in DEPLOY.md).
+- [ ] One real end-to-end payment, then confirm the order flipped to paid.
+- [ ] COD stays off unless you mean it: with `COD_ENABLED` unset the API
+      rejects `paymentMethod=CASH` and checkout offers 9Pay only.
 
-## Day-2 ops
+## 6. Operational hygiene
 
-- [ ] Runbook for "API is down": who pages whom, what to check first.
-- [ ] Runbook for "Payments are failing": Stripe dashboard, webhook log, signed-payload replay tool.
-- [ ] On-call rotation in PagerDuty / Better Stack.
+- [ ] Docker log rotation — logs fill the disk otherwise, and a full disk takes
+      Postgres down with it:
+
+```
+# /etc/logrotate.d/docker-banan
+/var/lib/docker/containers/*/*.log {
+  daily
+  rotate 7
+  size 100M
+  copytruncate
+  missingok
+  compress
+}
+```
+
+- [ ] Uptime check on `https://api.banancakes.vn/api/v1/health` that reaches a
+      human when it fails.
+- [ ] Disk-space alert — this box holds Postgres, uploads, and Docker logs.
+- [ ] Know how to read `docker compose ... logs backend` before you need to.
+
+## 7. Known limitations — accepted, not bugs
+
+- **Realtime is single-instance.** Rooms live in the backend process's memory,
+  so a second replica would deliver to only its own clients, silently. Scaling
+  out needs `@socket.io/redis-adapter` first (see `realtime.gateway.ts`).
+- **Uploads are on local disk** (`/uploads`, Docker volume). Fine for one box;
+  `uploads.service.ts` is shaped for S3/R2 when it isn't.
+- **One box, no failover.** Everything here assumes that's an accepted
+  trade-off — §1 is what makes it survivable.

@@ -34,9 +34,10 @@ banan/
 3. Read `docs/02-api-contract.md` for REST + WebSocket surface.
 4. Read `docs/03-flutter-structure.md` for the Clean Architecture layout.
 5. Read `docs/04-packages.md` for the dependency list and rationale.
-6. Read `docs/05-roadmap.md` for the module-by-module build plan.
+6. Read `DEPLOY.md` to ship it, and `docs/07-production-checklist.md` for what
+   to settle before taking real money.
 
-## Running (after scaffolding)
+## Running
 
 ```bash
 # backend
