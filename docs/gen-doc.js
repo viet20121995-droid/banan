@@ -267,7 +267,7 @@ children.push(...code([
   "  --dart-define=BANAN_API_BASE_URL=https://api.banancakes.vn/api/v1 \\",
   "  --dart-define=BANAN_WS_URL=https://api.banancakes.vn \\",
   "  --dart-define=BANAN_CUSTOMER_APP_URL=https://banancakes.vn \\",
-  "  --dart-define=BANAN_ENV=production",
+  "  --dart-define=BANAN_ENV=prod",
   "tar czf banan-web-merchant.tgz -C build/web .",
 ]));
 children.push(P("Tải lên (PowerShell):"));

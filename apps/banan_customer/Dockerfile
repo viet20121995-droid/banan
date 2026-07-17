@@ -13,8 +13,8 @@ COPY . .
 WORKDIR /workspace/apps/banan_customer
 RUN flutter pub get
 
-ARG BANAN_API_BASE_URL=https://banan-api.fly.dev/api/v1
-ARG BANAN_WS_URL=wss://banan-api.fly.dev
+ARG BANAN_API_BASE_URL=https://api.banancakes.vn/api/v1
+ARG BANAN_WS_URL=https://api.banancakes.vn
 ARG BANAN_ENV=prod
 
 RUN flutter build web --release \
