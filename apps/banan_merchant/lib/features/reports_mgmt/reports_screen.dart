@@ -67,7 +67,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           from: _ymd(_from),
           to: _ymd(_to),
         );
-    res.when(
+    // Awaited: the success branch writes the file, so without this the
+    // `_downloading = false` below fired while the save was still running —
+    // spinner off, button live again, mid-download.
+    await res.when(
       success: (bytes) async {
         try {
           await saveXlsx(bytes, 'banan-report-${_ymd(_from)}_${_ymd(_to)}.xlsx');
@@ -80,7 +83,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           setState(() => _downloadError = e.toString());
         }
       },
-      failure: (f) {
+      failure: (f) async {
         if (!mounted) return;
         setState(() => _downloadError = f.message ?? f.code);
       },

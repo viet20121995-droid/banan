@@ -1974,7 +1974,8 @@ Future<void> quickAddToCart({
   // Macaron sets still need the full detail screen — the flavour composer
   // is an inline panel, not a bottom sheet.
   if (product.hasFlavorComposer) {
-    context.push('/product/${product.id}');
+    // Fire-and-forget: nothing here cares about the popped result.
+    unawaited(context.push('/product/${product.id}'));
     return;
   }
   if (product.variants.length <= 1) {

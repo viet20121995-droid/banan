@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
@@ -79,7 +81,8 @@ class _Body extends ConsumerWidget {
     }
     if (!context.mounted) return;
     final path = n.deepLinkPath;
-    if (path != null) context.push(path);
+    // Fire-and-forget: nothing here cares about the popped result.
+    if (path != null) unawaited(context.push(path));
   }
 }
 

@@ -85,7 +85,9 @@ class _PromoPopupDialogState extends State<PromoPopupDialog> {
     if (url == null || url.isEmpty) return;
     final uri = Uri.tryParse(url);
     if (uri == null) return;
-    Navigator.of(context).maybePop();
+    // Deliberately not awaited: the launch shouldn't wait on the pop
+    // animation, and awaiting it here would make `context` stale below.
+    unawaited(Navigator.of(context).maybePop());
     await launchUrl(uri, mode: LaunchMode.platformDefault);
   }
 

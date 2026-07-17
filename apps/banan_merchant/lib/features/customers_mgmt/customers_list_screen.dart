@@ -211,6 +211,8 @@ class _CustomersListScreenState extends ConsumerState<CustomersListScreen> {
       ),
     );
     if (ok != true) return;
+    // The dialog was an async gap — the screen can be gone by now.
+    if (!context.mounted) return;
     if (title.text.trim().isEmpty || body.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Tiêu đề và nội dung là bắt buộc.')),
@@ -306,6 +308,8 @@ class _CustomersListScreenState extends ConsumerState<CustomersListScreen> {
       ),
     );
     if (ok != true) return;
+    // The dialog was an async gap — the screen can be gone by now.
+    if (!context.mounted) return;
     if (name.text.trim().length < 2 || phone.text.trim().length < 7) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cần tên và số điện thoại hợp lệ.')),

@@ -419,7 +419,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           );
           return;
         }
-        if (!context.mounted) return;
+        // State.mounted, not context.mounted: reading `context` after the
+        // adoptSession await is itself what we're guarding against.
+        if (!mounted) return;
 
         final session = ref.read(authRepositoryProvider).currentSession;
         if (session != null) {

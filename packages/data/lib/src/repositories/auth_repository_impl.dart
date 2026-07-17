@@ -167,8 +167,11 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<Result<AuthSession, AppFailure>> refresh() async {
     // Single-flight: collapse concurrent callers onto the same future.
     if (_refreshing != null) return _refreshing!;
-    _refreshing = _doRefresh()..whenComplete(() => _refreshing = null);
-    return _refreshing!;
+    final future = _doRefresh();
+    _refreshing = future;
+    // Callers await `future` itself; this side-chain only clears the slot.
+    unawaited(future.whenComplete(() => _refreshing = null));
+    return future;
   }
 
   Future<Result<AuthSession, AppFailure>> _doRefresh() async {
