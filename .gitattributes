@@ -1,0 +1,30 @@
+# Line endings. Without this, core.autocrlf=true put CRLF in the working tree
+# while Prettier/analyzers expect LF, so every line of every file read as an
+# error. Normalize to LF in the repo AND on checkout, on every machine.
+* text=auto eol=lf
+
+# Shell scripts must be LF or they fail to run (`bad interpreter: ^M`).
+*.sh text eol=lf
+
+# PowerShell stays CRLF — it's Windows-only tooling and some hosts choke on LF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary — never touch, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.tgz binary
+*.jar binary
+*.keystore binary
+*.mp4 binary
