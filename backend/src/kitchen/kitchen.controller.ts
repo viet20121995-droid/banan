@@ -48,8 +48,7 @@ export class KitchenController {
     // pick a queue — otherwise listForKitchen(null) would query
     // `WHERE kitchenId IS NULL` and surface UNROUTED orders instead of a real
     // kitchen's kanban (mirrors the admin ?kitchenId= rule in analytics).
-    const kitchenId =
-      user.kitchenId ?? (user.role === Role.ADMIN ? kitchenIdParam : undefined);
+    const kitchenId = user.kitchenId ?? (user.role === Role.ADMIN ? kitchenIdParam : undefined);
     if (!kitchenId) {
       throw new BadRequestException({ code: 'NO_KITCHEN_ASSIGNED' });
     }

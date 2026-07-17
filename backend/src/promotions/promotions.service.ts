@@ -448,7 +448,10 @@ export class PromotionsService {
     if (!storeId) return;
     const exists = await this.prisma.store.count({ where: { id: storeId } });
     if (!exists) {
-      throw new BadRequestException({ code: 'STORE_NOT_FOUND', message: 'Cửa hàng không tồn tại.' });
+      throw new BadRequestException({
+        code: 'STORE_NOT_FOUND',
+        message: 'Cửa hàng không tồn tại.',
+      });
     }
   }
 

@@ -30,7 +30,12 @@ beforeEach(() => mockSend.mockReset());
 
 describe('EmailService — DRY-RUN (RESEND_API_KEY not set)', () => {
   it('order-status email is NOT sent (logged only)', async () => {
-    await svc().sendOrderStatusEmail({ toEmail: 'a@gmail.com', toName: 'A', template: TPL(), orderCode: 'BAN-1' });
+    await svc().sendOrderStatusEmail({
+      toEmail: 'a@gmail.com',
+      toName: 'A',
+      template: TPL(),
+      orderCode: 'BAN-1',
+    });
     expect(mockSend).not.toHaveBeenCalled();
   });
   it('sendRaw returns false and does not send', async () => {
@@ -39,7 +44,11 @@ describe('EmailService — DRY-RUN (RESEND_API_KEY not set)', () => {
     expect(mockSend).not.toHaveBeenCalled();
   });
   it('password-reset email is NOT sent', async () => {
-    await svc().sendPasswordResetEmail({ toEmail: 'a@gmail.com', toName: 'A', resetUrl: 'https://x/r' });
+    await svc().sendPasswordResetEmail({
+      toEmail: 'a@gmail.com',
+      toName: 'A',
+      resetUrl: 'https://x/r',
+    });
     expect(mockSend).not.toHaveBeenCalled();
   });
 });
@@ -48,7 +57,11 @@ describe('EmailService — CONFIGURED (RESEND_API_KEY set)', () => {
   it('order-status: sends from banancakes.vn, code in subject, name + CTA in html', async () => {
     mockSend.mockResolvedValue({ error: null });
     await configured().sendOrderStatusEmail({
-      toEmail: 'cust@gmail.com', toName: 'Linh', template: TPL(), orderId: 'o1', orderCode: 'BAN-2026-7',
+      toEmail: 'cust@gmail.com',
+      toName: 'Linh',
+      template: TPL(),
+      orderId: 'o1',
+      orderCode: 'BAN-2026-7',
     });
     expect(mockSend).toHaveBeenCalledTimes(1);
     const a = mockSend.mock.calls[0][0];
@@ -64,21 +77,30 @@ describe('EmailService — CONFIGURED (RESEND_API_KEY set)', () => {
 
   it('order-status: SKIPS synthetic guest @banan.local addresses', async () => {
     await configured().sendOrderStatusEmail({
-      toEmail: 'guest+abc@banan.local', toName: 'Guest', template: TPL(),
+      toEmail: 'guest+abc@banan.local',
+      toName: 'Guest',
+      template: TPL(),
     });
     expect(mockSend).not.toHaveBeenCalled();
   });
 
   it('order-status: no CTA when there is no orderId', async () => {
     mockSend.mockResolvedValue({ error: null });
-    await configured().sendOrderStatusEmail({ toEmail: 'a@gmail.com', toName: 'A', template: TPL() });
+    await configured().sendOrderStatusEmail({
+      toEmail: 'a@gmail.com',
+      toName: 'A',
+      template: TPL(),
+    });
     expect(mockSend.mock.calls[0][0].html).not.toContain('Xem đơn hàng');
   });
 
   it('order-status: HTML-escapes name/body (no injection)', async () => {
     mockSend.mockResolvedValue({ error: null });
     await configured().sendOrderStatusEmail({
-      toEmail: 'a@gmail.com', toName: '<script>x</script>', template: TPL({ body: '<b>z</b>' }), orderCode: 'C1',
+      toEmail: 'a@gmail.com',
+      toName: '<script>x</script>',
+      template: TPL({ body: '<b>z</b>' }),
+      orderCode: 'C1',
     });
     const html = mockSend.mock.calls[0][0].html;
     expect(html).not.toContain('<script>x</script>');
@@ -111,7 +133,9 @@ describe('EmailService — CONFIGURED (RESEND_API_KEY set)', () => {
   it('password-reset: sends with reset subject and reset URL in html', async () => {
     mockSend.mockResolvedValue({ error: null });
     await configured().sendPasswordResetEmail({
-      toEmail: 'a@gmail.com', toName: 'A', resetUrl: 'https://banancakes.vn/reset?token=xyz123',
+      toEmail: 'a@gmail.com',
+      toName: 'A',
+      resetUrl: 'https://banancakes.vn/reset?token=xyz123',
     });
     const a = mockSend.mock.calls[0][0];
     expect(a.subject).toContain('Đặt lại mật khẩu');

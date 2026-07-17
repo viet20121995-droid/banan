@@ -811,8 +811,6 @@ describe('OrdersService.trackByCapability (public tracking)', () => {
 
   it('throws NotFound when the id does not resolve', async () => {
     const svc = serviceWithOrder(jest.fn().mockResolvedValue(null));
-    await expect(svc.trackByCapability('missing')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(svc.trackByCapability('missing')).rejects.toBeInstanceOf(NotFoundException);
   });
 });

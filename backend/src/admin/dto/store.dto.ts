@@ -1,11 +1,4 @@
-import {
-  IsNumber,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { IsNumber, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 /** Create a new branch (chain store). Operational fields (opening hours, pause
  *  flags, min-order, lead time) are tuned afterwards via the merchant settings

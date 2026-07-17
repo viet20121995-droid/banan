@@ -87,10 +87,7 @@ export class PaymentsController {
    */
   @Public()
   @Get('ninepay/return')
-  async ninepayReturn(
-    @Query() query: Record<string, string>,
-    @Res() res: Response,
-  ): Promise<void> {
+  async ninepayReturn(@Query() query: Record<string, string>, @Res() res: Response): Promise<void> {
     const customerBase =
       this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? 'http://localhost:8081';
     const verified = this.ninepay.verifyResult(query);
@@ -149,9 +146,7 @@ export class PaymentsController {
   @Public()
   @Post('ninepay/ipn')
   @HttpCode(HttpStatus.OK)
-  async ninepayIpn(
-    @Body() body: Record<string, string>,
-  ): Promise<{ status: string }> {
+  async ninepayIpn(@Body() body: Record<string, string>): Promise<{ status: string }> {
     const verified = this.ninepay.verifyResult(body);
     if (!verified.ok || !verified.invoiceNo) {
       // Acknowledge so 9Pay doesn't hammer retries; a checksum failure here is

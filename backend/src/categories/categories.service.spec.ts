@@ -14,9 +14,7 @@ describe('CategoriesService.removeWithProducts (order-safety)', () => {
         delete: category.delete,
       },
       product: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue((opts.productIds ?? ['p1']).map((id) => ({ id }))),
+        findMany: jest.fn().mockResolvedValue((opts.productIds ?? ['p1']).map((id) => ({ id }))),
       },
       orderItem: { count: jest.fn().mockResolvedValue(opts.orderRefs) },
     };
@@ -27,9 +25,7 @@ describe('CategoriesService.removeWithProducts (order-safety)', () => {
 
   it('refuses when any product is already in an order (keeps history)', async () => {
     const { svc, products, prisma } = make({ orderRefs: 2 });
-    await expect(svc.removeWithProducts('c1', null)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(svc.removeWithProducts('c1', null)).rejects.toBeInstanceOf(BadRequestException);
     expect(products.remove).not.toHaveBeenCalled();
     expect(prisma.category.delete).not.toHaveBeenCalled();
   });

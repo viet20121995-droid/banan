@@ -28,10 +28,7 @@ export class CategoriesController {
 
   @Public()
   @Get()
-  findAll(
-    @CurrentUser() user?: AuthPrincipal,
-    @Query('includeHidden') includeHidden?: string,
-  ) {
+  findAll(@CurrentUser() user?: AuthPrincipal, @Query('includeHidden') includeHidden?: string) {
     // Only staff (merchant back-office) may list hidden categories; the public
     // storefront always gets visible-only, even if it passes the flag.
     const privileged =

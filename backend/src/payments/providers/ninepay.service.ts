@@ -135,16 +135,13 @@ export class NinePayPaymentService {
     // lands on `/portal`; the canonical is the sorted + URL-encoded query string.
     const canonical = NinePayPaymentService.buildHttpQuery(params);
     const stringToSign = `POST\n${createUrl}\n${time}\n${canonical}`;
-    const signature = createHmac('sha256', secretKey)
-      .update(stringToSign, 'utf8')
-      .digest('base64');
+    const signature = createHmac('sha256', secretKey).update(stringToSign, 'utf8').digest('base64');
 
     // Redirect the browser to the hosted checkout `/portal` with ONLY baseEncode
     // + signature (also sorted + URL-encoded). `time` rides INSIDE baseEncode —
     // it is NOT a separate query param.
     const redirectUrl =
-      `${this.baseUrl}/portal?` +
-      NinePayPaymentService.buildHttpQuery({ baseEncode, signature });
+      `${this.baseUrl}/portal?` + NinePayPaymentService.buildHttpQuery({ baseEncode, signature });
 
     const payment = await this.prisma.payment.create({
       data: {

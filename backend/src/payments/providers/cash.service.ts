@@ -4,9 +4,13 @@ import { FulfillmentType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
- * Cash on pickup. The customer pays in person when collecting their order.
+ * Cash on receipt — at the counter for pickup, or to the courier for delivery
+ * (COD). Off unless `COD_ENABLED=true`; see `validateAllowed` below.
+ *
  * No external provider call — we just record an AUTHORIZED Payment row that
- * is flipped to CAPTURED when the merchant marks the order COMPLETED.
+ * is flipped to CAPTURED when the merchant marks the order COMPLETED. That
+ * row is also how a fully discounted order (total <= 0) settles, which is why
+ * the methods below stay reachable while the customer-facing gate is closed.
  */
 @Injectable()
 export class CashPaymentService {

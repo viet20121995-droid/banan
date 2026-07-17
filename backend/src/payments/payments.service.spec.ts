@@ -312,11 +312,7 @@ describe('PaymentsService.applyRefundSettled', () => {
   });
 });
 
-function validateSvc(enabled: {
-  stripe?: boolean;
-  momo?: boolean;
-  ninepay?: boolean;
-}) {
+function validateSvc(enabled: { stripe?: boolean; momo?: boolean; ninepay?: boolean }) {
   const noop = {} as never;
   return new PaymentsService(
     noop, // prisma

@@ -160,9 +160,7 @@ export class ProductsService {
       viewerRole === Role.MERCHANT_STAFF ||
       viewerRole === Role.ADMIN;
     const product = await this.prisma.product.findFirst({
-      where: privileged
-        ? { id }
-        : { id, isAvailable: true, category: { isHidden: false } },
+      where: privileged ? { id } : { id, isAvailable: true, category: { isHidden: false } },
       include: PRODUCT_INCLUDE,
     });
     if (!product) throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND' });
