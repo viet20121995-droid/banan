@@ -57,7 +57,9 @@ describe('EmailService — CONFIGURED (RESEND_API_KEY set)', () => {
     expect(a.subject).toContain('BAN-2026-7');
     expect(a.html).toContain('Linh');
     expect(a.html).toContain('Xem đơn hàng'); // CTA present when orderId given
-    expect(a.html).toContain('/orders/o1');
+    // Public tracking link — a guest opening this email has no session, so
+    // /orders/:id (auth-gated) would bounce them to /login.
+    expect(a.html).toContain('/track/o1');
   });
 
   it('order-status: SKIPS synthetic guest @banan.local addresses', async () => {

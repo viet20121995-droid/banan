@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { FulfillmentType, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
@@ -13,12 +13,23 @@ export class CashPaymentService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Cash on receipt. Allowed for BOTH pickup (pay at the counter) and
-   * delivery (COD — pay the courier), which is the norm in Vietnam.
+   * Cash on receipt (counter for pickup, COD for delivery). Off by default:
+   * the storefront is online-prepaid only, and hiding the option in the app
+   * is not enforcement — a direct API call could still book a COD order.
+   * Set `COD_ENABLED=true` to accept cash again; no code change needed.
+   *
+   * Note: this gate is only consulted when the CUSTOMER picks cash. A fully
+   * discounted order (total <= 0) records a CASH payment row internally after
+   * validation and is unaffected.
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validateAllowed(_fulfillment: FulfillmentType): void {
-    // No restriction — cash is accepted for every fulfillment type.
+    if (process.env.COD_ENABLED !== 'true') {
+      throw new BadRequestException({
+        code: 'COD_DISABLED',
+        message: 'Hiện chỉ nhận thanh toán online.',
+      });
+    }
   }
 
   async initiate(args: {

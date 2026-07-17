@@ -357,7 +357,37 @@ describe('PaymentsService.validate (provider availability — blocks before orde
     ).not.toThrow();
   });
 
-  it('CASH is always allowed (delegates to cash policy, no enabled check)', () => {
-    expect(() => validateSvc({}).validate('CASH' as never, 'PICKUP')).not.toThrow();
+  // CASH has no `enabled` flag of its own — the COD kill-switch lives in
+  // CashPaymentService.validateAllowed (see cash.service.spec.ts). Here we
+  // only assert PaymentsService delegates to it and lets its verdict through.
+  it('CASH delegates to the cash policy and propagates its rejection', () => {
+    const allow = { validateAllowed: jest.fn() };
+    const svc = new PaymentsService(
+      {} as never,
+      allow as never,
+      { enabled: false } as never,
+      { enabled: false } as never,
+      { enabled: false } as never,
+      {} as never,
+      {} as never,
+    );
+    expect(() => svc.validate('CASH' as never, 'PICKUP')).not.toThrow();
+    expect(allow.validateAllowed).toHaveBeenCalledWith('PICKUP');
+
+    const deny = {
+      validateAllowed: jest.fn(() => {
+        throw new Error('COD_DISABLED');
+      }),
+    };
+    const denySvc = new PaymentsService(
+      {} as never,
+      deny as never,
+      { enabled: false } as never,
+      { enabled: false } as never,
+      { enabled: false } as never,
+      {} as never,
+      {} as never,
+    );
+    expect(() => denySvc.validate('CASH' as never, 'DELIVERY')).toThrow('COD_DISABLED');
   });
 });
