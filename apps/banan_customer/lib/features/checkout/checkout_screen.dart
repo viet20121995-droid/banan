@@ -108,11 +108,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   void initState() {
     super.initState();
     // Pre-fill from the cart's order draft so the customer doesn't re-pick
-    // fulfillment / branch / schedule they already chose on the cart screen.
-    // The draft's own defaults fall back to the session-wide pickup/delivery
-    // preference, so an empty draft behaves exactly like before.
+    // branch / schedule they already chose on the cart screen.
     final draft = ref.read(orderDraftProvider);
-    _fulfillment = draft.fulfillment;
+    // Fulfillment comes straight from the live session preference, NOT the
+    // draft: the draft snapshots the preference once at first construction and
+    // then never re-syncs, so a shopper who flips pickup↔delivery on the menu
+    // AFTER checkout was first opened would see the stale draft value and have
+    // to pick again. The menu and this screen both write the preference, so
+    // it's the source of truth for fulfillment type.
+    _fulfillment = ref.read(fulfillmentPreferenceProvider);
     _pickupStoreId = draft.pickupStoreId;
     _scheduledFor = draft.scheduledFor;
     // Resolve the picked saved-address id (delivery only) against the address
@@ -1617,9 +1621,14 @@ class _GuestContactSection extends ConsumerWidget {
               // Use this widget's own context so the GoRouter lookup
               // happens at click time against the current widget tree —
               // sidesteps any "stale parent context" weirdness.
+              //
+              // push, not go: go replaces the stack, so "quay lại cửa hàng"
+              // on the auth screen finds nothing to pop and falls back to
+              // home. push keeps checkout underneath, so back returns here.
+              // ?next=/cart still applies after a real sign-in.
               Builder(
                 builder: (ctx) => TextButton(
-                  onPressed: () => ctx.go('/login?next=/cart'),
+                  onPressed: () => ctx.push('/login?next=/cart'),
                   child: Text(t.haveAccount),
                 ),
               ),
