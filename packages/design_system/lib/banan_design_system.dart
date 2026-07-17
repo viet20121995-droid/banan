@@ -15,8 +15,8 @@ export 'src/tokens/typography.dart';
 // Widgets
 export 'src/widgets/buttons/primary_button.dart';
 export 'src/widgets/cards/product_card.dart';
-export 'src/widgets/decor/seigaiha.dart';
 export 'src/widgets/cards/stat_card.dart';
+export 'src/widgets/decor/seigaiha.dart';
 export 'src/widgets/feedback/empty_state.dart';
 export 'src/widgets/feedback/error_state.dart';
 export 'src/widgets/inputs/app_text_field.dart';

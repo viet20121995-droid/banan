@@ -171,7 +171,7 @@ class _BundleCard extends StatelessWidget {
                         left: BananSpacing.sm,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                              horizontal: 8, vertical: 4,),
                           decoration: BoxDecoration(
                             borderRadius: BananRadii.rPill,
                             color: BananColors.accent.withValues(alpha: 0.92),
@@ -206,7 +206,7 @@ class _BundleCard extends StatelessWidget {
                       Text(
                         bundle.items
                             .map((it) =>
-                                '${it.quantity}× ${it.product?.name ?? "?"}')
+                                '${it.quantity}× ${it.product?.name ?? "?"}',)
                             .join(' + '),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.outline,

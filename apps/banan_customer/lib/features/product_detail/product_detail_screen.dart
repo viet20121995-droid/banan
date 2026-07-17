@@ -201,16 +201,14 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        twoCol
-                            ? Row(
+                        if (twoCol) Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(child: image),
                                   const SizedBox(width: BananSpacing.xxl),
                                   Expanded(child: details),
                                 ],
-                              )
-                            : Column(
+                              ) else Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   image,
@@ -674,7 +672,7 @@ class _RecommendationsSectionState
               children: [
                 Expanded(
                   child: Text('Khách cũng mua',
-                      style: theme.textTheme.titleLarge),
+                      style: theme.textTheme.titleLarge,),
                 ),
                 if (showArrows) ...[
                   _NavBtn(

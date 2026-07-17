@@ -1,6 +1,5 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
-import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -234,22 +233,22 @@ class _SummaryGrid extends StatelessWidget {
     final t = summary.totals;
     final cards = <_KpiData>[
       _KpiData('Doanh thu (hoàn tất)', _vnd(t.revenue),
-          icon: Icons.payments_outlined),
+          icon: Icons.payments_outlined,),
       _KpiData('Đơn hoàn tất', '${t.completed}',
-          icon: Icons.check_circle_outline),
+          icon: Icons.check_circle_outline,),
       _KpiData('Đơn huỷ', '${t.cancelled}', icon: Icons.cancel_outlined),
       _KpiData('Tổng đơn (cả huỷ)', '${t.orders}',
-          icon: Icons.receipt_long_outlined),
+          icon: Icons.receipt_long_outlined,),
       _KpiData('Giá trị TB / đơn', _vnd(t.avgOrderValue),
-          icon: Icons.trending_up),
+          icon: Icons.trending_up,),
       _KpiData('Phí giao thu', _vnd(t.deliveryFees),
-          icon: Icons.delivery_dining_outlined),
+          icon: Icons.delivery_dining_outlined,),
       _KpiData('Khuyến mãi áp', _vnd(t.coupons),
-          icon: Icons.local_offer_outlined),
+          icon: Icons.local_offer_outlined,),
       _KpiData('Điểm đã đổi', _vnd(t.pointsBurned),
-          icon: Icons.stars_outlined),
+          icon: Icons.stars_outlined,),
       _KpiData('Đã hoàn tiền', _vnd(t.refundedAmount),
-          icon: Icons.assignment_return_outlined),
+          icon: Icons.assignment_return_outlined,),
       _KpiData(
         'Pickup vs Delivery',
         '${summary.fulfillment.pickup} · ${summary.fulfillment.delivery}',
@@ -375,7 +374,7 @@ class _DailyTable extends StatelessWidget {
               DataCell(Text(r.date)),
               DataCell(Text('${r.orders}')),
               DataCell(Text(fmt.format(r.revenue))),
-            ]),
+            ],),
         ],
       ),
     );
@@ -422,7 +421,7 @@ class _ProductsTable extends StatelessWidget {
               DataCell(Text(items[i].productName)),
               DataCell(Text('${items[i].unitsSold}')),
               DataCell(Text(fmt.format(items[i].revenue))),
-            ]),
+            ],),
         ],
       ),
     );

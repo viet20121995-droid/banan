@@ -1037,7 +1037,7 @@ class _OrderItemRow extends ConsumerWidget {
         existing: existing,
       ),
     );
-    if (result == true) {
+    if (result ?? false) {
       ref.invalidate(_myReviewsForOrderProvider(order.id));
     }
   }
@@ -1218,19 +1218,19 @@ class _VatInvoiceBlock extends StatelessWidget {
               const Icon(Icons.receipt_long_outlined, size: 18),
               const SizedBox(width: BananSpacing.xs),
               Text('Thông tin hoá đơn VAT',
-                  style: theme.textTheme.titleSmall),
+                  style: theme.textTheme.titleSmall,),
             ],
           ),
           const SizedBox(height: BananSpacing.xs),
           if (order.invoiceCompanyName != null)
             Text(order.invoiceCompanyName!,
-                style: theme.textTheme.bodyLarge),
+                style: theme.textTheme.bodyLarge,),
           if (order.invoiceTaxId != null)
             Text('MST: ${order.invoiceTaxId}',
-                style: theme.textTheme.bodySmall),
+                style: theme.textTheme.bodySmall,),
           if (order.invoiceAddress != null)
             Text(order.invoiceAddress!,
-                style: theme.textTheme.bodySmall),
+                style: theme.textTheme.bodySmall,),
           if (order.invoiceEmail != null)
             Text(
               order.invoiceEmail!,
@@ -1274,7 +1274,7 @@ class _GiftBlock extends StatelessWidget {
               Text('Đơn quà tặng', style: theme.textTheme.titleSmall),
               if (order.giftWrap) ...[
                 const SizedBox(width: BananSpacing.sm),
-                _GiftFlagChip(label: 'Gói quà'),
+                const _GiftFlagChip(label: 'Gói quà'),
               ],
             ],
           ),
@@ -1393,7 +1393,7 @@ class _PersonalizationSummary extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.cake_outlined,
-                  size: 14, color: BananColors.primary),
+                  size: 14, color: BananColors.primary,),
               const SizedBox(width: 4),
               Text(
                 'Cá nhân hoá',
@@ -1408,7 +1408,7 @@ class _PersonalizationSummary extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text('Chữ trên bánh: "$text"',
-                  style: theme.textTheme.bodySmall),
+                  style: theme.textTheme.bodySmall,),
             ),
           if (candle != null)
             Text('Nến: $candle', style: theme.textTheme.bodySmall),
@@ -1416,7 +1416,7 @@ class _PersonalizationSummary extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text('Vị: $flavorLine',
-                  style: theme.textTheme.bodySmall),
+                  style: theme.textTheme.bodySmall,),
             ),
           if (note != null && note.isNotEmpty)
             Text('Ghi chú: $note', style: theme.textTheme.bodySmall),

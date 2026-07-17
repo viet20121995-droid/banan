@@ -195,7 +195,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
               Row(
                 children: [
                   const Icon(Icons.cake_outlined,
-                      color: BananColors.primary),
+                      color: BananColors.primary,),
                   const SizedBox(width: BananSpacing.sm),
                   Expanded(
                     child: Text(

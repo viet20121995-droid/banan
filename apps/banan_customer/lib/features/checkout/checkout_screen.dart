@@ -343,7 +343,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               .read(_deliveryQuoteProvider((
                 wardCode: _wardCode,
                 productIdsCsv: cart.orderedProductIds.join(','),
-              )))
+              ),),)
               .valueOrNull
               ?.store
               ?.id
@@ -1836,7 +1836,7 @@ class _DeliveryQuoteBox extends ConsumerWidget {
     final quoteFuture = ref.watch(_deliveryQuoteProvider((
       wardCode: wardCode,
       productIdsCsv: productIds.join(','),
-    )));
+    ),),);
 
     return quoteFuture.when(
       loading: () => const SizedBox(

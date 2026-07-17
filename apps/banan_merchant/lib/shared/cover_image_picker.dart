@@ -254,13 +254,13 @@ class _FileMeta extends StatelessWidget {
         ? (
             Icons.error_outline_rounded,
             theme.colorScheme.error,
-            '  · vượt giới hạn server (${hardMaxMb} MB) — sẽ bị từ chối',
+            '  · vượt giới hạn server ($hardMaxMb MB) — sẽ bị từ chối',
           )
         : overSoft
             ? (
                 Icons.warning_amber_rounded,
                 Colors.orange.shade700,
-                '  · vượt mức khuyến nghị (${recommendedMb} MB) — vẫn tải lên được',
+                '  · vượt mức khuyến nghị ($recommendedMb MB) — vẫn tải lên được',
               )
             : (
                 Icons.check_circle_outline,

@@ -11,23 +11,23 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/web_storage.dart' as web_storage;
+import '../bundles/bundle_strip.dart';
 import '../cart/cart_controller.dart';
-import '../content/app_footer.dart';
-import '../product_detail/cake_wizard.dart';
-import 'section_header.dart';
 import '../checkout/fulfillment_preference.dart';
+import '../content/app_footer.dart';
 // Used inside the inline _QuickAddSheet defined at the bottom of this file.
 // Pulling the import up here keeps all imports grouped at the top.
 import '../locations/locations_screen.dart' show storesListProvider;
 import '../notifications/notifications_controller.dart';
 import '../orders/reorder_helper.dart';
+import '../product_detail/cake_wizard.dart';
 import '../wishlist/wishlist_controller.dart';
-import '../bundles/bundle_strip.dart';
 import 'banan_brand.dart';
 import 'contact_fab.dart';
 import 'menu_controller.dart';
 import 'promo_popup_dialog.dart';
 import 'pwa_install.dart';
+import 'section_header.dart';
 
 /// Merchant-managed hero banners for the home carousel.
 final homeBannersProvider = FutureProvider<List<HomeBanner>>((ref) async {

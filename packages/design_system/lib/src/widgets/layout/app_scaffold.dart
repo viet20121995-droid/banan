@@ -1,3 +1,5 @@
+import 'package:banan_design_system/banan_design_system.dart' show BananPageBackground;
+import 'package:banan_design_system/src/widgets/decor/seigaiha.dart' show BananPageBackground;
 import 'package:flutter/material.dart';
 
 import '../../responsive/breakpoint_builder.dart';

@@ -54,7 +54,7 @@ class SiteContent {
         .map((m) => AboutSection(
               m['heading'] as String? ?? '',
               m['body'] as String? ?? '',
-            ))
+            ),)
         .where((s) => s.heading.isNotEmpty || s.body.isNotEmpty)
         .toList();
   }

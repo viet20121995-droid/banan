@@ -149,7 +149,7 @@ class _BulkPriceTabState extends ConsumerState<_BulkPriceTab> {
             DropdownMenuItem(value: 'all', child: Text('Tất cả sản phẩm')),
             DropdownMenuItem(value: 'category', child: Text('Theo danh mục')),
             DropdownMenuItem(
-                value: 'collection', child: Text('Theo bộ sưu tập')),
+                value: 'collection', child: Text('Theo bộ sưu tập'),),
           ],
           onChanged: (v) => setState(() => _scope = v ?? 'all'),
         ),
@@ -230,7 +230,7 @@ class _BulkPriceTabState extends ConsumerState<_BulkPriceTab> {
             ),
             const SizedBox(width: BananSpacing.sm),
             FilledButton.icon(
-              onPressed: _busy ? null : () => _confirmApply(),
+              onPressed: _busy ? null : _confirmApply,
               icon: const Icon(Icons.check),
               label: const Text('Áp dụng'),
             ),
@@ -243,7 +243,7 @@ class _BulkPriceTabState extends ConsumerState<_BulkPriceTab> {
         if (_preview != null && _preview!.sample.isNotEmpty) ...[
           const SizedBox(height: BananSpacing.md),
           Text('Xem trước (tối đa 10 dòng):',
-              style: theme.textTheme.titleSmall),
+              style: theme.textTheme.titleSmall,),
           const SizedBox(height: BananSpacing.xs),
           for (final r in _preview!.sample)
             Padding(
@@ -260,7 +260,7 @@ class _BulkPriceTabState extends ConsumerState<_BulkPriceTab> {
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.w700,
-                      )),
+                      ),),
                 ],
               ),
             ),
@@ -281,14 +281,14 @@ class _BulkPriceTabState extends ConsumerState<_BulkPriceTab> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Huỷ')),
+              child: const Text('Huỷ'),),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Áp dụng')),
+              child: const Text('Áp dụng'),),
         ],
       ),
     );
-    if (ok == true) await _run(dryRun: false);
+    if (ok ?? false) await _run(dryRun: false);
   }
 }
 
@@ -412,7 +412,7 @@ class _CsvImportTabState extends ConsumerState<_CsvImportTab> {
         ),
         const SizedBox(height: BananSpacing.sm),
         Text('Đã nhận diện ${preview.length} dòng.',
-            style: theme.textTheme.bodySmall),
+            style: theme.textTheme.bodySmall,),
         const SizedBox(height: BananSpacing.md),
         FilledButton.icon(
           onPressed: _busy || preview.isEmpty ? null : _import,
@@ -420,7 +420,7 @@ class _CsvImportTabState extends ConsumerState<_CsvImportTab> {
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2))
+                  child: CircularProgressIndicator(strokeWidth: 2),)
               : const Icon(Icons.upload_outlined),
           label: Text(_busy ? 'Đang nhập…' : 'Nhập ${preview.length} sản phẩm'),
         ),
@@ -434,7 +434,7 @@ class _CsvImportTabState extends ConsumerState<_CsvImportTab> {
           for (final e in _result!.errors)
             Text('• Dòng ${e.row} (${e.name}): ${e.error}',
                 style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.error)),
+                    ?.copyWith(color: theme.colorScheme.error),),
         ],
       ],
     );

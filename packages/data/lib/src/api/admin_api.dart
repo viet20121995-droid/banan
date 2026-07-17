@@ -99,7 +99,7 @@ class AdminApi {
         data: {'password': password},
       );
       final code = res.statusCode ?? 0;
-      if (code >= 200 && code < 300) return Result.success(true);
+      if (code >= 200 && code < 300) return const Result.success(true);
       return Result.failure(mapHttpStatusToFailure(res));
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
@@ -112,7 +112,7 @@ class AdminApi {
     try {
       final res = await _dio.delete<dynamic>('/admin/users/$id');
       final code = res.statusCode ?? 0;
-      if (code >= 200 && code < 300) return Result.success(true);
+      if (code >= 200 && code < 300) return const Result.success(true);
       return Result.failure(mapHttpStatusToFailure(res));
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));

@@ -64,7 +64,7 @@ class GiftCardsApi {
         code: m['code'] as String?,
         balanceVnd: (m['balanceVnd'] as num?)?.toInt(),
         reason: m['reason'] as String?,
-      ));
+      ),);
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
     } catch (e) {

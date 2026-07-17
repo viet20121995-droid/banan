@@ -172,7 +172,7 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
           if (_error != null) ...[
             const SizedBox(height: BananSpacing.xs),
             Text(_error!,
-                style: TextStyle(color: theme.colorScheme.error)),
+                style: TextStyle(color: theme.colorScheme.error),),
           ],
           const SizedBox(height: BananSpacing.md),
           FilledButton.icon(

@@ -21,7 +21,8 @@ dependencies:
   banan_data:
     path: ../data
 
-  intl: any
+  intl: ^0.20.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

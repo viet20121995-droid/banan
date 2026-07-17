@@ -88,7 +88,7 @@ class Product extends Equatable {
   /// every variant is UNLIMITED — the UI then knows to hide the indicator
   /// instead of showing "Còn 0" by mistake.
   int? get totalLimitedStock {
-    int sum = 0;
+    var sum = 0;
     var anyLimited = false;
     for (final v in variants) {
       if (v.stockMode == StockMode.limited) {

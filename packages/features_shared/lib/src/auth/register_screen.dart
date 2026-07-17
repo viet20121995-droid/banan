@@ -90,7 +90,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(s.registerTitle,
-                    style: theme.textTheme.displaySmall),
+                    style: theme.textTheme.displaySmall,),
                 const SizedBox(height: BananSpacing.sm),
                 Text(
                   s.registerSubtitle,
@@ -173,11 +173,11 @@ class _BirthdayField extends StatelessWidget {
       onTap: onTap,
       borderRadius: BananRadii.rmd,
       child: InputDecorator(
-        decoration: InputDecoration(
+        decoration: const InputDecoration(
           labelText: 'Birthday (optional)',
           helperText: "We'll send you a treat each year.",
-          prefixIcon: const Icon(Icons.cake_outlined, size: 20),
-          suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+          prefixIcon: Icon(Icons.cake_outlined, size: 20),
+          suffixIcon: Icon(Icons.calendar_today_outlined, size: 18),
         ),
         child: Text(
           value == null ? 'Tap to choose…' : fmt.format(value!),
@@ -195,7 +195,6 @@ class _Field extends StatelessWidget {
     this.keyboardType,
     this.obscureText = false,
     this.validator,
-    this.required = true,
   });
 
   final String label;
@@ -204,7 +203,6 @@ class _Field extends StatelessWidget {
   final TextInputType? keyboardType;
   final bool obscureText;
   final String? Function(String?)? validator;
-  final bool required;
 
   @override
   Widget build(BuildContext context) {
@@ -212,8 +210,9 @@ class _Field extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscureText,
-      validator: validator ??
-          (v) => required && (v == null || v.isEmpty) ? 'Required' : null,
+      // Every caller either passes its own validator or wants "not empty" —
+      // nothing ever opted out, so there is no `required` flag to honour.
+      validator: validator ?? (v) => (v == null || v.isEmpty) ? 'Required' : null,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, size: 20),

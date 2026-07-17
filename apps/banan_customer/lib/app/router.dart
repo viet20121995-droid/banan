@@ -9,6 +9,7 @@ import '../features/auth/change_email_confirm_screen.dart';
 import '../features/auth/change_password_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/reset_password_screen.dart';
+import '../features/bundles/bundle_detail_screen.dart';
 import '../features/cart/cart_screen.dart';
 import '../features/checkout/checkout_screen.dart';
 import '../features/content/about_screen.dart';
@@ -24,7 +25,6 @@ import '../features/notifications/notifications_screen.dart';
 import '../features/orders/order_detail_screen.dart';
 import '../features/orders/orders_list_screen.dart';
 import '../features/payment_return/payment_return_screen.dart';
-import '../features/bundles/bundle_detail_screen.dart';
 import '../features/product_detail/product_detail_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/vouchers/voucher_wallet_screen.dart';
@@ -168,7 +168,7 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/gift-cards', builder: (_, __) => const GiftCardScreen()),
       GoRoute(
           path: '/subscription',
-          builder: (_, __) => const SubscriptionScreen()),
+          builder: (_, __) => const SubscriptionScreen(),),
       GoRoute(path: '/catering', builder: (_, __) => const CateringScreen()),
       GoRoute(path: '/rewards', builder: (_, __) => const RewardsScreen()),
       GoRoute(path: '/orders', builder: (_, __) => const OrdersListScreen()),

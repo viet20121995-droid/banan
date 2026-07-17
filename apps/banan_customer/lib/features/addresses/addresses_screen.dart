@@ -413,7 +413,7 @@ class _WardPicker extends ConsumerWidget {
         loading: () => const LinearProgressIndicator(minHeight: 2),
         error: (e, _) => TextFormField(
           enabled: false,
-          decoration: InputDecoration(
+          decoration: const InputDecoration(
             labelText: 'Phường (TP.HCM)',
             errorText: 'Không tải được danh sách phường',
           ),

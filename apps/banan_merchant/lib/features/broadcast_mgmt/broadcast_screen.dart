@@ -43,10 +43,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Huỷ')),
+              child: const Text('Huỷ'),),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Gửi')),
+              child: const Text('Gửi'),),
         ],
       ),
     );
@@ -92,7 +92,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               padding: const EdgeInsets.all(BananSpacing.lg),
               children: [
                 Text('Gửi thông báo trong ứng dụng',
-                    style: theme.textTheme.titleLarge),
+                    style: theme.textTheme.titleLarge,),
                 const SizedBox(height: BananSpacing.xs),
                 Text(
                   'Thông báo hiển thị trong hộp thư của khách trên web & app. '
@@ -136,7 +136,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2))
+                          child: CircularProgressIndicator(strokeWidth: 2),)
                       : const Icon(Icons.campaign_outlined),
                   label: Text(_busy ? 'Đang gửi…' : 'Gửi cho tất cả khách'),
                 ),

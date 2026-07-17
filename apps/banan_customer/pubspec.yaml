@@ -29,6 +29,10 @@ dependencies:
   url_launcher: ^6.3.0
   file_picker: ^8.0.6
 
+  # Ships with the SDK (url_strategy for web) — not a pub.dev package.
+  flutter_web_plugins:
+    sdk: flutter
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

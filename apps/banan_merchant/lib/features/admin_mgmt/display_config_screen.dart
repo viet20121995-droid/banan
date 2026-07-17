@@ -105,7 +105,7 @@ class _DisplayConfigScreenState
                         contentPadding: EdgeInsets.zero,
                         value: cfg.showStockToCustomers,
                         onChanged:
-                            _saving ? null : (v) => _toggleStock(v),
+                            _saving ? null : _toggleStock,
                         title: Text(
                           cfg.showStockToCustomers
                               ? 'Đang hiển thị'

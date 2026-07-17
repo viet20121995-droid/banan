@@ -448,7 +448,7 @@ class _GiftBlock extends StatelessWidget {
             Text('Lời chúc (in lên thiệp):',
                 style: theme.textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w700,
-                )),
+                ),),
             Text(
               '“${order.giftMessage!}”',
               style: theme.textTheme.bodyLarge?.copyWith(
@@ -461,7 +461,7 @@ class _GiftBlock extends StatelessWidget {
             Text('Người nhận:',
                 style: theme.textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w700,
-                )),
+                ),),
             Text(
               '${order.giftRecipientName ?? '—'}'
               '${(order.giftRecipientPhone?.isNotEmpty ?? false) ? ' · ${order.giftRecipientPhone}' : ''}',
@@ -529,24 +529,24 @@ class _VatInvoiceBlock extends StatelessWidget {
               const Icon(Icons.receipt_long_outlined, size: 18),
               const SizedBox(width: BananSpacing.xs),
               Text('Yêu cầu xuất hoá đơn VAT',
-                  style: theme.textTheme.titleSmall),
+                  style: theme.textTheme.titleSmall,),
             ],
           ),
           const SizedBox(height: BananSpacing.xs),
           if (order.invoiceCompanyName != null)
             Text(order.invoiceCompanyName!,
-                style: theme.textTheme.bodyLarge),
+                style: theme.textTheme.bodyLarge,),
           if (order.invoiceTaxId != null)
             Text('MST: ${order.invoiceTaxId}',
-                style: theme.textTheme.bodySmall),
+                style: theme.textTheme.bodySmall,),
           if (order.invoiceAddress != null)
             Text(order.invoiceAddress!,
-                style: theme.textTheme.bodySmall),
+                style: theme.textTheme.bodySmall,),
           if (order.invoiceEmail != null)
             Text(order.invoiceEmail!,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.outline,
-                )),
+                ),),
         ],
       ),
     );
@@ -592,7 +592,7 @@ class _MerchantPersonalizationBlock extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.cake_outlined,
-                  size: 14, color: BananColors.primary),
+                  size: 14, color: BananColors.primary,),
               const SizedBox(width: 4),
               Text(
                 'Cá nhân hoá — hướng dẫn bếp',

@@ -250,10 +250,9 @@ class _BundleItemRow extends StatelessWidget {
                   style: theme.textTheme.titleSmall,
                 ),
                 Text(
-                  '${item.quantity} cái' +
-                      (item.variant != null
+                  '${item.quantity} cái${item.variant != null
                           ? ' · ${item.variant!.label}'
-                          : ''),
+                          : ''}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.outline,
                   ),

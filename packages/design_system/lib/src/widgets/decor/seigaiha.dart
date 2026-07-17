@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:banan_design_system/banan_design_system.dart' show AppScaffold;
+import 'package:banan_design_system/src/widgets/layout/app_scaffold.dart' show AppScaffold;
 import 'package:flutter/material.dart';
 
 import '../../tokens/colors.dart';
@@ -36,7 +38,7 @@ class SeigaihaPainter extends CustomPainter {
     var row = 0;
     for (double cy = 0; cy < size.height + r; cy += rowStep) {
       final shift = row.isEven ? 0.0 : r;
-      for (double cx = -r + shift; cx < size.width + r; cx += r * 2) {
+      for (var cx = -r + shift; cx < size.width + r; cx += r * 2) {
         for (var i = rings; i >= 1; i--) {
           final rr = r * (i / rings);
           canvas.drawArc(

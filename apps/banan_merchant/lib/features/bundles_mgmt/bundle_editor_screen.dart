@@ -124,7 +124,7 @@ class _BundleEditorScreenState extends ConsumerState<BundleEditorScreen> {
     }
     s = buf
         .toString()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp('[^a-z0-9]+'), '-')
         .replaceAll(RegExp(r'^-+|-+$'), '');
     return s;
   }
@@ -204,7 +204,7 @@ class _BundleEditorScreenState extends ConsumerState<BundleEditorScreen> {
                 'productId': it.product!.id,
                 if (it.variant != null) 'variantId': it.variant!.id,
                 'quantity': it.quantity,
-              })
+              },)
           .toList(),
     };
     final api = ref.read(bundlesApiProvider);

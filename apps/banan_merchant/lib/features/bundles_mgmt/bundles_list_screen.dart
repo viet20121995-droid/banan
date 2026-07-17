@@ -172,7 +172,7 @@ class _BundleRow extends StatelessWidget {
                   Text(
                     bundle.items
                         .map((it) =>
-                            '${it.quantity}× ${it.product?.name ?? "?"}')
+                            '${it.quantity}× ${it.product?.name ?? "?"}',)
                         .join(' + '),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,

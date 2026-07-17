@@ -93,7 +93,7 @@ class _ChangeEmailConfirmScreenState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Icon(Icons.link_off_outlined,
-              size: 56, color: theme.colorScheme.error),
+              size: 56, color: theme.colorScheme.error,),
           const SizedBox(height: BananSpacing.lg),
           Text(
             _error!,

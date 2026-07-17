@@ -36,7 +36,7 @@ class MarketingConfig {
         giftCard:
             MarketingProgram.fromJson(j['giftCard'] as Map<String, dynamic>?),
         subscription: MarketingProgram.fromJson(
-            j['subscription'] as Map<String, dynamic>?),
+            j['subscription'] as Map<String, dynamic>?,),
         catering:
             MarketingProgram.fromJson(j['catering'] as Map<String, dynamic>?),
         rewards:
