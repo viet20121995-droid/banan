@@ -68,3 +68,13 @@ final qualityAlertsProvider =
     FutureProvider.autoDispose<List<MfgQualityAlert>>((ref) async {
   return _orThrow(await ref.watch(manufacturingApiProvider).listAlerts(stage: 'NEW'));
 });
+
+// ── planning ──
+final scheduleProvider =
+    FutureProvider.autoDispose<List<MfgScheduleItem>>((ref) async {
+  return _orThrow(await ref.watch(manufacturingApiProvider).schedule());
+});
+
+final staffProvider = FutureProvider.autoDispose<List<MfgStaff>>((ref) async {
+  return _orThrow(await ref.watch(manufacturingApiProvider).listStaff());
+});

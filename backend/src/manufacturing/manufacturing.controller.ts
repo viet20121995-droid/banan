@@ -9,6 +9,7 @@ import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import {
   CreateMoDto,
   CreateQualityPointDto,
+  PlanMoDto,
   ProduceDto,
   ReceiveDto,
   RecordCheckDto,
@@ -63,6 +64,26 @@ export class ManufacturingController {
   @Get('dashboard/mo-counts')
   moCounts() {
     return this.mfg.moStateCounts();
+  }
+
+  // ── planning (schedule + employee assignment) ─────────────────────────────
+  @Roles(...KITCHEN_READ)
+  @Get('staff')
+  listStaff() {
+    return this.mfg.listStaff();
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('schedule')
+  schedule() {
+    return this.mfg.schedule();
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @HttpCode(HttpStatus.OK)
+  @Post('orders/:id/plan')
+  planMO(@Param('id') id: string, @Body() dto: PlanMoDto) {
+    return this.mfg.planMO(id, dto);
   }
 
   // ── costing ────────────────────────────────────────────────────────────

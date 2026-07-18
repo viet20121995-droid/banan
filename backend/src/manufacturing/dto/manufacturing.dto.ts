@@ -129,6 +129,21 @@ export class SetAlertStageDto {
   stage!: 'NEW' | 'CONFIRMED' | 'SOLVED';
 }
 
+/**
+ * Plan a manufacturing order: set/clear its scheduled date and responsible
+ * person. Both fields are optional; passing an explicit `null` clears the
+ * field, omitting it leaves the current value untouched.
+ */
+export class PlanMoDto {
+  @IsOptional()
+  @IsString()
+  scheduledDate?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  responsibleId?: string | null;
+}
+
 export class ExpiringQueryDto {
   @IsString()
   before!: string;

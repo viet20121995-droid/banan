@@ -171,11 +171,36 @@ Proven by an integration case: gate blocks with no check, a 50°C reading fails
 and opens an alert, a re-measured 38°C passes and the WO finishes. Backend
 suite 158 pass / 7 skip; integration 7/7 on real Postgres; kitchen web builds.
 
+## Increment 4 — Planning (schedule + assignment) ✅
+
+The master production schedule as a **day-column Kanban**, reusing fields that
+already existed on the MO (`scheduledDate`, `responsibleId`) — no migration.
+
+- **Schedule board** (`/production/schedule`): a backlog column of unscheduled
+  MOs plus one column per day for the coming week (and any day already booked,
+  including overdue). Cards show code, product, qty, state and assignee.
+- **Plan a run**: tap a card (manager only) to set/clear its production day and
+  pick the responsible person. Nulls clear the field.
+- **Employee assignment**: `responsibleId` is a *soft* link — a plain user id,
+  so the manufacturing side stays namespaced off `User` (no FK, no back-relation
+  on the ordering model). Names are batch-resolved in the `schedule` feed, not by
+  a join. `GET manufacturing/staff` lists assignable kitchen users.
+
+New API: `GET manufacturing/schedule`, `GET manufacturing/staff`,
+`POST manufacturing/orders/:id/plan`. A finished/cancelled MO can't be
+rescheduled. Proven by an integration case (assign → resolve name → clear to
+backlog → refuse a DONE MO); integration 8/8 on real Postgres.
+
+**MPS scope:** the schedule board *is* the master production schedule surface —
+what to make, when, by whom. Demand-netting (planning against sales
+orders/forecast) is deliberately out of scope for a one-person, separate
+section. A pixel-timeline Gantt is skipped in favour of day columns — the right
+grain for a bakery. Add either if a real need shows up.
+
 ## Roadmap (next increments)
 
-4. **Planning** — Gantt/Kanban schedule, employee assignment, MPS.
 5. **Reports + purchasing** — production/scrap/cost reports, replenishment.
 6. **P2** — OEE, maintenance, activities/notifications, HSD background job.
 
 Also deferred UI: BoM editor (create/edit recipes — today recipes come from the
-seed or the API), scrap form, receipt form.
+seed or the API), scrap form, receipt form, quality-alerts screen.

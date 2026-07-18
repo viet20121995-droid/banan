@@ -189,4 +189,41 @@ d('Manufacturing golden path (integration)', () => {
     expect(finished.state).toBe('DONE');
     expect(finished.dateFinished).not.toBeNull();
   });
+
+  // ── planning: schedule + employee assignment (increment 4) ──
+  it('schedules an MO with an assignee, clears it back to the backlog, and refuses a finished MO', async () => {
+    // A kitchen user to assign (idempotent by email so reruns don't collide).
+    const boss = await prisma.user.upsert({
+      where: { email: 'mfg-it-planner@banan.test' },
+      update: {},
+      create: {
+        email: 'mfg-it-planner@banan.test',
+        passwordHash: 'x',
+        fullName: 'Chị Kế Hoạch',
+        role: 'KITCHEN_MANAGER',
+      },
+    });
+
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 200 });
+
+    // Assign to a day + the planner, and confirm schedule() resolves the name.
+    const when = new Date('2026-08-01T00:00:00.000Z');
+    await mfg.planMO(mo.id, { scheduledDate: when.toISOString(), responsibleId: boss.id });
+    let row = (await mfg.schedule()).find((r) => r.id === mo.id)!;
+    expect(row.scheduledDate?.toISOString()).toBe(when.toISOString());
+    expect(row.responsibleName).toBe('Chị Kế Hoạch');
+
+    // Clear only the date → back in the backlog, assignee retained.
+    await mfg.planMO(mo.id, { scheduledDate: null });
+    row = (await mfg.schedule()).find((r) => r.id === mo.id)!;
+    expect(row.scheduledDate).toBeNull();
+    expect(row.responsibleId).toBe(boss.id);
+
+    // The finished cake MO (produced earlier) can't be rescheduled.
+    const cakeMo = (globalThis as Record<string, unknown>).__cakeMo as string;
+    await expect(
+      mfg.planMO(cakeMo, { scheduledDate: when.toISOString() }),
+    ).rejects.toThrow(/kết thúc/);
+  });
 });

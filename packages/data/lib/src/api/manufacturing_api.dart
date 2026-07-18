@@ -355,6 +355,58 @@ class MfgQualityAlert {
   final String? description;
 }
 
+/// A plannable MO on the schedule board: what to make, when, and by whom.
+class MfgScheduleItem {
+  const MfgScheduleItem({
+    required this.id,
+    required this.code,
+    required this.productNameVi,
+    required this.qtyToProduce,
+    required this.uomCode,
+    required this.state,
+    required this.scheduledDate,
+    required this.responsibleId,
+    required this.responsibleName,
+  });
+
+  factory MfgScheduleItem.fromJson(Map<String, dynamic> j) => MfgScheduleItem(
+        id: j['id'] as String,
+        code: j['code'] as String,
+        productNameVi: j['productNameVi'] as String? ?? '',
+        qtyToProduce: _num(j['qtyToProduce']),
+        uomCode: j['uomCode'] as String? ?? '',
+        state: j['state'] as String,
+        scheduledDate: DateTime.tryParse('${j['scheduledDate']}'),
+        responsibleId: j['responsibleId'] as String?,
+        responsibleName: j['responsibleName'] as String?,
+      );
+
+  final String id;
+  final String code;
+  final String productNameVi;
+  final double qtyToProduce;
+  final String uomCode;
+  final String state;
+  final DateTime? scheduledDate;
+  final String? responsibleId;
+  final String? responsibleName;
+}
+
+/// A kitchen user assignable as the person responsible for an MO.
+class MfgStaff {
+  const MfgStaff({required this.id, required this.fullName, required this.role});
+
+  factory MfgStaff.fromJson(Map<String, dynamic> j) => MfgStaff(
+        id: j['id'] as String,
+        fullName: j['fullName'] as String? ?? '',
+        role: j['role'] as String? ?? '',
+      );
+
+  final String id;
+  final String fullName;
+  final String role;
+}
+
 // ── client ──────────────────────────────────────────────────────────────────
 
 class ManufacturingApi {
@@ -398,6 +450,24 @@ class ManufacturingApi {
   Future<Result<List<MfgStateCount>, AppFailure>> moCounts() =>
       _get('$_base/dashboard/mo-counts',
           parse: (res) => _list(res, MfgStateCount.fromJson),);
+
+  // ── planning ──
+  Future<Result<List<MfgScheduleItem>, AppFailure>> schedule() =>
+      _get('$_base/schedule', parse: (res) => _list(res, MfgScheduleItem.fromJson));
+
+  Future<Result<List<MfgStaff>, AppFailure>> listStaff() =>
+      _get('$_base/staff', parse: (res) => _list(res, MfgStaff.fromJson));
+
+  /// Set/clear an MO's scheduled date and assignee. Nulls clear the field.
+  Future<Result<void, AppFailure>> planOrder(
+    String id, {
+    required DateTime? scheduledDate,
+    required String? responsibleId,
+  }) =>
+      _postVoid('$_base/orders/$id/plan', body: {
+        'scheduledDate': scheduledDate?.toIso8601String(),
+        'responsibleId': responsibleId,
+      },);
 
   // ── mutations ──
   Future<Result<MfgOrderDetail, AppFailure>> createOrder({

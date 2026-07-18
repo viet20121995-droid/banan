@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -872,6 +872,83 @@ export class ManufacturingService {
       _count: { _all: true },
     });
     return rows.map((r) => ({ state: r.state, count: r._count._all }));
+  }
+
+  // ── planning (schedule + employee assignment) ─────────────────────────────
+
+  /** Kitchen users who can be assigned to run an MO. */
+  listStaff() {
+    return this.prisma.user.findMany({
+      where: {
+        role: { in: [Role.KITCHEN_MANAGER, Role.KITCHEN_STAFF, Role.ADMIN] },
+        isActive: true,
+      },
+      select: { id: true, fullName: true, role: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
+  /**
+   * The planning board feed: every MO not yet finished (Draft / Confirmed /
+   * In-progress), with its scheduled day and assignee resolved. responsibleId
+   * is a soft link (a plain user id, so the manufacturing side stays namespaced
+   * off the User model) — names are batch-resolved here, not by a FK join.
+   */
+  async schedule() {
+    const mos = await this.prisma.mfgOrder.findMany({
+      where: { state: { in: ['DRAFT', 'CONFIRMED', 'PROGRESS'] } },
+      include: { product: { include: { uom: true } } },
+      orderBy: [{ scheduledDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+    });
+
+    const ids = [...new Set(mos.map((m) => m.responsibleId).filter((x): x is string => !!x))];
+    const users = ids.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const nameOf = new Map(users.map((u) => [u.id, u.fullName]));
+
+    return mos.map((m) => ({
+      id: m.id,
+      code: m.code,
+      productNameVi: m.product.nameVi,
+      uomCode: m.product.uom.code,
+      qtyToProduce: m.qtyToProduce,
+      state: m.state,
+      scheduledDate: m.scheduledDate,
+      responsibleId: m.responsibleId,
+      responsibleName: m.responsibleId ? (nameOf.get(m.responsibleId) ?? null) : null,
+    }));
+  }
+
+  /**
+   * Set (or clear) an MO's scheduled date and/or responsible person. A finished
+   * or cancelled MO can't be rescheduled — its plan is history.
+   */
+  async planMO(id: string, dto: { scheduledDate?: string | null; responsibleId?: string | null }) {
+    const mo = await this.prisma.mfgOrder.findUnique({ where: { id } });
+    if (!mo) throw new NotFoundException({ code: 'MFG_MO_NOT_FOUND' });
+    if (mo.state === 'DONE' || mo.state === 'CANCEL') {
+      throw new ConflictException({
+        code: 'MFG_MO_STATE',
+        message: 'Không thể lên lịch cho MO đã kết thúc.',
+      });
+    }
+    if (dto.responsibleId) {
+      const user = await this.prisma.user.findUnique({ where: { id: dto.responsibleId } });
+      if (!user) throw new BadRequestException({ code: 'MFG_USER_NOT_FOUND' });
+    }
+
+    const data: Prisma.MfgOrderUpdateInput = {};
+    if (dto.scheduledDate !== undefined) {
+      data.scheduledDate = dto.scheduledDate ? new Date(dto.scheduledDate) : null;
+    }
+    if (dto.responsibleId !== undefined) {
+      data.responsibleId = dto.responsibleId;
+    }
+    return this.prisma.mfgOrder.update({ where: { id }, data });
   }
 
   // ── shop floor: work-order execution ──────────────────────────────────────

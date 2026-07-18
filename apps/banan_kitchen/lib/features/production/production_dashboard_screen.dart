@@ -75,6 +75,12 @@ class ProductionDashboardScreen extends ConsumerWidget {
             ),
             const SizedBox(height: BananSpacing.sm),
             OutlinedButton.icon(
+              onPressed: () => context.push('/production/schedule'),
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: const Text('Lịch sản xuất (lên lịch + phân công)'),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            OutlinedButton.icon(
               onPressed: () => context.push('/production/orders'),
               icon: const Icon(Icons.list_alt),
               label: const Text('Tất cả lệnh sản xuất'),
