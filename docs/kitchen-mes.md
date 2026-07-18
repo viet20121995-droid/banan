@@ -132,12 +132,33 @@ without a database. It proves acceptance criteria 1, 3, 4, 5, 6, 7:
 - a finished lot traces back to its raw lots
 - MO cost = materials + operations, matching a hand calc to the đồng
 
+## Increment 2 — Flutter "Sản xuất" section ✅
+
+A route-separated area in `banan_kitchen` (`/production/*`, reached from a
+factory icon on the orders board — never mixed with the Kanban):
+
+- **Dashboard** — MO counts by state, near-expiry lots, links to orders/stock.
+- **MO list** — filterable by state; "Tạo lệnh" picks a BoM + quantity.
+- **MO detail** — status, components with Đủ hàng / Thiếu badges, and the
+  state-driven actions (Xác nhận → Kiểm tra tồn / Giữ hàng / Sản xuất → Huỷ).
+  Produce shows the resulting lot, output and cost. Write actions are gated to
+  kitchen managers; staff see a read-only card.
+- **Stock** — on-hand at the kitchen location + near-expiry lots.
+
+Data layer: `ManufacturingApi` in `packages/data` (DTOs + Result/isOk guards),
+`manufacturingApiProvider`. Backend gained the read endpoints the UI needs
+(`GET products / boms / boms/:id / work-centers / dashboard/mo-counts`).
+
+Kitchen web build compiles; the API is proven by the integration test. The UI
+wiring itself still wants a click-through on a running stack.
+
 ## Roadmap (next increments)
 
-2. **Shop floor + QC** — work-order start/pause/done, quality points (measure /
-   pass-fail) gated on operations, quality alerts. Flutter tablet kanban.
-3. **Flutter "Sản xuất" section** — dashboard, BoM editor, MO screen, stock/lot
-   views, wired to this API. Route-separated from the orders area.
+3. **Shop floor + QC** — work-order start/pause/done, quality points (measure /
+   pass-fail) gated on operations, quality alerts. Tablet kanban.
 4. **Planning** — Gantt/Kanban schedule, employee assignment, MPS.
 5. **Reports + purchasing** — production/scrap/cost reports, replenishment.
 6. **P2** — OEE, maintenance, activities/notifications, HSD background job.
+
+Also deferred UI: BoM editor (create/edit recipes — today recipes come from the
+seed or the API), scrap form, receipt form.

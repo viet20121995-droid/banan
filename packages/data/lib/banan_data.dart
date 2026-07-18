@@ -21,6 +21,7 @@ export 'src/api/gift_cards_api.dart';
 export 'src/api/health_api.dart';
 export 'src/api/kitchens_api.dart';
 export 'src/api/loyalty_api.dart';
+export 'src/api/manufacturing_api.dart';
 export 'src/api/marketing_api.dart';
 export 'src/api/merchant_coupons_api.dart';
 export 'src/api/merchant_tools_api.dart';

@@ -26,6 +26,11 @@ class KanbanScreen extends ConsumerWidget {
         title: Text(s.productionBoard),
         actions: [
           IconButton(
+            icon: const Icon(Icons.factory_outlined),
+            tooltip: 'Sản xuất',
+            onPressed: () => context.push('/production'),
+          ),
+          IconButton(
             icon: const Icon(Icons.bar_chart_outlined),
             tooltip: s.analytics,
             onPressed: () => context.push('/analytics'),

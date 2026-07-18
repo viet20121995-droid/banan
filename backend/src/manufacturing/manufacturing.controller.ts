@@ -21,6 +21,37 @@ const KITCHEN_WRITE = [Role.KITCHEN_MANAGER, Role.ADMIN];
 export class ManufacturingController {
   constructor(private readonly mfg: ManufacturingService) {}
 
+  // ── master data (for the Sản xuất UI) ────────────────────────────────────
+  @Roles(...KITCHEN_READ)
+  @Get('products')
+  listProducts(@Query('type') type?: string) {
+    return this.mfg.listProducts(type);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('boms')
+  listBoms() {
+    return this.mfg.listBoms();
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('boms/:id')
+  getBom(@Param('id') id: string) {
+    return this.mfg.getBom(id);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('work-centers')
+  listWorkCenters() {
+    return this.mfg.listWorkCenters();
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('dashboard/mo-counts')
+  moCounts() {
+    return this.mfg.moStateCounts();
+  }
+
   // ── costing ────────────────────────────────────────────────────────────
   @Roles(...KITCHEN_READ)
   @Get('boms/:id/cost')

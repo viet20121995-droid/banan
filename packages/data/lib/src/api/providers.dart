@@ -42,6 +42,7 @@ import 'health_api.dart';
 import 'interceptors/auth_interceptor.dart';
 import 'kitchens_api.dart';
 import 'loyalty_api.dart';
+import 'manufacturing_api.dart';
 import 'marketing_api.dart';
 import 'merchant_coupons_api.dart';
 import 'merchant_tools_api.dart';
@@ -529,3 +530,7 @@ final Provider<CampaignsApi> campaignsApiProvider = Provider<CampaignsApi>(
 /// at the same [CampaignsApi]. Widgets may `ref.watch`/`ref.read` either name.
 final Provider<CampaignsApi> campaignsRepositoryProvider =
     Provider<CampaignsApi>((ref) => ref.watch(campaignsApiProvider));
+
+/// Kitchen MES — the "Sản xuất" API (manufacturing orders, BoM cost, stock).
+final Provider<ManufacturingApi> manufacturingApiProvider =
+    Provider<ManufacturingApi>((ref) => ManufacturingApi(ref.watch(dioProvider)));

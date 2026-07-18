@@ -6,6 +6,10 @@ import 'package:go_router/go_router.dart';
 import '../features/account/change_password_screen.dart';
 import '../features/analytics/analytics_screen.dart';
 import '../features/kanban/kanban_screen.dart';
+import '../features/production/mo_detail_screen.dart';
+import '../features/production/mo_list_screen.dart';
+import '../features/production/production_dashboard_screen.dart';
+import '../features/production/stock_screen.dart';
 
 const _login = '/login';
 const _wrongApp = '/wrong-app';
@@ -37,6 +41,25 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/analytics',
         builder: (_, __) => const KitchenAnalyticsScreen(),
+      ),
+      // ── "Sản xuất" (manufacturing / MES) — separate from the orders board. ──
+      GoRoute(
+        path: '/production',
+        builder: (_, __) => const ProductionDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/production/orders',
+        builder: (_, state) =>
+            MoListScreen(state: state.uri.queryParameters['state']),
+      ),
+      GoRoute(
+        path: '/production/orders/:id',
+        builder: (_, state) =>
+            MoDetailScreen(moId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/production/stock',
+        builder: (_, __) => const StockScreen(),
       ),
       GoRoute(
         path: '/change-password',

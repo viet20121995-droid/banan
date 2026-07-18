@@ -815,11 +815,62 @@ export class ManufacturingService {
     return this.prisma.mfgOrder.findUnique({
       where: { id },
       include: {
-        product: true,
+        product: { include: { uom: true } },
         bom: true,
+        lot: true,
         components: { include: { product: true } },
         workOrders: { include: { workCenter: true, bomOperation: true } },
       },
     });
+  }
+
+  // ── master-data reads (for the Sản xuất UI: pick a BoM to build, etc.) ─────
+
+  listProducts(type?: string) {
+    return this.prisma.mfgProduct.findMany({
+      where: { active: true, ...(type ? { type: type as never } : {}) },
+      include: { category: true, uom: true },
+      orderBy: { code: 'asc' },
+    });
+  }
+
+  listBoms() {
+    return this.prisma.mfgBom.findMany({
+      where: { active: true },
+      include: {
+        product: { include: { uom: true } },
+        uom: true,
+        _count: { select: { lines: true, operations: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  getBom(id: string) {
+    return this.prisma.mfgBom.findUnique({
+      where: { id },
+      include: {
+        product: { include: { uom: true } },
+        uom: true,
+        lines: { include: { component: true, uom: true } },
+        operations: { include: { workCenter: true }, orderBy: { sequence: 'asc' } },
+      },
+    });
+  }
+
+  listWorkCenters() {
+    return this.prisma.mfgWorkCenter.findMany({
+      where: { active: true },
+      orderBy: { code: 'asc' },
+    });
+  }
+
+  /** Dashboard counts — MOs grouped by state. */
+  async moStateCounts() {
+    const rows = await this.prisma.mfgOrder.groupBy({
+      by: ['state'],
+      _count: { _all: true },
+    });
+    return rows.map((r) => ({ state: r.state, count: r._count._all }));
   }
 }
