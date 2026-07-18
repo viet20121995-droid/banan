@@ -71,19 +71,19 @@ model User {
   kitchenId String?
   kitchen   Kitchen? @relation(fields: [kitchenId], references: [id])
 
-  addresses          Address[]
-  paymentMethods     PaymentMethod[]
-  orders             Order[]            @relation("CustomerOrders")
-  loyaltyEvents      LoyaltyEvent[]
-  notifications      Notification[]
-  refreshTokens      RefreshToken[]
-  passwordResets     PasswordReset[]
-  emailChanges       EmailChange[]
-  couponRedemptions  CouponRedemption[]
-  authoredThreads    Thread[]           @relation("ThreadAuthor")
-  devices            DeviceToken[]
-  reviews            Review[]
-  wishlistItems      WishlistItem[]
+  addresses         Address[]
+  paymentMethods    PaymentMethod[]
+  orders            Order[]            @relation("CustomerOrders")
+  loyaltyEvents     LoyaltyEvent[]
+  notifications     Notification[]
+  refreshTokens     RefreshToken[]
+  passwordResets    PasswordReset[]
+  emailChanges      EmailChange[]
+  couponRedemptions CouponRedemption[]
+  authoredThreads   Thread[]           @relation("ThreadAuthor")
+  devices           DeviceToken[]
+  reviews           Review[]
+  wishlistItems     WishlistItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -176,14 +176,14 @@ model Store {
   /// Product.leadTimeHours overrides this when set.
   defaultLeadHours Int @default(0)
 
-  users       User[]
-  products    Product[]
-  orders      Order[]
-  collections Collection[]
-  bundles     Bundle[]
-  threads     Thread[]
-  coupons     Coupon[]
-  banners     Banner[]
+  users         User[]
+  products      Product[]
+  orders        Order[]
+  collections   Collection[]
+  bundles       Bundle[]
+  threads       Thread[]
+  coupons       Coupon[]
+  banners       Banner[]
   blackoutDates StoreBlackoutDate[]
 
   createdAt DateTime @default(now())
@@ -213,24 +213,24 @@ model PromoPopup {
 /// Looked up by the fixed primary key "default" so we never need a
 /// separate lookup table.
 model DeliveryConfig {
-  id                            String   @id @default("default")
+  id                          String   @id @default("default")
   /// Standard products — same ward as the routed store (often free).
-  standardFeeSameWardVnd        Int      @default(0)
+  standardFeeSameWardVnd      Int      @default(0)
   /// Standard products — customer ward differs from the routed store.
-  standardFeeOtherWardVnd       Int      @default(30000)
+  standardFeeOtherWardVnd     Int      @default(30000)
   /// Birthday cakes — same ward as the routed store. Higher than standard
   /// because cakes are fragile + need careful handling.
-  birthdayCakeFeeSameWardVnd    Int      @default(30000)
+  birthdayCakeFeeSameWardVnd  Int      @default(30000)
   /// Birthday cakes — different ward from the routed store.
-  birthdayCakeFeeOtherWardVnd   Int      @default(70000)
+  birthdayCakeFeeOtherWardVnd Int      @default(70000)
   /// Slug of the collection whose products get the "birthday cake" pricing
   /// tier. Matching is by Collection.slug so the admin can re-point this
   /// to a different curated set without code changes.
-  birthdayCakeCollectionSlug    String   @default("home-birthday-cakes")
+  birthdayCakeCollectionSlug  String   @default("home-birthday-cakes")
   /// Legacy field kept for backward compat — pre-2026 versions used a
   /// distance band rule. Ignored by the current ward-equality logic.
-  thresholdKm                   Float    @default(3)
-  updatedAt                     DateTime @updatedAt
+  thresholdKm                 Float    @default(3)
+  updatedAt                   DateTime @updatedAt
 }
 
 /// One-off closure date for a store (Tết, public holidays, vacation). Orders
@@ -250,14 +250,14 @@ model StoreBlackoutDate {
 /// Home-page hero banner. Null storeId = chain-wide (admin). Merchants
 /// manage their own store's banners.
 model Banner {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   storeId   String?
-  store     Store?   @relation(fields: [storeId], references: [id])
+  store     Store?  @relation(fields: [storeId], references: [id])
   imageUrl  String
   title     String?
   ctaUrl    String?
-  sortOrder Int      @default(0)
-  isActive  Boolean  @default(true)
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -286,45 +286,45 @@ model Kitchen {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Category {
-  id        String    @id @default(uuid())
-  name      String
-  slug      String    @unique
-  imageUrl  String?
-  sortOrder Int       @default(0)
+  id                     String    @id @default(uuid())
+  name                   String
+  slug                   String    @unique
+  imageUrl               String?
+  sortOrder              Int       @default(0)
   /// When true, the category is featured as a product strip on the customer
   /// home page (replacing the old Collection strips). All categories always
   /// appear as menu filter chips regardless of this flag.
-  isPinnedToHome Boolean @default(false)
+  isPinnedToHome         Boolean   @default(false)
   /// At most ONE category is the "birthday cake" category. Products in it get
   /// isBirthdayCake=true (drives the cake-personalization wizard + the
   /// birthday delivery-fee tier). Replaces the old Collection-slug mechanism.
-  isBirthdayCakeCategory Boolean @default(false)
+  isBirthdayCakeCategory Boolean   @default(false)
   /// Hidden categories vanish from the customer storefront entirely — no menu
   /// chip, no home strip, and their products are excluded from every customer
   /// product query (list, search, detail, recommendations). Merchant/admin
   /// still see them (to unhide). Products are untouched; unhiding restores them.
-  isHidden  Boolean   @default(false)
-  products  Product[]
+  isHidden               Boolean   @default(false)
+  products               Product[]
 }
 
 model Product {
-  id                 String           @id @default(uuid())
+  id                 String    @id @default(uuid())
   storeId            String
-  store              Store            @relation(fields: [storeId], references: [id])
+  store              Store     @relation(fields: [storeId], references: [id])
   categoryId         String
-  category           Category         @relation(fields: [categoryId], references: [id])
+  category           Category  @relation(fields: [categoryId], references: [id])
   name               String
   slug               String
-  description        String           @db.Text
-  basePrice          Decimal          @db.Decimal(12, 2)
+  description        String    @db.Text
+  basePrice          Decimal   @db.Decimal(12, 2)
   // Cover image is images[0]; gallery is images[1..].
   images             String[]
   // Free-form merchant-set badges shown on the customer card.
   // Examples: "Vegan", "Gluten-free", "Bestseller", "New".
-  tags               String[]         @default([])
-  preparationMinutes Int              @default(60)
-  isAvailable        Boolean          @default(true)
-  isSeasonal         Boolean          @default(false)
+  tags               String[]  @default([])
+  preparationMinutes Int       @default(60)
+  isAvailable        Boolean   @default(true)
+  isSeasonal         Boolean   @default(false)
   seasonStart        DateTime?
   seasonEnd          DateTime?
 
@@ -335,7 +335,7 @@ model Product {
   ///   dailyMaxQuantity    — null = unlimited. Else a daily order cap
   ///                          enforced across all customers for that date.
   leadTimeHours       Int?
-  availableDaysOfWeek Int[]  @default([])
+  availableDaysOfWeek Int[] @default([])
   dailyMaxQuantity    Int?
 
   /// Flavor-composition products (macaron sets). When [flavorPickCount]
@@ -344,17 +344,17 @@ model Product {
   /// ("3× Jasmine + 2× Lemon" for a set of 5). Null = no composer.
   /// The chosen composition is stored on `OrderItem.personalization`
   /// as `{ "flavors": { "Jasmine": 3, "Lemon": 2 } }`.
-  flavorPickCount     Int?
-  flavorOptions       String[] @default([])
+  flavorPickCount Int?
+  flavorOptions   String[] @default([])
 
-  variants           ProductVariant[]
-  orderItems         OrderItem[]
-  collectionItems    CollectionItem[]
-  linkedThreads      Thread[]         @relation("ThreadProduct")
-  reviews            Review[]
-  wishlistedBy       WishlistItem[]
-  bundleItems        BundleItem[]
-  productionBatches  ProductionBatch[]
+  variants          ProductVariant[]
+  orderItems        OrderItem[]
+  collectionItems   CollectionItem[]
+  linkedThreads     Thread[]          @relation("ThreadProduct")
+  reviews           Review[]
+  wishlistedBy      WishlistItem[]
+  bundleItems       BundleItem[]
+  productionBatches ProductionBatch[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -369,18 +369,18 @@ enum StockMode {
 }
 
 model ProductVariant {
-  id          String      @id @default(uuid())
-  productId   String
-  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id                String            @id @default(uuid())
+  productId         String
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
   // Size + flavor are required, even if "Default" — keeps the order item shape uniform.
-  size        String
-  flavor      String
-  priceDelta  Decimal     @db.Decimal(12, 2) @default(0)
-  stockMode   StockMode   @default(UNLIMITED)
-  stockQty    Int?
-  isAvailable Boolean     @default(true)
-  orderItems  OrderItem[]
-  bundleItems BundleItem[]
+  size              String
+  flavor            String
+  priceDelta        Decimal           @default(0) @db.Decimal(12, 2)
+  stockMode         StockMode         @default(UNLIMITED)
+  stockQty          Int?
+  isAvailable       Boolean           @default(true)
+  orderItems        OrderItem[]
+  bundleItems       BundleItem[]
   productionBatches ProductionBatch[]
 
   @@unique([productId, size, flavor])
@@ -427,30 +427,30 @@ model CollectionItem {
 /// Homepage feed entries — announcements, seasonal highlights, news.
 /// `publishedAt = null` means draft.
 model Thread {
-  id          String    @id @default(uuid())
-  storeId     String
-  store       Store     @relation(fields: [storeId], references: [id])
-  authorId    String
-  author      User      @relation("ThreadAuthor", fields: [authorId], references: [id])
-  title       String
-  body        String    @db.Text
-  imageUrl    String?
+  id                 String    @id @default(uuid())
+  storeId            String
+  store              Store     @relation(fields: [storeId], references: [id])
+  authorId           String
+  author             User      @relation("ThreadAuthor", fields: [authorId], references: [id])
+  title              String
+  body               String    @db.Text
+  imageUrl           String?
   /// Carousel images (first is the cover). `imageUrl` kept for back-compat.
-  images      String[]  @default([])
+  images             String[]  @default([])
   /// Extracted from the body (#hashtag) on save; powers search + filter.
-  hashtags    String[]  @default([])
+  hashtags           String[]  @default([])
   /// Optional "Shop this" deep-link target.
-  productId   String?
-  product     Product?  @relation("ThreadProduct", fields: [productId], references: [id])
+  productId          String?
+  product            Product?  @relation("ThreadProduct", fields: [productId], references: [id])
   /// Configurable call-to-action button.
-  ctaLabel    String?
-  ctaUrl      String?
+  ctaLabel           String?
+  ctaUrl             String?
   /// When set + still in the future, the scheduler auto-publishes at this
   /// time (sets publishedAt). Lets merchants queue posts.
   scheduledPublishAt DateTime?
   /// Lightweight impression counter for the merchant insights view.
-  viewCount   Int       @default(0)
-  publishedAt DateTime?
+  viewCount          Int       @default(0)
+  publishedAt        DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -467,7 +467,7 @@ model Address {
   id         String  @id @default(uuid())
   userId     String
   user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  label      String  // "Home", "Office"
+  label      String // "Home", "Office"
   recipient  String
   phone      String
   line1      String
@@ -537,56 +537,56 @@ enum OrderStatus {
 }
 
 enum KitchenStatus {
-  PENDING_ACK    // newly sent to kitchen, awaiting staff acknowledgement
-  PREPARING      // kitchen is actively making the order
+  PENDING_ACK // newly sent to kitchen, awaiting staff acknowledgement
+  PREPARING // kitchen is actively making the order
   READY_DISPATCH // done — awaiting return to the merchant
 }
 
 model Order {
-  id              String          @id @default(uuid())
+  id                String          @id @default(uuid())
   // Human-readable code like BAN-2026-000123. Generated by service.
-  code            String          @unique
-  customerId      String
-  customer        User            @relation("CustomerOrders", fields: [customerId], references: [id])
-  storeId         String
-  store           Store           @relation(fields: [storeId], references: [id])
-  kitchenId       String?
-  kitchen         Kitchen?        @relation("KitchenOrders", fields: [kitchenId], references: [id])
-  fulfillmentType FulfillmentType
-  scheduledFor    DateTime?
+  code              String          @unique
+  customerId        String
+  customer          User            @relation("CustomerOrders", fields: [customerId], references: [id])
+  storeId           String
+  store             Store           @relation(fields: [storeId], references: [id])
+  kitchenId         String?
+  kitchen           Kitchen?        @relation("KitchenOrders", fields: [kitchenId], references: [id])
+  fulfillmentType   FulfillmentType
+  scheduledFor      DateTime?
   /// Set the first time the scheduler surfaces this order as "due soon",
   /// so the cron doesn't spam the same order on every tick.
   dueSoonNotifiedAt DateTime?
-  addressId       String?
-  address         Address?        @relation(fields: [addressId], references: [id])
-  status          OrderStatus     @default(PENDING)
-  kitchenStatus   KitchenStatus?
+  addressId         String?
+  address           Address?        @relation(fields: [addressId], references: [id])
+  status            OrderStatus     @default(PENDING)
+  kitchenStatus     KitchenStatus?
 
   // Money — all in minor units of order currency (default VND has none, so plain integer-ish decimals).
-  currency       String  @default("VND")
-  subtotal       Decimal @db.Decimal(12, 2)
-  deliveryFee    Decimal @db.Decimal(12, 2) @default(0)
-  pointsRedeemed Int     @default(0)
-  pointsDiscount Decimal @db.Decimal(12, 2) @default(0)
-  couponId       String?
-  coupon         Coupon? @relation(fields: [couponId], references: [id])
-  loyaltyEvents  LoyaltyEvent[]
-  couponDiscount Decimal @db.Decimal(12, 2) @default(0)
+  currency          String         @default("VND")
+  subtotal          Decimal        @db.Decimal(12, 2)
+  deliveryFee       Decimal        @default(0) @db.Decimal(12, 2)
+  pointsRedeemed    Int            @default(0)
+  pointsDiscount    Decimal        @default(0) @db.Decimal(12, 2)
+  couponId          String?
+  coupon            Coupon?        @relation(fields: [couponId], references: [id])
+  loyaltyEvents     LoyaltyEvent[]
+  couponDiscount    Decimal        @default(0) @db.Decimal(12, 2)
   // Automatic promotion-engine discounts (product/category/flash/happy-hour…).
-  campaignDiscount Decimal @db.Decimal(12, 2) @default(0)
+  campaignDiscount  Decimal        @default(0) @db.Decimal(12, 2)
   // [{ id, name, type, discountVnd }] of campaigns applied to this order.
-  campaignInfo   Json?
+  campaignInfo      Json?
   // Combo savings: when a cart line is a Bundle, it's expanded into its
   // constituent products at REGULAR prices (so each OrderItem keeps its true
   // menu price for VAT/reports), and the difference vs the bundle's flat
   // priceVnd is recorded here as a single "Giảm combo" discount line.
-  bundleDiscount Decimal @db.Decimal(12, 2) @default(0)
+  bundleDiscount    Decimal        @default(0) @db.Decimal(12, 2)
   // Gift-card redemption applied to this order (balance-based; one card may
   // span several orders). `giftCardCode` is the code used; the amount is the
   // VND deducted from this order's total.
-  giftCardCode     String?
-  giftCardAmountVnd Int    @default(0)
-  total          Decimal @db.Decimal(12, 2)
+  giftCardCode      String?
+  giftCardAmountVnd Int            @default(0)
+  total             Decimal        @db.Decimal(12, 2)
 
   customMessage String?
   notes         String?
@@ -605,13 +605,13 @@ model Order {
   // Toggled at checkout; the merchant fulfills outside the app (xuất hóa
   // đơn từ hệ thống thuế). We just persist the request data so the
   // merchant can issue the invoice and the customer can see status.
-  requestVatInvoice    Boolean @default(false)
-  invoiceCompanyName   String?
-  invoiceTaxId         String?
-  invoiceAddress       String?
-  invoiceEmail         String?
-  invoiceIssuedAt      DateTime?
-  invoiceFileUrl       String?
+  requestVatInvoice  Boolean   @default(false)
+  invoiceCompanyName String?
+  invoiceTaxId       String?
+  invoiceAddress     String?
+  invoiceEmail       String?
+  invoiceIssuedAt    DateTime?
+  invoiceFileUrl     String?
 
   items             OrderItem[]
   reviews           Review[]
@@ -788,22 +788,22 @@ enum CampaignType {
 /// free-shipping and fixed discounts stay on Coupon; combos stay on Bundle —
 /// this model powers the automatic + targeted campaign types.
 model Campaign {
-  id           String       @id @default(uuid())
+  id           String               @id @default(uuid())
   type         CampaignType
   name         String
-  isActive     Boolean      @default(true)
-  priority     Int          @default(0)
-  stackable    Boolean      @default(true)
+  isActive     Boolean              @default(true)
+  priority     Int                  @default(0)
+  stackable    Boolean              @default(true)
   startsAt     DateTime?
   endsAt       DateTime?
   config       Json
   storeId      String? // null = chain-wide
   usageLimit   Int?
-  usedCount    Int          @default(0)
+  usedCount    Int                  @default(0)
   perUserLimit Int?
   redemptions  CampaignRedemption[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
   @@index([type])
   @@index([isActive])
@@ -878,17 +878,17 @@ enum BatchStatus {
 }
 
 model ProductionBatch {
-  id           String      @id @default(uuid())
+  id           String          @id @default(uuid())
   kitchenId    String
-  kitchen      Kitchen     @relation(fields: [kitchenId], references: [id])
+  kitchen      Kitchen         @relation(fields: [kitchenId], references: [id])
   productId    String
-  product      Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   variantId    String?
   variant      ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   plannedQty   Int
-  actualQty    Int         @default(0)
+  actualQty    Int             @default(0)
   scheduledFor DateTime
-  status       BatchStatus @default(PLANNED)
+  status       BatchStatus     @default(PLANNED)
   notes        String?
 
   createdAt DateTime @default(now())
@@ -951,17 +951,17 @@ enum ReviewStatus {
 /// order containing the product can review (enforced by the service).
 /// Each user can leave at most one review per product (composite unique).
 model Review {
-  id        String       @id @default(uuid())
-  productId String
-  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orderId   String?
-  order     Order?       @relation(fields: [orderId], references: [id])
-  rating    Int          // 1..5
-  body      String?      @db.Text
-  images    String[]     @default([])
-  status    ReviewStatus @default(PUBLISHED)
+  id             String       @id @default(uuid())
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId        String?
+  order          Order?       @relation(fields: [orderId], references: [id])
+  rating         Int // 1..5
+  body           String?      @db.Text
+  images         String[]     @default([])
+  status         ReviewStatus @default(PUBLISHED)
   /// Merchant moderation note (visible to admin/merchant only).
   moderationNote String?
 
@@ -981,18 +981,18 @@ model Review {
 /// the `personalization`-style metadata (kept simple — the kitchen
 /// reads it for what to make).
 model Bundle {
-  id            String         @id @default(uuid())
-  storeId       String
-  store         Store          @relation(fields: [storeId], references: [id])
-  name          String
-  slug          String
-  description   String?        @db.Text
-  imageUrl      String?
-  priceVnd      Int
-  isActive      Boolean        @default(true)
-  isPinnedToHome Boolean       @default(false)
-  sortOrder     Int            @default(0)
-  items         BundleItem[]
+  id             String       @id @default(uuid())
+  storeId        String
+  store          Store        @relation(fields: [storeId], references: [id])
+  name           String
+  slug           String
+  description    String?      @db.Text
+  imageUrl       String?
+  priceVnd       Int
+  isActive       Boolean      @default(true)
+  isPinnedToHome Boolean      @default(false)
+  sortOrder      Int          @default(0)
+  items          BundleItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1002,17 +1002,17 @@ model Bundle {
 }
 
 model BundleItem {
-  id        String         @id @default(uuid())
+  id        String          @id @default(uuid())
   bundleId  String
-  bundle    Bundle         @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundle    Bundle          @relation(fields: [bundleId], references: [id], onDelete: Cascade)
   productId String
-  product   Product        @relation(fields: [productId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
   /// Optional variant pin — null = use the product's default variant at
   /// order time. Useful when a bundle specifies "the matcha flavour" of
   /// a multi-flavour product.
   variantId String?
   variant   ProductVariant? @relation(fields: [variantId], references: [id])
-  quantity  Int            @default(1)
+  quantity  Int             @default(1)
 
   @@unique([bundleId, productId, variantId])
 }
@@ -1080,19 +1080,19 @@ model GiftCard {
 /// Merchants flip the toggle on only when stock is genuinely scarce
 /// chain-wide (limited-edition releases, seasonal drops).
 model DisplayConfig {
-  id                     String   @id @default("default")
-  showStockToCustomers   Boolean  @default(false)
+  id                   String  @id @default("default")
+  showStockToCustomers Boolean @default(false)
 
   /// Contact widget — a floating "Liên hệ" FAB on the customer site
   /// that surfaces these channels in a bottom sheet. Each field null →
   /// that channel is hidden from the sheet. When every field is null
   /// the FAB itself is hidden.
-  contactPhone        String?
-  contactZaloOaId     String?   // Zalo Official Account id → deep link `https://zalo.me/{id}`
-  contactMessengerId  String?   // FB page username → `https://m.me/{id}`
-  contactEmail        String?
+  contactPhone       String?
+  contactZaloOaId    String? // Zalo Official Account id → deep link `https://zalo.me/{id}`
+  contactMessengerId String? // FB page username → `https://m.me/{id}`
+  contactEmail       String?
 
-  updatedAt              DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 }
 
 /// Heart / "Yêu thích" — saved products per customer.
@@ -1147,4 +1147,371 @@ model NewsletterCampaign {
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manufacturing (Kitchen MES) — the "Sản xuất" section of the kitchen app.
+// Fully namespaced under `Mfg*` so it never collides with the ordering side
+// (Product, ProductionBatch, kitchen queue). Increment 1 = the P0 spine:
+// 3-tier products, UoM, multi-level BoM + ratio%, MO produce→lot→stock→consume,
+// AVCO costing, scrap, traceability. QC / shop-floor / schedule / MPS land in
+// later increments. See docs/kitchen-mes.md.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum MfgProductType {
+  RAW // nguyên liệu
+  SEMI // bán thành phẩm
+  FINISHED // thành phẩm
+  PACKAGING // bao bì
+}
+
+enum MfgCostMethod {
+  AVCO // bình quân gia quyền — raw materials
+  STANDARD // giá chuẩn — finished goods
+}
+
+enum MfgTracking {
+  NONE
+  LOT
+}
+
+enum MfgLocationType {
+  INTERNAL
+  SUPPLIER
+  PRODUCTION
+  SCRAP
+}
+
+enum MfgMoState {
+  DRAFT
+  CONFIRMED
+  PROGRESS
+  DONE
+  CANCEL
+}
+
+enum MfgAvailability {
+  AVAILABLE
+  NOT_AVAILABLE
+}
+
+enum MfgWoState {
+  PENDING
+  READY
+  PROGRESS
+  BLOCKED
+  DONE
+  CANCEL
+}
+
+enum MfgMoveRef {
+  RECEIPT
+  DELIVERY
+  INTERNAL
+  MO // produce (finished in / component out)
+  SCRAP
+}
+
+model MfgUom {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  nameVi   String
+  nameEn   String
+  // UoMs convert only within the same category (weight to weight).
+  category String // 'weight' | 'unit' | 'volume'
+  // Multiplier to the category's reference unit (gram for weight). kg to 1000.
+  factor   Decimal @db.Decimal(14, 6)
+  rounding Decimal @default(0.001) @db.Decimal(14, 6)
+
+  products     MfgProduct[]
+  bomLines     MfgBomLine[]
+  boms         MfgBom[]
+  moComponents MfgOrderComponent[]
+  orders       MfgOrder[]
+  scraps       MfgScrap[]
+  moves        MfgStockMove[]
+
+  createdAt DateTime @default(now())
+}
+
+model MfgCategory {
+  id         String        @id @default(uuid())
+  nameVi     String
+  nameEn     String
+  costMethod MfgCostMethod @default(AVCO)
+
+  products MfgProduct[]
+
+  createdAt DateTime @default(now())
+}
+
+model MfgProduct {
+  id             String         @id @default(uuid())
+  code           String         @unique
+  nameVi         String
+  nameEn         String
+  categoryId     String
+  category       MfgCategory    @relation(fields: [categoryId], references: [id])
+  uomId          String
+  uom            MfgUom         @relation(fields: [uomId], references: [id])
+  type           MfgProductType
+  tracking       MfgTracking    @default(NONE)
+  useExpiration  Boolean        @default(false)
+  expirationDays Int            @default(0)
+  // Standard cost (finished/manual). AVCO cost is maintained on avgCost as
+  // receipts/produces roll in.
+  standardCost   Decimal        @default(0) @db.Decimal(14, 2)
+  avgCost        Decimal        @default(0) @db.Decimal(14, 2)
+  active         Boolean        @default(true)
+
+  boms            MfgBom[]            @relation("ProductBoms")
+  bomLines        MfgBomLine[]
+  bomByproducts   MfgBomByproduct[]
+  orders          MfgOrder[]
+  orderComponents MfgOrderComponent[]
+  lots            MfgLot[]
+  quants          MfgStockQuant[]
+  moves           MfgStockMove[]
+  scraps          MfgScrap[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, active])
+}
+
+model MfgWorkCenter {
+  id          String  @id @default(uuid())
+  code        String  @unique
+  nameVi      String
+  nameEn      String
+  costPerHour Decimal @default(0) @db.Decimal(14, 2)
+  capacity    Int     @default(1)
+  active      Boolean @default(true)
+
+  bomOperations MfgBomOperation[]
+  workOrders    MfgWorkOrder[]
+
+  createdAt DateTime @default(now())
+}
+
+model MfgBom {
+  id        String     @id @default(uuid())
+  productId String
+  product   MfgProduct @relation("ProductBoms", fields: [productId], references: [id])
+  outputQty Decimal    @default(1) @db.Decimal(14, 3)
+  uomId     String
+  uom       MfgUom     @relation(fields: [uomId], references: [id])
+  version   Int        @default(1)
+  active    Boolean    @default(true)
+
+  lines      MfgBomLine[]
+  operations MfgBomOperation[]
+  byproducts MfgBomByproduct[]
+  orders     MfgOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, active])
+}
+
+model MfgBomLine {
+  id           String     @id @default(uuid())
+  bomId        String
+  bom          MfgBom     @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  componentId  String
+  component    MfgProduct @relation(fields: [componentId], references: [id])
+  qty          Decimal    @db.Decimal(14, 3)
+  uomId        String
+  uom          MfgUom     @relation(fields: [uomId], references: [id])
+  // Baker's percentage vs the BoM's flour (or total) weight. Derived; stored
+  // so a saved recipe keeps the number the baker entered.
+  ratioPercent Decimal    @default(0) @db.Decimal(9, 4)
+
+  @@index([bomId])
+}
+
+model MfgBomOperation {
+  id              String        @id @default(uuid())
+  bomId           String
+  bom             MfgBom        @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  sequence        Int
+  nameVi          String
+  nameEn          String
+  workCenterId    String
+  workCenter      MfgWorkCenter @relation(fields: [workCenterId], references: [id])
+  durationMinutes Int           @default(0)
+
+  workOrders MfgWorkOrder[]
+
+  @@unique([bomId, sequence])
+}
+
+model MfgBomByproduct {
+  id        String     @id @default(uuid())
+  bomId     String
+  bom       MfgBom     @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  productId String
+  product   MfgProduct @relation(fields: [productId], references: [id])
+  qty       Decimal    @db.Decimal(14, 3)
+}
+
+model MfgLocation {
+  id     String          @id @default(uuid())
+  code   String          @unique
+  nameVi String
+  nameEn String
+  type   MfgLocationType @default(INTERNAL)
+
+  quants    MfgStockQuant[]
+  movesFrom MfgStockMove[]  @relation("MoveSrc")
+  movesTo   MfgStockMove[]  @relation("MoveDest")
+  scraps    MfgScrap[]
+
+  createdAt DateTime @default(now())
+}
+
+model MfgLot {
+  id         String     @id @default(uuid())
+  productId  String
+  product    MfgProduct @relation(fields: [productId], references: [id])
+  name       String
+  mfgDate    DateTime   @default(now())
+  expiryDate DateTime?
+
+  quants MfgStockQuant[]
+  moves  MfgStockMove[]
+  orders MfgOrder[]
+  scraps MfgScrap[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([productId, name])
+  @@index([expiryDate])
+}
+
+model MfgStockQuant {
+  id          String      @id @default(uuid())
+  productId   String
+  product     MfgProduct  @relation(fields: [productId], references: [id])
+  lotId       String?
+  lot         MfgLot?     @relation(fields: [lotId], references: [id])
+  locationId  String
+  location    MfgLocation @relation(fields: [locationId], references: [id])
+  // On-hand in the product's own UoM (grams for weight-tracked items).
+  quantity    Decimal     @default(0) @db.Decimal(14, 3)
+  reservedQty Decimal     @default(0) @db.Decimal(14, 3)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, lotId, locationId])
+  @@index([productId, lotId, locationId])
+}
+
+model MfgStockMove {
+  id             String      @id @default(uuid())
+  productId      String
+  product        MfgProduct  @relation(fields: [productId], references: [id])
+  lotId          String?
+  lot            MfgLot?     @relation(fields: [lotId], references: [id])
+  qty            Decimal     @db.Decimal(14, 3)
+  uomId          String
+  uom            MfgUom      @relation(fields: [uomId], references: [id])
+  srcLocationId  String
+  srcLocation    MfgLocation @relation("MoveSrc", fields: [srcLocationId], references: [id])
+  destLocationId String
+  destLocation   MfgLocation @relation("MoveDest", fields: [destLocationId], references: [id])
+  refType        MfgMoveRef
+  // Free ref id (MfgOrder.id for produce/consume, MfgScrap.id for scrap).
+  refId          String?
+  unitCost       Decimal     @default(0) @db.Decimal(14, 2)
+  date           DateTime    @default(now())
+
+  @@index([productId, date])
+  @@index([refType, refId])
+  @@index([lotId])
+}
+
+model MfgOrder {
+  id            String     @id @default(uuid())
+  code          String     @unique
+  productId     String
+  product       MfgProduct @relation(fields: [productId], references: [id])
+  bomId         String
+  bom           MfgBom     @relation(fields: [bomId], references: [id])
+  qtyToProduce  Decimal    @db.Decimal(14, 3)
+  qtyProduced   Decimal    @default(0) @db.Decimal(14, 3)
+  uomId         String
+  uom           MfgUom     @relation(fields: [uomId], references: [id])
+  state         MfgMoState @default(DRAFT)
+  scheduledDate DateTime?
+  responsibleId String?
+  lotId         String?
+  lot           MfgLot?    @relation(fields: [lotId], references: [id])
+  // Snapshotted total cost at produce time (materials + operations).
+  totalCost     Decimal    @default(0) @db.Decimal(14, 2)
+
+  components MfgOrderComponent[]
+  workOrders MfgWorkOrder[]
+  scraps     MfgScrap[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([state])
+}
+
+model MfgOrderComponent {
+  id           String          @id @default(uuid())
+  moId         String
+  mo           MfgOrder        @relation(fields: [moId], references: [id], onDelete: Cascade)
+  productId    String
+  product      MfgProduct      @relation(fields: [productId], references: [id])
+  qtyToConsume Decimal         @db.Decimal(14, 3)
+  qtyConsumed  Decimal         @default(0) @db.Decimal(14, 3)
+  uomId        String
+  uom          MfgUom          @relation(fields: [uomId], references: [id])
+  availability MfgAvailability @default(NOT_AVAILABLE)
+  reservedQty  Decimal         @default(0) @db.Decimal(14, 3)
+
+  @@index([moId])
+}
+
+model MfgWorkOrder {
+  id               String          @id @default(uuid())
+  moId             String
+  mo               MfgOrder        @relation(fields: [moId], references: [id], onDelete: Cascade)
+  bomOperationId   String
+  bomOperation     MfgBomOperation @relation(fields: [bomOperationId], references: [id])
+  workCenterId     String
+  workCenter       MfgWorkCenter   @relation(fields: [workCenterId], references: [id])
+  sequence         Int
+  state            MfgWoState      @default(PENDING)
+  durationExpected Int             @default(0)
+  durationReal     Int             @default(0)
+  dateStart        DateTime?
+  dateFinished     DateTime?
+
+  @@unique([moId, sequence])
+  @@index([moId])
+}
+
+model MfgScrap {
+  id         String      @id @default(uuid())
+  productId  String
+  product    MfgProduct  @relation(fields: [productId], references: [id])
+  lotId      String?
+  lot        MfgLot?     @relation(fields: [lotId], references: [id])
+  qty        Decimal     @db.Decimal(14, 3)
+  uomId      String
+  uom        MfgUom      @relation(fields: [uomId], references: [id])
+  locationId String
+  location   MfgLocation @relation(fields: [locationId], references: [id])
+  reason     String
+  moId       String?
+  mo         MfgOrder?   @relation(fields: [moId], references: [id])
+  date       DateTime    @default(now())
+
+  @@index([productId, date])
 }

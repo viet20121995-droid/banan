@@ -1,0 +1,111 @@
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+
+import { Roles } from '../auth/decorators/roles.decorator';
+
+import { CreateMoDto, ProduceDto, ReceiveDto, ScrapDto } from './dto/manufacturing.dto';
+import { ManufacturingService } from './manufacturing.service';
+
+/**
+ * Kitchen MES — the "Sản xuất" section. Separate from the ordering/kitchen-queue
+ * endpoints. Reads are open to any kitchen role; anything that moves stock or
+ * cost is manager/admin only. Finer roles (baker start/done, QC, warehouse)
+ * arrive with the shop-floor increment.
+ */
+const KITCHEN_READ = [Role.KITCHEN_MANAGER, Role.KITCHEN_STAFF, Role.ADMIN];
+const KITCHEN_WRITE = [Role.KITCHEN_MANAGER, Role.ADMIN];
+
+@ApiTags('manufacturing')
+@Controller({ path: 'manufacturing', version: '1' })
+export class ManufacturingController {
+  constructor(private readonly mfg: ManufacturingService) {}
+
+  // ── costing ────────────────────────────────────────────────────────────
+  @Roles(...KITCHEN_READ)
+  @Get('boms/:id/cost')
+  bomCost(@Param('id') id: string) {
+    return this.mfg.bomCost(id);
+  }
+
+  // ── manufacturing orders ─────────────────────────────────────────────────
+  @Roles(...KITCHEN_READ)
+  @Get('orders')
+  listMOs(@Query('state') state?: string) {
+    return this.mfg.listMOs(state);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('orders/:id')
+  getMO(@Param('id') id: string) {
+    return this.mfg.getMO(id);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('orders')
+  createMO(@Body() dto: CreateMoDto) {
+    return this.mfg.createMO(dto);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('orders/:id/confirm')
+  confirmMO(@Param('id') id: string) {
+    return this.mfg.confirmMO(id);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('orders/:id/check-availability')
+  checkAvailability(@Param('id') id: string) {
+    return this.mfg.checkAvailability(id);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('orders/:id/reserve')
+  reserve(@Param('id') id: string) {
+    return this.mfg.reserve(id);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('orders/:id/produce')
+  produce(@Param('id') id: string, @Body() dto: ProduceDto) {
+    return this.mfg.produce(id, dto.producedQty);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @HttpCode(HttpStatus.OK)
+  @Post('orders/:id/cancel')
+  cancelMO(@Param('id') id: string) {
+    return this.mfg.cancelMO(id);
+  }
+
+  // ── stock ────────────────────────────────────────────────────────────────
+  @Roles(...KITCHEN_WRITE)
+  @Post('receipts')
+  receive(@Body() dto: ReceiveDto) {
+    return this.mfg.receive(dto);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('scraps')
+  scrap(@Body() dto: ScrapDto) {
+    return this.mfg.scrap(dto);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('stock/on-hand')
+  onHand(@Query('productId') productId?: string) {
+    return this.mfg.onHand(productId);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('lots/expiring')
+  expiring(@Query('before') before: string) {
+    return this.mfg.expiringLots(before);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('traceability/lot/:id')
+  trace(@Param('id') id: string) {
+    return this.mfg.traceLot(id);
+  }
+}
