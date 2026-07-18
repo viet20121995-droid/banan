@@ -532,10 +532,17 @@ export class ManufacturingService {
       },
     });
     if (!mo) throw new NotFoundException({ code: 'MFG_MO_NOT_FOUND' });
-    if (mo.state === 'DONE' || mo.state === 'CANCEL') {
+    // Only a confirmed (or in-progress) MO can be produced. A DRAFT has no work
+    // orders yet — producing it would skip confirmation (WO generation,
+    // availability), leave the QC gate vacuous, and book stock at operationCost
+    // = 0. The claim below enforces the same, race-safely.
+    if (mo.state !== 'CONFIRMED' && mo.state !== 'PROGRESS') {
       throw new ConflictException({
         code: 'MFG_MO_STATE',
-        message: `MO đã ${mo.state === 'DONE' ? 'hoàn tất' : 'huỷ'}.`,
+        message:
+          mo.state === 'DRAFT'
+            ? 'MO chưa xác nhận — không thể sản xuất.'
+            : `MO đã ${mo.state === 'DONE' ? 'hoàn tất' : 'huỷ'}.`,
       });
     }
     // The direct "Sản xuất" path enforces the same QC gate as shop-floor doneWO,
@@ -553,13 +560,13 @@ export class ManufacturingService {
       // loser blocks, then re-evaluates its WHERE against the committed DONE
       // state, claims 0 rows, and aborts — so a batch is consumed/booked once.
       const claim = await db.mfgOrder.updateMany({
-        where: { id, state: { notIn: ['DONE', 'CANCEL'] } },
+        where: { id, state: { in: ['CONFIRMED', 'PROGRESS'] } },
         data: { state: 'PROGRESS' },
       });
       if (claim.count === 0) {
         throw new ConflictException({
           code: 'MFG_MO_STATE',
-          message: 'MO đã hoàn tất hoặc huỷ.',
+          message: 'MO không ở trạng thái sản xuất được (đã hoàn tất, huỷ, hoặc chưa xác nhận).',
         });
       }
 
@@ -699,14 +706,38 @@ export class ManufacturingService {
   async cancelMO(id: string) {
     const mo = await this.prisma.mfgOrder.findUnique({ where: { id } });
     if (!mo) throw new NotFoundException({ code: 'MFG_MO_NOT_FOUND' });
+    // Fast fails (informative); the guarded claim inside the transaction is the
+    // real, race-safe gate.
     if (mo.state === 'DONE') {
       throw new ConflictException({
         code: 'MFG_MO_STATE',
         message: 'Không thể huỷ MO đã hoàn tất.',
       });
     }
-    // Release any reservations this MO holds.
-    await this.prisma.$transaction(async (db) => {
+    if (mo.state === 'CANCEL') return { id, state: 'CANCEL' as const };
+
+    return this.prisma.$transaction(async (db) => {
+      // Claim the cancel atomically. The row lock serialises against a
+      // concurrent produce (which claims the same row): if produce won and set
+      // DONE, this claims 0 rows and rejects; and a second concurrent cancel
+      // also claims 0 rows, so the reservation release below runs exactly once
+      // (no double decrement → reservedQty can't go negative).
+      const claim = await db.mfgOrder.updateMany({
+        where: { id, state: { notIn: ['DONE', 'CANCEL'] } },
+        data: { state: 'CANCEL' },
+      });
+      if (claim.count === 0) {
+        const now = await db.mfgOrder.findUniqueOrThrow({ where: { id } });
+        if (now.state === 'DONE') {
+          throw new ConflictException({
+            code: 'MFG_MO_STATE',
+            message: 'Không thể huỷ MO đã hoàn tất.',
+          });
+        }
+        return { id, state: 'CANCEL' as const }; // already cancelled — idempotent
+      }
+
+      // Release any reservations this MO's components hold.
       const stock = await this.locationId(db, 'STOCK');
       const comps = await db.mfgOrderComponent.findMany({ where: { moId: id } });
       for (const c of comps) {
@@ -729,13 +760,12 @@ export class ManufacturingService {
           data: { reservedQty: 0 },
         });
       }
-      await db.mfgOrder.update({ where: { id }, data: { state: 'CANCEL' } });
       await db.mfgWorkOrder.updateMany({
         where: { moId: id, state: { notIn: ['DONE', 'CANCEL'] } },
         data: { state: 'CANCEL' },
       });
+      return { id, state: 'CANCEL' as const };
     });
-    return { id, state: 'CANCEL' };
   }
 
   // ── scrap ─────────────────────────────────────────────────────────────────

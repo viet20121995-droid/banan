@@ -335,4 +335,54 @@ d('Manufacturing golden path (integration)', () => {
     const totalQty = eggQuants.reduce((s, q) => s + Number(q.quantity), 0);
     expect(totalRes).toBeLessThanOrEqual(totalQty + 1e-9);
   });
+
+  // ── state guards (round-3 review) ──
+  it('produce refuses a DRAFT MO (must be confirmed first)', async () => {
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 }); // DRAFT
+    await expect(mfg.produce(mo.id)).rejects.toThrow(/xác nhận/i);
+    const still = await prisma.mfgOrder.findUniqueOrThrow({ where: { id: mo.id } });
+    expect(still.state).toBe('DRAFT'); // untouched, nothing booked
+  });
+
+  it('produce vs cancel race: exactly one wins and the state stays consistent', async () => {
+    // Cake ops carry no QC points; stock its components so produce can run.
+    await mfg.receive({ productId: ids.sponge, qty: 5000, uomId: gUom, unitCost: 180.25 });
+    await mfg.receive({ productId: ids.cream, qty: 5000, uomId: gUom, unitCost: 120 });
+    await mfg.receive({ productId: ids.berry, qty: 5000, uomId: gUom, unitCost: 200 });
+    const bom = await bomOf(ids.cake);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(mo.id);
+    const before = await onHand(ids.cake);
+
+    const [pr, cr] = await Promise.allSettled([mfg.produce(mo.id), mfg.cancelMO(mo.id)]);
+    const finalMo = await prisma.mfgOrder.findUniqueOrThrow({ where: { id: mo.id } });
+
+    // The two outcomes are mutually exclusive; stock is booked iff produce won.
+    if (finalMo.state === 'DONE') {
+      expect(pr.status).toBe('fulfilled');
+      expect(cr.status).toBe('rejected');
+      expect(await onHand(ids.cake)).toBe(before + 1000);
+    } else {
+      expect(finalMo.state).toBe('CANCEL');
+      expect(cr.status).toBe('fulfilled');
+      expect(pr.status).toBe('rejected');
+      expect(await onHand(ids.cake)).toBe(before);
+    }
+  });
+
+  it('two concurrent cancels are idempotent and never drive reservedQty negative', async () => {
+    const bom = await bomOf(ids.cake);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(mo.id);
+    await mfg.reserve(mo.id); // take some holds
+
+    await Promise.allSettled([mfg.cancelMO(mo.id), mfg.cancelMO(mo.id)]);
+
+    const finalMo = await prisma.mfgOrder.findUniqueOrThrow({ where: { id: mo.id } });
+    expect(finalMo.state).toBe('CANCEL');
+    // A double release would push a quant below zero; the claim prevents it.
+    const quants = await prisma.mfgStockQuant.findMany();
+    for (const q of quants) expect(Number(q.reservedQty)).toBeGreaterThanOrEqual(0);
+  });
 });
