@@ -280,4 +280,59 @@ d('Manufacturing golden path (integration)', () => {
     const done = await mfg.produce(mo.id);
     expect(done.state).toBe('DONE');
   });
+
+  // ── concurrency (round-2 review) ──
+  it('produce is race-safe: two concurrent calls on one MO book stock once', async () => {
+    // Cake operations carry no QC points, so the produce QC gate is vacuous here
+    // and can't mask the concurrency behaviour. Stock its components directly.
+    await mfg.receive({ productId: ids.sponge, qty: 5000, uomId: gUom, unitCost: 180.25 });
+    await mfg.receive({ productId: ids.cream, qty: 5000, uomId: gUom, unitCost: 120 });
+    await mfg.receive({ productId: ids.berry, qty: 5000, uomId: gUom, unitCost: 200 });
+    const bom = await bomOf(ids.cake);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(mo.id);
+
+    const before = await onHand(ids.cake);
+    const results = await Promise.allSettled([mfg.produce(mo.id), mfg.produce(mo.id)]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    expect(ok).toBe(1);
+    expect(failed).toBe(1);
+    // Finished stock booked exactly once (+1000), not twice.
+    expect(await onHand(ids.cake)).toBe(before + 1000);
+  });
+
+  it('reserve never overbooks a quant when two MOs compete for it', async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    // Pin egg to a single known quant with only 300 on hand — less than the 400
+    // each sponge MO wants, so the two reserves genuinely contend.
+    await prisma.mfgStockQuant.deleteMany({
+      where: { productId: ids.egg, locationId: stockLoc.id },
+    });
+    await prisma.mfgStockQuant.create({
+      data: {
+        productId: ids.egg,
+        lotId: null,
+        locationId: stockLoc.id,
+        quantity: 300,
+        reservedQty: 0,
+      },
+    });
+
+    const bom = await bomOf(ids.sponge);
+    const moA = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 }); // egg 400
+    const moB = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(moA.id);
+    await mfg.confirmMO(moB.id);
+
+    await Promise.allSettled([mfg.reserve(moA.id), mfg.reserve(moB.id)]);
+
+    // The invariant that must never break: reservedQty <= quantity per quant.
+    const eggQuants = await prisma.mfgStockQuant.findMany({
+      where: { productId: ids.egg, locationId: stockLoc.id },
+    });
+    const totalRes = eggQuants.reduce((s, q) => s + Number(q.reservedQty), 0);
+    const totalQty = eggQuants.reduce((s, q) => s + Number(q.quantity), 0);
+    expect(totalRes).toBeLessThanOrEqual(totalQty + 1e-9);
+  });
 });

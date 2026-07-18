@@ -474,12 +474,21 @@ export class ManufacturingService {
           if (remaining <= 0) break;
           const free = n(q.quantity) - n(q.reservedQty);
           if (free <= 0) continue;
-          const take = Math.min(free, remaining);
-          await db.mfgStockQuant.update({
-            where: { id: q.id },
-            data: { reservedQty: { increment: round3(take) } },
-          });
-          remaining -= take;
+          const take = round3(Math.min(free, remaining));
+          if (take <= 0) continue;
+          // Guarded update: only reserve if the quant STILL has `take` free at
+          // write time (re-checked in SQL, not against the stale read), so two
+          // concurrent reserves can't both grab the same stock and push
+          // reservedQty past quantity. Prisma's where can't express the
+          // cross-column `quantity - reservedQty >= take`, hence raw SQL.
+          // On contention the row count is 0 — leave it: a best-effort reserve
+          // that never oversells is the correct advisory behaviour.
+          const reserved = await db.$executeRaw`
+            UPDATE "MfgStockQuant"
+            SET "reservedQty" = "reservedQty" + ${take}::numeric
+            WHERE "id" = ${q.id} AND "quantity" - "reservedQty" >= ${take}::numeric
+          `;
+          if (reserved === 1) remaining -= take;
         }
         await db.mfgOrderComponent.update({
           where: { id: c.id },
@@ -538,6 +547,22 @@ export class ManufacturingService {
     if (outQty <= 0) throw new BadRequestException({ code: 'MFG_QTY_INVALID' });
 
     return this.prisma.$transaction(async (db) => {
+      // Claim the MO atomically before any side effect. The pre-transaction
+      // state check above is a fast fail, not a guard — two concurrent produce
+      // calls can both pass it. This guarded UPDATE row-locks the order; the
+      // loser blocks, then re-evaluates its WHERE against the committed DONE
+      // state, claims 0 rows, and aborts — so a batch is consumed/booked once.
+      const claim = await db.mfgOrder.updateMany({
+        where: { id, state: { notIn: ['DONE', 'CANCEL'] } },
+        data: { state: 'PROGRESS' },
+      });
+      if (claim.count === 0) {
+        throw new ConflictException({
+          code: 'MFG_MO_STATE',
+          message: 'MO đã hoàn tất hoặc huỷ.',
+        });
+      }
+
       // ── consume components, FIFO by lot, at their current AVCO ──
       let materialCost = 0;
       for (const c of mo.components) {
