@@ -873,4 +873,228 @@ export class ManufacturingService {
     });
     return rows.map((r) => ({ state: r.state, count: r._count._all }));
   }
+
+  // ── shop floor: work-order execution ──────────────────────────────────────
+
+  /** Open work orders for the tablet board — grouped-ready by work center. */
+  shopFloor(workCenterId?: string) {
+    return this.prisma.mfgWorkOrder.findMany({
+      where: {
+        state: { in: ['READY', 'PROGRESS', 'BLOCKED'] },
+        ...(workCenterId ? { workCenterId } : {}),
+      },
+      include: {
+        workCenter: true,
+        mo: { include: { product: true } },
+        bomOperation: {
+          include: { qualityPoints: { where: { active: true } } },
+        },
+        qualityChecks: { orderBy: { date: 'desc' } },
+      },
+      orderBy: [{ workCenterId: 'asc' }, { sequence: 'asc' }],
+    });
+  }
+
+  private async wo(id: string) {
+    const wo = await this.prisma.mfgWorkOrder.findUnique({ where: { id } });
+    if (!wo) throw new NotFoundException({ code: 'MFG_WO_NOT_FOUND' });
+    return wo;
+  }
+
+  /** Minutes between two instants, floored at 0. */
+  private elapsedMin(from: Date | null, to: Date): number {
+    if (!from) return 0;
+    return Math.max(0, Math.round((to.getTime() - from.getTime()) / 60000));
+  }
+
+  /** Start (or resume) a work order — marks the current run's start. */
+  async startWO(id: string) {
+    const wo = await this.wo(id);
+    if (wo.state === 'DONE' || wo.state === 'CANCEL') {
+      throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn đã kết thúc.' });
+    }
+    await this.prisma.$transaction([
+      this.prisma.mfgWorkOrder.update({
+        where: { id },
+        data: { state: 'PROGRESS', dateStart: new Date() },
+      }),
+      this.prisma.mfgOrder.update({
+        where: { id: wo.moId },
+        data: { state: 'PROGRESS' },
+      }),
+    ]);
+    return this.wo(id);
+  }
+
+  /** Pause — bank the elapsed run time and go back to Ready. */
+  async pauseWO(id: string) {
+    const wo = await this.wo(id);
+    if (wo.state !== 'PROGRESS') {
+      throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn không đang chạy.' });
+    }
+    return this.prisma.mfgWorkOrder.update({
+      where: { id },
+      data: {
+        state: 'READY',
+        durationReal: wo.durationReal + this.elapsedMin(wo.dateStart, new Date()),
+        dateStart: null,
+      },
+    });
+  }
+
+  /**
+   * Finish a work order. Blocked until every active quality point on its
+   * operation has a PASS check — a FAIL or a missing check stops it, so a batch
+   * can't be signed off with an open QC item. Banks the final run time.
+   */
+  async doneWO(id: string) {
+    const wo = await this.prisma.mfgWorkOrder.findUnique({
+      where: { id },
+      include: {
+        bomOperation: { include: { qualityPoints: { where: { active: true } } } },
+        qualityChecks: { orderBy: { date: 'desc' } },
+      },
+    });
+    if (!wo) throw new NotFoundException({ code: 'MFG_WO_NOT_FOUND' });
+    if (wo.state === 'DONE' || wo.state === 'CANCEL') {
+      throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn đã kết thúc.' });
+    }
+
+    for (const qp of wo.bomOperation.qualityPoints) {
+      // The LATEST check for the point is the verdict — a re-measure that passes
+      // supersedes an earlier fail, so a corrected batch isn't blocked forever.
+      const latest = wo.qualityChecks.find((c) => c.qualityPointId === qp.id);
+      if (!latest) {
+        throw new BadRequestException({
+          code: 'MFG_QC_REQUIRED',
+          message: `Cần kiểm tra "${qp.titleVi}" (đạt) trước khi hoàn tất.`,
+        });
+      }
+      if (latest.result === 'FAIL') {
+        throw new BadRequestException({
+          code: 'MFG_QC_FAILED',
+          message: `Kiểm tra "${qp.titleVi}" KHÔNG đạt — không thể hoàn tất công đoạn.`,
+        });
+      }
+    }
+
+    return this.prisma.mfgWorkOrder.update({
+      where: { id },
+      data: {
+        state: 'DONE',
+        durationReal: wo.durationReal + this.elapsedMin(wo.dateStart, new Date()),
+        dateFinished: new Date(),
+        dateStart: wo.dateStart,
+      },
+    });
+  }
+
+  // ── quality control ───────────────────────────────────────────────────────
+
+  createQualityPoint(dto: {
+    titleVi: string;
+    titleEn: string;
+    testType: 'MEASURE' | 'PASS_FAIL';
+    bomOperationId?: string;
+    productId?: string;
+    normMin?: number;
+    normMax?: number;
+    unit?: string;
+  }) {
+    return this.prisma.mfgQualityPoint.create({ data: dto });
+  }
+
+  listQualityPoints(bomOperationId?: string) {
+    return this.prisma.mfgQualityPoint.findMany({
+      where: { active: true, ...(bomOperationId ? { bomOperationId } : {}) },
+      include: { bomOperation: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Record a QC result against a work order. For a MEASURE point the verdict is
+   * computed here — PASS only when the value is within [normMin, normMax] — so a
+   * tablet just sends the number. A FAIL opens a quality alert automatically.
+   */
+  async recordCheck(dto: {
+    qualityPointId: string;
+    workOrderId: string;
+    measuredValue?: number;
+    passFail?: 'PASS' | 'FAIL';
+    note?: string;
+    userId?: string;
+  }) {
+    const qp = await this.prisma.mfgQualityPoint.findUnique({
+      where: { id: dto.qualityPointId },
+    });
+    if (!qp) throw new NotFoundException({ code: 'MFG_QP_NOT_FOUND' });
+    const wo = await this.prisma.mfgWorkOrder.findUnique({
+      where: { id: dto.workOrderId },
+    });
+    if (!wo) throw new NotFoundException({ code: 'MFG_WO_NOT_FOUND' });
+
+    let result: 'PASS' | 'FAIL';
+    if (qp.testType === 'MEASURE') {
+      if (dto.measuredValue == null) {
+        throw new BadRequestException({
+          code: 'MFG_QC_VALUE_REQUIRED',
+          message: 'Cần nhập giá trị đo.',
+        });
+      }
+      const v = dto.measuredValue;
+      const okMin = qp.normMin == null || v >= n(qp.normMin);
+      const okMax = qp.normMax == null || v <= n(qp.normMax);
+      result = okMin && okMax ? 'PASS' : 'FAIL';
+    } else {
+      if (dto.passFail == null) {
+        throw new BadRequestException({
+          code: 'MFG_QC_RESULT_REQUIRED',
+          message: 'Cần chọn Đạt / Không đạt.',
+        });
+      }
+      result = dto.passFail;
+    }
+
+    return this.prisma.$transaction(async (db) => {
+      const check = await db.mfgQualityCheck.create({
+        data: {
+          qualityPointId: dto.qualityPointId,
+          workOrderId: dto.workOrderId,
+          moId: wo.moId,
+          result,
+          measuredValue: dto.measuredValue ?? null,
+          note: dto.note,
+          userId: dto.userId,
+        },
+      });
+      if (result === 'FAIL') {
+        await db.mfgQualityAlert.create({
+          data: {
+            title: `QC không đạt: ${qp.titleVi}`,
+            moId: wo.moId,
+            description:
+              dto.measuredValue != null
+                ? `Giá trị đo ${dto.measuredValue}${qp.unit ?? ''} ngoài ngưỡng.`
+                : 'Kiểm tra Đạt/Không đạt: KHÔNG đạt.',
+          },
+        });
+      }
+      return check;
+    });
+  }
+
+  listAlerts(stage?: string) {
+    return this.prisma.mfgQualityAlert.findMany({
+      where: stage ? { stage: stage as never } : undefined,
+      include: { mo: true, product: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async setAlertStage(id: string, stage: 'NEW' | 'CONFIRMED' | 'SOLVED') {
+    const alert = await this.prisma.mfgQualityAlert.findUnique({ where: { id } });
+    if (!alert) throw new NotFoundException({ code: 'MFG_ALERT_NOT_FOUND' });
+    return this.prisma.mfgQualityAlert.update({ where: { id }, data: { stage } });
+  }
 }

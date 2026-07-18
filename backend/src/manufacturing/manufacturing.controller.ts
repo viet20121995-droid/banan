@@ -2,9 +2,19 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from 
 import { ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
-import { CreateMoDto, ProduceDto, ReceiveDto, ScrapDto } from './dto/manufacturing.dto';
+import {
+  CreateMoDto,
+  CreateQualityPointDto,
+  ProduceDto,
+  ReceiveDto,
+  RecordCheckDto,
+  ScrapDto,
+  SetAlertStageDto,
+} from './dto/manufacturing.dto';
 import { ManufacturingService } from './manufacturing.service';
 
 /**
@@ -15,6 +25,9 @@ import { ManufacturingService } from './manufacturing.service';
  */
 const KITCHEN_READ = [Role.KITCHEN_MANAGER, Role.KITCHEN_STAFF, Role.ADMIN];
 const KITCHEN_WRITE = [Role.KITCHEN_MANAGER, Role.ADMIN];
+// Shop-floor actions (start/done a work order, record a QC check) are the
+// baker's/QC's daily job, so staff may do them too.
+const KITCHEN_FLOOR = [Role.KITCHEN_MANAGER, Role.KITCHEN_STAFF, Role.ADMIN];
 
 @ApiTags('manufacturing')
 @Controller({ path: 'manufacturing', version: '1' })
@@ -138,5 +151,60 @@ export class ManufacturingController {
   @Get('traceability/lot/:id')
   trace(@Param('id') id: string) {
     return this.mfg.traceLot(id);
+  }
+
+  // ── shop floor + QC ───────────────────────────────────────────────────────
+  @Roles(...KITCHEN_READ)
+  @Get('shop-floor')
+  shopFloor(@Query('workCenter') workCenter?: string) {
+    return this.mfg.shopFloor(workCenter);
+  }
+
+  @Roles(...KITCHEN_FLOOR)
+  @Post('work-orders/:id/start')
+  startWo(@Param('id') id: string) {
+    return this.mfg.startWO(id);
+  }
+
+  @Roles(...KITCHEN_FLOOR)
+  @Post('work-orders/:id/pause')
+  pauseWo(@Param('id') id: string) {
+    return this.mfg.pauseWO(id);
+  }
+
+  @Roles(...KITCHEN_FLOOR)
+  @Post('work-orders/:id/done')
+  doneWo(@Param('id') id: string) {
+    return this.mfg.doneWO(id);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('quality-points')
+  listQualityPoints(@Query('bomOperationId') bomOperationId?: string) {
+    return this.mfg.listQualityPoints(bomOperationId);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('quality-points')
+  createQualityPoint(@Body() dto: CreateQualityPointDto) {
+    return this.mfg.createQualityPoint(dto);
+  }
+
+  @Roles(...KITCHEN_FLOOR)
+  @Post('quality-checks')
+  recordCheck(@Body() dto: RecordCheckDto, @CurrentUser() user: AuthPrincipal) {
+    return this.mfg.recordCheck({ ...dto, userId: user.sub });
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('quality-alerts')
+  listAlerts(@Query('stage') stage?: string) {
+    return this.mfg.listAlerts(stage);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('quality-alerts/:id/stage')
+  setAlertStage(@Param('id') id: string, @Body() dto: SetAlertStageDto) {
+    return this.mfg.setAlertStage(id, dto.stage);
   }
 }

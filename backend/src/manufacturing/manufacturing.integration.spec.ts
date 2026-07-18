@@ -148,4 +148,45 @@ d('Manufacturing golden path (integration)', () => {
     const rawCodes = spongeEntry.trace!.consumed.map((c) => c.product);
     expect(rawCodes).toEqual(expect.arrayContaining(['RAW-FLOUR', 'RAW-SUGAR', 'RAW-EGG']));
   });
+
+  // ── shop floor + QC (increment 3) ──
+  it('gates a work order on its quality check, and records the fail as an alert', async () => {
+    // A fresh sponge MO, confirmed → its work orders are READY.
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 500 });
+    await mfg.confirmMO(mo.id);
+    const wo = await prisma.mfgWorkOrder.findFirstOrThrow({
+      where: { moId: mo.id },
+      orderBy: { sequence: 'asc' },
+      include: { bomOperation: true },
+    });
+
+    // A HACCP-style temperature check on that operation: 36–40°C.
+    const qp = await mfg.createQualityPoint({
+      titleVi: 'Nhiệt độ hỗn hợp trứng-sữa',
+      titleEn: 'Egg-milk mixture temp',
+      testType: 'MEASURE',
+      bomOperationId: wo.bomOperationId,
+      normMin: 36,
+      normMax: 40,
+      unit: '°C',
+    });
+
+    await mfg.startWO(wo.id);
+
+    // No check yet → can't finish.
+    await expect(mfg.doneWO(wo.id)).rejects.toThrow(/kiểm tra/i);
+
+    // Out of range → FAIL, an alert opens, still blocked.
+    await mfg.recordCheck({ qualityPointId: qp.id, workOrderId: wo.id, measuredValue: 50 });
+    const alerts = await mfg.listAlerts();
+    expect(alerts.some((a) => a.moId === mo.id)).toBe(true);
+    await expect(mfg.doneWO(wo.id)).rejects.toThrow(/KHÔNG đạt/);
+
+    // Re-measure in range → PASS supersedes, and now it finishes with time banked.
+    await mfg.recordCheck({ qualityPointId: qp.id, workOrderId: wo.id, measuredValue: 38 });
+    const finished = await mfg.doneWO(wo.id);
+    expect(finished.state).toBe('DONE');
+    expect(finished.dateFinished).not.toBeNull();
+  });
 });

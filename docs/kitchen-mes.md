@@ -152,10 +152,27 @@ Data layer: `ManufacturingApi` in `packages/data` (DTOs + Result/isOk guards),
 Kitchen web build compiles; the API is proven by the integration test. The UI
 wiring itself still wants a click-through on a running stack.
 
+## Increment 3 — Shop floor + QC ✅
+
+- **Work-order execution**: `POST work-orders/:id/{start,pause,done}` with real
+  duration banked (start marks the run, pause/done add elapsed minutes). That
+  real time flows into the produce cost.
+- **Quality points** on operations (`MEASURE` with a norm range, or `PASS_FAIL`),
+  and **checks** — for a MEASURE point the verdict is computed server-side (PASS
+  only inside `[normMin, normMax]`), so a tablet just sends the number.
+- **Gating**: `done` is refused until every active quality point on the
+  operation has a *latest* PASS check — a re-measure supersedes an earlier fail,
+  so a corrected batch isn't blocked forever. A FAIL opens a **quality alert**.
+- Flutter **Xưởng sản xuất** screen (tablet-first): work orders as columns per
+  work center, Bắt đầu / Tạm dừng / Hoàn tất, and inline QC entry (temperature
+  or Đạt/Không đạt). Any kitchen role runs it; QC-point authoring is manager-only.
+
+Proven by an integration case: gate blocks with no check, a 50°C reading fails
+and opens an alert, a re-measured 38°C passes and the WO finishes. Backend
+suite 158 pass / 7 skip; integration 7/7 on real Postgres; kitchen web builds.
+
 ## Roadmap (next increments)
 
-3. **Shop floor + QC** — work-order start/pause/done, quality points (measure /
-   pass-fail) gated on operations, quality alerts. Tablet kanban.
 4. **Planning** — Gantt/Kanban schedule, employee assignment, MPS.
 5. **Reports + purchasing** — production/scrap/cost reports, replenishment.
 6. **P2** — OEE, maintenance, activities/notifications, HSD background job.

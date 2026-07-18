@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 
 export class CreateMoDto {
   @IsUUID()
@@ -67,6 +67,66 @@ export class ScrapDto {
   @IsOptional()
   @IsUUID()
   moId?: string;
+}
+
+export class CreateQualityPointDto {
+  @IsString()
+  @MaxLength(120)
+  titleVi!: string;
+
+  @IsString()
+  @MaxLength(120)
+  titleEn!: string;
+
+  @IsIn(['MEASURE', 'PASS_FAIL'])
+  testType!: 'MEASURE' | 'PASS_FAIL';
+
+  @IsOptional()
+  @IsUUID()
+  bomOperationId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  productId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  normMin?: number;
+
+  @IsOptional()
+  @IsNumber()
+  normMax?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  unit?: string;
+}
+
+export class RecordCheckDto {
+  @IsUUID()
+  qualityPointId!: string;
+
+  @IsUUID()
+  workOrderId!: string;
+
+  @IsOptional()
+  @IsNumber()
+  measuredValue?: number;
+
+  @IsOptional()
+  @IsIn(['PASS', 'FAIL'])
+  passFail?: 'PASS' | 'FAIL';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  note?: string;
+}
+
+export class SetAlertStageDto {
+  @IsIn(['NEW', 'CONFIRMED', 'SOLVED'])
+  stage!: 'NEW' | 'CONFIRMED' | 'SOLVED';
 }
 
 export class ExpiringQueryDto {

@@ -1273,6 +1273,8 @@ model MfgProduct {
   quants          MfgStockQuant[]
   moves           MfgStockMove[]
   scraps          MfgScrap[]
+  qualityPoints   MfgQualityPoint[]
+  qualityAlerts   MfgQualityAlert[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1343,7 +1345,8 @@ model MfgBomOperation {
   workCenter      MfgWorkCenter @relation(fields: [workCenterId], references: [id])
   durationMinutes Int           @default(0)
 
-  workOrders MfgWorkOrder[]
+  workOrders    MfgWorkOrder[]
+  qualityPoints MfgQualityPoint[]
 
   @@unique([bomId, sequence])
 }
@@ -1452,9 +1455,11 @@ model MfgOrder {
   // Snapshotted total cost at produce time (materials + operations).
   totalCost     Decimal    @default(0) @db.Decimal(14, 2)
 
-  components MfgOrderComponent[]
-  workOrders MfgWorkOrder[]
-  scraps     MfgScrap[]
+  components    MfgOrderComponent[]
+  workOrders    MfgWorkOrder[]
+  scraps        MfgScrap[]
+  qualityChecks MfgQualityCheck[]
+  qualityAlerts MfgQualityAlert[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1493,6 +1498,8 @@ model MfgWorkOrder {
   dateStart        DateTime?
   dateFinished     DateTime?
 
+  qualityChecks MfgQualityCheck[]
+
   @@unique([moId, sequence])
   @@index([moId])
 }
@@ -1514,4 +1521,81 @@ model MfgScrap {
   date       DateTime    @default(now())
 
   @@index([productId, date])
+}
+
+// ── Kitchen MES increment 3: quality control (QC) ────────────────────────────
+
+enum MfgTestType {
+  MEASURE // đo giá trị (nhiệt độ...) — pass khi trong [normMin, normMax]
+  PASS_FAIL // đạt / không đạt (nhũ hoá, không bọt/váng/vật lạ)
+}
+
+enum MfgCheckResult {
+  NONE
+  PASS
+  FAIL
+}
+
+enum MfgAlertStage {
+  NEW
+  CONFIRMED
+  SOLVED
+}
+
+/// A control point attached to a BoM operation (HACCP-style). MEASURE points
+/// carry a norm range the measured value must land in to pass.
+model MfgQualityPoint {
+  id             String           @id @default(uuid())
+  titleVi        String
+  titleEn        String
+  testType       MfgTestType
+  bomOperationId String?
+  bomOperation   MfgBomOperation? @relation(fields: [bomOperationId], references: [id])
+  productId      String?
+  product        MfgProduct?      @relation(fields: [productId], references: [id])
+  normMin        Decimal?         @db.Decimal(10, 2)
+  normMax        Decimal?         @db.Decimal(10, 2)
+  unit           String? // °C, ...
+  active         Boolean          @default(true)
+
+  checks MfgQualityCheck[]
+
+  createdAt DateTime @default(now())
+
+  @@index([bomOperationId])
+}
+
+/// A recorded result against a control point during a work order.
+model MfgQualityCheck {
+  id             String          @id @default(uuid())
+  qualityPointId String
+  qualityPoint   MfgQualityPoint @relation(fields: [qualityPointId], references: [id])
+  moId           String?
+  mo             MfgOrder?       @relation(fields: [moId], references: [id])
+  workOrderId    String?
+  workOrder      MfgWorkOrder?   @relation(fields: [workOrderId], references: [id])
+  result         MfgCheckResult  @default(NONE)
+  measuredValue  Decimal?        @db.Decimal(10, 2)
+  note           String?
+  userId         String?
+  date           DateTime        @default(now())
+
+  @@index([workOrderId])
+  @@index([moId])
+}
+
+/// Raised when a check fails (or by staff). Worked through NEW → CONFIRMED →
+/// SOLVED.
+model MfgQualityAlert {
+  id          String        @id @default(uuid())
+  title       String
+  moId        String?
+  mo          MfgOrder?     @relation(fields: [moId], references: [id])
+  productId   String?
+  product     MfgProduct?   @relation(fields: [productId], references: [id])
+  stage       MfgAlertStage @default(NEW)
+  description String?
+  createdAt   DateTime      @default(now())
+
+  @@index([stage])
 }

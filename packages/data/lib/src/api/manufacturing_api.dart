@@ -245,6 +245,116 @@ class MfgStateCount {
   final int count;
 }
 
+class MfgQualityPointLite {
+  const MfgQualityPointLite({
+    required this.id,
+    required this.titleVi,
+    required this.testType,
+    required this.normMin,
+    required this.normMax,
+    required this.unit,
+    required this.latestResult,
+  });
+
+  factory MfgQualityPointLite.fromJson(
+    Map<String, dynamic> j, {
+    String? latestResult,
+  }) =>
+      MfgQualityPointLite(
+        id: j['id'] as String,
+        titleVi: j['titleVi'] as String,
+        testType: j['testType'] as String,
+        normMin: _num(j['normMin']),
+        normMax: _num(j['normMax']),
+        unit: j['unit'] as String?,
+        latestResult: latestResult,
+      );
+
+  final String id;
+  final String titleVi;
+  final String testType; // MEASURE | PASS_FAIL
+  final double normMin;
+  final double normMax;
+  final String? unit;
+  final String? latestResult; // null | PASS | FAIL
+  bool get isMeasure => testType == 'MEASURE';
+}
+
+class MfgWorkOrderCard {
+  const MfgWorkOrderCard({
+    required this.id,
+    required this.sequence,
+    required this.state,
+    required this.moCode,
+    required this.productNameVi,
+    required this.operationNameVi,
+    required this.workCenterId,
+    required this.workCenterNameVi,
+    required this.qualityPoints,
+  });
+
+  factory MfgWorkOrderCard.fromJson(Map<String, dynamic> j) {
+    // Latest check result per quality point → drives the badge.
+    final checks = (j['qualityChecks'] as List? ?? const [])
+        .cast<Map<String, dynamic>>();
+    String? latestFor(String pointId) {
+      for (final c in checks) {
+        if (c['qualityPointId'] == pointId) return c['result'] as String?;
+      }
+      return null;
+    }
+
+    final op = j['bomOperation'] as Map<String, dynamic>? ?? const {};
+    final points = (op['qualityPoints'] as List? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map((p) => MfgQualityPointLite.fromJson(p, latestResult: latestFor(p['id'] as String)))
+        .toList();
+
+    return MfgWorkOrderCard(
+      id: j['id'] as String,
+      sequence: (j['sequence'] as num).toInt(),
+      state: j['state'] as String,
+      moCode: (j['mo'] as Map?)?['code'] as String? ?? '',
+      productNameVi: (j['mo'] as Map?)?['product']?['nameVi'] as String? ?? '',
+      operationNameVi: op['nameVi'] as String? ?? '',
+      workCenterId: (j['workCenter'] as Map?)?['id'] as String? ?? '',
+      workCenterNameVi: (j['workCenter'] as Map?)?['nameVi'] as String? ?? '',
+      qualityPoints: points,
+    );
+  }
+
+  final String id;
+  final int sequence;
+  final String state; // PENDING | READY | PROGRESS | BLOCKED | DONE | CANCEL
+  final String moCode;
+  final String productNameVi;
+  final String operationNameVi;
+  final String workCenterId;
+  final String workCenterNameVi;
+  final List<MfgQualityPointLite> qualityPoints;
+}
+
+class MfgQualityAlert {
+  const MfgQualityAlert({
+    required this.id,
+    required this.title,
+    required this.stage,
+    required this.description,
+  });
+
+  factory MfgQualityAlert.fromJson(Map<String, dynamic> j) => MfgQualityAlert(
+        id: j['id'] as String,
+        title: j['title'] as String,
+        stage: j['stage'] as String,
+        description: j['description'] as String?,
+      );
+
+  final String id;
+  final String title;
+  final String stage; // NEW | CONFIRMED | SOLVED
+  final String? description;
+}
+
 // ── client ──────────────────────────────────────────────────────────────────
 
 class ManufacturingApi {
@@ -322,6 +432,42 @@ class ManufacturingApi {
   }) =>
       _postVoid('$_base/scraps',
           body: {'productId': productId, 'qty': qty, 'uomId': uomId, 'reason': reason},);
+
+  // ── shop floor + QC ──
+  Future<Result<List<MfgWorkOrderCard>, AppFailure>> shopFloor({String? workCenter}) =>
+      _get('$_base/shop-floor',
+          query: {if (workCenter != null) 'workCenter': workCenter},
+          parse: (res) => _list(res, MfgWorkOrderCard.fromJson),);
+
+  Future<Result<void, AppFailure>> startWo(String id) =>
+      _postVoid('$_base/work-orders/$id/start');
+  Future<Result<void, AppFailure>> pauseWo(String id) =>
+      _postVoid('$_base/work-orders/$id/pause');
+  Future<Result<void, AppFailure>> doneWo(String id) =>
+      _postVoid('$_base/work-orders/$id/done');
+
+  Future<Result<void, AppFailure>> recordCheck({
+    required String qualityPointId,
+    required String workOrderId,
+    double? measuredValue,
+    String? passFail,
+    String? note,
+  }) =>
+      _postVoid('$_base/quality-checks', body: {
+        'qualityPointId': qualityPointId,
+        'workOrderId': workOrderId,
+        if (measuredValue != null) 'measuredValue': measuredValue,
+        if (passFail != null) 'passFail': passFail,
+        if (note != null) 'note': note,
+      },);
+
+  Future<Result<List<MfgQualityAlert>, AppFailure>> listAlerts({String? stage}) =>
+      _get('$_base/quality-alerts',
+          query: {if (stage != null) 'stage': stage},
+          parse: (res) => _list(res, MfgQualityAlert.fromJson),);
+
+  Future<Result<void, AppFailure>> setAlertStage(String id, String stage) =>
+      _postVoid('$_base/quality-alerts/$id/stage', body: {'stage': stage});
 
   // ── helpers ──
   Future<Result<T, AppFailure>> _get<T>(

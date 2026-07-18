@@ -69,6 +69,12 @@ class ProductionDashboardScreen extends ConsumerWidget {
             ),
             const SizedBox(height: BananSpacing.lg),
             FilledButton.icon(
+              onPressed: () => context.push('/production/shop-floor'),
+              icon: const Icon(Icons.precision_manufacturing_outlined),
+              label: const Text('Xưởng sản xuất (bắt đầu/hoàn tất + QC)'),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            OutlinedButton.icon(
               onPressed: () => context.push('/production/orders'),
               icon: const Icon(Icons.list_alt),
               label: const Text('Tất cả lệnh sản xuất'),

@@ -52,3 +52,19 @@ final canProduceProvider = Provider.autoDispose<bool>((ref) {
   final role = ref.watch(authSessionProvider).valueOrNull?.user.role;
   return role != null && (role.isAdmin || role == Role.kitchenManager);
 });
+
+/// Any kitchen role runs the shop floor (baker/QC start/done + record checks).
+final canRunFloorProvider = Provider.autoDispose<bool>((ref) {
+  final role = ref.watch(authSessionProvider).valueOrNull?.user.role;
+  return role != null && (role.isKitchen || role.isAdmin);
+});
+
+final shopFloorProvider =
+    FutureProvider.autoDispose<List<MfgWorkOrderCard>>((ref) async {
+  return _orThrow(await ref.watch(manufacturingApiProvider).shopFloor());
+});
+
+final qualityAlertsProvider =
+    FutureProvider.autoDispose<List<MfgQualityAlert>>((ref) async {
+  return _orThrow(await ref.watch(manufacturingApiProvider).listAlerts(stage: 'NEW'));
+});
