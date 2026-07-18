@@ -1,4 +1,13 @@
-import { IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateMoDto {
   @IsUUID()
@@ -9,7 +18,7 @@ export class CreateMoDto {
   qtyToProduce!: number;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   scheduledDate?: string;
 
   @IsOptional()
@@ -136,7 +145,7 @@ export class SetAlertStageDto {
  */
 export class PlanMoDto {
   @IsOptional()
-  @IsString()
+  @IsDateString()
   scheduledDate?: string | null;
 
   @IsOptional()

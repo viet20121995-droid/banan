@@ -394,17 +394,15 @@ class MfgScheduleItem {
 
 /// A kitchen user assignable as the person responsible for an MO.
 class MfgStaff {
-  const MfgStaff({required this.id, required this.fullName, required this.role});
+  const MfgStaff({required this.id, required this.fullName});
 
   factory MfgStaff.fromJson(Map<String, dynamic> j) => MfgStaff(
         id: j['id'] as String,
         fullName: j['fullName'] as String? ?? '',
-        role: j['role'] as String? ?? '',
       );
 
   final String id;
   final String fullName;
-  final String role;
 }
 
 // ── client ──────────────────────────────────────────────────────────────────
@@ -465,7 +463,17 @@ class ManufacturingApi {
     required String? responsibleId,
   }) =>
       _postVoid('$_base/orders/$id/plan', body: {
-        'scheduledDate': scheduledDate?.toIso8601String(),
+        // Anchor the chosen calendar day to UTC midnight so it round-trips to
+        // the same day regardless of the server's timezone (the read side reads
+        // UTC calendar fields). A bare local DateTime drops its offset and lands
+        // a day off on any ahead-of-UTC backend.
+        'scheduledDate': scheduledDate == null
+            ? null
+            : DateTime.utc(
+                scheduledDate.year,
+                scheduledDate.month,
+                scheduledDate.day,
+              ).toIso8601String(),
         'responsibleId': responsibleId,
       },);
 

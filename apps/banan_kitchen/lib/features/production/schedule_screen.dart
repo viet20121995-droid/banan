@@ -239,16 +239,28 @@ class _PlanDialogState extends ConsumerState<_PlanDialog> {
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
+    final first = DateTime(now.year, now.month, now.day);
+    final current = _date ?? now;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date ?? now,
-      firstDate: DateTime(now.year, now.month, now.day),
+      // An overdue MO's date is before `first`; showDatePicker asserts
+      // initialDate >= firstDate, so clamp it up.
+      initialDate: current.isBefore(first) ? first : current,
+      firstDate: first,
       lastDate: now.add(const Duration(days: 365)),
     );
     if (picked != null) setState(() => _date = picked);
   }
 
   Future<void> _submit() async {
+    // A stale assignee (a user no longer in the kitchen-staff list) renders as
+    // "Chưa phân công"; don't silently re-persist the old id — send null so the
+    // saved state matches what's shown (and the backend would reject it anyway).
+    final people = ref.read(staffProvider).valueOrNull;
+    final responsible =
+        people != null && !people.any((p) => p.id == _responsibleId)
+            ? null
+            : _responsibleId;
     setState(() {
       _busy = true;
       _error = null;
@@ -256,7 +268,7 @@ class _PlanDialogState extends ConsumerState<_PlanDialog> {
     final res = await ref.read(manufacturingApiProvider).planOrder(
           widget.item.id,
           scheduledDate: _date,
-          responsibleId: _responsibleId,
+          responsibleId: responsible,
         );
     if (!mounted) return;
     res.when(

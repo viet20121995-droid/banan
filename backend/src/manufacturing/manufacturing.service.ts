@@ -883,7 +883,7 @@ export class ManufacturingService {
         role: { in: [Role.KITCHEN_MANAGER, Role.KITCHEN_STAFF, Role.ADMIN] },
         isActive: true,
       },
-      select: { id: true, fullName: true, role: true },
+      select: { id: true, fullName: true },
       orderBy: { fullName: 'asc' },
     });
   }
@@ -937,8 +937,22 @@ export class ManufacturingService {
       });
     }
     if (dto.responsibleId) {
-      const user = await this.prisma.user.findUnique({ where: { id: dto.responsibleId } });
-      if (!user) throw new BadRequestException({ code: 'MFG_USER_NOT_FOUND' });
+      // Only an active kitchen user is assignable — the same set listStaff
+      // offers. Guards against assigning (and thereby surfacing the name of) an
+      // arbitrary or deactivated account.
+      const user = await this.prisma.user.findFirst({
+        where: {
+          id: dto.responsibleId,
+          isActive: true,
+          role: { in: [Role.KITCHEN_MANAGER, Role.KITCHEN_STAFF, Role.ADMIN] },
+        },
+      });
+      if (!user) {
+        throw new BadRequestException({
+          code: 'MFG_USER_NOT_ASSIGNABLE',
+          message: 'Người phụ trách phải là nhân sự bếp đang hoạt động.',
+        });
+      }
     }
 
     const data: Prisma.MfgOrderUpdateInput = {};

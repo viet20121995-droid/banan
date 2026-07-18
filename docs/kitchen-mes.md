@@ -188,8 +188,11 @@ already existed on the MO (`scheduledDate`, `responsibleId`) — no migration.
 
 New API: `GET manufacturing/schedule`, `GET manufacturing/staff`,
 `POST manufacturing/orders/:id/plan`. A finished/cancelled MO can't be
-rescheduled. Proven by an integration case (assign → resolve name → clear to
-backlog → refuse a DONE MO); integration 8/8 on real Postgres.
+rescheduled, and the responsible must be an *active kitchen user* (the same set
+`staff` offers). The scheduled day is anchored to UTC midnight on the way out so
+it round-trips to the same calendar day whatever timezone the backend runs in.
+Proven by an integration case (assign → resolve name → clear to backlog → refuse
+a DONE MO → refuse a non-kitchen assignee); integration 8/8 on real Postgres.
 
 **MPS scope:** the schedule board *is* the master production schedule surface —
 what to make, when, by whom. Demand-netting (planning against sales

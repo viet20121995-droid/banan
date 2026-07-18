@@ -225,5 +225,21 @@ d('Manufacturing golden path (integration)', () => {
     await expect(
       mfg.planMO(cakeMo, { scheduledDate: when.toISOString() }),
     ).rejects.toThrow(/kết thúc/);
+
+    // A non-kitchen account can't be assigned as responsible.
+    const outsider = await prisma.user.upsert({
+      where: { email: 'mfg-it-customer@banan.test' },
+      update: { role: 'CUSTOMER', isActive: true },
+      create: {
+        email: 'mfg-it-customer@banan.test',
+        passwordHash: 'x',
+        fullName: 'Khách Lạ',
+        role: 'CUSTOMER',
+      },
+    });
+    const mo2 = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 });
+    await expect(
+      mfg.planMO(mo2.id, { responsibleId: outsider.id }),
+    ).rejects.toThrow(/nhân sự bếp/);
   });
 });
