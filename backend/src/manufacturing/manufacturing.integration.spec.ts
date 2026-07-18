@@ -482,4 +482,62 @@ d('Manufacturing golden path (integration)', () => {
     const paused2 = await mfg.pauseWO(wo.id);
     expect(paused2.durationReal).toBeGreaterThanOrEqual(paused1.durationReal + 4);
   });
+
+  // ── reports + replenishment (increment 5) ──
+  it('production and cost reports aggregate DONE MOs; the material/operation split sums to total', async () => {
+    // Production report over all time — the golden-path sponge + cake are DONE.
+    const prod = await mfg.productionReport();
+    const spongeRow = prod.rows.find((r) => r.productId === ids.sponge);
+    const cakeRow = prod.rows.find((r) => r.productId === ids.cake);
+    expect(spongeRow).toBeDefined();
+    expect(cakeRow).toBeDefined();
+    expect(spongeRow!.totalCost).toBeGreaterThan(0);
+    // Grouping loses no MO: per-product moCount sums back to the total.
+    expect(prod.rows.reduce((s, r) => s + r.moCount, 0)).toBe(prod.totals.moCount);
+
+    // Cost report: every row's split reconstructs the snapshot exactly.
+    const cost = await mfg.costReport();
+    for (const r of cost.rows) {
+      expect(r.materialCost + r.operationCost).toBe(r.totalCost);
+    }
+    // The golden sponge MO (total 180250) splits into the hand-checked figures.
+    const golden = cost.rows.find((r) => r.totalCost === 180250);
+    expect(golden).toBeDefined();
+    expect(golden!.materialCost).toBe(37750);
+    expect(golden!.operationCost).toBe(142500);
+  });
+
+  it('scrap report values events at the frozen move cost, grouped by reason and product', async () => {
+    const scrap = await mfg.scrapReport();
+    // The golden-path scrap: 200 cake @ AVCO 209.15 frozen on the move = 41830đ.
+    const byReason = scrap.byReason.find((r) => r.reason === 'Rơi vỡ');
+    expect(byReason).toBeDefined();
+    expect(byReason!.value).toBe(41830);
+    const byProduct = scrap.byProduct.find((r) => r.productId === ids.cake);
+    expect(byProduct).toBeDefined();
+    expect(byProduct!.qty).toBe(200);
+    expect(byProduct!.value).toBe(41830);
+    expect(scrap.totals.value).toBeGreaterThanOrEqual(41830);
+  });
+
+  it('replenishment flags a raw-material shortfall from open-MO demand vs free stock', async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    // Zero flour on hand so demand from open MOs shows as a clean shortfall.
+    await prisma.mfgStockQuant.deleteMany({
+      where: { productId: ids.flour, locationId: stockLoc.id },
+    });
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 }); // flour 500
+    await mfg.confirmMO(mo.id); // open (CONFIRMED) → counts toward demand
+
+    const rep = await mfg.replenishment();
+    const flourProduct = await prisma.mfgProduct.findUniqueOrThrow({ where: { id: ids.flour } });
+    const row = rep.rows.find((r) => r.productId === ids.flour);
+    expect(row).toBeDefined();
+    expect(row!.available).toBe(0); // stock zeroed
+    expect(row!.shortfall).toBe(row!.demand); // nothing free → buy the whole demand
+    expect(row!.shortfall).toBeGreaterThanOrEqual(500); // at least this MO's need
+    expect(row!.avgCost).toBe(Number(flourProduct.avgCost));
+    expect(row!.estCost).toBe(Math.round(row!.shortfall * row!.avgCost));
+  });
 });

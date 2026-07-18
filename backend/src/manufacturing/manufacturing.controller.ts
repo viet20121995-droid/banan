@@ -65,6 +65,31 @@ export class ManufacturingController {
     return this.mfg.moStateCounts();
   }
 
+  // ── reports + replenishment ───────────────────────────────────────────────
+  @Roles(...KITCHEN_READ)
+  @Get('reports/production')
+  productionReport(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.mfg.productionReport(from, to);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('reports/scrap')
+  scrapReport(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.mfg.scrapReport(from, to);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('reports/cost')
+  costReport(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.mfg.costReport(from, to);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('replenishment')
+  replenishment() {
+    return this.mfg.replenishment();
+  }
+
   // ── planning (schedule + employee assignment) ─────────────────────────────
   @Roles(...KITCHEN_READ)
   @Get('staff')

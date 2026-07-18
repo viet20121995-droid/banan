@@ -986,6 +986,299 @@ export class ManufacturingService {
     return rows.map((r) => ({ state: r.state, count: r._count._all }));
   }
 
+  // ── reports + replenishment (increment 5) ─────────────────────────────────
+
+  /**
+   * Optional ISO date-range → a Prisma filter. `from` is inclusive; `to` is
+   * inclusive of the whole calendar day (floored to UTC midnight, then +1 day as
+   * an exclusive upper bound) so a `to` of 2026-07-18 still catches that evening.
+   */
+  private dateRange(from?: string, to?: string): { gte?: Date; lt?: Date } | undefined {
+    const range: { gte?: Date; lt?: Date } = {};
+    if (from) range.gte = new Date(from);
+    if (to) {
+      const end = new Date(to);
+      end.setUTCHours(0, 0, 0, 0);
+      end.setUTCDate(end.getUTCDate() + 1);
+      range.lt = end;
+    }
+    return range.gte || range.lt ? range : undefined;
+  }
+
+  /**
+   * Production report: finished (DONE) MOs in a window, grouped by product.
+   * Output qty and cost are the produce-time snapshots on the MO (qtyProduced,
+   * totalCost) — DONE is terminal so they never drift. Qty is not totalled
+   * across products (mixed UoM); only đồng and MO count are.
+   */
+  async productionReport(from?: string, to?: string) {
+    const when = this.dateRange(from, to);
+    const mos = await this.prisma.mfgOrder.findMany({
+      where: { state: 'DONE', ...(when ? { updatedAt: when } : {}) },
+      include: { product: { include: { uom: true } } },
+    });
+
+    const byProduct = new Map<
+      string,
+      {
+        productId: string;
+        productCode: string;
+        productNameVi: string;
+        uomCode: string;
+        moCount: number;
+        qtyProduced: number;
+        totalCost: number;
+      }
+    >();
+    for (const mo of mos) {
+      const row = byProduct.get(mo.productId) ?? {
+        productId: mo.productId,
+        productCode: mo.product.code,
+        productNameVi: mo.product.nameVi,
+        uomCode: mo.product.uom.code,
+        moCount: 0,
+        qtyProduced: 0,
+        totalCost: 0,
+      };
+      row.moCount += 1;
+      row.qtyProduced += n(mo.qtyProduced);
+      row.totalCost += n(mo.totalCost);
+      byProduct.set(mo.productId, row);
+    }
+
+    const rows = [...byProduct.values()]
+      .map((r) => ({
+        ...r,
+        qtyProduced: round3(r.qtyProduced),
+        totalCost: roundMoney(r.totalCost),
+        avgUnitCost: r.qtyProduced > 0 ? roundCost(r.totalCost / r.qtyProduced) : 0,
+      }))
+      .sort((a, b) => b.totalCost - a.totalCost);
+
+    return {
+      from: from ?? null,
+      to: to ?? null,
+      rows,
+      totals: {
+        moCount: mos.length,
+        totalCost: roundMoney(rows.reduce((s, r) => s + r.totalCost, 0)),
+      },
+    };
+  }
+
+  /**
+   * Scrap report over a window. MfgScrap carries no cost column — value is read
+   * from the paired stock move (refType SCRAP, refId = scrap.id), whose unitCost
+   * is the AVCO snapshot frozen at scrap time (live avgCost would drift on later
+   * receipts). Grouped by reason (value only — qty across products is mixed-UoM)
+   * and by product (qty + value).
+   */
+  async scrapReport(from?: string, to?: string) {
+    const when = this.dateRange(from, to);
+    const scraps = await this.prisma.mfgScrap.findMany({
+      where: when ? { date: when } : undefined,
+      include: { product: { include: { uom: true } } },
+    });
+    if (scraps.length === 0) {
+      return {
+        from: from ?? null,
+        to: to ?? null,
+        byReason: [],
+        byProduct: [],
+        totals: { value: 0, count: 0 },
+      };
+    }
+
+    const moves = await this.prisma.mfgStockMove.findMany({
+      where: { refType: 'SCRAP', refId: { in: scraps.map((s) => s.id) } },
+      select: { refId: true, unitCost: true },
+    });
+    const costOf = new Map(moves.map((m) => [m.refId, n(m.unitCost)]));
+
+    const byReason = new Map<string, { reason: string; value: number; count: number }>();
+    const byProduct = new Map<
+      string,
+      {
+        productId: string;
+        productCode: string;
+        productNameVi: string;
+        uomCode: string;
+        qty: number;
+        value: number;
+        count: number;
+      }
+    >();
+    let totalValue = 0;
+    for (const s of scraps) {
+      const value = n(s.qty) * (costOf.get(s.id) ?? 0);
+      totalValue += value;
+
+      const r = byReason.get(s.reason) ?? { reason: s.reason, value: 0, count: 0 };
+      r.value += value;
+      r.count += 1;
+      byReason.set(s.reason, r);
+
+      const p = byProduct.get(s.productId) ?? {
+        productId: s.productId,
+        productCode: s.product.code,
+        productNameVi: s.product.nameVi,
+        uomCode: s.product.uom.code,
+        qty: 0,
+        value: 0,
+        count: 0,
+      };
+      p.qty += n(s.qty);
+      p.value += value;
+      p.count += 1;
+      byProduct.set(s.productId, p);
+    }
+
+    return {
+      from: from ?? null,
+      to: to ?? null,
+      byReason: [...byReason.values()]
+        .map((r) => ({ ...r, value: roundMoney(r.value) }))
+        .sort((a, b) => b.value - a.value),
+      byProduct: [...byProduct.values()]
+        .map((p) => ({ ...p, qty: round3(p.qty), value: roundMoney(p.value) }))
+        .sort((a, b) => b.value - a.value),
+      totals: { value: roundMoney(totalValue), count: scraps.length },
+    };
+  }
+
+  /**
+   * Cost report: for each DONE MO in a window, the actual material-vs-operation
+   * split. Materials are summed from the MO's consume moves (refType MO, booked
+   * INTO the PRODUCTION location) at their frozen unit cost; operations are the
+   * remainder of the produce-time totalCost snapshot — so material + operation
+   * equals totalCost exactly, no rounding drift.
+   */
+  async costReport(from?: string, to?: string) {
+    const when = this.dateRange(from, to);
+    const production = await this.locationId(this.prisma, 'PRODUCTION');
+    const mos = await this.prisma.mfgOrder.findMany({
+      where: { state: 'DONE', ...(when ? { updatedAt: when } : {}) },
+      include: { product: true, uom: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (mos.length === 0) {
+      return {
+        from: from ?? null,
+        to: to ?? null,
+        rows: [],
+        totals: { materialCost: 0, operationCost: 0, totalCost: 0 },
+      };
+    }
+
+    const consumes = await this.prisma.mfgStockMove.findMany({
+      where: { refType: 'MO', destLocationId: production, refId: { in: mos.map((m) => m.id) } },
+      select: { refId: true, qty: true, unitCost: true },
+    });
+    const materialByMo = new Map<string, number>();
+    for (const mv of consumes) {
+      if (!mv.refId) continue;
+      materialByMo.set(mv.refId, (materialByMo.get(mv.refId) ?? 0) + n(mv.qty) * n(mv.unitCost));
+    }
+
+    const rows = mos.map((mo) => {
+      const total = roundMoney(n(mo.totalCost));
+      const material = roundMoney(materialByMo.get(mo.id) ?? 0);
+      const operation = total - material; // remainder → split sums to total exactly
+      const produced = n(mo.qtyProduced);
+      return {
+        moId: mo.id,
+        code: mo.code,
+        productNameVi: mo.product.nameVi,
+        qtyProduced: round3(produced),
+        uomCode: mo.uom.code,
+        materialCost: material,
+        operationCost: operation,
+        totalCost: total,
+        unitCost: produced > 0 ? roundCost(total / produced) : 0,
+      };
+    });
+
+    return {
+      from: from ?? null,
+      to: to ?? null,
+      rows,
+      totals: {
+        materialCost: roundMoney(rows.reduce((s, r) => s + r.materialCost, 0)),
+        operationCost: roundMoney(rows.reduce((s, r) => s + r.operationCost, 0)),
+        totalCost: roundMoney(rows.reduce((s, r) => s + r.totalCost, 0)),
+      },
+    };
+  }
+
+  /**
+   * Replenishment suggestion: for every purchased item (RAW / PACKAGING), the
+   * shortfall between demand from open MOs and free stock. Advisory only — it
+   * recommends what to buy (act on it in Odoo); it creates nothing.
+   *   demand    = Σ (qtyToConsume − qtyConsumed) over DRAFT/CONFIRMED/PROGRESS MOs
+   *   available = Σ (quantity − reservedQty) at STOCK
+   *   shortfall = demand − available (only positive rows are returned)
+   */
+  async replenishment() {
+    const stock = await this.locationId(this.prisma, 'STOCK');
+
+    // Purchased products only — SEMI/FINISHED are produced, not bought.
+    const products = await this.prisma.mfgProduct.findMany({
+      where: { active: true, type: { in: ['RAW', 'PACKAGING'] } },
+      include: { uom: true },
+      orderBy: { code: 'asc' },
+    });
+    const purchasedIds = new Set(products.map((p) => p.id));
+
+    // Demand: open-MO component needs, grouped by product.
+    const components = await this.prisma.mfgOrderComponent.findMany({
+      where: { mo: { state: { in: ['DRAFT', 'CONFIRMED', 'PROGRESS'] } } },
+      select: { productId: true, qtyToConsume: true, qtyConsumed: true },
+    });
+    const demandBy = new Map<string, number>();
+    for (const c of components) {
+      if (!purchasedIds.has(c.productId)) continue;
+      const need = n(c.qtyToConsume) - n(c.qtyConsumed);
+      if (need <= 0) continue;
+      demandBy.set(c.productId, (demandBy.get(c.productId) ?? 0) + need);
+    }
+
+    // Free stock at STOCK, grouped by product.
+    const quants = await this.prisma.mfgStockQuant.findMany({
+      where: { locationId: stock, productId: { in: [...purchasedIds] } },
+      select: { productId: true, quantity: true, reservedQty: true },
+    });
+    const availBy = new Map<string, number>();
+    for (const q of quants) {
+      availBy.set(q.productId, (availBy.get(q.productId) ?? 0) + n(q.quantity) - n(q.reservedQty));
+    }
+
+    const rows = products
+      .map((p) => {
+        const demand = demandBy.get(p.id) ?? 0;
+        const available = availBy.get(p.id) ?? 0;
+        const shortfall = demand - available;
+        const avgCost = n(p.avgCost);
+        return {
+          productId: p.id,
+          productCode: p.code,
+          productNameVi: p.nameVi,
+          uomCode: p.uom.code,
+          demand: round3(demand),
+          available: round3(available),
+          shortfall: round3(shortfall),
+          avgCost: roundCost(avgCost),
+          estCost: roundMoney(shortfall * avgCost),
+        };
+      })
+      .filter((r) => r.shortfall > 0)
+      .sort((a, b) => b.estCost - a.estCost);
+
+    return {
+      rows,
+      totals: { estCost: roundMoney(rows.reduce((s, r) => s + r.estCost, 0)) },
+    };
+  }
+
   // ── planning (schedule + employee assignment) ─────────────────────────────
 
   /** Kitchen users who can be assigned to run an MO. */
