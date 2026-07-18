@@ -91,6 +91,16 @@ GET  traceability/lot/:id
 - **Check availability** compares on-hand − reserved against need and sets an
   Available / Not-available badge, but never blocks — advisory, matching the
   observed "warn but continue".
+- **Reservations are advisory by design.** `reserve` is a soft hold: it never
+  overbooks a quant (a guarded update re-checks `quantity − reservedQty ≥ take`
+  in SQL, so two concurrent reserves can't both grab the same stock), but the
+  hold is *not owned per-MO* — `reservedQty` is a running total on the quant, not
+  an allocation. Real on-hand is never at risk from this: `produce` consumes real
+  FIFO stock and backflushes any shortfall, and `produce` itself is guarded by an
+  atomic state claim so a batch is consumed/booked exactly once. Making holds
+  *hard* (a per-MO allocation ledger so cancel/produce only touch their own
+  reservation) is a deliberate future increment, not an accident — deferred
+  because at single-site bakery concurrency the advisory hold is enough.
 - **Produce** generates the finished lot (mfg = today, expiry = today +
   `expirationDays`), books it into stock, consumes the **full** BoM FIFO by
   expiry (backflushing any shortfall so cost/qty stay whole), rolls the finished
