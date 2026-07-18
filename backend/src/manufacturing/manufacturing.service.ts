@@ -453,15 +453,40 @@ export class ManufacturingService {
    * component reserves what it can and stays Not-available.
    */
   async reserve(id: string) {
-    const mo = await this.prisma.mfgOrder.findUnique({
-      where: { id },
-      include: { components: true },
-    });
+    const mo = await this.prisma.mfgOrder.findUnique({ where: { id } });
     if (!mo) throw new NotFoundException({ code: 'MFG_MO_NOT_FOUND' });
+    // Only a confirmed / in-progress MO can hold stock. Reserving a DRAFT (no
+    // plan yet) or a terminal DONE/CANCEL order would create a hold with no
+    // natural release path. Fast fail; the claim below is the race-safe guard.
+    if (mo.state !== 'CONFIRMED' && mo.state !== 'PROGRESS') {
+      throw new ConflictException({
+        code: 'MFG_MO_STATE',
+        message:
+          mo.state === 'DRAFT'
+            ? 'MO chưa xác nhận — không thể giữ hàng.'
+            : `MO đã ${mo.state === 'DONE' ? 'hoàn tất' : 'huỷ'} — không thể giữ hàng.`,
+      });
+    }
     const stock = await this.locationId(this.prisma, 'STOCK');
 
     await this.prisma.$transaction(async (db) => {
-      for (const c of mo.components) {
+      // Claim + lock the MO row so two concurrent reserves of the SAME order
+      // serialise, and enforce the state race-safely (CONFIRMED → PROGRESS). The
+      // components are then re-read INSIDE the lock, so the second reserve sees
+      // the first's holds and computes need = 0 instead of double-reserving.
+      const claim = await db.mfgOrder.updateMany({
+        where: { id, state: { in: ['CONFIRMED', 'PROGRESS'] } },
+        data: { state: 'PROGRESS' },
+      });
+      if (claim.count === 0) {
+        throw new ConflictException({
+          code: 'MFG_MO_STATE',
+          message: 'MO không ở trạng thái giữ hàng được.',
+        });
+      }
+
+      const components = await db.mfgOrderComponent.findMany({ where: { moId: id } });
+      for (const c of components) {
         const need = n(c.qtyToConsume) - n(c.reservedQty);
         if (need <= 0) continue;
         let remaining = need;
@@ -495,10 +520,7 @@ export class ManufacturingService {
           data: { reservedQty: round3(n(c.qtyToConsume) - remaining) },
         });
       }
-      await db.mfgOrder.update({
-        where: { id: mo.id },
-        data: { state: mo.state === 'CONFIRMED' ? 'PROGRESS' : mo.state },
-      });
+      // State already claimed to PROGRESS above — nothing more to set here.
     });
     return this.checkAvailability(id);
   }

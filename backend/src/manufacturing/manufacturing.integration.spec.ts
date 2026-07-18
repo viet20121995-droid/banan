@@ -385,4 +385,52 @@ d('Manufacturing golden path (integration)', () => {
     const quants = await prisma.mfgStockQuant.findMany();
     for (const q of quants) expect(Number(q.reservedQty)).toBeGreaterThanOrEqual(0);
   });
+
+  // ── reserve idempotency + state guard (round-4 review) ──
+  it('reserve is idempotent under two concurrent calls on the same MO', async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    // Pin flour to one clean quant with ample stock so a double hold (not just an
+    // overbook) would show — both reserves could otherwise each grab 500.
+    await prisma.mfgStockQuant.deleteMany({
+      where: { productId: ids.flour, locationId: stockLoc.id },
+    });
+    await prisma.mfgStockQuant.create({
+      data: {
+        productId: ids.flour,
+        lotId: null,
+        locationId: stockLoc.id,
+        quantity: 5000,
+        reservedQty: 0,
+      },
+    });
+
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 }); // flour 500
+    await mfg.confirmMO(mo.id);
+
+    await Promise.allSettled([mfg.reserve(mo.id), mfg.reserve(mo.id)]);
+
+    // The flour held on the quant must match the component's reserved — 500, not
+    // 1000. A non-idempotent reserve double-holds the quant and strands 500.
+    const flourComp = await prisma.mfgOrderComponent.findFirstOrThrow({
+      where: { moId: mo.id, productId: ids.flour },
+    });
+    const flourQuants = await prisma.mfgStockQuant.findMany({
+      where: { productId: ids.flour, locationId: stockLoc.id },
+    });
+    const quantReserved = flourQuants.reduce((s, q) => s + Number(q.reservedQty), 0);
+    expect(Number(flourComp.reservedQty)).toBe(500);
+    expect(quantReserved).toBe(500);
+  });
+
+  it('reserve refuses a DRAFT or terminal MO', async () => {
+    const bom = await bomOf(ids.sponge);
+    const draft = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 }); // DRAFT
+    await expect(mfg.reserve(draft.id)).rejects.toThrow(/xác nhận/i);
+
+    const cancelled = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 });
+    await mfg.confirmMO(cancelled.id);
+    await mfg.cancelMO(cancelled.id);
+    await expect(mfg.reserve(cancelled.id)).rejects.toThrow(/huỷ/i);
+  });
 });
