@@ -10,7 +10,6 @@ import {
   CreateMoDto,
   CreateQualityPointDto,
   PlanMoDto,
-  ProduceDto,
   ReceiveDto,
   RecordCheckDto,
   ScrapDto,
@@ -132,8 +131,8 @@ export class ManufacturingController {
 
   @Roles(...KITCHEN_WRITE)
   @Post('orders/:id/produce')
-  produce(@Param('id') id: string, @Body() dto: ProduceDto) {
-    return this.mfg.produce(id, dto.producedQty);
+  produce(@Param('id') id: string) {
+    return this.mfg.produce(id);
   }
 
   @Roles(...KITCHEN_WRITE)

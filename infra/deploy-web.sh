@@ -45,10 +45,14 @@ build_and_upload() {
     d='$REMOTE_DIR/$remoteName'
     t=/tmp/banan-web-$remoteName.tgz
     test -s \"\$t\"
-    rm -rf \"\$d.new\" && mkdir -p \"\$d.new\"
+    rm -rf \"\$d.new\" \"\$d.old\" && mkdir -p \"\$d.new\"
     tar xzf \"\$t\" -C \"\$d.new\"
     test -s \"\$d.new/main.dart.js\"
-    rm -rf \"\$d\" && mv \"\$d.new\" \"\$d\"
+    # Swap by moving the live copy aside first, not deleting it: if the final
+    # move fails, restore the previous copy so the site is never left missing.
+    if [ -e \"\$d\" ]; then mv \"\$d\" \"\$d.old\"; fi
+    mv \"\$d.new\" \"\$d\" || { mv \"\$d.old\" \"\$d\" 2>/dev/null; false; }
+    rm -rf \"\$d.old\"
     rm -f \"\$t\"
   " || {
     echo "✖ $remoteName failed to deploy — the live copy was left untouched" >&2

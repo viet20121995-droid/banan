@@ -179,11 +179,25 @@ class _MarketingScreenState extends ConsumerState<MarketingScreen> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ),
           const SizedBox(height: BananSpacing.md),
-          _referralCard(),
-          _giftCardCard(),
-          _subscriptionCard(),
-          _cateringCard(),
-          _rewardsCard(),
+          // A non-admin can read the config but the backend refuses the PATCH, so
+          // block editing at the input level too — not only the switch/save — so
+          // an owner can't start filling a form that will never save.
+          IgnorePointer(
+            ignoring: !_canEdit,
+            child: Opacity(
+              opacity: _canEdit ? 1 : 0.6,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _referralCard(),
+                  _giftCardCard(),
+                  _subscriptionCard(),
+                  _cateringCard(),
+                  _rewardsCard(),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: BananSpacing.xxl),
         ],
       ),

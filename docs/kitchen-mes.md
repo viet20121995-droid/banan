@@ -92,9 +92,17 @@ GET  traceability/lot/:id
   Available / Not-available badge, but never blocks — advisory, matching the
   observed "warn but continue".
 - **Produce** generates the finished lot (mfg = today, expiry = today +
-  `expirationDays`), books it into stock, consumes components FIFO by expiry
-  (backflushing any shortfall so cost/qty stay whole), rolls the finished
-  product's AVCO forward, and snapshots `totalCost` = materials + operations.
+  `expirationDays`), books it into stock, consumes the **full** BoM FIFO by
+  expiry (backflushing any shortfall so cost/qty stay whole), rolls the finished
+  product's AVCO forward, and snapshots `totalCost` = materials + operations. It
+  makes the whole planned quantity — partial-yield production was removed rather
+  than left half-wired. Every stock write is an **atomic increment** (Postgres
+  row-locks the update) so concurrent moves can't lose each other's changes.
+- **QC is enforced on both close paths.** Whether an operation is closed from the
+  shop floor (`doneWO`) or the order is closed directly (`produce`), the same
+  gate runs: every active quality point on the operation must have a latest PASS
+  check. So finished stock can't be booked with QC skipped or failed, no matter
+  which button ends the batch.
 - **Cost** = Σ(component base-qty × AVCO, recursing into semi BoMs) +
   Σ(operation minutes / 60 × work-center cost/hour). Unit costs keep 2 decimals
   so a semi at 180.25đ/g doesn't shed a quarter đồng per gram up the tree; only

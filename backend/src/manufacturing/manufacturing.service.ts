@@ -73,6 +73,11 @@ export class ManufacturingService {
     // findFirst, not findUnique: the compound key includes a nullable lotId,
     // and Prisma's WhereUniqueInput doesn't accept null in a compound. Equality
     // on the three fields is unambiguous because of the @@unique.
+    // ponytail: a concurrent FIRST-TOUCH of the same (product, null-lot,
+    // location) can race two callers past this findFirst into two create()s — a
+    // duplicate quant row. Harmless to totals (availableAtStock SUMs every
+    // matching quant); if it ever matters, add a NULLS NOT DISTINCT unique +
+    // an ON CONFLICT upsert.
     const existing = await db.mfgStockQuant.findFirst({
       where: {
         productId: args.productId,
@@ -81,11 +86,15 @@ export class ManufacturingService {
       },
     });
     if (existing) {
+      // Atomic increment, not read-modify-write: Postgres row-locks the UPDATE,
+      // so two concurrent moves against the same quant both apply instead of one
+      // clobbering the other. Deltas are pre-rounded and the column is
+      // Decimal(14,3), so accumulation stays exact.
       await db.mfgStockQuant.update({
         where: { id: existing.id },
         data: {
-          quantity: round3(n(existing.quantity) + (args.dQty ?? 0)),
-          reservedQty: round3(n(existing.reservedQty) + (args.dReserved ?? 0)),
+          quantity: { increment: round3(args.dQty ?? 0) },
+          reservedQty: { increment: round3(args.dReserved ?? 0) },
         },
       });
     } else {
@@ -320,27 +329,43 @@ export class ManufacturingService {
     }
 
     const factor = dto.qtyToProduce / n(bom.outputQty);
-    const code = await this.nextMoCode(this.prisma);
+    const componentCreate = bom.lines.map((l) => ({
+      productId: l.componentId,
+      qtyToConsume: round3(n(l.qty) * factor),
+      uomId: l.uomId,
+    }));
 
-    return this.prisma.mfgOrder.create({
-      data: {
-        code,
-        productId: bom.productId,
-        bomId: bom.id,
-        qtyToProduce: round3(dto.qtyToProduce),
-        uomId: bom.uomId,
-        scheduledDate: dto.scheduledDate ? new Date(dto.scheduledDate) : null,
-        responsibleId: dto.responsibleId,
-        components: {
-          create: bom.lines.map((l) => ({
-            productId: l.componentId,
-            qtyToConsume: round3(n(l.qty) * factor),
-            uomId: l.uomId,
-          })),
-        },
-      },
-      include: { components: true },
-    });
+    // nextMoCode is count()+1, which two concurrent creates can land on the same
+    // value — retry on the unique-violation rather than 500 the request.
+    // ponytail: fine at bakery volume; swap to a DB sequence if MO creation
+    // ever gets hot.
+    for (let attempt = 0; ; attempt++) {
+      const code = await this.nextMoCode(this.prisma);
+      try {
+        return await this.prisma.mfgOrder.create({
+          data: {
+            code,
+            productId: bom.productId,
+            bomId: bom.id,
+            qtyToProduce: round3(dto.qtyToProduce),
+            uomId: bom.uomId,
+            scheduledDate: dto.scheduledDate ? new Date(dto.scheduledDate) : null,
+            responsibleId: dto.responsibleId,
+            components: { create: componentCreate },
+          },
+          include: { components: true },
+        });
+      } catch (e) {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002' &&
+          attempt < 5
+        ) {
+          continue;
+        }
+        throw e;
+      }
+    }
   }
 
   /**
@@ -452,7 +477,7 @@ export class ManufacturingService {
           const take = Math.min(free, remaining);
           await db.mfgStockQuant.update({
             where: { id: q.id },
-            data: { reservedQty: round3(n(q.reservedQty) + take) },
+            data: { reservedQty: { increment: round3(take) } },
           });
           remaining -= take;
         }
@@ -479,7 +504,7 @@ export class ManufacturingService {
    * quantity (backflush), letting the quant go negative rather than silently
    * under-costing the order, which matches "warn but continue".
    */
-  async produce(id: string, producedQty?: number) {
+  async produce(id: string) {
     const stock = await this.locationId(this.prisma, 'STOCK');
     const production = await this.locationId(this.prisma, 'PRODUCTION');
 
@@ -488,7 +513,13 @@ export class ManufacturingService {
       include: {
         product: { include: { uom: true } },
         components: { include: { product: true, uom: true } },
-        workOrders: { include: { workCenter: true } },
+        workOrders: {
+          include: {
+            workCenter: true,
+            bomOperation: { include: { qualityPoints: { where: { active: true } } } },
+            qualityChecks: { orderBy: { date: 'desc' } },
+          },
+        },
       },
     });
     if (!mo) throw new NotFoundException({ code: 'MFG_MO_NOT_FOUND' });
@@ -498,7 +529,12 @@ export class ManufacturingService {
         message: `MO đã ${mo.state === 'DONE' ? 'hoàn tất' : 'huỷ'}.`,
       });
     }
-    const outQty = producedQty ?? n(mo.qtyToProduce);
+    // The direct "Sản xuất" path enforces the same QC gate as shop-floor doneWO,
+    // so a batch can't reach finished stock with a quality point unchecked or
+    // failed. An MO with no QC points passes vacuously.
+    for (const wo of mo.workOrders) this.assertQcPassed(wo);
+
+    const outQty = n(mo.qtyToProduce);
     if (outQty <= 0) throw new BadRequestException({ code: 'MFG_QTY_INVALID' });
 
     return this.prisma.$transaction(async (db) => {
@@ -529,13 +565,12 @@ export class ManufacturingService {
             refId: mo.id,
             unitCost: n(c.product.avgCost),
           });
-          // Release any reservation we held on this quant.
+          // Release any reservation we held on this quant — atomic decrement,
+          // clamped by what the loaded row holds so it never goes negative.
           if (n(q.reservedQty) > 0) {
             await db.mfgStockQuant.update({
               where: { id: q.id },
-              data: {
-                reservedQty: round3(Math.max(0, n(q.reservedQty) - take)),
-              },
+              data: { reservedQty: { decrement: round3(Math.min(take, n(q.reservedQty))) } },
             });
           }
           remaining -= take;
@@ -660,7 +695,7 @@ export class ManufacturingService {
           const give = Math.min(n(q.reservedQty), remaining);
           await db.mfgStockQuant.update({
             where: { id: q.id },
-            data: { reservedQty: round3(n(q.reservedQty) - give) },
+            data: { reservedQty: { decrement: round3(give) } },
           });
           remaining -= give;
         }
@@ -998,6 +1033,34 @@ export class ManufacturingService {
     return Math.max(0, Math.round((to.getTime() - from.getTime()) / 60000));
   }
 
+  /**
+   * Throw unless every active quality point on a work order's operation has a
+   * LATEST PASS check (a re-measure supersedes an earlier fail). Shared by
+   * doneWO (shop floor) and produce (the direct "Sản xuất" button) so finished
+   * stock can never be booked with a QC point skipped or failed, whichever path
+   * closes the order.
+   */
+  private assertQcPassed(wo: {
+    bomOperation: { qualityPoints: { id: string; titleVi: string }[] };
+    qualityChecks: { qualityPointId: string; result: string }[];
+  }): void {
+    for (const qp of wo.bomOperation.qualityPoints) {
+      const latest = wo.qualityChecks.find((c) => c.qualityPointId === qp.id);
+      if (!latest) {
+        throw new BadRequestException({
+          code: 'MFG_QC_REQUIRED',
+          message: `Cần kiểm tra "${qp.titleVi}" (đạt) trước khi hoàn tất.`,
+        });
+      }
+      if (latest.result === 'FAIL') {
+        throw new BadRequestException({
+          code: 'MFG_QC_FAILED',
+          message: `Kiểm tra "${qp.titleVi}" KHÔNG đạt — không thể hoàn tất.`,
+        });
+      }
+    }
+  }
+
   /** Start (or resume) a work order — marks the current run's start. */
   async startWO(id: string) {
     const wo = await this.wo(id);
@@ -1051,23 +1114,7 @@ export class ManufacturingService {
       throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn đã kết thúc.' });
     }
 
-    for (const qp of wo.bomOperation.qualityPoints) {
-      // The LATEST check for the point is the verdict — a re-measure that passes
-      // supersedes an earlier fail, so a corrected batch isn't blocked forever.
-      const latest = wo.qualityChecks.find((c) => c.qualityPointId === qp.id);
-      if (!latest) {
-        throw new BadRequestException({
-          code: 'MFG_QC_REQUIRED',
-          message: `Cần kiểm tra "${qp.titleVi}" (đạt) trước khi hoàn tất.`,
-        });
-      }
-      if (latest.result === 'FAIL') {
-        throw new BadRequestException({
-          code: 'MFG_QC_FAILED',
-          message: `Kiểm tra "${qp.titleVi}" KHÔNG đạt — không thể hoàn tất công đoạn.`,
-        });
-      }
-    }
+    this.assertQcPassed(wo);
 
     return this.prisma.mfgWorkOrder.update({
       where: { id },

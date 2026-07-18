@@ -222,9 +222,9 @@ d('Manufacturing golden path (integration)', () => {
 
     // The finished cake MO (produced earlier) can't be rescheduled.
     const cakeMo = (globalThis as Record<string, unknown>).__cakeMo as string;
-    await expect(
-      mfg.planMO(cakeMo, { scheduledDate: when.toISOString() }),
-    ).rejects.toThrow(/kết thúc/);
+    await expect(mfg.planMO(cakeMo, { scheduledDate: when.toISOString() })).rejects.toThrow(
+      /kết thúc/,
+    );
 
     // A non-kitchen account can't be assigned as responsible.
     const outsider = await prisma.user.upsert({
@@ -238,8 +238,46 @@ d('Manufacturing golden path (integration)', () => {
       },
     });
     const mo2 = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 });
-    await expect(
-      mfg.planMO(mo2.id, { responsibleId: outsider.id }),
-    ).rejects.toThrow(/nhân sự bếp/);
+    await expect(mfg.planMO(mo2.id, { responsibleId: outsider.id })).rejects.toThrow(/nhân sự bếp/);
+  });
+
+  // The direct produce() path must honour the QC gate, not just shop-floor doneWO.
+  it('produce enforces the operation QC gate (not just doneWO)', async () => {
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 300 });
+    await mfg.confirmMO(mo.id);
+    const wo = await prisma.mfgWorkOrder.findFirstOrThrow({
+      where: { moId: mo.id },
+      orderBy: { sequence: 'asc' },
+      include: { bomOperation: true },
+    });
+    // Guarantee at least one active QC point on the operation.
+    await mfg.createQualityPoint({
+      titleVi: 'Nhiệt độ nướng',
+      titleEn: 'Bake temp',
+      testType: 'MEASURE',
+      bomOperationId: wo.bomOperationId,
+      normMin: 150,
+      normMax: 180,
+      unit: '°C',
+    });
+
+    // Direct produce must refuse while a QC point on the op is unchecked.
+    await expect(mfg.produce(mo.id)).rejects.toThrow(/kiểm tra|đạt/i);
+
+    // Record a passing check for every active point on this WO → produce runs.
+    const points = await prisma.mfgQualityPoint.findMany({
+      where: { bomOperationId: wo.bomOperationId, active: true },
+    });
+    for (const p of points) {
+      await mfg.recordCheck({
+        qualityPointId: p.id,
+        workOrderId: wo.id,
+        measuredValue: p.testType === 'MEASURE' ? Number(p.normMin ?? 0) : undefined,
+        passFail: p.testType === 'PASS_FAIL' ? 'PASS' : undefined,
+      });
+    }
+    const done = await mfg.produce(mo.id);
+    expect(done.state).toBe('DONE');
   });
 });

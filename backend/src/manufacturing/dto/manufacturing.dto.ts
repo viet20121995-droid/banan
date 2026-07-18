@@ -26,13 +26,6 @@ export class CreateMoDto {
   responsibleId?: string;
 }
 
-export class ProduceDto {
-  @IsOptional()
-  @IsNumber()
-  @Min(0.001)
-  producedQty?: number;
-}
-
 export class ReceiveDto {
   @IsUUID()
   productId!: string;
