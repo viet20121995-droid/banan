@@ -1104,12 +1104,6 @@ export class ManufacturingService {
     return wo;
   }
 
-  /** Minutes between two instants, floored at 0. */
-  private elapsedMin(from: Date | null, to: Date): number {
-    if (!from) return 0;
-    return Math.max(0, Math.round((to.getTime() - from.getTime()) / 60000));
-  }
-
   /**
    * Throw unless every active quality point on a work order's operation has a
    * LATEST PASS check (a re-measure supersedes an earlier fail). Shared by
@@ -1140,43 +1134,51 @@ export class ManufacturingService {
 
   /** Start (or resume) a work order — marks the current run's start. */
   async startWO(id: string) {
-    const wo = await this.wo(id);
-    if (wo.state === 'DONE' || wo.state === 'CANCEL') {
+    const wo = await this.wo(id); // existence + moId
+    // Guarded claim: row-locks and re-checks state, so a concurrent doneWO/cancel
+    // can't be reverted to PROGRESS by a racing start.
+    const claim = await this.prisma.mfgWorkOrder.updateMany({
+      where: { id, state: { notIn: ['DONE', 'CANCEL'] } },
+      data: { state: 'PROGRESS', dateStart: new Date() },
+    });
+    if (claim.count === 0) {
       throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn đã kết thúc.' });
     }
-    await this.prisma.$transaction([
-      this.prisma.mfgWorkOrder.update({
-        where: { id },
-        data: { state: 'PROGRESS', dateStart: new Date() },
-      }),
-      this.prisma.mfgOrder.update({
-        where: { id: wo.moId },
-        data: { state: 'PROGRESS' },
-      }),
-    ]);
+    // Only revive the MO to PROGRESS if it's still open — never resurrect a terminal MO.
+    await this.prisma.mfgOrder.updateMany({
+      where: { id: wo.moId, state: { in: ['CONFIRMED', 'PROGRESS'] } },
+      data: { state: 'PROGRESS' },
+    });
     return this.wo(id);
   }
 
-  /** Pause — bank the elapsed run time and go back to Ready. */
+  /**
+   * Pause — bank the elapsed run time and go back to Ready. The banking is a
+   * single guarded UPDATE: it increments `durationReal` from the row's own
+   * `dateStart` and re-checks `state = 'PROGRESS'` under the row lock, so two
+   * concurrent pauses (or a pause racing a done) can't lose each other's time or
+   * stomp each other's state.
+   */
   async pauseWO(id: string) {
-    const wo = await this.wo(id);
-    if (wo.state !== 'PROGRESS') {
+    const affected = await this.prisma.$executeRaw`
+      UPDATE "MfgWorkOrder"
+      SET "state" = 'READY',
+          "durationReal" = "durationReal" + GREATEST(0, ROUND((EXTRACT(EPOCH FROM (now() - "dateStart")) / 60)::numeric))::int,
+          "dateStart" = NULL
+      WHERE "id" = ${id} AND "state" = 'PROGRESS'`;
+    if (affected === 0) {
+      await this.wo(id); // throws MFG_WO_NOT_FOUND if the row is gone
       throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn không đang chạy.' });
     }
-    return this.prisma.mfgWorkOrder.update({
-      where: { id },
-      data: {
-        state: 'READY',
-        durationReal: wo.durationReal + this.elapsedMin(wo.dateStart, new Date()),
-        dateStart: null,
-      },
-    });
+    return this.wo(id);
   }
 
   /**
    * Finish a work order. Blocked until every active quality point on its
    * operation has a PASS check — a FAIL or a missing check stops it, so a batch
-   * can't be signed off with an open QC item. Banks the final run time.
+   * can't be signed off with an open QC item. The close itself is a guarded
+   * UPDATE (banks the final run time and re-checks the row isn't already
+   * terminal), so it applies exactly once under concurrent finishes.
    */
   async doneWO(id: string) {
     const wo = await this.prisma.mfgWorkOrder.findUnique({
@@ -1193,15 +1195,16 @@ export class ManufacturingService {
 
     this.assertQcPassed(wo);
 
-    return this.prisma.mfgWorkOrder.update({
-      where: { id },
-      data: {
-        state: 'DONE',
-        durationReal: wo.durationReal + this.elapsedMin(wo.dateStart, new Date()),
-        dateFinished: new Date(),
-        dateStart: wo.dateStart,
-      },
-    });
+    const affected = await this.prisma.$executeRaw`
+      UPDATE "MfgWorkOrder"
+      SET "state" = 'DONE',
+          "durationReal" = "durationReal" + GREATEST(0, ROUND((EXTRACT(EPOCH FROM (now() - "dateStart")) / 60)::numeric))::int,
+          "dateFinished" = now()
+      WHERE "id" = ${id} AND "state" NOT IN ('DONE', 'CANCEL')`;
+    if (affected === 0) {
+      throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn đã kết thúc.' });
+    }
+    return this.wo(id);
   }
 
   // ── quality control ───────────────────────────────────────────────────────

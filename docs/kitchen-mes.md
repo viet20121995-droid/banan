@@ -174,7 +174,11 @@ wiring itself still wants a click-through on a running stack.
 
 - **Work-order execution**: `POST work-orders/:id/{start,pause,done}` with real
   duration banked (start marks the run, pause/done add elapsed minutes). That
-  real time flows into the produce cost.
+  real time flows into the produce cost. Each transition is a **guarded UPDATE**
+  that re-checks the work order's state under the row lock and increments
+  `durationReal` from the row's own `dateStart` in SQL — so two people closing or
+  pausing the same operation at once can't lose banked time or stomp each other's
+  state (the close applies exactly once).
 - **Quality points** on operations (`MEASURE` with a norm range, or `PASS_FAIL`),
   and **checks** — for a MEASURE point the verdict is computed server-side (PASS
   only inside `[normMin, normMax]`), so a tablet just sends the number.

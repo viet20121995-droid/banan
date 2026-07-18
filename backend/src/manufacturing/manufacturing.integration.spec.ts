@@ -433,4 +433,53 @@ d('Manufacturing golden path (integration)', () => {
     await mfg.cancelMO(cancelled.id);
     await expect(mfg.reserve(cancelled.id)).rejects.toThrow(/huỷ/i);
   });
+
+  // ── work-order transition concurrency (preempt review) ──
+  it('two concurrent doneWO finish the work order exactly once', async () => {
+    const bom = await bomOf(ids.cake); // cake ops carry no QC points → not gated
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 });
+    await mfg.confirmMO(mo.id);
+    const wo = await prisma.mfgWorkOrder.findFirstOrThrow({
+      where: { moId: mo.id },
+      orderBy: { sequence: 'asc' },
+    });
+    await mfg.startWO(wo.id);
+
+    const results = await Promise.allSettled([mfg.doneWO(wo.id), mfg.doneWO(wo.id)]);
+    // The guarded UPDATE re-checks state under the row lock: one claims DONE, the
+    // other sees it already terminal and is rejected. No double-close.
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    const final = await prisma.mfgWorkOrder.findUniqueOrThrow({ where: { id: wo.id } });
+    expect(final.state).toBe('DONE');
+  });
+
+  it('pause banks run time incrementally from the row dateStart, across resumes', async () => {
+    const bom = await bomOf(ids.cake);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 });
+    await mfg.confirmMO(mo.id);
+    const wo = await prisma.mfgWorkOrder.findFirstOrThrow({
+      where: { moId: mo.id },
+      orderBy: { sequence: 'asc' },
+    });
+
+    // First run: pretend it started 10 minutes ago, then pause.
+    await prisma.mfgWorkOrder.update({
+      where: { id: wo.id },
+      data: { state: 'PROGRESS', dateStart: new Date(Date.now() - 10 * 60000), durationReal: 0 },
+    });
+    const paused1 = await mfg.pauseWO(wo.id);
+    expect(paused1.state).toBe('READY');
+    expect(paused1.dateStart).toBeNull();
+    expect(paused1.durationReal).toBeGreaterThanOrEqual(9);
+    expect(paused1.durationReal).toBeLessThanOrEqual(11);
+
+    // Second run: 5 more minutes → banked on TOP of the first (increment, not overwrite).
+    await prisma.mfgWorkOrder.update({
+      where: { id: wo.id },
+      data: { state: 'PROGRESS', dateStart: new Date(Date.now() - 5 * 60000) },
+    });
+    const paused2 = await mfg.pauseWO(wo.id);
+    expect(paused2.durationReal).toBeGreaterThanOrEqual(paused1.durationReal + 4);
+  });
 });
