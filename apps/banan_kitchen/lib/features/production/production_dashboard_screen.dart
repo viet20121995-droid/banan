@@ -46,7 +46,10 @@ class ProductionDashboardScreen extends ConsumerWidget {
           padding: const EdgeInsets.all(BananSpacing.lg),
           children: [
             // ── Lệnh sản xuất theo trạng thái ──
-            Text('Lệnh sản xuất', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Lệnh sản xuất',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: BananSpacing.sm),
             counts.when(
               loading: () => const LinearProgressIndicator(),
@@ -61,7 +64,8 @@ class ProductionDashboardScreen extends ConsumerWidget {
                       _CountCard(
                         label: entry.value,
                         count: byState[entry.key] ?? 0,
-                        onTap: () => context.push('/production/orders?state=${entry.key}'),
+                        onTap: () => context
+                            .push('/production/orders?state=${entry.key}'),
                       ),
                   ],
                 );
@@ -91,11 +95,25 @@ class ProductionDashboardScreen extends ConsumerWidget {
               icon: const Icon(Icons.inventory_2_outlined),
               label: const Text('Tồn kho & lô'),
             ),
+            const SizedBox(height: BananSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/production/reports'),
+              icon: const Icon(Icons.bar_chart_outlined),
+              label: const Text('Báo cáo (sản xuất/giá thành/hao hụt)'),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/production/replenishment'),
+              icon: const Icon(Icons.shopping_cart_outlined),
+              label: const Text('Gợi ý mua hàng'),
+            ),
 
             const SizedBox(height: BananSpacing.xl),
             // ── HSD sắp hết ──
-            Text('Lô sắp hết hạn (3 ngày)',
-                style: Theme.of(context).textTheme.titleLarge,),
+            Text(
+              'Lô sắp hết hạn (3 ngày)',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: BananSpacing.sm),
             expiring.when(
               loading: () => const LinearProgressIndicator(),
@@ -116,7 +134,11 @@ class ProductionDashboardScreen extends ConsumerWidget {
 }
 
 class _CountCard extends StatelessWidget {
-  const _CountCard({required this.label, required this.count, required this.onTap});
+  const _CountCard({
+    required this.label,
+    required this.count,
+    required this.onTap,
+  });
   final String label;
   final int count;
   final VoidCallback onTap;
@@ -154,16 +176,21 @@ class _ExpiringTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final expiry = lot.expiryDate;
-    final label = expiry == null ? '—' : DateFormat('dd/MM/yyyy').format(expiry);
+    final label =
+        expiry == null ? '—' : DateFormat('dd/MM/yyyy').format(expiry);
     final soon = expiry != null &&
         expiry.isBefore(DateTime.now().add(const Duration(days: 1)));
     return ListTile(
       dense: true,
-      leading: Icon(Icons.schedule,
-          color: soon ? BananColors.danger : BananColors.gold,),
+      leading: Icon(
+        Icons.schedule,
+        color: soon ? BananColors.danger : BananColors.gold,
+      ),
       title: Text('${lot.productNameVi} · ${lot.name}'),
-      trailing: Text('HSD $label',
-          style: TextStyle(color: soon ? BananColors.danger : null),),
+      trailing: Text(
+        'HSD $label',
+        style: TextStyle(color: soon ? BananColors.danger : null),
+      ),
     );
   }
 }
@@ -174,8 +201,10 @@ class _ErrorLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: BananSpacing.sm),
-        child: Text('Lỗi: $error',
-            style: TextStyle(color: Theme.of(context).colorScheme.error),),
+        child: Text(
+          'Lỗi: $error',
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
       );
 }
 
@@ -185,7 +214,9 @@ class _EmptyNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: BananSpacing.sm),
-        child: Text(text,
-            style: TextStyle(color: Theme.of(context).colorScheme.outline),),
+        child: Text(
+          text,
+          style: TextStyle(color: Theme.of(context).colorScheme.outline),
+        ),
       );
 }

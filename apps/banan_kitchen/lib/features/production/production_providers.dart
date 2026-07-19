@@ -21,7 +21,9 @@ final expiringLotsProvider =
     FutureProvider.autoDispose<List<MfgExpiringLot>>((ref) async {
   // Anything expiring within 3 days is worth surfacing on the dashboard.
   final before = DateTime.now().add(const Duration(days: 3));
-  return _orThrow(await ref.watch(manufacturingApiProvider).expiringLots(before));
+  return _orThrow(
+    await ref.watch(manufacturingApiProvider).expiringLots(before),
+  );
 });
 
 /// [state] filter: null = all, else one of DRAFT/CONFIRMED/PROGRESS/DONE/CANCEL.
@@ -32,8 +34,8 @@ final moListProvider = FutureProvider.autoDispose
   );
 });
 
-final moDetailProvider = FutureProvider.autoDispose
-    .family<MfgOrderDetail, String>((ref, id) async {
+final moDetailProvider =
+    FutureProvider.autoDispose.family<MfgOrderDetail, String>((ref, id) async {
   return _orThrow(await ref.watch(manufacturingApiProvider).getOrder(id));
 });
 
@@ -66,7 +68,9 @@ final shopFloorProvider =
 
 final qualityAlertsProvider =
     FutureProvider.autoDispose<List<MfgQualityAlert>>((ref) async {
-  return _orThrow(await ref.watch(manufacturingApiProvider).listAlerts(stage: 'NEW'));
+  return _orThrow(
+    await ref.watch(manufacturingApiProvider).listAlerts(stage: 'NEW'),
+  );
 });
 
 // ── planning ──
@@ -77,4 +81,41 @@ final scheduleProvider =
 
 final staffProvider = FutureProvider.autoDispose<List<MfgStaff>>((ref) async {
   return _orThrow(await ref.watch(manufacturingApiProvider).listStaff());
+});
+
+// ── reports + replenishment ──
+/// Date-range key for the report providers: (from, to), either nullable.
+/// A record has value equality, so the family caches per distinct range.
+typedef MfgReportRange = (DateTime? from, DateTime? to);
+
+final productionReportProvider = FutureProvider.autoDispose
+    .family<MfgProductionReport, MfgReportRange>((ref, range) async {
+  return _orThrow(
+    await ref
+        .watch(manufacturingApiProvider)
+        .productionReport(from: range.$1, to: range.$2),
+  );
+});
+
+final scrapReportProvider = FutureProvider.autoDispose
+    .family<MfgScrapReport, MfgReportRange>((ref, range) async {
+  return _orThrow(
+    await ref
+        .watch(manufacturingApiProvider)
+        .scrapReport(from: range.$1, to: range.$2),
+  );
+});
+
+final costReportProvider = FutureProvider.autoDispose
+    .family<MfgCostReport, MfgReportRange>((ref, range) async {
+  return _orThrow(
+    await ref
+        .watch(manufacturingApiProvider)
+        .costReport(from: range.$1, to: range.$2),
+  );
+});
+
+final replenishmentProvider =
+    FutureProvider.autoDispose<MfgReplenishment>((ref) async {
+  return _orThrow(await ref.watch(manufacturingApiProvider).replenishment());
 });

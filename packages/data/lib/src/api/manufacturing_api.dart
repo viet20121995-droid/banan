@@ -239,8 +239,10 @@ class MfgExpiringLot {
 
 class MfgStateCount {
   const MfgStateCount({required this.state, required this.count});
-  factory MfgStateCount.fromJson(Map<String, dynamic> j) =>
-      MfgStateCount(state: j['state'] as String, count: (j['count'] as num).toInt());
+  factory MfgStateCount.fromJson(Map<String, dynamic> j) => MfgStateCount(
+        state: j['state'] as String,
+        count: (j['count'] as num).toInt(),
+      );
   final String state;
   final int count;
 }
@@ -295,8 +297,8 @@ class MfgWorkOrderCard {
 
   factory MfgWorkOrderCard.fromJson(Map<String, dynamic> j) {
     // Latest check result per quality point → drives the badge.
-    final checks = (j['qualityChecks'] as List? ?? const [])
-        .cast<Map<String, dynamic>>();
+    final checks =
+        (j['qualityChecks'] as List? ?? const []).cast<Map<String, dynamic>>();
     String? latestFor(String pointId) {
       for (final c in checks) {
         if (c['qualityPointId'] == pointId) return c['result'] as String?;
@@ -307,7 +309,12 @@ class MfgWorkOrderCard {
     final op = j['bomOperation'] as Map<String, dynamic>? ?? const {};
     final points = (op['qualityPoints'] as List? ?? const [])
         .cast<Map<String, dynamic>>()
-        .map((p) => MfgQualityPointLite.fromJson(p, latestResult: latestFor(p['id'] as String)))
+        .map(
+          (p) => MfgQualityPointLite.fromJson(
+            p,
+            latestResult: latestFor(p['id'] as String),
+          ),
+        )
         .toList();
 
     return MfgWorkOrderCard(
@@ -405,6 +412,268 @@ class MfgStaff {
   final String fullName;
 }
 
+// ── reports + replenishment (increment 5) ────────────────────────────────────
+
+class MfgProductionRow {
+  const MfgProductionRow({
+    required this.productId,
+    required this.productCode,
+    required this.productNameVi,
+    required this.uomCode,
+    required this.moCount,
+    required this.qtyProduced,
+    required this.totalCost,
+    required this.avgUnitCost,
+  });
+
+  factory MfgProductionRow.fromJson(Map<String, dynamic> j) => MfgProductionRow(
+        productId: j['productId'] as String,
+        productCode: j['productCode'] as String? ?? '',
+        productNameVi: j['productNameVi'] as String? ?? '',
+        uomCode: j['uomCode'] as String? ?? '',
+        moCount: (j['moCount'] as num?)?.toInt() ?? 0,
+        qtyProduced: _num(j['qtyProduced']),
+        totalCost: _num(j['totalCost']),
+        avgUnitCost: _num(j['avgUnitCost']),
+      );
+
+  final String productId;
+  final String productCode;
+  final String productNameVi;
+  final String uomCode;
+  final int moCount;
+  final double qtyProduced;
+  final double totalCost;
+  final double avgUnitCost;
+}
+
+class MfgProductionReport {
+  const MfgProductionReport({
+    required this.rows,
+    required this.moCount,
+    required this.totalCost,
+  });
+
+  factory MfgProductionReport.fromJson(Map<String, dynamic> j) {
+    final totals = j['totals'] as Map<String, dynamic>? ?? const {};
+    return MfgProductionReport(
+      rows: ((j['rows'] as List?) ?? const [])
+          .map(
+            (e) =>
+                MfgProductionRow.fromJson((e as Map).cast<String, dynamic>()),
+          )
+          .toList(),
+      moCount: (totals['moCount'] as num?)?.toInt() ?? 0,
+      totalCost: _num(totals['totalCost']),
+    );
+  }
+
+  final List<MfgProductionRow> rows;
+  final int moCount;
+  final double totalCost;
+}
+
+class MfgScrapReasonRow {
+  const MfgScrapReasonRow({
+    required this.reason,
+    required this.value,
+    required this.count,
+  });
+
+  factory MfgScrapReasonRow.fromJson(Map<String, dynamic> j) =>
+      MfgScrapReasonRow(
+        reason: j['reason'] as String? ?? '',
+        value: _num(j['value']),
+        count: (j['count'] as num?)?.toInt() ?? 0,
+      );
+
+  final String reason;
+  final double value;
+  final int count;
+}
+
+class MfgScrapProductRow {
+  const MfgScrapProductRow({
+    required this.productId,
+    required this.productCode,
+    required this.productNameVi,
+    required this.uomCode,
+    required this.qty,
+    required this.value,
+    required this.count,
+  });
+
+  factory MfgScrapProductRow.fromJson(Map<String, dynamic> j) =>
+      MfgScrapProductRow(
+        productId: j['productId'] as String,
+        productCode: j['productCode'] as String? ?? '',
+        productNameVi: j['productNameVi'] as String? ?? '',
+        uomCode: j['uomCode'] as String? ?? '',
+        qty: _num(j['qty']),
+        value: _num(j['value']),
+        count: (j['count'] as num?)?.toInt() ?? 0,
+      );
+
+  final String productId;
+  final String productCode;
+  final String productNameVi;
+  final String uomCode;
+  final double qty;
+  final double value;
+  final int count;
+}
+
+class MfgScrapReport {
+  const MfgScrapReport({
+    required this.byReason,
+    required this.byProduct,
+    required this.value,
+    required this.count,
+  });
+
+  factory MfgScrapReport.fromJson(Map<String, dynamic> j) {
+    final totals = j['totals'] as Map<String, dynamic>? ?? const {};
+    return MfgScrapReport(
+      byReason: ((j['byReason'] as List?) ?? const [])
+          .map(
+            (e) =>
+                MfgScrapReasonRow.fromJson((e as Map).cast<String, dynamic>()),
+          )
+          .toList(),
+      byProduct: ((j['byProduct'] as List?) ?? const [])
+          .map(
+            (e) =>
+                MfgScrapProductRow.fromJson((e as Map).cast<String, dynamic>()),
+          )
+          .toList(),
+      value: _num(totals['value']),
+      count: (totals['count'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final List<MfgScrapReasonRow> byReason;
+  final List<MfgScrapProductRow> byProduct;
+  final double value;
+  final int count;
+}
+
+class MfgCostRow {
+  const MfgCostRow({
+    required this.moId,
+    required this.code,
+    required this.productNameVi,
+    required this.qtyProduced,
+    required this.uomCode,
+    required this.materialCost,
+    required this.operationCost,
+    required this.totalCost,
+    required this.unitCost,
+  });
+
+  factory MfgCostRow.fromJson(Map<String, dynamic> j) => MfgCostRow(
+        moId: j['moId'] as String,
+        code: j['code'] as String? ?? '',
+        productNameVi: j['productNameVi'] as String? ?? '',
+        qtyProduced: _num(j['qtyProduced']),
+        uomCode: j['uomCode'] as String? ?? '',
+        materialCost: _num(j['materialCost']),
+        operationCost: _num(j['operationCost']),
+        totalCost: _num(j['totalCost']),
+        unitCost: _num(j['unitCost']),
+      );
+
+  final String moId;
+  final String code;
+  final String productNameVi;
+  final double qtyProduced;
+  final String uomCode;
+  final double materialCost;
+  final double operationCost;
+  final double totalCost;
+  final double unitCost;
+}
+
+class MfgCostReport {
+  const MfgCostReport({
+    required this.rows,
+    required this.materialCost,
+    required this.operationCost,
+    required this.totalCost,
+  });
+
+  factory MfgCostReport.fromJson(Map<String, dynamic> j) {
+    final totals = j['totals'] as Map<String, dynamic>? ?? const {};
+    return MfgCostReport(
+      rows: ((j['rows'] as List?) ?? const [])
+          .map((e) => MfgCostRow.fromJson((e as Map).cast<String, dynamic>()))
+          .toList(),
+      materialCost: _num(totals['materialCost']),
+      operationCost: _num(totals['operationCost']),
+      totalCost: _num(totals['totalCost']),
+    );
+  }
+
+  final List<MfgCostRow> rows;
+  final double materialCost;
+  final double operationCost;
+  final double totalCost;
+}
+
+class MfgReplenishRow {
+  const MfgReplenishRow({
+    required this.productId,
+    required this.productCode,
+    required this.productNameVi,
+    required this.uomCode,
+    required this.demand,
+    required this.available,
+    required this.shortfall,
+    required this.avgCost,
+    required this.estCost,
+  });
+
+  factory MfgReplenishRow.fromJson(Map<String, dynamic> j) => MfgReplenishRow(
+        productId: j['productId'] as String,
+        productCode: j['productCode'] as String? ?? '',
+        productNameVi: j['productNameVi'] as String? ?? '',
+        uomCode: j['uomCode'] as String? ?? '',
+        demand: _num(j['demand']),
+        available: _num(j['available']),
+        shortfall: _num(j['shortfall']),
+        avgCost: _num(j['avgCost']),
+        estCost: _num(j['estCost']),
+      );
+
+  final String productId;
+  final String productCode;
+  final String productNameVi;
+  final String uomCode;
+  final double demand;
+  final double available;
+  final double shortfall;
+  final double avgCost;
+  final double estCost;
+}
+
+class MfgReplenishment {
+  const MfgReplenishment({required this.rows, required this.estCost});
+
+  factory MfgReplenishment.fromJson(Map<String, dynamic> j) {
+    final totals = j['totals'] as Map<String, dynamic>? ?? const {};
+    return MfgReplenishment(
+      rows: ((j['rows'] as List?) ?? const [])
+          .map(
+            (e) => MfgReplenishRow.fromJson((e as Map).cast<String, dynamic>()),
+          )
+          .toList(),
+      estCost: _num(totals['estCost']),
+    );
+  }
+
+  final List<MfgReplenishRow> rows;
+  final double estCost;
+}
+
 // ── client ──────────────────────────────────────────────────────────────────
 
 class ManufacturingApi {
@@ -413,45 +682,127 @@ class ManufacturingApi {
 
   static const _base = '/manufacturing';
 
-  List<T> _list<T>(Response<dynamic> res, T Function(Map<String, dynamic>) fromJson) {
+  List<T> _list<T>(
+    Response<dynamic> res,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
     final data = res.data?['data'] as List? ?? const [];
-    return data.map((e) => fromJson((e as Map).cast<String, dynamic>())).toList();
+    return data
+        .map((e) => fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
   }
 
-  Future<Result<List<MfgOrderSummary>, AppFailure>> listOrders({String? state}) =>
-      _get('$_base/orders', query: {if (state != null) 'state': state},
-          parse: (res) => _list(res, MfgOrderSummary.fromJson),);
+  Future<Result<List<MfgOrderSummary>, AppFailure>> listOrders({
+    String? state,
+  }) =>
+      _get(
+        '$_base/orders',
+        query: {if (state != null) 'state': state},
+        parse: (res) => _list(res, MfgOrderSummary.fromJson),
+      );
 
   Future<Result<MfgOrderDetail, AppFailure>> getOrder(String id) => _get(
         '$_base/orders/$id',
         parse: (res) => MfgOrderDetail.fromJson(
-            (res.data?['data'] as Map).cast<String, dynamic>(),),
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
       );
 
-  Future<Result<List<MfgBomSummary>, AppFailure>> listBoms() => _get('$_base/boms',
-      parse: (res) => _list(res, MfgBomSummary.fromJson),);
+  Future<Result<List<MfgBomSummary>, AppFailure>> listBoms() => _get(
+        '$_base/boms',
+        parse: (res) => _list(res, MfgBomSummary.fromJson),
+      );
 
   Future<Result<MfgCost, AppFailure>> bomCost(String bomId) => _get(
         '$_base/boms/$bomId/cost',
-        parse: (res) =>
-            MfgCost.fromJson((res.data?['data'] as Map).cast<String, dynamic>()),
+        parse: (res) => MfgCost.fromJson(
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
       );
 
-  Future<Result<List<MfgOnHand>, AppFailure>> onHand() => _get('$_base/stock/on-hand',
-      parse: (res) => _list(res, MfgOnHand.fromJson),);
+  Future<Result<List<MfgOnHand>, AppFailure>> onHand() => _get(
+        '$_base/stock/on-hand',
+        parse: (res) => _list(res, MfgOnHand.fromJson),
+      );
 
-  Future<Result<List<MfgExpiringLot>, AppFailure>> expiringLots(DateTime before) =>
-      _get('$_base/lots/expiring',
-          query: {'before': before.toUtc().toIso8601String()},
-          parse: (res) => _list(res, MfgExpiringLot.fromJson),);
+  Future<Result<List<MfgExpiringLot>, AppFailure>> expiringLots(
+    DateTime before,
+  ) =>
+      _get(
+        '$_base/lots/expiring',
+        query: {'before': before.toUtc().toIso8601String()},
+        parse: (res) => _list(res, MfgExpiringLot.fromJson),
+      );
 
-  Future<Result<List<MfgStateCount>, AppFailure>> moCounts() =>
-      _get('$_base/dashboard/mo-counts',
-          parse: (res) => _list(res, MfgStateCount.fromJson),);
+  Future<Result<List<MfgStateCount>, AppFailure>> moCounts() => _get(
+        '$_base/dashboard/mo-counts',
+        parse: (res) => _list(res, MfgStateCount.fromJson),
+      );
+
+  // ── reports + replenishment ──
+
+  /// A calendar day anchored to UTC midnight, so the range round-trips to the
+  /// same day whatever timezone the backend runs in (matches [planOrder]).
+  static String? _day(DateTime? d) =>
+      d == null ? null : DateTime.utc(d.year, d.month, d.day).toIso8601String();
+
+  Future<Result<MfgProductionReport, AppFailure>> productionReport({
+    DateTime? from,
+    DateTime? to,
+  }) =>
+      _get(
+        '$_base/reports/production',
+        query: {
+          if (_day(from) != null) 'from': _day(from),
+          if (_day(to) != null) 'to': _day(to),
+        },
+        parse: (res) => MfgProductionReport.fromJson(
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Future<Result<MfgScrapReport, AppFailure>> scrapReport({
+    DateTime? from,
+    DateTime? to,
+  }) =>
+      _get(
+        '$_base/reports/scrap',
+        query: {
+          if (_day(from) != null) 'from': _day(from),
+          if (_day(to) != null) 'to': _day(to),
+        },
+        parse: (res) => MfgScrapReport.fromJson(
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Future<Result<MfgCostReport, AppFailure>> costReport({
+    DateTime? from,
+    DateTime? to,
+  }) =>
+      _get(
+        '$_base/reports/cost',
+        query: {
+          if (_day(from) != null) 'from': _day(from),
+          if (_day(to) != null) 'to': _day(to),
+        },
+        parse: (res) => MfgCostReport.fromJson(
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Future<Result<MfgReplenishment, AppFailure>> replenishment() => _get(
+        '$_base/replenishment',
+        parse: (res) => MfgReplenishment.fromJson(
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
+      );
 
   // ── planning ──
-  Future<Result<List<MfgScheduleItem>, AppFailure>> schedule() =>
-      _get('$_base/schedule', parse: (res) => _list(res, MfgScheduleItem.fromJson));
+  Future<Result<List<MfgScheduleItem>, AppFailure>> schedule() => _get(
+        '$_base/schedule',
+        parse: (res) => _list(res, MfgScheduleItem.fromJson),
+      );
 
   Future<Result<List<MfgStaff>, AppFailure>> listStaff() =>
       _get('$_base/staff', parse: (res) => _list(res, MfgStaff.fromJson));
@@ -462,30 +813,36 @@ class ManufacturingApi {
     required DateTime? scheduledDate,
     required String? responsibleId,
   }) =>
-      _postVoid('$_base/orders/$id/plan', body: {
-        // Anchor the chosen calendar day to UTC midnight so it round-trips to
-        // the same day regardless of the server's timezone (the read side reads
-        // UTC calendar fields). A bare local DateTime drops its offset and lands
-        // a day off on any ahead-of-UTC backend.
-        'scheduledDate': scheduledDate == null
-            ? null
-            : DateTime.utc(
-                scheduledDate.year,
-                scheduledDate.month,
-                scheduledDate.day,
-              ).toIso8601String(),
-        'responsibleId': responsibleId,
-      },);
+      _postVoid(
+        '$_base/orders/$id/plan',
+        body: {
+          // Anchor the chosen calendar day to UTC midnight so it round-trips to
+          // the same day regardless of the server's timezone (the read side reads
+          // UTC calendar fields). A bare local DateTime drops its offset and lands
+          // a day off on any ahead-of-UTC backend.
+          'scheduledDate': scheduledDate == null
+              ? null
+              : DateTime.utc(
+                  scheduledDate.year,
+                  scheduledDate.month,
+                  scheduledDate.day,
+                ).toIso8601String(),
+          'responsibleId': responsibleId,
+        },
+      );
 
   // ── mutations ──
   Future<Result<MfgOrderDetail, AppFailure>> createOrder({
     required String bomId,
     required double qtyToProduce,
   }) =>
-      _post('$_base/orders',
-          body: {'bomId': bomId, 'qtyToProduce': qtyToProduce},
-          parse: (res) => MfgOrderDetail.fromJson(
-              (res.data?['data'] as Map).cast<String, dynamic>(),),);
+      _post(
+        '$_base/orders',
+        body: {'bomId': bomId, 'qtyToProduce': qtyToProduce},
+        parse: (res) => MfgOrderDetail.fromJson(
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
+      );
 
   Future<Result<void, AppFailure>> confirm(String id) =>
       _postVoid('$_base/orders/$id/confirm');
@@ -508,14 +865,25 @@ class ManufacturingApi {
     required String uomId,
     required String reason,
   }) =>
-      _postVoid('$_base/scraps',
-          body: {'productId': productId, 'qty': qty, 'uomId': uomId, 'reason': reason},);
+      _postVoid(
+        '$_base/scraps',
+        body: {
+          'productId': productId,
+          'qty': qty,
+          'uomId': uomId,
+          'reason': reason,
+        },
+      );
 
   // ── shop floor + QC ──
-  Future<Result<List<MfgWorkOrderCard>, AppFailure>> shopFloor({String? workCenter}) =>
-      _get('$_base/shop-floor',
-          query: {if (workCenter != null) 'workCenter': workCenter},
-          parse: (res) => _list(res, MfgWorkOrderCard.fromJson),);
+  Future<Result<List<MfgWorkOrderCard>, AppFailure>> shopFloor({
+    String? workCenter,
+  }) =>
+      _get(
+        '$_base/shop-floor',
+        query: {if (workCenter != null) 'workCenter': workCenter},
+        parse: (res) => _list(res, MfgWorkOrderCard.fromJson),
+      );
 
   Future<Result<void, AppFailure>> startWo(String id) =>
       _postVoid('$_base/work-orders/$id/start');
@@ -531,18 +899,25 @@ class ManufacturingApi {
     String? passFail,
     String? note,
   }) =>
-      _postVoid('$_base/quality-checks', body: {
-        'qualityPointId': qualityPointId,
-        'workOrderId': workOrderId,
-        if (measuredValue != null) 'measuredValue': measuredValue,
-        if (passFail != null) 'passFail': passFail,
-        if (note != null) 'note': note,
-      },);
+      _postVoid(
+        '$_base/quality-checks',
+        body: {
+          'qualityPointId': qualityPointId,
+          'workOrderId': workOrderId,
+          if (measuredValue != null) 'measuredValue': measuredValue,
+          if (passFail != null) 'passFail': passFail,
+          if (note != null) 'note': note,
+        },
+      );
 
-  Future<Result<List<MfgQualityAlert>, AppFailure>> listAlerts({String? stage}) =>
-      _get('$_base/quality-alerts',
-          query: {if (stage != null) 'stage': stage},
-          parse: (res) => _list(res, MfgQualityAlert.fromJson),);
+  Future<Result<List<MfgQualityAlert>, AppFailure>> listAlerts({
+    String? stage,
+  }) =>
+      _get(
+        '$_base/quality-alerts',
+        query: {if (stage != null) 'stage': stage},
+        parse: (res) => _list(res, MfgQualityAlert.fromJson),
+      );
 
   Future<Result<void, AppFailure>> setAlertStage(String id, String stage) =>
       _postVoid('$_base/quality-alerts/$id/stage', body: {'stage': stage});
@@ -554,7 +929,8 @@ class ManufacturingApi {
     Map<String, dynamic>? query,
   }) async {
     try {
-      final res = await _dio.get<Map<String, dynamic>>(path, queryParameters: query);
+      final res =
+          await _dio.get<Map<String, dynamic>>(path, queryParameters: query);
       if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       return Result.success(parse(res));
     } on DioException catch (e) {
@@ -580,7 +956,10 @@ class ManufacturingApi {
     }
   }
 
-  Future<Result<void, AppFailure>> _postVoid(String path, {Object? body}) async {
+  Future<Result<void, AppFailure>> _postVoid(
+    String path, {
+    Object? body,
+  }) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>(path, data: body);
       if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));

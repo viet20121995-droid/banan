@@ -222,10 +222,44 @@ orders/forecast) is deliberately out of scope for a one-person, separate
 section. A pixel-timeline Gantt is skipped in favour of day columns — the right
 grain for a bakery. Add either if a real need shows up.
 
+## Increment 5 — Reports + replenishment ✅
+
+Read-only reporting over what the engine already records — no migration, all
+sourced from the existing `Mfg*` tables.
+
+- **Production report** (`GET reports/production?from&to`) — finished (DONE) MOs
+  grouped by product, with qty and cost from the produce-time snapshot
+  (`qtyProduced`, `totalCost`). Qty is deliberately not totalled across products
+  (mixed UoM — grams vs pieces); only đồng and MO count are.
+- **Cost report** (`GET reports/cost?from&to`) — per DONE MO, the actual
+  material-vs-operation split. Materials are summed from the MO's consume moves
+  (`refType MO` booked into the `PRODUCTION` location) at their **frozen** unit
+  cost; operations are the remainder of the `totalCost` snapshot, so the split
+  reconstructs the total exactly with no rounding drift.
+- **Scrap report** (`GET reports/scrap?from&to`) — scrap valued at the unit cost
+  **frozen on the paired `SCRAP` move** (the AVCO snapshot at scrap time, not the
+  live `avgCost` which drifts on later receipts). Grouped by reason (value only —
+  qty is mixed-UoM) and by product (qty + value).
+- **Replenishment** (`GET replenishment`) — an advisory buy list: for each
+  purchased item (`RAW`/`PACKAGING`), `shortfall = open-MO demand
+  (qtyToConsume − qtyConsumed over DRAFT/CONFIRMED/PROGRESS) − free stock
+  (quantity − reservedQty at STOCK)`. It recommends what to buy and roughly what
+  it costs; it **creates nothing** — the actual purchase orders are placed in
+  Odoo (the system of record for procurement). A full purchase-request lifecycle
+  in the MES was deliberately skipped rather than duplicate Odoo.
+
+Flutter: a **Báo cáo sản xuất** screen (`/production/reports`) with 3 tabs
+(Sản xuất / Giá thành / Hao hụt) and quick date-range presets (7 / 30 ngày /
+Tất cả), and a **Gợi ý mua hàng** screen (`/production/replenishment`). Both are
+read-only, reached from the production dashboard. Integration 21/21 on real
+Postgres (the report figures hand-checked: sponge split 37750/142500 = 180250,
+scrap 200 × 209.15 = 41830 from the frozen move cost); kitchen web build OK.
+
 ## Roadmap (next increments)
 
-5. **Reports + purchasing** — production/scrap/cost reports, replenishment.
 6. **P2** — OEE, maintenance, activities/notifications, HSD background job.
+7. **Hard reservations** (if needed) — a per-MO allocation ledger so
+   cancel/produce only touch their own hold (today reservations are advisory).
 
 Also deferred UI: BoM editor (create/edit recipes — today recipes come from the
 seed or the API), scrap form, receipt form, quality-alerts screen.

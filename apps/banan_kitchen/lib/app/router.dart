@@ -9,6 +9,8 @@ import '../features/kanban/kanban_screen.dart';
 import '../features/production/mo_detail_screen.dart';
 import '../features/production/mo_list_screen.dart';
 import '../features/production/production_dashboard_screen.dart';
+import '../features/production/replenishment_screen.dart';
+import '../features/production/reports_screen.dart';
 import '../features/production/schedule_screen.dart';
 import '../features/production/shop_floor_screen.dart';
 import '../features/production/stock_screen.dart';
@@ -70,6 +72,14 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/production/schedule',
         builder: (_, __) => const ScheduleScreen(),
+      ),
+      GoRoute(
+        path: '/production/reports',
+        builder: (_, __) => const ReportsScreen(),
+      ),
+      GoRoute(
+        path: '/production/replenishment',
+        builder: (_, __) => const ReplenishmentScreen(),
       ),
       GoRoute(
         path: '/change-password',
