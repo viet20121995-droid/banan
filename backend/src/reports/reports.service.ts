@@ -63,6 +63,8 @@ export class ReportsService {
   async summary(r: ReportRange) {
     const where: Prisma.OrderWhereInput = {
       createdAt: { gte: r.from, lte: r.to },
+      // Internal transfers move goods between branches — never retail revenue.
+      source: { not: 'INTERNAL_TRANSFER' },
       ...(r.storeId && { storeId: r.storeId }),
     };
     const [orders, refunds] = await Promise.all([
@@ -148,6 +150,7 @@ export class ReportsService {
         order: {
           createdAt: { gte: r.from, lte: r.to },
           status: { not: 'CANCELLED' },
+          source: { not: 'INTERNAL_TRANSFER' },
           ...(r.storeId && { storeId: r.storeId }),
         },
       },
@@ -185,6 +188,7 @@ export class ReportsService {
     return this.prisma.order.findMany({
       where: {
         createdAt: { gte: r.from, lte: r.to },
+        source: { not: 'INTERNAL_TRANSFER' },
         ...(r.storeId && { storeId: r.storeId }),
         ...(status && { status }),
       },
@@ -208,7 +212,10 @@ export class ReportsService {
     return this.prisma.refund.findMany({
       where: {
         createdAt: { gte: r.from, lte: r.to },
-        ...(r.storeId && { order: { storeId: r.storeId } }),
+        order: {
+          source: { not: 'INTERNAL_TRANSFER' },
+          ...(r.storeId && { storeId: r.storeId }),
+        },
       },
       include: {
         order: {

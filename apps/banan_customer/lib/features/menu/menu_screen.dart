@@ -29,6 +29,11 @@ import 'promo_popup_dialog.dart';
 import 'pwa_install.dart';
 import 'section_header.dart';
 
+final _wholesaleAccessProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final result = await ref.watch(wholesaleApiProvider).access();
+  return result.when(success: (enabled) => enabled, failure: (_) => false);
+});
+
 /// Merchant-managed hero banners for the home carousel.
 final homeBannersProvider = FutureProvider<List<HomeBanner>>((ref) async {
   final res = await ref.watch(bannersRepositoryProvider).publicList();
@@ -91,10 +96,20 @@ class MenuScreen extends ConsumerWidget {
           child: BananBrand(compact: isMobile),
         ),
         actions: isMobile
-            ? _mobileActions(context, ref, cart: cart, isGuest: isGuest,
-                unread: unread,)
-            : _desktopActions(context, ref, cart: cart, isGuest: isGuest,
-                unread: unread,),
+            ? _mobileActions(
+                context,
+                ref,
+                cart: cart,
+                isGuest: isGuest,
+                unread: unread,
+              )
+            : _desktopActions(
+                context,
+                ref,
+                cart: cart,
+                isGuest: isGuest,
+                unread: unread,
+              ),
       ),
       // Floating "View cart" button — shows up the moment the cart isn't
       // empty, so the customer can jump straight to checkout without
@@ -117,8 +132,7 @@ class MenuScreen extends ConsumerWidget {
           _Body(
             state: state,
             onRetry: controller.refresh,
-            showHomeContent:
-                state.categoryId == null && state.query.isEmpty,
+            showHomeContent: state.categoryId == null && state.query.isEmpty,
             header: _MenuHeader(
               greeting: isGuest
                   ? null
@@ -161,6 +175,8 @@ class MenuScreen extends ConsumerWidget {
     required int unread,
   }) {
     final s = ref.watch(stringsProvider);
+    final wholesaleEnabled =
+        !isGuest && (ref.watch(_wholesaleAccessProvider).valueOrNull ?? false);
 
     Widget navText(String label, VoidCallback onTap) => TextButton(
           onPressed: onTap,
@@ -174,6 +190,8 @@ class MenuScreen extends ConsumerWidget {
     return [
       navText(s.locations, () => context.push('/locations')),
       if (!isGuest) navText(s.trackOrders, () => context.push('/orders')),
+      if (wholesaleEnabled)
+        navText('Wholesale', () => context.push('/wholesale')),
       if (!isGuest) navText(s.membership, () => context.push('/membership')),
       const SizedBox(width: BananSpacing.sm),
       if (pwaCanInstall())
@@ -207,8 +225,7 @@ class MenuScreen extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.only(right: BananSpacing.sm),
           child: TextButton.icon(
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
+            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
             icon: const Icon(Icons.logout_rounded, size: 18),
             label: Text(s.signOut),
           ),
@@ -227,6 +244,8 @@ class MenuScreen extends ConsumerWidget {
   }) {
     final s = ref.watch(stringsProvider);
     final activeLocale = ref.watch(localeProvider);
+    final wholesaleEnabled =
+        !isGuest && (ref.watch(_wholesaleAccessProvider).valueOrNull ?? false);
     return [
       _CartButton(itemCount: cart.itemCount),
       PopupMenuButton<String>(
@@ -252,6 +271,8 @@ class MenuScreen extends ConsumerWidget {
               context.push('/membership');
             case 'orders':
               context.push('/orders');
+            case 'wholesale':
+              context.push('/wholesale');
             case 'login':
               context.go('/login');
             case 'register':
@@ -335,6 +356,15 @@ class MenuScreen extends ConsumerWidget {
               child: ListTile(
                 leading: const Icon(Icons.receipt_long_rounded),
                 title: Text(s.myOrders),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          if (wholesaleEnabled)
+            const PopupMenuItem(
+              value: 'wholesale',
+              child: ListTile(
+                leading: Icon(Icons.handshake_outlined),
+                title: Text('Wholesale'),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
@@ -576,8 +606,7 @@ class _FulfillmentToggle extends ConsumerWidget {
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color:
-                          theme.colorScheme.primary.withValues(alpha: 0.18),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.18),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -614,8 +643,7 @@ class _FulfillmentToggle extends ConsumerWidget {
                     Text(
                       label,
                       style: theme.textTheme.titleSmall?.copyWith(
-                        color:
-                            isSelected ? theme.colorScheme.primary : null,
+                        color: isSelected ? theme.colorScheme.primary : null,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -889,8 +917,7 @@ class _PausedStatusBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stores =
-        ref.watch(storesListProvider).valueOrNull ?? const <Store>[];
+    final stores = ref.watch(storesListProvider).valueOrNull ?? const <Store>[];
     final paused = stores
         .where((s) => s.isPaused || s.isPickupPaused || s.isDeliveryPaused)
         .toList();
@@ -910,8 +937,8 @@ class _PausedBannerBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final allDown = paused.length >= total && total > 0 &&
-        paused.every((s) => s.isPaused);
+    final allDown =
+        paused.length >= total && total > 0 && paused.every((s) => s.isPaused);
     final bg = (allDown
         ? theme.colorScheme.errorContainer
         : theme.colorScheme.tertiaryContainer);
@@ -1101,7 +1128,10 @@ class _BodyState extends ConsumerState<_Body> {
         : null;
     final pinnedIds = (pinned == null || pinned.isEmpty)
         ? const <String>{}
-        : {for (final c in pinned) for (final p in c.products) p.id};
+        : {
+            for (final c in pinned)
+              for (final p in c.products) p.id,
+          };
     final gridProducts = pinnedIds.isEmpty
         ? state.products
         : state.products.where((p) => !pinnedIds.contains(p.id)).toList();
@@ -1150,9 +1180,7 @@ class _BodyState extends ConsumerState<_Body> {
               const SliverToBoxAdapter(child: AllBundlesStrip()),
               SliverToBoxAdapter(child: _PinnedCategories()),
             ],
-            if (showHomeContent &&
-                state.loaded &&
-                gridProducts.isNotEmpty)
+            if (showHomeContent && state.loaded && gridProducts.isNotEmpty)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.only(top: BananSpacing.lg),
@@ -1198,9 +1226,8 @@ class _BodyState extends ConsumerState<_Body> {
                     isWishlisted: isWishlisted(wishlistAsync, p.id),
                     onToggleWishlist: session == null
                         ? null
-                        : () => ref
-                            .read(wishlistIdsProvider.notifier)
-                            .toggle(p.id),
+                        : () =>
+                            ref.read(wishlistIdsProvider.notifier).toggle(p.id),
                     onTap: () => context.push('/product/${p.id}'),
                     onQuickAdd: (showStock && p.isSoldOut)
                         ? null
@@ -1296,12 +1323,10 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
     final threads = ref.watch(homeThreadsProvider).valueOrNull ?? const [];
     final slides = <({String? image, String title})>[
       if (banners.isNotEmpty)
-        for (final b in banners)
-          (image: b.imageUrl, title: b.title ?? '')
+        for (final b in banners) (image: b.imageUrl, title: b.title ?? '')
       else ...[
         for (final t in threads)
-          if (t.gallery.isNotEmpty)
-            (image: t.gallery.first, title: t.title),
+          if (t.gallery.isNotEmpty) (image: t.gallery.first, title: t.title),
       ],
     ];
     if (slides.isEmpty) {
@@ -1409,9 +1434,8 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                     if (!ctaDismissed)
                       FilledButton.icon(
                         onPressed: () {
-                          ref
-                              .read(heroCtaDismissedProvider.notifier)
-                              .state = true;
+                          ref.read(heroCtaDismissedProvider.notifier).state =
+                              true;
                           widget.onOrderTap();
                         },
                         style: FilledButton.styleFrom(
@@ -1575,7 +1599,8 @@ class _ThreadsStrip extends ConsumerWidget {
               if (threads.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(
-                      vertical: BananSpacing.lg,),
+                    vertical: BananSpacing.lg,
+                  ),
                   child: Text(
                     s.noPostsYet,
                     style: Theme.of(context).textTheme.bodyMedium,
@@ -1590,7 +1615,8 @@ class _ThreadsStrip extends ConsumerWidget {
                         for (final t in threads)
                           Padding(
                             padding: const EdgeInsets.only(
-                                bottom: BananSpacing.lg,),
+                              bottom: BananSpacing.lg,
+                            ),
                             child: _ThreadCard(thread: t),
                           ),
                       ],
@@ -1658,8 +1684,7 @@ class _ThreadCardState extends ConsumerState<_ThreadCard> {
       decoration: BoxDecoration(
         borderRadius: BananRadii.rlg,
         color: theme.colorScheme.surface,
-        border:
-            Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+        border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -1680,8 +1705,10 @@ class _ThreadCardState extends ConsumerState<_ThreadCard> {
                       errorBuilder: (_, __, ___) => Container(
                         color: BananColors.surfaceDim,
                         alignment: Alignment.center,
-                        child: const Icon(Icons.image_not_supported_rounded,
-                            color: BananColors.cocoaSoft,),
+                        child: const Icon(
+                          Icons.image_not_supported_rounded,
+                          color: BananColors.cocoaSoft,
+                        ),
                       ),
                     ),
                   ),
@@ -1698,13 +1725,13 @@ class _ThreadCardState extends ConsumerState<_ThreadCard> {
                               width: 7,
                               height: 7,
                               margin: const EdgeInsets.symmetric(
-                                  horizontal: 3,),
+                                horizontal: 3,
+                              ),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: i == _page
                                     ? Colors.white
-                                    : Colors.white
-                                        .withValues(alpha: 0.45),
+                                    : Colors.white.withValues(alpha: 0.45),
                               ),
                             ),
                         ],
@@ -1776,12 +1803,16 @@ class _ThreadCardState extends ConsumerState<_ThreadCard> {
                     ),
                     if (thread.viewCount > 0) ...[
                       const SizedBox(width: BananSpacing.sm),
-                      Icon(Icons.remove_red_eye_rounded,
-                          size: 14,
-                          color: theme.textTheme.labelSmall?.color,),
+                      Icon(
+                        Icons.remove_red_eye_rounded,
+                        size: 14,
+                        color: theme.textTheme.labelSmall?.color,
+                      ),
                       const SizedBox(width: 3),
-                      Text('${thread.viewCount}',
-                          style: theme.textTheme.labelSmall,),
+                      Text(
+                        '${thread.viewCount}',
+                        style: theme.textTheme.labelSmall,
+                      ),
                     ],
                   ],
                 ),
@@ -1825,8 +1856,7 @@ class _OrderAgainStrip extends ConsumerWidget {
               itemCount: orders.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(width: BananSpacing.md),
-              itemBuilder: (context, i) =>
-                  _OrderAgainCard(order: orders[i]),
+              itemBuilder: (context, i) => _OrderAgainCard(order: orders[i]),
             ),
           ),
         ],
@@ -1870,8 +1900,7 @@ class _OrderAgainCard extends ConsumerWidget {
         decoration: BoxDecoration(
           borderRadius: BananRadii.rlg,
           color: theme.colorScheme.surface,
-          border:
-              Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+          border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1942,8 +1971,7 @@ class _PinnedCategories extends ConsumerWidget {
     return async.maybeWhen(
       orElse: () => const SizedBox.shrink(),
       data: (categories) {
-        final visible =
-            categories.where((c) => c.products.isNotEmpty).toList();
+        final visible = categories.where((c) => c.products.isNotEmpty).toList();
         if (visible.isEmpty) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2020,9 +2048,7 @@ Future<void> _quickAddBirthdayCake({
   required WidgetRef ref,
   required Product product,
 }) async {
-  var variant = product.variants.length == 1
-      ? product.variants.first
-      : null;
+  var variant = product.variants.length == 1 ? product.variants.first : null;
   var qty = 1;
 
   // Multi-size cake → ask for the size + quantity first. We capture the
@@ -2086,10 +2112,9 @@ void _confirmAddToCart({
           unitPrice: unitPrice,
           quantity: quantity,
           coverImage: product.coverImage,
-          personalization:
-              (personalization == null || personalization.isEmpty)
-                  ? null
-                  : personalization,
+          personalization: (personalization == null || personalization.isEmpty)
+              ? null
+              : personalization,
           isBirthdayCake: isBirthdayCake,
           leadTimeHours: product.leadTimeHours,
           availableDaysOfWeek: product.availableDaysOfWeek,
@@ -2119,11 +2144,9 @@ class _CategoryStrip extends ConsumerWidget {
     final products = category.products;
     final session = ref.watch(authSessionProvider).valueOrNull;
     final wishlistAsync = ref.watch(wishlistIdsProvider);
-    final showStock = ref
-            .watch(displayConfigProvider)
-            .valueOrNull
-            ?.showStockToCustomers ??
-        false;
+    final showStock =
+        ref.watch(displayConfigProvider).valueOrNull?.showStockToCustomers ??
+            false;
     return Padding(
       padding: const EdgeInsets.only(bottom: BananSpacing.lg),
       child: Column(
@@ -2158,9 +2181,8 @@ class _CategoryStrip extends ConsumerWidget {
                     isWishlisted: isWishlisted(wishlistAsync, p.id),
                     onToggleWishlist: session == null
                         ? null
-                        : () => ref
-                            .read(wishlistIdsProvider.notifier)
-                            .toggle(p.id),
+                        : () =>
+                            ref.read(wishlistIdsProvider.notifier).toggle(p.id),
                     onTap: () => context.push('/product/${p.id}'),
                     onQuickAdd: (showStock && p.isSoldOut)
                         ? null
@@ -2251,7 +2273,10 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.product.name, style: theme.textTheme.titleMedium),
+                    Text(
+                      widget.product.name,
+                      style: theme.textTheme.titleMedium,
+                    ),
                     Text(
                       fmt.format(unitPrice),
                       style: theme.textTheme.titleSmall?.copyWith(
@@ -2339,8 +2364,7 @@ class _NewsletterFooter extends ConsumerStatefulWidget {
   const _NewsletterFooter();
 
   @override
-  ConsumerState<_NewsletterFooter> createState() =>
-      _NewsletterFooterState();
+  ConsumerState<_NewsletterFooter> createState() => _NewsletterFooterState();
 }
 
 class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
@@ -2465,9 +2489,7 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
                 Text(
                   _msg!,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: _ok
-                        ? BananColors.success
-                        : theme.colorScheme.error,
+                    color: _ok ? BananColors.success : theme.colorScheme.error,
                   ),
                   textAlign: TextAlign.center,
                 ),

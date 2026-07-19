@@ -28,6 +28,7 @@ class StoreOrdersState {
   final bool loading;
   final AppFailure? failure;
   final OrderStatus? statusFilter;
+
   /// When true, only orders with `scheduledFor != null` are shown — sorted
   /// by upcoming pickup/delivery time.
   final bool scheduledOnly;
@@ -136,10 +137,10 @@ class StoreOrdersController extends StateNotifier<StoreOrdersState> {
 
 /// Provider also wires realtime: any `order.created` / `order.status_changed`
 /// event triggers a refresh. The store-room scoping is enforced server-side.
-final storeOrdersControllerProvider = StateNotifierProvider.autoDispose<
-    StoreOrdersController, StoreOrdersState>((ref) {
-  final controller =
-      StoreOrdersController(ref.watch(orderRepositoryProvider));
+final storeOrdersControllerProvider =
+    StateNotifierProvider.autoDispose<StoreOrdersController, StoreOrdersState>(
+        (ref) {
+  final controller = StoreOrdersController(ref.watch(orderRepositoryProvider));
   ref.listen<AsyncValue<RealtimeEvent>>(realtimeEventsProvider, (_, next) {
     next.whenData((event) {
       if (event.event == 'order.created' ||
@@ -174,17 +175,15 @@ class MerchantOrdersScreen extends ConsumerWidget {
     );
 
     final s = ref.watch(stringsProvider);
-    final isAdmin = ref
-            .watch(authSessionProvider)
-            .valueOrNull
-            ?.user
-            .role
-            .isAdmin ??
-        false;
+    final role = ref.watch(authSessionProvider).valueOrNull?.user.role;
+    final isAdmin = role?.isAdmin ?? false;
 
     return MerchantShell(
       title: s.orders,
       onRefresh: controller.refresh,
+      action: _CreateOrderMenu(
+        canCreateInternal: isAdmin || role == Role.merchantOwner,
+      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -215,6 +214,42 @@ class MerchantOrdersScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CreateOrderMenu extends StatelessWidget {
+  const _CreateOrderMenu({required this.canCreateInternal});
+
+  final bool canCreateInternal;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Tạo đơn',
+      icon: const Icon(Icons.add_circle_outline),
+      onSelected: (value) => context.push(value),
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          value: '/orders/counter',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.point_of_sale_outlined),
+            title: Text('Đơn tại quầy'),
+            subtitle: Text('Khách đặt trước và thanh toán tại cửa hàng'),
+          ),
+        ),
+        if (canCreateInternal)
+          const PopupMenuItem(
+            value: '/orders/internal-transfer',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.local_shipping_outlined),
+              title: Text('Đặt hàng nội bộ'),
+              subtitle: Text('Bếp sản xuất và giao về chi nhánh'),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -261,8 +296,10 @@ class _NewOrderBannerState extends State<_NewOrderBanner>
               padding: const EdgeInsets.all(BananSpacing.md),
               child: Row(
                 children: [
-                  const Icon(Icons.notifications_active,
-                      color: Colors.white,),
+                  const Icon(
+                    Icons.notifications_active,
+                    color: Colors.white,
+                  ),
                   const SizedBox(width: BananSpacing.md),
                   Expanded(
                     child: Text(
@@ -284,8 +321,11 @@ class _NewOrderBannerState extends State<_NewOrderBanner>
                     ),
                   ),
                   const SizedBox(width: BananSpacing.xs),
-                  const Icon(Icons.arrow_forward, color: Colors.white,
-                      size: 18,),
+                  const Icon(
+                    Icons.arrow_forward,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                 ],
               ),
             ),
@@ -374,9 +414,8 @@ class _Body extends StatelessWidget {
     }
     if (visible.isEmpty) {
       return EmptyState(
-        title: state.scheduledOnly
-            ? 'Chưa có đơn lên lịch'
-            : 'Chưa có đơn ở đây',
+        title:
+            state.scheduledOnly ? 'Chưa có đơn lên lịch' : 'Chưa có đơn ở đây',
         message: state.scheduledOnly
             ? 'Đơn đặt trước cho ngày sau sẽ hiển thị ở đây.'
             : 'Đơn hàng mới sẽ xuất hiện theo thời gian thực.',
@@ -402,8 +441,7 @@ class _Body extends StatelessWidget {
                 borderRadius: BananRadii.rlg,
                 color: Theme.of(context).colorScheme.surface,
                 border: Border.all(
-                  color: Theme.of(context).dividerTheme.color ??
-                      Colors.black12,
+                  color: Theme.of(context).dividerTheme.color ?? Colors.black12,
                 ),
               ),
               child: Row(
@@ -457,8 +495,11 @@ class _Body extends StatelessWidget {
                             padding: const EdgeInsets.only(top: 2),
                             child: Row(
                               children: [
-                                const Icon(Icons.event,
-                                    size: 13, color: BananColors.gold,),
+                                const Icon(
+                                  Icons.event,
+                                  size: 13,
+                                  color: BananColors.gold,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Cho ${DateFormat.MMMd().add_jm().format(o.scheduledFor!.toLocal())}',

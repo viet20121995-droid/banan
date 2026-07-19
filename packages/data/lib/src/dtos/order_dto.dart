@@ -105,7 +105,8 @@ class OrderStatusEventDto {
 
   OrderStatusEvent toDomain() => OrderStatusEvent(
         id: id,
-        fromStatus: fromStatus == null ? null : OrderStatus.fromWire(fromStatus!),
+        fromStatus:
+            fromStatus == null ? null : OrderStatus.fromWire(fromStatus!),
         toStatus: OrderStatus.fromWire(toStatus),
         actorId: actorId,
         note: note,
@@ -156,6 +157,12 @@ class OrderDto {
     this.giftRecipientPhone,
     this.giftWrap = false,
     this.hidePrice = false,
+    this.source = 'WEB',
+    this.settlementMode = 'ONLINE',
+    this.requestingStoreName,
+    this.destinationStoreName,
+    this.wholesaleCompanyName,
+    this.wholesaleDeliveryAddress,
   });
 
   factory OrderDto.fromJson(Map<String, dynamic> json) {
@@ -213,6 +220,16 @@ class OrderDto {
       giftRecipientPhone: json['giftRecipientPhone'] as String?,
       giftWrap: json['giftWrap'] as bool? ?? false,
       hidePrice: json['hidePrice'] as bool? ?? false,
+      source: json['source'] as String? ?? 'WEB',
+      settlementMode: json['settlementMode'] as String? ?? 'ONLINE',
+      requestingStoreName:
+          (json['requestingStore'] as Map?)?['name'] as String?,
+      destinationStoreName:
+          (json['destinationStore'] as Map?)?['name'] as String?,
+      wholesaleCompanyName:
+          (json['wholesaleAccount'] as Map?)?['companyName'] as String?,
+      wholesaleDeliveryAddress:
+          (json['wholesaleAccount'] as Map?)?['deliveryAddress'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -242,6 +259,7 @@ class OrderDto {
   final String? invoiceTaxId;
   final String? invoiceAddress;
   final String? invoiceEmail;
+
   /// ISO-8601 string from the API (kept raw so a null roundtrip stays null).
   final String? invoiceIssuedAt;
   final String? invoiceFileUrl;
@@ -258,6 +276,12 @@ class OrderDto {
   final String? giftRecipientPhone;
   final bool giftWrap;
   final bool hidePrice;
+  final String source;
+  final String settlementMode;
+  final String? requestingStoreName;
+  final String? destinationStoreName;
+  final String? wholesaleCompanyName;
+  final String? wholesaleDeliveryAddress;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -270,8 +294,9 @@ class OrderDto {
         fulfillmentType: FulfillmentType.fromWire(fulfillmentType),
         status: OrderStatus.fromWire(status),
         kitchenId: kitchenId,
-        kitchenStatus:
-            kitchenStatus == null ? null : KitchenStatus.fromWire(kitchenStatus!),
+        kitchenStatus: kitchenStatus == null
+            ? null
+            : KitchenStatus.fromWire(kitchenStatus!),
         subtotal: subtotal,
         deliveryFee: deliveryFee,
         total: total,
@@ -288,8 +313,9 @@ class OrderDto {
         invoiceTaxId: invoiceTaxId,
         invoiceAddress: invoiceAddress,
         invoiceEmail: invoiceEmail,
-        invoiceIssuedAt:
-            invoiceIssuedAt == null ? null : DateTime.tryParse(invoiceIssuedAt!),
+        invoiceIssuedAt: invoiceIssuedAt == null
+            ? null
+            : DateTime.tryParse(invoiceIssuedAt!),
         invoiceFileUrl: invoiceFileUrl,
         campaignDiscount: campaignDiscount,
         bundleDiscount: bundleDiscount,
@@ -304,6 +330,12 @@ class OrderDto {
         giftRecipientPhone: giftRecipientPhone,
         giftWrap: giftWrap,
         hidePrice: hidePrice,
+        source: source,
+        settlementMode: settlementMode,
+        requestingStoreName: requestingStoreName,
+        destinationStoreName: destinationStoreName,
+        wholesaleCompanyName: wholesaleCompanyName,
+        wholesaleDeliveryAddress: wholesaleDeliveryAddress,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );

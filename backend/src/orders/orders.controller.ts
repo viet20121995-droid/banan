@@ -6,13 +6,14 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseEnumPipe,
   Patch,
   Post,
   Query,
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { OrderStatus, Role } from '@prisma/client';
+import { OrderSource, OrderStatus, Role } from '@prisma/client';
 import type { Request } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -20,6 +21,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
+import { CounterOrderDto, InternalTransferDto } from './dto/channel-order.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { TransferToKitchenDto } from './dto/transfer-order.dto';
@@ -91,10 +93,26 @@ export class OrdersController {
 export class MerchantOrdersController {
   constructor(private readonly orders: OrdersService) {}
 
+  /** Staff keys in a walk-in customer's order at the shop counter. */
+  @Post('counter')
+  createCounter(@CurrentUser() user: AuthPrincipal, @Body() dto: CounterOrderDto) {
+    return this.orders.createCounterOrder(user, dto);
+  }
+
+  /** A branch requests goods from the kitchen for itself (internal transfer). */
+  @Post('internal-transfer')
+  @Roles(Role.MERCHANT_OWNER, Role.ADMIN)
+  createInternalTransfer(@CurrentUser() user: AuthPrincipal, @Body() dto: InternalTransferDto) {
+    return this.orders.createInternalTransfer(user, dto);
+  }
+
   @Get()
   list(
     @CurrentUser() user: AuthPrincipal,
-    @Query('status') status?: OrderStatus,
+    @Query('status', new ParseEnumPipe(OrderStatus, { optional: true }))
+    status?: OrderStatus,
+    @Query('source', new ParseEnumPipe(OrderSource, { optional: true }))
+    source?: OrderSource,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
   ) {
@@ -105,6 +123,7 @@ export class MerchantOrdersController {
     // scoped to the store they own/operate.
     return this.orders.listForStore(user.storeId ?? null, {
       status,
+      source,
       page: Number(page) || 1,
       perPage: Number(perPage) || 30,
     });
@@ -136,6 +155,11 @@ export class MerchantOrdersController {
       kitchenId: dto.kitchenId,
       note: dto.note,
     });
+  }
+
+  @Post(':id/counter-paid')
+  markCounterPaid(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
+    return this.orders.markCounterPaid(id, user);
   }
 
   /// VAT-invoice issuance — fills `invoiceIssuedAt` (now) and (optionally)

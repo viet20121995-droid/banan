@@ -80,7 +80,12 @@ export class AnalyticsService {
 
     const [orders, items] = await this.prisma.$transaction([
       this.prisma.order.findMany({
-        where: { ...scope, createdAt: { gte: start, lt: end } },
+        // Internal transfers move goods between branches — never retail revenue.
+        where: {
+          ...scope,
+          createdAt: { gte: start, lt: end },
+          source: { not: 'INTERNAL_TRANSFER' },
+        },
         select: {
           id: true,
           status: true,
@@ -99,7 +104,11 @@ export class AnalyticsService {
       }),
       this.prisma.orderItem.findMany({
         where: {
-          order: { ...scope, createdAt: { gte: start, lt: end } },
+          order: {
+            ...scope,
+            createdAt: { gte: start, lt: end },
+            source: { not: 'INTERNAL_TRANSFER' },
+          },
         },
         select: {
           productId: true,

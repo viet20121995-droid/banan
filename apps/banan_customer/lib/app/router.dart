@@ -28,6 +28,7 @@ import '../features/payment_return/payment_return_screen.dart';
 import '../features/product_detail/product_detail_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/vouchers/voucher_wallet_screen.dart';
+import '../features/wholesale/wholesale_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
 
 const _login = '/login';
@@ -167,11 +168,13 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/referral', builder: (_, __) => const ReferralScreen()),
       GoRoute(path: '/gift-cards', builder: (_, __) => const GiftCardScreen()),
       GoRoute(
-          path: '/subscription',
-          builder: (_, __) => const SubscriptionScreen(),),
+        path: '/subscription',
+        builder: (_, __) => const SubscriptionScreen(),
+      ),
       GoRoute(path: '/catering', builder: (_, __) => const CateringScreen()),
       GoRoute(path: '/rewards', builder: (_, __) => const RewardsScreen()),
       GoRoute(path: '/orders', builder: (_, __) => const OrdersListScreen()),
+      GoRoute(path: '/wholesale', builder: (_, __) => const WholesaleScreen()),
       GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
       GoRoute(
         path: '/bundles/:id',

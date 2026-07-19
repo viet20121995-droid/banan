@@ -112,6 +112,9 @@ export class RealtimeGateway implements OnGatewayConnection {
     client.data = data;
 
     await client.join(`user:${data.userId}`);
+    if (data.role === 'ADMIN') {
+      await client.join('role:ADMIN');
+    }
     if ((data.role === 'MERCHANT_OWNER' || data.role === 'MERCHANT_STAFF') && data.storeId) {
       await client.join(`store:${data.storeId}`);
     }

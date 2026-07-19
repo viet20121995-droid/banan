@@ -373,6 +373,13 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
               iconSelected: Icons.notifications_active,
               route: '/broadcast',
             ),
+          if (isAdmin)
+            const _NavItem(
+              label: 'Wholesale',
+              icon: Icons.handshake_outlined,
+              iconSelected: Icons.handshake,
+              route: '/admin/wholesale',
+            ),
         ],
       ),
       const _NavGroup(
@@ -658,9 +665,8 @@ class _NavTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = selected
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurface;
+    final color =
+        selected ? theme.colorScheme.primary : theme.colorScheme.onSurface;
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: BananSpacing.sm,
@@ -692,8 +698,7 @@ class _NavTile extends StatelessWidget {
                     item.label,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: color,
-                      fontWeight:
-                          selected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                 ),
@@ -783,9 +788,7 @@ class _SidebarUserFooter extends ConsumerWidget {
             Expanded(
               child: InkWell(
                 borderRadius: BorderRadius.circular(6),
-                onTap: isAdmin
-                    ? () => context.go('/admin/accounts')
-                    : null,
+                onTap: isAdmin ? () => context.go('/admin/accounts') : null,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 4,

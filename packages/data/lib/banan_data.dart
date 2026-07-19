@@ -35,6 +35,7 @@ export 'src/api/reviews_api.dart';
 export 'src/api/site_content_api.dart';
 export 'src/api/stores_api.dart';
 export 'src/api/threads_api.dart';
+export 'src/api/wholesale_api.dart';
 export 'src/api/wishlist_api.dart';
 export 'src/local/catalog_cache_init.dart';
 export 'src/local/json_cache.dart';

@@ -114,6 +114,12 @@ class Order extends Equatable {
     this.giftRecipientPhone,
     this.giftWrap = false,
     this.hidePrice = false,
+    this.source = 'WEB',
+    this.settlementMode = 'ONLINE',
+    this.requestingStoreName,
+    this.destinationStoreName,
+    this.wholesaleCompanyName,
+    this.wholesaleDeliveryAddress,
   });
 
   final String id;
@@ -186,6 +192,22 @@ class Order extends Equatable {
   final bool giftWrap;
   final bool hidePrice;
 
+  /// Order channel (wire value): WEB | STAFF_COUNTER | WHOLESALE |
+  /// INTERNAL_TRANSFER. Drives the source badge on staff boards — always
+  /// from the backend field, never inferred from notes.
+  final String source;
+
+  /// ONLINE | COUNTER_PAID | COUNTER_UNPAID | ON_ACCOUNT | INTERNAL_LEDGER.
+  final String settlementMode;
+
+  /// INTERNAL_TRANSFER only — the branch that asked / the branch receiving.
+  final String? requestingStoreName;
+  final String? destinationStoreName;
+
+  /// WHOLESALE only — the buyer's company name.
+  final String? wholesaleCompanyName;
+  final String? wholesaleDeliveryAddress;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -239,6 +261,12 @@ class Order extends Equatable {
         giftRecipientPhone,
         giftWrap,
         hidePrice,
+        source,
+        settlementMode,
+        requestingStoreName,
+        destinationStoreName,
+        wholesaleCompanyName,
+        wholesaleDeliveryAddress,
         createdAt,
         updatedAt,
       ];

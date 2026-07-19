@@ -57,6 +57,7 @@ import 'site_content_api.dart';
 import 'store_settings_api.dart';
 import 'stores_api.dart';
 import 'threads_api.dart';
+import 'wholesale_api.dart';
 import 'wishlist_api.dart';
 
 /// Singleton Dio instance shared across the app — wired with the auth
@@ -299,6 +300,11 @@ final Provider<OrdersApi> ordersApiProvider = Provider<OrdersApi>(
   (ref) => OrdersApi(ref.watch(dioProvider)),
 );
 
+/// Wholesale (B2B on-account) — customer catalog/orders + admin management.
+final Provider<WholesaleApi> wholesaleApiProvider = Provider<WholesaleApi>(
+  (ref) => WholesaleApi(ref.watch(dioProvider)),
+);
+
 final Provider<OrderRepository> orderRepositoryProvider =
     Provider<OrderRepository>(
   (ref) => OrderRepositoryImpl(ref.watch(ordersApiProvider)),
@@ -448,8 +454,7 @@ final Provider<StoreSettingsApi> storeSettingsApiProvider =
 
 final Provider<StoreSettingsRepository> storeSettingsRepositoryProvider =
     Provider<StoreSettingsRepository>(
-  (ref) =>
-      StoreSettingsRepositoryImpl(ref.watch(storeSettingsApiProvider)),
+  (ref) => StoreSettingsRepositoryImpl(ref.watch(storeSettingsApiProvider)),
 );
 
 /// Threads — merchant CRUD + customer home reads.
@@ -515,8 +520,7 @@ final Provider<MerchantCouponsApi> merchantCouponsApiProvider =
 
 final Provider<MerchantCouponsRepository> merchantCouponsRepositoryProvider =
     Provider<MerchantCouponsRepository>(
-  (ref) =>
-      MerchantCouponsRepositoryImpl(ref.watch(merchantCouponsApiProvider)),
+  (ref) => MerchantCouponsRepositoryImpl(ref.watch(merchantCouponsApiProvider)),
 );
 
 /// Admin promotions manager — chain-wide / per-store campaign CRUD.
@@ -533,4 +537,6 @@ final Provider<CampaignsApi> campaignsRepositoryProvider =
 
 /// Kitchen MES — the "Sản xuất" API (manufacturing orders, BoM cost, stock).
 final Provider<ManufacturingApi> manufacturingApiProvider =
-    Provider<ManufacturingApi>((ref) => ManufacturingApi(ref.watch(dioProvider)));
+    Provider<ManufacturingApi>(
+  (ref) => ManufacturingApi(ref.watch(dioProvider)),
+);

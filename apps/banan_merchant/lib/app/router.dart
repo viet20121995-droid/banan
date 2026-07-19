@@ -1,4 +1,5 @@
 import 'package:banan_data/banan_data.dart';
+import 'package:banan_domain/banan_domain.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,6 +30,7 @@ import '../features/marketing_mgmt/marketing_screen.dart';
 import '../features/menu_mgmt/menu_list_screen.dart';
 import '../features/menu_mgmt/product_editor_screen.dart';
 import '../features/newsletter_mgmt/newsletter_screen.dart';
+import '../features/orders_mgmt/channel_order_screens.dart';
 import '../features/orders_mgmt/order_detail_screen.dart';
 import '../features/orders_mgmt/orders_screen.dart';
 import '../features/refunds/refunds_screen.dart';
@@ -39,6 +41,7 @@ import '../features/stores_mgmt/store_editor_screen.dart';
 import '../features/stores_mgmt/stores_list_screen.dart';
 import '../features/threads_mgmt/thread_editor_screen.dart';
 import '../features/threads_mgmt/threads_list_screen.dart';
+import '../features/wholesale_mgmt/wholesale_admin_screen.dart';
 
 const _login = '/login';
 const _wrongApp = '/wrong-app';
@@ -69,6 +72,21 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       // Default: orders queue (merchant's daily focus).
       GoRoute(path: _home, builder: (_, __) => const MerchantOrdersScreen()),
+      // NOTE: static paths must precede the '/orders/:id' matcher.
+      GoRoute(
+        path: '/orders/counter',
+        builder: (_, __) => const CounterOrderScreen(),
+      ),
+      GoRoute(
+        path: '/orders/internal-transfer',
+        redirect: (_, __) {
+          final role = repo.currentSession?.user.role;
+          return role == Role.merchantOwner || role == Role.admin
+              ? null
+              : _home;
+        },
+        builder: (_, __) => const InternalTransferScreen(),
+      ),
       GoRoute(
         path: '/orders/:id',
         builder: (context, state) => MerchantOrderDetailScreen(
@@ -165,6 +183,12 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin/accounts',
         builder: (_, __) => const AccountsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/wholesale',
+        redirect: (_, __) =>
+            repo.currentSession?.user.role == Role.admin ? null : _home,
+        builder: (_, __) => const WholesaleAdminScreen(),
       ),
       GoRoute(
         path: '/admin/delivery-config',

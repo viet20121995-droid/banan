@@ -56,24 +56,78 @@ class OrdersApi {
     }
   }
 
-  Future<Result<({List<OrderDto> items, int page, int perPage, int total}),
-      AppFailure>> myOrders({
+  Future<
+      Result<({List<OrderDto> items, int page, int perPage, int total}),
+          AppFailure>> myOrders({
     int page = 1,
     int perPage = 20,
   }) =>
       _list('/orders', {'page': page, 'perPage': perPage});
 
-  Future<Result<({List<OrderDto> items, int page, int perPage, int total}),
-      AppFailure>> storeOrders({
+  Future<
+      Result<({List<OrderDto> items, int page, int perPage, int total}),
+          AppFailure>> storeOrders({
     String? status,
+    String? source,
     int page = 1,
     int perPage = 30,
   }) =>
       _list('/merchant/orders', {
         if (status != null) 'status': status,
+        if (source != null) 'source': source,
         'page': page,
         'perPage': perPage,
       });
+
+  /// Staff keys in a walk-in customer's order at the counter. Settlement is
+  /// the till — no online gateway is ever involved.
+  Future<Result<OrderDto, AppFailure>> createCounterOrder({
+    required List<Map<String, dynamic>> items,
+    required String customerName,
+    required String customerPhone,
+    required bool paidAtCounter,
+    String? customerEmail,
+    DateTime? scheduledFor,
+    String? notes,
+    String? storeId,
+    String? clientRequestId,
+  }) =>
+      _postOrder('/merchant/orders/counter', {
+        'items': items,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
+        if (customerEmail != null && customerEmail.isNotEmpty)
+          'customerEmail': customerEmail,
+        'payment': paidAtCounter ? 'PAID_AT_COUNTER' : 'UNPAID_AT_COUNTER',
+        if (scheduledFor != null)
+          'scheduledFor': scheduledFor.toUtc().toIso8601String(),
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (storeId != null) 'storeId': storeId,
+        if (clientRequestId != null) 'clientRequestId': clientRequestId,
+      });
+
+  /// A branch requests goods from the kitchen for itself (internal transfer).
+  Future<Result<OrderDto, AppFailure>> createInternalTransfer({
+    required List<Map<String, dynamic>> items,
+    DateTime? scheduledFor,
+    String? notes,
+    String? requestingStoreId,
+    String? destinationStoreId,
+    String? clientRequestId,
+  }) =>
+      _postOrder('/merchant/orders/internal-transfer', {
+        'items': items,
+        if (scheduledFor != null)
+          'scheduledFor': scheduledFor.toUtc().toIso8601String(),
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (requestingStoreId != null) 'requestingStoreId': requestingStoreId,
+        if (destinationStoreId != null)
+          'destinationStoreId': destinationStoreId,
+        if (clientRequestId != null) 'clientRequestId': clientRequestId,
+      });
+
+  Future<Result<OrderDto, AppFailure>> markCounterPaid(String id) =>
+      _postOrder('/merchant/orders/$id/counter-paid', const {});
 
   Future<Result<OrderDto, AppFailure>> get(String id) async {
     try {
@@ -165,9 +219,7 @@ class OrdersApi {
       if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       return Result.success(
-        raw
-            .map((e) => OrderDto.fromJson(e as Map<String, dynamic>))
-            .toList(),
+        raw.map((e) => OrderDto.fromJson(e as Map<String, dynamic>)).toList(),
       );
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
@@ -206,8 +258,9 @@ class OrdersApi {
     }
   }
 
-  Future<Result<({List<OrderDto> items, int page, int perPage, int total}),
-      AppFailure>> _list(String path, Map<String, dynamic> query) async {
+  Future<
+      Result<({List<OrderDto> items, int page, int perPage, int total}),
+          AppFailure>> _list(String path, Map<String, dynamic> query) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(
         path,
@@ -216,14 +269,16 @@ class OrdersApi {
       if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       final meta = res.data?['meta'] as Map<String, dynamic>? ?? const {};
-      return Result.success((
-        items: raw
-            .map((e) => OrderDto.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        page: (meta['page'] as num?)?.toInt() ?? 1,
-        perPage: (meta['perPage'] as num?)?.toInt() ?? raw.length,
-        total: (meta['total'] as num?)?.toInt() ?? raw.length,
-      ),);
+      return Result.success(
+        (
+          items: raw
+              .map((e) => OrderDto.fromJson(e as Map<String, dynamic>))
+              .toList(),
+          page: (meta['page'] as num?)?.toInt() ?? 1,
+          perPage: (meta['perPage'] as num?)?.toInt() ?? raw.length,
+          total: (meta['total'] as num?)?.toInt() ?? raw.length,
+        ),
+      );
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
     } catch (e) {

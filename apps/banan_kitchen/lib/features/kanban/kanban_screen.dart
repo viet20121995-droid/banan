@@ -373,9 +373,8 @@ class _CardFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final summary = order.items
-        .map((i) => '${i.quantity}× ${i.productName}')
-        .join('\n');
+    final summary =
+        order.items.map((i) => '${i.quantity}× ${i.productName}').join('\n');
 
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -405,55 +404,118 @@ class _CardFrame extends StatelessWidget {
               ),
             ],
           ),
-          // Which branch sent this order. Kitchen needs this to know who to
-          // hand it back to after dispatch — and to spot-check before
-          // starting prep that the order is going to the right place.
-          if (order.storeName != null) ...[
-            const SizedBox(height: BananSpacing.xs),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: BananSpacing.sm,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BananRadii.rPill,
-                    color: BananColors.gold.withValues(alpha: 0.15),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.storefront_outlined,
-                        size: 12,
-                        color: BananColors.cocoa,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        order.storeName!,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: BananColors.cocoa,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
+          // Which branch sent this order + which CHANNEL it came from. The
+          // source badge reads Order.source (backend truth, never inferred
+          // from notes); internal transfers also show requesting → receiving
+          // branch, wholesale shows the buyer's company.
+          const SizedBox(height: BananSpacing.xs),
+          Wrap(
+            spacing: BananSpacing.xs,
+            runSpacing: 2,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _sourceBadge(theme),
+              if (order.storeName != null)
+                _pill(
+                  theme,
+                  icon: Icons.storefront_outlined,
+                  label: order.storeName!,
+                  bg: BananColors.gold.withValues(alpha: 0.15),
+                  fg: BananColors.cocoa,
                 ),
-                const SizedBox(width: BananSpacing.xs),
-                Text(
-                  order.fulfillmentType == FulfillmentType.delivery
-                      ? 'delivery'
-                      : 'pickup',
-                  style: theme.textTheme.labelSmall,
-                ),
-              ],
+              Text(
+                order.fulfillmentType == FulfillmentType.delivery
+                    ? 'delivery'
+                    : 'pickup',
+                style: theme.textTheme.labelSmall,
+              ),
+            ],
+          ),
+          if (order.source == 'INTERNAL_TRANSFER' &&
+              order.destinationStoreName != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Giao về: ${order.destinationStoreName}'
+              '${order.requestingStoreName != null && order.requestingStoreName != order.destinationStoreName ? ' (yêu cầu: ${order.requestingStoreName})' : ''}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: BananColors.info,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          if (order.source == 'WHOLESALE' &&
+              order.wholesaleDeliveryAddress != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Giao đến: ${order.wholesaleDeliveryAddress}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: BananColors.primary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
           const SizedBox(height: BananSpacing.xs),
           Text(summary, style: theme.textTheme.bodySmall),
           const SizedBox(height: BananSpacing.sm),
           child,
+        ],
+      ),
+    );
+  }
+
+  /// Channel badge from `Order.source`. WEB is the default channel and shows
+  /// a neutral label; operational channels get their own color.
+  Widget _sourceBadge(ThemeData theme) {
+    final (label, color, icon) = switch (order.source) {
+      'STAFF_COUNTER' => (
+          'Tại quầy',
+          BananColors.accent,
+          Icons.point_of_sale_outlined,
+        ),
+      'WHOLESALE' => (
+          order.wholesaleCompanyName == null
+              ? 'Wholesale'
+              : 'Wholesale · ${order.wholesaleCompanyName}',
+          BananColors.primary,
+          Icons.business_outlined,
+        ),
+      'INTERNAL_TRANSFER' => ('Nội bộ', BananColors.info, Icons.swap_horiz),
+      _ => ('Web', BananColors.outline, Icons.public),
+    };
+    return _pill(
+      theme,
+      icon: icon,
+      label: label,
+      bg: color.withValues(alpha: 0.14),
+      fg: color,
+    );
+  }
+
+  Widget _pill(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required Color bg,
+    required Color fg,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: BananSpacing.sm,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(borderRadius: BananRadii.rPill, color: bg),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: fg),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: fg,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
@@ -548,8 +610,11 @@ class _CompletedCard extends StatelessWidget {
       order: order,
       child: Row(
         children: [
-          const Icon(Icons.check_circle_outline,
-              size: 16, color: BananColors.success,),
+          const Icon(
+            Icons.check_circle_outline,
+            size: 16,
+            color: BananColors.success,
+          ),
           const SizedBox(width: BananSpacing.xs),
           Text(
             _statusLabel(order.status),

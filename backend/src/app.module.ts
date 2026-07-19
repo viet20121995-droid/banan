@@ -44,6 +44,7 @@ import { SiteContentModule } from './site-content/site-content.module';
 import { StoresModule } from './stores/stores.module';
 import { ThreadsModule } from './threads/threads.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { WholesaleModule } from './wholesale/wholesale.module';
 import { WishlistModule } from './wishlist/wishlist.module';
 
 @Module({
@@ -103,6 +104,7 @@ import { WishlistModule } from './wishlist/wishlist.module';
     AnalyticsModule,
     ReviewsModule,
     ReportsModule,
+    WholesaleModule,
     WishlistModule,
     SiteContentModule,
   ],

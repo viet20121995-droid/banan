@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { KitchenStatus, OrderStatus, Prisma, Refund, Role } from '@prisma/client';
+import { KitchenStatus, OrderSource, OrderStatus, Prisma, Refund, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'node:crypto';
 
@@ -64,6 +64,13 @@ const ORDER_INCLUDE = {
   statusEvents: { orderBy: { createdAt: 'asc' } },
   payments: { orderBy: { createdAt: 'desc' } },
   refunds: { orderBy: { createdAt: 'desc' } },
+  // Channel context for the kitchen/merchant boards: who keyed it in, which
+  // branches an internal transfer moves between, which wholesale account.
+  requestingStore: { select: { id: true, name: true } },
+  destinationStore: { select: { id: true, name: true } },
+  wholesaleAccount: {
+    select: { id: true, companyName: true, deliveryAddress: true },
+  },
 } satisfies Prisma.OrderInclude;
 
 type OrderWithIncludes = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE }>;
@@ -947,7 +954,7 @@ export class OrdersService {
 
   async listForStore(
     storeId: string | null,
-    opts: { status?: OrderStatus; page?: number; perPage?: number },
+    opts: { status?: OrderStatus; source?: OrderSource; page?: number; perPage?: number },
   ) {
     const page = opts.page ?? 1;
     const perPage = opts.perPage ?? 30;
@@ -957,6 +964,7 @@ export class OrdersService {
     const where: Prisma.OrderWhereInput = {
       ...(storeId != null && { storeId }),
       ...(opts.status && { status: opts.status }),
+      ...(opts.source && { source: opts.source }),
     };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
@@ -1044,6 +1052,12 @@ export class OrdersService {
           // gift card being restored above).
           await this.coupons.reverseRedemption(id, tx);
           await this.promotions.reverseUsage(id, tx);
+          if (order.source === 'WHOLESALE') {
+            await tx.wholesaleReceivable.updateMany({
+              where: { orderId: id, status: 'PENDING' },
+              data: { status: 'CANCELLED' },
+            });
+          }
           // Open a refund row for each already-captured payment INSIDE this tx,
           // so a cancelled order can never be left without its refund row (which
           // the status guard would then block a retry from creating). Realtime
@@ -1086,12 +1100,15 @@ export class OrdersService {
       at: new Date().toISOString(),
     });
 
-    // Push a customer-facing notification (in-app + future FCM).
-    await this.notifications.sendToUser(
-      order.customerId,
-      orderStatusNotification(order.code, toStatus),
-      { orderId: id, code: order.code, status: toStatus },
-    );
+    // Push a customer-facing notification (in-app + future FCM). Internal
+    // transfers have no customer — `customerId` is the requesting staffer.
+    if (order.source !== 'INTERNAL_TRANSFER') {
+      await this.notifications.sendToUser(
+        order.customerId,
+        orderStatusNotification(order.code, toStatus),
+        { orderId: id, code: order.code, status: toStatus },
+      );
+    }
 
     return updated;
   }
@@ -1282,11 +1299,13 @@ export class OrdersService {
       },
     );
 
-    await this.notifications.sendToUser(
-      order.customerId,
-      orderStatusNotification(order.code, 'SENT_TO_KITCHEN'),
-      { orderId: id, code: order.code, status: 'SENT_TO_KITCHEN' },
-    );
+    if (order.source !== 'INTERNAL_TRANSFER') {
+      await this.notifications.sendToUser(
+        order.customerId,
+        orderStatusNotification(order.code, 'SENT_TO_KITCHEN'),
+        { orderId: id, code: order.code, status: 'SENT_TO_KITCHEN' },
+      );
+    }
 
     // Alert the kitchen's staff — in-app + web push (sound on the open
     // kitchen board). Fire-and-forget.
@@ -1460,12 +1479,14 @@ export class OrdersService {
 
     // Notify the customer that their order is ready / out for delivery —
     // the kitchen dispatch bypasses transition(), which would otherwise
-    // send this. (in-app + push)
-    await this.notifications.sendToUser(
-      order.customerId,
-      orderStatusNotification(order.code, targetOrderStatus),
-      { orderId: id, code: order.code, status: targetOrderStatus },
-    );
+    // send this. (in-app + push) Internal transfers have no customer.
+    if (order.source !== 'INTERNAL_TRANSFER') {
+      await this.notifications.sendToUser(
+        order.customerId,
+        orderStatusNotification(order.code, targetOrderStatus),
+        { orderId: id, code: order.code, status: targetOrderStatus },
+      );
+    }
 
     return updated;
   }
@@ -1508,6 +1529,743 @@ export class OrdersService {
       include: ORDER_INCLUDE,
       orderBy: { updatedAt: 'asc' },
     });
+  }
+
+  /**
+   * Atomically accepts a wholesale order, activates its receivable term and
+   * puts the order on the kitchen board. Stock was reserved when the buyer
+   * submitted the order; a cancelled pending order restores it through the
+   * normal cancellation compensation path.
+   */
+  async confirmWholesaleOrder(
+    id: string,
+    actor: { sub: string; role: Role },
+  ): Promise<OrderWithIncludes> {
+    if (actor.role !== Role.ADMIN) {
+      throw new ForbiddenException({ code: 'AUTH_FORBIDDEN' });
+    }
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        store: { select: { id: true, defaultKitchenId: true } },
+        receivable: { select: { id: true, status: true } },
+        wholesaleAccount: { select: { paymentTermDays: true } },
+        wholesaleContract: { select: { paymentTermDays: true } },
+      },
+    });
+    if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
+    if (order.source !== 'WHOLESALE') {
+      throw new BadRequestException({ code: 'NOT_WHOLESALE_ORDER' });
+    }
+    if (order.status !== 'PENDING' || order.receivable?.status !== 'PENDING') {
+      throw new BadRequestException({
+        code: 'ORDER_INVALID_TRANSITION',
+        message: 'Đơn wholesale này đã được xử lý.',
+      });
+    }
+    const kitchenId = order.store.defaultKitchenId;
+    if (!kitchenId) {
+      throw new BadRequestException({
+        code: 'NO_KITCHEN_AVAILABLE',
+        message: 'Cửa hàng chưa gán bếp mặc định.',
+      });
+    }
+    const termDays =
+      order.wholesaleContract?.paymentTermDays ?? order.wholesaleAccount?.paymentTermDays ?? 30;
+    const confirmedAt = new Date();
+    const dueDate = new Date(confirmedAt.getTime() + termDays * 24 * 3600 * 1000);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.order.updateMany({
+        where: { id, source: 'WHOLESALE', status: 'PENDING' },
+        data: {
+          status: 'SENT_TO_KITCHEN',
+          kitchenStatus: 'PENDING_ACK',
+          kitchenId,
+        },
+      });
+      if (claimed.count === 0) {
+        throw new BadRequestException({
+          code: 'ORDER_INVALID_TRANSITION',
+          message: 'Đơn wholesale đã được xử lý đồng thời.',
+        });
+      }
+      const receivable = await tx.wholesaleReceivable.updateMany({
+        where: { orderId: id, status: 'PENDING' },
+        data: { status: 'OPEN', dueDate },
+      });
+      if (receivable.count === 0) {
+        throw new BadRequestException({ code: 'WHOLESALE_RECEIVABLE_INVALID' });
+      }
+      await tx.orderStatusEvent.createMany({
+        data: [
+          {
+            orderId: id,
+            fromStatus: 'PENDING',
+            toStatus: 'ACCEPTED',
+            actorId: actor.sub,
+            note: 'Admin xác nhận đơn wholesale',
+          },
+          {
+            orderId: id,
+            fromStatus: 'ACCEPTED',
+            toStatus: 'SENT_TO_KITCHEN',
+            actorId: actor.sub,
+            note: 'Gửi bếp sau khi xác nhận wholesale',
+          },
+        ],
+      });
+      return tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
+    });
+
+    this.realtime.emit(
+      [`order:${id}`, `user:${order.customerId}`, `store:${order.storeId}`, `kitchen:${kitchenId}`],
+      'order.status_changed',
+      {
+        orderId: id,
+        code: order.code,
+        fromStatus: 'PENDING',
+        toStatus: 'SENT_TO_KITCHEN',
+        kitchenStatus: 'PENDING_ACK',
+        at: confirmedAt.toISOString(),
+      },
+    );
+    await this.notifications.sendToUser(
+      order.customerId,
+      orderStatusNotification(order.code, 'SENT_TO_KITCHEN'),
+      { orderId: id, code: order.code, status: 'SENT_TO_KITCHEN' },
+    );
+    void this.notifications.notifyKitchenStaff(
+      kitchenId,
+      {
+        type: 'kitchen_new',
+        title: `Đơn wholesale · ${order.code}`,
+        body: `${updated.items.length} món cần chuẩn bị.`,
+      },
+      { code: order.code },
+    );
+    return updated;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Operational channels — staff counter + internal transfer. Both reuse the
+  // same Order pipeline (snapshot pricing, stock decrement, daily caps,
+  // kitchen board); what differs is policy: who may create, how it settles,
+  // and which benefits (coupons/points/campaigns) are simply never applied.
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /** Store the actor operates on: staff are pinned to their own store; admin must name one. */
+  private resolveActorStore(
+    principal: { sub: string; role: Role; storeId?: string | null },
+    dtoStoreId?: string,
+  ): string {
+    if (principal.role === Role.ADMIN) {
+      if (!dtoStoreId) {
+        throw new BadRequestException({
+          code: 'STORE_REQUIRED',
+          message: 'Admin phải chọn cửa hàng cho đơn này.',
+        });
+      }
+      return dtoStoreId;
+    }
+    if (!principal.storeId) {
+      throw new BadRequestException({ code: 'NO_STORE_ASSIGNED' });
+    }
+    if (dtoStoreId && dtoStoreId !== principal.storeId) {
+      throw new ForbiddenException({
+        code: 'STORE_SCOPE',
+        message: 'Bạn chỉ có thể tạo đơn cho cửa hàng của mình.',
+      });
+    }
+    return principal.storeId;
+  }
+
+  /** Idempotency read: the first order created with this (creator, key), if any. */
+  private findByClientRequestId(createdById: string, clientRequestId?: string) {
+    if (!clientRequestId) return Promise.resolve(null);
+    return this.prisma.order.findUnique({
+      where: { createdById_clientRequestId: { createdById, clientRequestId } },
+      include: ORDER_INCLUDE,
+    });
+  }
+
+  /**
+   * Find-or-create the customer for a COUNTER order. Unlike the public guest
+   * guard, a staff member keying in a returning customer's phone is trusted —
+   * a CLAIMED customer account is reused (their order history aggregates),
+   * not refused. Only a staff/kitchen/admin phone is rejected.
+   */
+  private async resolveCounterCustomer(args: {
+    fullName: string;
+    phone: string;
+    email?: string;
+  }): Promise<string> {
+    const existing = await this.prisma.user.findUnique({
+      where: { phone: args.phone },
+      select: { id: true, role: true },
+    });
+    if (existing) {
+      if (existing.role !== 'CUSTOMER') {
+        throw new BadRequestException({
+          code: 'PHONE_IS_STAFF',
+          message: 'Số điện thoại này thuộc tài khoản nội bộ.',
+        });
+      }
+      return existing.id;
+    }
+    const normalisedEmail = args.email?.toLowerCase();
+    const emailInUse = normalisedEmail
+      ? (await this.prisma.user.findUnique({
+          where: { email: normalisedEmail },
+          select: { id: true },
+        })) !== null
+      : false;
+    const finalEmail =
+      normalisedEmail && !emailInUse
+        ? normalisedEmail
+        : `guest+${randomBytes(8).toString('hex')}@banan.local`;
+    const passwordHash = await bcrypt.hash(randomBytes(24).toString('base64url'), 12);
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          email: finalEmail,
+          phone: args.phone,
+          passwordHash,
+          fullName: args.fullName,
+          role: 'CUSTOMER',
+          marketingOptIn: false,
+        },
+        select: { id: true },
+      });
+      return user.id;
+    } catch (error) {
+      // Two counter terminals may key the same new phone at once. Re-read the
+      // winner instead of failing the second order on User.phone uniqueness.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const winner = await this.prisma.user.findUnique({
+          where: { phone: args.phone },
+          select: { id: true, role: true },
+        });
+        if (winner?.role === 'CUSTOMER') return winner.id;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Lean line build for operational channels: availability + default variant +
+   * friendly LIMITED stock check + retail price snapshot. No bundles, no
+   * campaigns/coupons/points — those are WEB checkout benefits by policy.
+   * The authoritative race-safe stock decrement still runs inside the tx.
+   */
+  private async buildChannelLines(
+    items: CreateOrderDto['items'],
+    opts: { enforceLimitedStock?: boolean } = {},
+  ) {
+    const requestedIds = [...new Set(items.map((i) => i.productId))];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: requestedIds } },
+      include: { variants: { orderBy: [{ size: 'asc' }, { flavor: 'asc' }] } },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
+    if (requestedIds.some((id) => !productById.has(id))) {
+      throw new BadRequestException({ code: 'PRODUCT_NOT_FOUND' });
+    }
+    if (new Set(products.map((p) => p.storeId)).size > 1) {
+      throw new BadRequestException({
+        code: 'CART_MULTI_STORE',
+        message: 'All items must be from the same store.',
+      });
+    }
+
+    const demandByVariant = new Map<string, number>();
+    for (const input of items) {
+      const p = productById.get(input.productId)!;
+      const v = input.variantId ? p.variants.find((x) => x.id === input.variantId) : p.variants[0];
+      if (v) demandByVariant.set(v.id, (demandByVariant.get(v.id) ?? 0) + input.quantity);
+    }
+
+    let subtotal = new Prisma.Decimal(0);
+    const lineCreates: Prisma.OrderItemCreateManyOrderInput[] = [];
+    for (const input of items) {
+      const product = productById.get(input.productId)!;
+      if (!product.isAvailable) {
+        throw new BadRequestException({
+          code: 'PRODUCT_UNAVAILABLE',
+          message: `${product.name} is no longer available.`,
+        });
+      }
+      const variant = input.variantId
+        ? product.variants.find((v) => v.id === input.variantId)
+        : product.variants[0];
+      if (!variant || !variant.isAvailable) {
+        throw new BadRequestException({
+          code: 'VARIANT_UNAVAILABLE',
+          message: `Selected option for ${product.name} is unavailable.`,
+        });
+      }
+      if ((opts.enforceLimitedStock ?? true) && variant.stockMode === 'LIMITED') {
+        const have = variant.stockQty ?? 0;
+        const demand = demandByVariant.get(variant.id) ?? input.quantity;
+        if (have < demand) {
+          throw new BadRequestException({
+            code: 'OUT_OF_STOCK',
+            message:
+              have <= 0
+                ? `"${product.name}" đã hết hàng.`
+                : `"${product.name}" chỉ còn ${have} cái — vui lòng giảm số lượng.`,
+          });
+        }
+      }
+      const unitPrice = new Prisma.Decimal(product.basePrice).plus(variant.priceDelta);
+      const lineTotal = unitPrice.times(input.quantity);
+      subtotal = subtotal.plus(lineTotal);
+      lineCreates.push({
+        productId: product.id,
+        variantId: variant.id,
+        productName: product.name,
+        variantLabel: `${variant.size} · ${variant.flavor}`,
+        quantity: input.quantity,
+        unitPrice,
+        customMessage: input.customMessage,
+        personalization:
+          input.personalization && Object.keys(input.personalization).length > 0
+            ? (input.personalization as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+        lineTotal,
+      });
+    }
+    return { products, lineCreates, subtotal };
+  }
+
+  /** Shared tx body: daily caps → FOR UPDATE product/variant lock → LIMITED decrement. */
+  async reserveChannelStock(
+    tx: Prisma.TransactionClient,
+    products: Array<{ id: string; name: string; dailyMaxQuantity: number | null }>,
+    lineCreates: Prisma.OrderItemCreateManyOrderInput[],
+    targetAt: Date,
+    opts: { decrementLimitedStock?: boolean } = {},
+  ): Promise<void> {
+    const qtyByProduct = new Map<string, number>();
+    for (const l of lineCreates) {
+      qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.quantity);
+    }
+    await this.assertDailyCaps(tx, products, qtyByProduct, targetAt);
+
+    const lineProductIds = [...new Set(lineCreates.map((l) => l.productId))].sort();
+    const lineVariantIds = [
+      ...new Set(lineCreates.map((l) => l.variantId).filter((v): v is string => !!v)),
+    ].sort();
+    const freshProducts = new Map(
+      (
+        await tx.$queryRaw<Array<{ id: string; isAvailable: boolean }>>`
+          SELECT "id", "isAvailable" FROM "Product"
+          WHERE "id" IN (${Prisma.join(lineProductIds)})
+          ORDER BY "id" FOR UPDATE`
+      ).map((p) => [p.id, p]),
+    );
+    const freshVariants = new Map(
+      lineVariantIds.length === 0
+        ? []
+        : (
+            await tx.$queryRaw<Array<{ id: string; stockMode: string; isAvailable: boolean }>>`
+          SELECT "id", "stockMode", "isAvailable" FROM "ProductVariant"
+          WHERE "id" IN (${Prisma.join(lineVariantIds)})
+          ORDER BY "id" FOR UPDATE`
+          ).map((v) => [v.id, v]),
+    );
+    const limitedDemand = new Map<string, { quantity: number; productName: string }>();
+    for (const line of lineCreates) {
+      const product = freshProducts.get(line.productId);
+      if (!product || !product.isAvailable) {
+        throw new BadRequestException({
+          code: 'PRODUCT_UNAVAILABLE',
+          message: `"${line.productName}" vừa ngừng bán.`,
+        });
+      }
+      const variantId = line.variantId;
+      if (!variantId) continue;
+      const variant = freshVariants.get(variantId);
+      if (!variant || !variant.isAvailable) {
+        throw new BadRequestException({
+          code: 'VARIANT_UNAVAILABLE',
+          message: `Lựa chọn cho "${line.productName}" vừa ngừng bán.`,
+        });
+      }
+      if (!(opts.decrementLimitedStock ?? true) || variant.stockMode !== 'LIMITED') continue;
+      const cur = limitedDemand.get(variantId);
+      if (cur) cur.quantity += line.quantity;
+      else limitedDemand.set(variantId, { quantity: line.quantity, productName: line.productName });
+    }
+    for (const variantId of [...limitedDemand.keys()].sort()) {
+      const { quantity, productName } = limitedDemand.get(variantId)!;
+      const updated = await tx.productVariant.updateMany({
+        where: { id: variantId, stockQty: { gte: quantity } },
+        data: { stockQty: { decrement: quantity } },
+      });
+      if (updated.count === 0) {
+        throw new BadRequestException({
+          code: 'OUT_OF_STOCK',
+          message: `"${productName}" vừa hết hàng.`,
+        });
+      }
+    }
+  }
+
+  notifyWholesaleOrderCreated(order: {
+    id: string;
+    code: string;
+    customerId: string;
+    storeId: string;
+  }): void {
+    this.realtime.emit(['role:ADMIN', `user:${order.customerId}`], 'order.created', {
+      orderId: order.id,
+      code: order.code,
+      source: 'WHOLESALE',
+      storeId: order.storeId,
+      at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * STAFF_COUNTER — staff keys in a walk-in customer's order at the shop.
+   * Same validation rails as WEB (store accepting, product timeline, daily
+   * caps, race-safe stock) but: settlement is the till (CASH payment row when
+   * already paid — no gateway, no COD_ENABLED), no coupons/points/gift cards
+   * by policy, and the order lands straight on the kitchen board.
+   */
+  async createCounterOrder(
+    principal: { sub: string; role: Role; storeId?: string | null },
+    dto: {
+      items: CreateOrderDto['items'];
+      customerName: string;
+      customerPhone: string;
+      customerEmail?: string;
+      scheduledFor?: string;
+      notes?: string;
+      payment: 'PAID_AT_COUNTER' | 'UNPAID_AT_COUNTER';
+      sendToKitchen?: boolean;
+      storeId?: string;
+      clientRequestId?: string;
+    },
+  ): Promise<OrderWithIncludes> {
+    const storeId = this.resolveActorStore(principal, dto.storeId);
+    const replay = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
+    if (replay) return replay;
+
+    const sendToKitchen = dto.sendToKitchen ?? true;
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+      select: { id: true, defaultKitchenId: true },
+    });
+    if (!store) throw new BadRequestException({ code: 'STORE_NOT_FOUND' });
+    if (sendToKitchen && !store.defaultKitchenId) {
+      throw new BadRequestException({
+        code: 'NO_KITCHEN_AVAILABLE',
+        message: 'Cửa hàng chưa gán bếp mặc định.',
+      });
+    }
+
+    const customerId = await this.resolveCounterCustomer({
+      fullName: dto.customerName.trim(),
+      phone: dto.customerPhone.trim(),
+      email: dto.customerEmail,
+    });
+
+    const placedAt = new Date();
+    const targetAt = dto.scheduledFor ? new Date(dto.scheduledFor) : placedAt;
+    await this.assertStoreAcceptingOrder(storeId, 'PICKUP', targetAt, placedAt, !!dto.scheduledFor);
+    const { products, lineCreates, subtotal } = await this.buildChannelLines(dto.items);
+    await this.assertProductsAcceptingOrder(products, targetAt, placedAt, !!dto.scheduledFor);
+
+    const orderCode = generateOrderCode();
+    const kitchenId = sendToKitchen ? store.defaultKitchenId : null;
+    let created: OrderWithIncludes;
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        await this.reserveChannelStock(tx, products, lineCreates, targetAt);
+        const order = await tx.order.create({
+          data: {
+            code: orderCode,
+            customerId,
+            storeId,
+            fulfillmentType: 'PICKUP',
+            scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
+            status: sendToKitchen ? 'SENT_TO_KITCHEN' : 'PENDING',
+            ...(sendToKitchen && { kitchenStatus: 'PENDING_ACK' as const, kitchenId }),
+            source: 'STAFF_COUNTER',
+            settlementMode: dto.payment === 'PAID_AT_COUNTER' ? 'COUNTER_PAID' : 'COUNTER_UNPAID',
+            createdById: principal.sub,
+            clientRequestId: dto.clientRequestId ?? null,
+            subtotal,
+            total: subtotal,
+            notes: dto.notes,
+            items: { createMany: { data: lineCreates } },
+            statusEvents: {
+              createMany: {
+                data: [
+                  {
+                    fromStatus: null,
+                    toStatus: 'PENDING',
+                    actorId: principal.sub,
+                    note: 'Đơn tại quầy',
+                  },
+                  ...(sendToKitchen
+                    ? [
+                        {
+                          fromStatus: 'PENDING' as const,
+                          toStatus: 'SENT_TO_KITCHEN' as const,
+                          actorId: principal.sub,
+                          note: 'Gửi bếp từ quầy',
+                        },
+                      ]
+                    : []),
+                ],
+              },
+            },
+          },
+          include: ORDER_INCLUDE,
+        });
+        if (dto.payment === 'PAID_AT_COUNTER') {
+          // Till cash — recorded directly, never via a gateway/provider config.
+          await tx.payment.create({
+            data: {
+              orderId: order.id,
+              provider: 'CASH',
+              providerRef: `COUNTER-${orderCode}`,
+              amount: order.total,
+              currency: order.currency,
+              status: 'CAPTURED',
+            },
+          });
+        }
+        return order;
+      });
+    } catch (e) {
+      // Double submit racing past the idempotency pre-read: the loser hits the
+      // (createdById, clientRequestId) unique — return the winner's order.
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002' &&
+        dto.clientRequestId
+      ) {
+        const winner = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
+        if (winner) return winner;
+      }
+      throw e;
+    }
+
+    const rooms = [`store:${storeId}`];
+    if (kitchenId) rooms.push(`kitchen:${kitchenId}`);
+    this.realtime.emit(rooms, 'order.created', this.toEventPayload(created));
+    if (kitchenId) {
+      void this.notifications.notifyKitchenStaff(
+        kitchenId,
+        {
+          type: 'kitchen_new',
+          title: `Đơn vào bếp · ${created.code}`,
+          body: `${created.items.length} món cần chuẩn bị.`,
+        },
+        { code: created.code },
+      );
+    }
+    return created;
+  }
+
+  /**
+   * INTERNAL_TRANSFER — a branch orders goods from the kitchen for itself.
+   * No customer, no payment, no benefits; totals snapshot at retail for
+   * costing visibility but the source excludes them from retail revenue.
+   * The requesting staff user stands in as `customerId` (the column is
+   * non-nullable); customer-facing notifications are gated off by source.
+   */
+  async createInternalTransfer(
+    principal: { sub: string; role: Role; storeId?: string | null },
+    dto: {
+      items: CreateOrderDto['items'];
+      scheduledFor?: string;
+      notes?: string;
+      requestingStoreId?: string;
+      destinationStoreId?: string;
+      sendToKitchen?: boolean;
+      clientRequestId?: string;
+    },
+  ): Promise<OrderWithIncludes> {
+    const requestingStoreId = this.resolveActorStore(principal, dto.requestingStoreId);
+    const replay = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
+    if (replay) return replay;
+
+    const destinationStoreId = dto.destinationStoreId ?? requestingStoreId;
+    const sendToKitchen = dto.sendToKitchen ?? true;
+    const [requesting, destination] = await Promise.all([
+      this.prisma.store.findUnique({
+        where: { id: requestingStoreId },
+        select: { id: true, defaultKitchenId: true },
+      }),
+      this.prisma.store.findUnique({ where: { id: destinationStoreId }, select: { id: true } }),
+    ]);
+    if (!requesting || !destination) {
+      throw new BadRequestException({ code: 'STORE_NOT_FOUND' });
+    }
+    if (sendToKitchen && !requesting.defaultKitchenId) {
+      throw new BadRequestException({
+        code: 'NO_KITCHEN_AVAILABLE',
+        message: 'Cửa hàng chưa gán bếp mặc định.',
+      });
+    }
+
+    const placedAt = new Date();
+    const targetAt = dto.scheduledFor ? new Date(dto.scheduledFor) : placedAt;
+    const { products, lineCreates, subtotal } = await this.buildChannelLines(dto.items, {
+      enforceLimitedStock: false,
+    });
+    await this.assertProductsAcceptingOrder(products, targetAt, placedAt, !!dto.scheduledFor);
+
+    const orderCode = generateOrderCode();
+    const kitchenId = sendToKitchen ? requesting.defaultKitchenId : null;
+    let created: OrderWithIncludes;
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        await this.reserveChannelStock(tx, products, lineCreates, targetAt, {
+          decrementLimitedStock: false,
+        });
+        return tx.order.create({
+          data: {
+            code: orderCode,
+            customerId: principal.sub,
+            storeId: requestingStoreId,
+            fulfillmentType: 'DELIVERY',
+            scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
+            status: sendToKitchen ? 'SENT_TO_KITCHEN' : 'PENDING',
+            ...(sendToKitchen && { kitchenStatus: 'PENDING_ACK' as const, kitchenId }),
+            source: 'INTERNAL_TRANSFER',
+            settlementMode: 'INTERNAL_LEDGER',
+            createdById: principal.sub,
+            clientRequestId: dto.clientRequestId ?? null,
+            requestingStoreId,
+            destinationStoreId,
+            subtotal,
+            total: subtotal,
+            notes: dto.notes,
+            items: { createMany: { data: lineCreates } },
+            statusEvents: {
+              createMany: {
+                data: [
+                  {
+                    fromStatus: null,
+                    toStatus: 'PENDING',
+                    actorId: principal.sub,
+                    note: 'Yêu cầu nội bộ',
+                  },
+                  ...(sendToKitchen
+                    ? [
+                        {
+                          fromStatus: 'PENDING' as const,
+                          toStatus: 'SENT_TO_KITCHEN' as const,
+                          actorId: principal.sub,
+                          note: 'Gửi bếp (nội bộ)',
+                        },
+                      ]
+                    : []),
+                ],
+              },
+            },
+          },
+          include: ORDER_INCLUDE,
+        });
+      });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002' &&
+        dto.clientRequestId
+      ) {
+        const winner = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
+        if (winner) return winner;
+      }
+      throw e;
+    }
+
+    const rooms = [`store:${requestingStoreId}`];
+    if (destinationStoreId !== requestingStoreId) rooms.push(`store:${destinationStoreId}`);
+    if (kitchenId) rooms.push(`kitchen:${kitchenId}`);
+    this.realtime.emit(rooms, 'order.created', this.toEventPayload(created));
+    if (kitchenId) {
+      void this.notifications.notifyKitchenStaff(
+        kitchenId,
+        {
+          type: 'kitchen_new',
+          title: `Đơn nội bộ · ${created.code}`,
+          body: `${created.items.length} món cho chi nhánh.`,
+        },
+        { code: created.code },
+      );
+    }
+    return created;
+  }
+
+  async markCounterPaid(
+    id: string,
+    actor: { sub: string; role: Role; storeId?: string | null },
+  ): Promise<OrderWithIncludes> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: ORDER_INCLUDE,
+    });
+    if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
+    this.assertCanWrite(order, actor);
+    if (order.source !== 'STAFF_COUNTER') {
+      throw new BadRequestException({ code: 'NOT_COUNTER_ORDER' });
+    }
+    if (order.settlementMode !== 'COUNTER_UNPAID') {
+      throw new BadRequestException({
+        code: 'COUNTER_ALREADY_SETTLED',
+        message: 'Đơn tại quầy này đã được ghi nhận thanh toán.',
+      });
+    }
+    if (order.status === 'CANCELLED' || order.status === 'REFUNDED') {
+      throw new BadRequestException({
+        code: 'COUNTER_ORDER_NOT_PAYABLE',
+        message: 'Không thể thu tiền cho đơn đã huỷ/hoàn tiền.',
+      });
+    }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.order.updateMany({
+        where: {
+          id,
+          source: 'STAFF_COUNTER',
+          settlementMode: 'COUNTER_UNPAID',
+          status: { notIn: ['CANCELLED', 'REFUNDED'] },
+        },
+        data: { settlementMode: 'COUNTER_PAID' },
+      });
+      if (claimed.count === 0) {
+        throw new BadRequestException({ code: 'COUNTER_ALREADY_SETTLED' });
+      }
+      await tx.payment.create({
+        data: {
+          orderId: id,
+          provider: 'CASH',
+          providerRef: `COUNTER-${order.code}`,
+          amount: order.total,
+          currency: order.currency,
+          status: 'CAPTURED',
+        },
+      });
+      return tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
+    });
+    this.realtime.emit(
+      [`order:${id}`, `user:${order.customerId}`, `store:${order.storeId}`],
+      'order.payment_captured',
+      {
+        orderId: id,
+        code: order.code,
+        provider: 'CASH',
+        amount: order.total,
+        at: new Date().toISOString(),
+      },
+    );
+    return updated;
   }
 
   /**

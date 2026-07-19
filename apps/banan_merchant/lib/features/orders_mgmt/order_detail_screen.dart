@@ -67,8 +67,9 @@ class _Body extends ConsumerWidget {
     if (!context.mounted) return;
     res.when(
       success: (_) {
-        ref.invalidate(_orderProvider(order.id));
-        ref.invalidate(storeOrdersControllerProvider);
+        ref
+          ..invalidate(_orderProvider(order.id))
+          ..invalidate(storeOrdersControllerProvider);
       },
       failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(authFailureMessage(f))),
@@ -84,6 +85,23 @@ class _Body extends ConsumerWidget {
       success: (_) {
         ref.invalidate(_orderProvider(order.id));
         ref.invalidate(storeOrdersControllerProvider);
+      },
+      failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(authFailureMessage(f))),
+      ),
+    );
+  }
+
+  Future<void> _markCounterPaid(BuildContext context, WidgetRef ref) async {
+    final res = await ref.read(ordersApiProvider).markCounterPaid(order.id);
+    if (!context.mounted) return;
+    res.when(
+      success: (_) {
+        ref.invalidate(_orderProvider(order.id));
+        ref.invalidate(storeOrdersControllerProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã ghi nhận thanh toán tại quầy.')),
+        );
       },
       failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(authFailureMessage(f))),
@@ -114,8 +132,10 @@ class _Body extends ConsumerWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(order.code,
-                          style: theme.textTheme.headlineSmall,),
+                      child: Text(
+                        order.code,
+                        style: theme.textTheme.headlineSmall,
+                      ),
                     ),
                     StatusBadge(
                       label: order.status.label,
@@ -173,8 +193,10 @@ class _Body extends ConsumerWidget {
                 ],
                 if (order.notes != null && order.notes!.isNotEmpty) ...[
                   const SizedBox(height: BananSpacing.md),
-                  Text('Ghi chú của khách',
-                      style: theme.textTheme.titleSmall,),
+                  Text(
+                    'Ghi chú của khách',
+                    style: theme.textTheme.titleSmall,
+                  ),
                   Text(order.notes!, style: theme.textTheme.bodyMedium),
                 ],
                 if (order.isGift) ...[
@@ -204,8 +226,10 @@ class _Body extends ConsumerWidget {
                                 style: theme.textTheme.bodyLarge,
                               ),
                               if (item.variantLabel != null)
-                                Text(item.variantLabel!,
-                                    style: theme.textTheme.bodySmall,),
+                                Text(
+                                  item.variantLabel!,
+                                  style: theme.textTheme.bodySmall,
+                                ),
                               if (item.customMessage != null &&
                                   item.customMessage!.isNotEmpty)
                                 Text(
@@ -249,6 +273,17 @@ class _Body extends ConsumerWidget {
                   bold: true,
                 ),
                 const SizedBox(height: BananSpacing.xxl),
+                if (order.source == 'STAFF_COUNTER' &&
+                    order.settlementMode == 'COUNTER_UNPAID' &&
+                    order.status != OrderStatus.cancelled &&
+                    order.status != OrderStatus.refunded) ...[
+                  FilledButton.icon(
+                    onPressed: () => _markCounterPaid(context, ref),
+                    icon: const Icon(Icons.payments_outlined),
+                    label: const Text('Xác nhận đã thu tiền tại quầy'),
+                  ),
+                  const SizedBox(height: BananSpacing.md),
+                ],
                 if (actions.isNotEmpty)
                   Wrap(
                     spacing: BananSpacing.md,
@@ -265,8 +300,12 @@ class _Body extends ConsumerWidget {
   }
 
   List<Widget> _actionsFor(Order order, BuildContext context, WidgetRef ref) {
-    Widget btn(String label, IconData icon, OrderStatus to,
-        {bool primary = true,}) {
+    Widget btn(
+      String label,
+      IconData icon,
+      OrderStatus to, {
+      bool primary = true,
+    }) {
       Future<void> onPressed() => _transition(context, ref, to);
       return primary
           ? FilledButton.icon(
@@ -301,8 +340,12 @@ class _Body extends ConsumerWidget {
             icon: const Icon(Icons.factory_outlined),
             label: const Text('Gửi tới bếp'),
           ),
-          btn('Huỷ', Icons.cancel_outlined, OrderStatus.cancelled,
-              primary: false,),
+          btn(
+            'Huỷ',
+            Icons.cancel_outlined,
+            OrderStatus.cancelled,
+            primary: false,
+          ),
         ];
       case OrderStatus.inPreparation:
         final readyTo = order.fulfillmentType == FulfillmentType.delivery
@@ -318,15 +361,23 @@ class _Body extends ConsumerWidget {
             icon: const Icon(Icons.factory_outlined),
             label: const Text('Chuyển sang bếp'),
           ),
-          btn('Huỷ', Icons.cancel_outlined, OrderStatus.cancelled,
-              primary: false,),
+          btn(
+            'Huỷ',
+            Icons.cancel_outlined,
+            OrderStatus.cancelled,
+            primary: false,
+          ),
         ];
       case OrderStatus.sentToKitchen:
         // Kitchen owns the order — only cancel is available to the merchant
         // until the kitchen dispatches it back.
         return [
-          btn('Huỷ', Icons.cancel_outlined, OrderStatus.cancelled,
-              primary: false,),
+          btn(
+            'Huỷ',
+            Icons.cancel_outlined,
+            OrderStatus.cancelled,
+            primary: false,
+          ),
         ];
       case OrderStatus.readyForPickup:
         return [
@@ -442,13 +493,14 @@ class _GiftBlock extends StatelessWidget {
                 const _GiftFlagChip(label: 'Ẩn giá trên phiếu'),
             ],
           ),
-          if (order.giftMessage != null &&
-              order.giftMessage!.isNotEmpty) ...[
+          if (order.giftMessage != null && order.giftMessage!.isNotEmpty) ...[
             const SizedBox(height: BananSpacing.sm),
-            Text('Lời chúc (in lên thiệp):',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),),
+            Text(
+              'Lời chúc (in lên thiệp):',
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             Text(
               '“${order.giftMessage!}”',
               style: theme.textTheme.bodyLarge?.copyWith(
@@ -458,10 +510,12 @@ class _GiftBlock extends StatelessWidget {
           ],
           if (hasRecipient) ...[
             const SizedBox(height: BananSpacing.sm),
-            Text('Người nhận:',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),),
+            Text(
+              'Người nhận:',
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             Text(
               '${order.giftRecipientName ?? '—'}'
               '${(order.giftRecipientPhone?.isNotEmpty ?? false) ? ' · ${order.giftRecipientPhone}' : ''}',
@@ -528,25 +582,35 @@ class _VatInvoiceBlock extends StatelessWidget {
             children: [
               const Icon(Icons.receipt_long_outlined, size: 18),
               const SizedBox(width: BananSpacing.xs),
-              Text('Yêu cầu xuất hoá đơn VAT',
-                  style: theme.textTheme.titleSmall,),
+              Text(
+                'Yêu cầu xuất hoá đơn VAT',
+                style: theme.textTheme.titleSmall,
+              ),
             ],
           ),
           const SizedBox(height: BananSpacing.xs),
           if (order.invoiceCompanyName != null)
-            Text(order.invoiceCompanyName!,
-                style: theme.textTheme.bodyLarge,),
+            Text(
+              order.invoiceCompanyName!,
+              style: theme.textTheme.bodyLarge,
+            ),
           if (order.invoiceTaxId != null)
-            Text('MST: ${order.invoiceTaxId}',
-                style: theme.textTheme.bodySmall,),
+            Text(
+              'MST: ${order.invoiceTaxId}',
+              style: theme.textTheme.bodySmall,
+            ),
           if (order.invoiceAddress != null)
-            Text(order.invoiceAddress!,
-                style: theme.textTheme.bodySmall,),
+            Text(
+              order.invoiceAddress!,
+              style: theme.textTheme.bodySmall,
+            ),
           if (order.invoiceEmail != null)
-            Text(order.invoiceEmail!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),),
+            Text(
+              order.invoiceEmail!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
         ],
       ),
     );
@@ -591,8 +655,11 @@ class _MerchantPersonalizationBlock extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.cake_outlined,
-                  size: 14, color: BananColors.primary,),
+              const Icon(
+                Icons.cake_outlined,
+                size: 14,
+                color: BananColors.primary,
+              ),
               const SizedBox(width: 4),
               Text(
                 'Cá nhân hoá — hướng dẫn bếp',
