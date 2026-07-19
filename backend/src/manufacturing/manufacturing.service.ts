@@ -642,24 +642,54 @@ export class ManufacturingService {
         });
         for (const q of quants) {
           if (remaining <= 0) break;
-          // Consume only FREE stock. This MO's own hold was released above, so any
-          // remaining reservedQty on the quant belongs to OTHER orders — taking it
-          // would eat a reservation this batch doesn't own. The shortfall (incl.
-          // stock another order has reserved) backflushes below.
-          const take = Math.min(n(q.quantity) - n(q.reservedQty), remaining);
-          if (take <= 0) continue;
-          await this.move(db, {
-            productId: c.productId,
-            lotId: q.lotId,
-            qty: take,
-            uomId: c.product.uomId,
-            srcLocationId: stock,
-            destLocationId: production,
-            refType: 'MO',
-            refId: mo.id,
-            unitCost: n(c.product.avgCost),
-          });
-          remaining -= take;
+          // Consume only FREE stock (quantity − reservedQty). This MO's own hold
+          // was released above, so any reservedQty left belongs to OTHER orders —
+          // taking it would eat a reservation this batch doesn't own. The take is
+          // re-checked in SQL at write time (EvalPlanQual re-reads a concurrent
+          // consume/reserve's committed value), so two MOs producing the same raw
+          // can't both drain the same free stock and drive the quant negative —
+          // the loser claims 0 rows and re-reads. Bounded retries drain this quant
+          // to its committed free; any true shortfall backflushes below.
+          let free = n(q.quantity) - n(q.reservedQty);
+          for (let attempt = 0; attempt < 5 && remaining > 0 && free > 0; attempt++) {
+            const take = round3(Math.min(free, remaining));
+            if (take <= 0) break;
+            const took = await db.$executeRaw`
+              UPDATE "MfgStockQuant"
+              SET "quantity" = "quantity" - ${take}::numeric
+              WHERE "id" = ${q.id} AND "quantity" - "reservedQty" >= ${take}::numeric
+            `;
+            if (took === 1) {
+              // Source on-hand already decremented atomically by the guarded UPDATE;
+              // record the traceable move + book into production directly (move()
+              // would decrement the source a second time).
+              await db.mfgStockMove.create({
+                data: {
+                  productId: c.productId,
+                  lotId: q.lotId,
+                  qty: take,
+                  uomId: c.product.uomId,
+                  srcLocationId: stock,
+                  destLocationId: production,
+                  refType: 'MO',
+                  refId: mo.id,
+                  unitCost: roundCost(n(c.product.avgCost)),
+                },
+              });
+              await this.adjustQuant(db, {
+                productId: c.productId,
+                lotId: q.lotId,
+                locationId: production,
+                dQty: take,
+              });
+              remaining = round3(remaining - take);
+              break;
+            }
+            // Contention: another tx committed a decrement first. Re-read the
+            // committed free and retry with the smaller amount.
+            const fresh = await db.mfgStockQuant.findUnique({ where: { id: q.id } });
+            free = fresh ? n(fresh.quantity) - n(fresh.reservedQty) : 0;
+          }
         }
         // Backflush the shortfall so cost/qty stay whole (quant goes negative).
         // ponytail: the backflush hits the null-lot quant. If a component is NOT
@@ -931,7 +961,7 @@ export class ManufacturingService {
   onHand(productId?: string) {
     return this.prisma.mfgStockQuant.findMany({
       where: productId ? { productId } : undefined,
-      include: { product: true, lot: true, location: true },
+      include: { product: { include: { uom: true } }, lot: true, location: true },
     });
   }
 

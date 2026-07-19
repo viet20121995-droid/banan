@@ -317,7 +317,7 @@ class MfgOnHand {
   factory MfgOnHand.fromJson(Map<String, dynamic> j) => MfgOnHand(
         productNameVi: (j['product'] as Map?)?['nameVi'] as String? ?? '',
         productCode: (j['product'] as Map?)?['code'] as String? ?? '',
-        uomCode: (j['product'] as Map?)?['uomId'] as String? ?? '',
+        uomCode: ((j['product'] as Map?)?['uom'] as Map?)?['code'] as String? ?? '',
         lotName: (j['lot'] as Map?)?['name'] as String?,
         locationCode: (j['location'] as Map?)?['code'] as String? ?? '',
         quantity: _num(j['quantity']),

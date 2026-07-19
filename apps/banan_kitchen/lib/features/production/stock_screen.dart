@@ -34,7 +34,8 @@ class StockScreen extends ConsumerWidget {
               data: (rows) {
                 // Only the internal STOCK location matters to the kitchen;
                 // supplier/production/scrap are plumbing.
-                final stock = rows.where((r) => r.locationCode == 'STOCK').toList();
+                final stock =
+                    rows.where((r) => r.locationCode == 'STOCK').toList();
                 if (stock.isEmpty) return const Text('Kho trống.');
                 return Column(
                   children: [
@@ -43,33 +44,49 @@ class StockScreen extends ConsumerWidget {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         title: Text(r.productNameVi),
-                        subtitle: r.lotName == null ? null : Text('Lô: ${r.lotName}'),
-                        trailing: Text(r.quantity.toStringAsFixed(0)),
+                        subtitle:
+                            r.lotName == null ? null : Text('Lô: ${r.lotName}'),
+                        trailing: Text(
+                          '${r.quantity.toStringAsFixed(0)} ${r.uomCode}'.trim(),
+                        ),
                       ),
                   ],
                 );
               },
             ),
             const SizedBox(height: BananSpacing.xl),
-            Text('Lô sắp hết hạn', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Lô sắp hết hạn',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: BananSpacing.sm),
             expiring.when(
               loading: () => const LinearProgressIndicator(),
               error: (e, _) => Text('Lỗi: $e'),
               data: (lots) => lots.isEmpty
-                  ? Text('Không có lô sắp hết hạn.',
-                      style: TextStyle(color: Theme.of(context).colorScheme.outline),)
+                  ? Text(
+                      'Không có lô sắp hết hạn.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    )
                   : Column(
                       children: [
                         for (final lot in lots)
                           ListTile(
                             dense: true,
                             contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.schedule, color: BananColors.gold),
+                            leading: const Icon(
+                              Icons.schedule,
+                              color: BananColors.gold,
+                            ),
                             title: Text('${lot.productNameVi} · ${lot.name}'),
-                            trailing: Text(lot.expiryDate == null
-                                ? '—'
-                                : DateFormat('dd/MM/yyyy').format(lot.expiryDate!),),
+                            trailing: Text(
+                              lot.expiryDate == null
+                                  ? '—'
+                                  : DateFormat('dd/MM/yyyy')
+                                      .format(lot.expiryDate!),
+                            ),
                           ),
                       ],
                     ),

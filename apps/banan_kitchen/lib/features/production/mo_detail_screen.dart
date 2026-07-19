@@ -34,7 +34,10 @@ class MoDetailScreen extends ConsumerWidget {
             children: [
               _Header(mo: mo),
               const SizedBox(height: BananSpacing.lg),
-              Text('Thành phần', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Thành phần',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: BananSpacing.sm),
               for (final c in mo.components) _ComponentTile(component: c),
               if (mo.state == 'DONE') ...[
@@ -45,8 +48,11 @@ class MoDetailScreen extends ConsumerWidget {
               if (canProduce)
                 _Actions(mo: mo)
               else
-                Text('Chỉ quản lý bếp mới thao tác được lệnh sản xuất.',
-                    style: TextStyle(color: Theme.of(context).colorScheme.outline),),
+                Text(
+                  'Chỉ quản lý bếp mới thao tác được lệnh sản xuất.',
+                  style:
+                      TextStyle(color: Theme.of(context).colorScheme.outline),
+                ),
             ],
           ),
         ),
@@ -76,19 +82,24 @@ class _Header extends StatelessWidget {
             children: [
               Expanded(child: Text(mo.code, style: theme.textTheme.titleLarge)),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: c.withValues(alpha: 0.14),
                   borderRadius: BananRadii.rPill,
                 ),
-                child: Text(mfgStateLabels[mo.state] ?? mo.state,
-                    style: TextStyle(color: c, fontWeight: FontWeight.w600),),
+                child: Text(
+                  mfgStateLabels[mo.state] ?? mo.state,
+                  style: TextStyle(color: c, fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          Text('${mo.productNameVi} · SL ${mo.qtyToProduce.toStringAsFixed(0)}${mo.uomCode}',
-              style: theme.textTheme.bodyMedium,),
+          Text(
+            '${mo.productNameVi} · SL ${mo.qtyToProduce.toStringAsFixed(0)}${mo.uomCode}',
+            style: theme.textTheme.bodyMedium,
+          ),
         ],
       ),
     );
@@ -163,17 +174,34 @@ class _Actions extends ConsumerStatefulWidget {
 class _ActionsState extends ConsumerState<_Actions> {
   bool _busy = false;
 
-  Future<void> _run(Future<Result<void, AppFailure>> Function() op, String ok) async {
+  /// Any MO transition (confirm/reserve/produce/cancel) shifts state, counts,
+  /// stock and the boards. Invalidate the whole cluster — passing a family
+  /// provider bare invalidates every cached filter (e.g. moListProvider for
+  /// CONFIRMED as well as null), so a list reached via a state filter can't keep
+  /// a stale row.
+  void _invalidateRelated() {
+    ref
+      ..invalidate(moDetailProvider(widget.mo.id))
+      ..invalidate(moListProvider)
+      ..invalidate(moCountsProvider)
+      ..invalidate(scheduleProvider)
+      ..invalidate(shopFloorProvider)
+      ..invalidate(onHandProvider)
+      ..invalidate(expiringLotsProvider);
+  }
+
+  Future<void> _run(
+    Future<Result<void, AppFailure>> Function() op,
+    String ok,
+  ) async {
     setState(() => _busy = true);
     final res = await op();
     if (!mounted) return;
     setState(() => _busy = false);
     res.when(
       success: (_) {
-        ref.invalidate(moDetailProvider(widget.mo.id));
-        ref.invalidate(moListProvider(null));
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(ok)));
+        _invalidateRelated();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok)));
       },
       failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Lỗi: ${f.message ?? f.code}')),
@@ -189,40 +217,59 @@ class _ActionsState extends ConsumerState<_Actions> {
 
     final buttons = <Widget>[];
     if (state == 'DRAFT') {
-      buttons.add(FilledButton.icon(
-        onPressed: _busy ? null : () => _run(() => api.confirm(id), 'Đã xác nhận lệnh.'),
-        icon: const Icon(Icons.check_circle_outline),
-        label: const Text('Xác nhận'),
-      ),);
+      buttons.add(
+        FilledButton.icon(
+          onPressed: _busy
+              ? null
+              : () => _run(() => api.confirm(id), 'Đã xác nhận lệnh.'),
+          icon: const Icon(Icons.check_circle_outline),
+          label: const Text('Xác nhận'),
+        ),
+      );
     }
     if (state == 'CONFIRMED' || state == 'PROGRESS') {
       buttons.addAll([
         OutlinedButton.icon(
-          onPressed: _busy ? null : () => _run(() => api.checkAvailability(id), 'Đã kiểm tra tồn.'),
+          onPressed: _busy
+              ? null
+              : () => _run(() => api.checkAvailability(id), 'Đã kiểm tra tồn.'),
           icon: const Icon(Icons.fact_check_outlined),
           label: const Text('Kiểm tra tồn'),
         ),
         OutlinedButton.icon(
-          onPressed: _busy ? null : () => _run(() => api.reserve(id), 'Đã giữ hàng.'),
+          onPressed:
+              _busy ? null : () => _run(() => api.reserve(id), 'Đã giữ hàng.'),
           icon: const Icon(Icons.bookmark_added_outlined),
           label: const Text('Giữ hàng'),
         ),
         FilledButton.icon(
-          onPressed: _busy ? null : () => _run(() => api.produce(id), 'Đã sản xuất — sinh lô + nhập kho.'),
+          onPressed: _busy
+              ? null
+              : () => _run(
+                    () => api.produce(id),
+                    'Đã sản xuất — sinh lô + nhập kho.',
+                  ),
           icon: const Icon(Icons.factory_outlined),
           label: const Text('Sản xuất'),
         ),
       ]);
     }
     if (state != 'DONE' && state != 'CANCEL') {
-      buttons.add(TextButton.icon(
-        onPressed: _busy ? null : () => _run(() => api.cancel(id), 'Đã huỷ lệnh.'),
-        icon: const Icon(Icons.cancel_outlined),
-        label: const Text('Huỷ lệnh'),
-      ),);
+      buttons.add(
+        TextButton.icon(
+          onPressed:
+              _busy ? null : () => _run(() => api.cancel(id), 'Đã huỷ lệnh.'),
+          icon: const Icon(Icons.cancel_outlined),
+          label: const Text('Huỷ lệnh'),
+        ),
+      );
     }
 
     if (buttons.isEmpty) return const SizedBox.shrink();
-    return Wrap(spacing: BananSpacing.sm, runSpacing: BananSpacing.sm, children: buttons);
+    return Wrap(
+      spacing: BananSpacing.sm,
+      runSpacing: BananSpacing.sm,
+      children: buttons,
+    );
   }
 }

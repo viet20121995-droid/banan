@@ -927,4 +927,65 @@ d('Manufacturing golden path (integration)', () => {
       expect(wo.durationReal).toBe(wo.durationExpected); // standard time banked, not 0
     }
   });
+
+  it('two MOs producing the same raw never overdraw its free stock (concurrent)', async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    await prisma.mfgReservation.deleteMany();
+    const bom = await bomOf(ids.sponge);
+
+    const moA = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(moA.id);
+    const moB = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(moB.id);
+
+    const detail = await mfg.getMO(moA.id);
+    const flourNeed = Number(
+      detail!.components.find((c) => c.productId === ids.flour)!.qtyToConsume,
+    );
+    // Ample free stock for every OTHER component so only flour is contended.
+    for (const c of detail!.components) {
+      await prisma.mfgStockQuant.deleteMany({
+        where: { productId: c.productId, locationId: stockLoc.id },
+      });
+      if (c.productId === ids.flour) continue;
+      await prisma.mfgStockQuant.create({
+        data: {
+          productId: c.productId,
+          lotId: null,
+          locationId: stockLoc.id,
+          quantity: Number(c.qtyToConsume) * 2,
+          reservedQty: 0,
+        },
+      });
+    }
+    // Flour: free for exactly ONE MO, on a lot-quant so a shortfall backflushes
+    // to a SEPARATE null-lot quant — leaving this quant a clean witness.
+    const lot = await prisma.mfgLot.create({
+      data: { productId: ids.flour, name: 'HR-P1-RACE', mfgDate: new Date() },
+    });
+    const flourQuant = await prisma.mfgStockQuant.create({
+      data: {
+        productId: ids.flour,
+        lotId: lot.id,
+        locationId: stockLoc.id,
+        quantity: flourNeed,
+        reservedQty: 0,
+      },
+    });
+
+    // Both produce at once; neither holds a reservation, so both race for the
+    // one free flour lot-quant. The guarded consume lets exactly one drain it;
+    // the loser re-reads free=0 and backflushes. Without the guard both would
+    // draw flourNeed and push this lot-quant to −flourNeed (overdraw).
+    const res = await Promise.allSettled([mfg.produce(moA.id), mfg.produce(moB.id)]);
+    expect(res.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+
+    const after = await prisma.mfgStockQuant.findUniqueOrThrow({ where: { id: flourQuant.id } });
+    expect(Number(after.quantity)).toBe(0); // drained exactly once, never overdrawn
+    // Exactly one real consume move drew from the lot; the loser backflushed null-lot.
+    const lotConsumes = await prisma.mfgStockMove.count({
+      where: { productId: ids.flour, lotId: lot.id, refType: 'MO' },
+    });
+    expect(lotConsumes).toBe(1);
+  });
 });

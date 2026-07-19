@@ -26,7 +26,9 @@ class ShopFloorScreen extends ConsumerWidget {
           error: (e, _) => Center(child: Text('Lỗi: $e')),
           data: (cards) {
             if (cards.isEmpty) {
-              return const Center(child: Text('Không có công đoạn nào đang chờ.'));
+              return const Center(
+                child: Text('Không có công đoạn nào đang chờ.'),
+              );
             }
             // Group by work center → one column each.
             final byWc = <String, List<MfgWorkOrderCard>>{};
@@ -67,7 +69,14 @@ class _WcColumn extends StatelessWidget {
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: BananSpacing.sm),
-            for (final c in cards) _WoCard(card: c),
+            // Viewport-tall column inside the horizontal board scroll: cards get
+            // their own vertical scroll so a busy work center doesn't overflow.
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [for (final c in cards) _WoCard(card: c)],
+              ),
+            ),
           ],
         ),
       ),
@@ -119,16 +128,26 @@ class _WoCardState extends ConsumerState<_WoCard> {
         children: [
           Row(
             children: [
-              Expanded(child: Text('${c.moCode} · ${c.productNameVi}',
-                  style: theme.textTheme.titleSmall,),),
+              Expanded(
+                child: Text(
+                  '${c.moCode} · ${c.productNameVi}',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: stateColor.withValues(alpha: 0.14),
                   borderRadius: BananRadii.rPill,
                 ),
-                child: Text(mfgStateLabels[c.state] ?? c.state,
-                    style: TextStyle(color: stateColor, fontSize: 11, fontWeight: FontWeight.w600),),
+                child: Text(
+                  mfgStateLabels[c.state] ?? c.state,
+                  style: TextStyle(
+                    color: stateColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -137,7 +156,8 @@ class _WoCardState extends ConsumerState<_WoCard> {
           // ── QC points ──
           if (c.qualityPoints.isNotEmpty) ...[
             const SizedBox(height: BananSpacing.sm),
-            for (final qp in c.qualityPoints) _QcRow(workOrderId: c.id, point: qp),
+            for (final qp in c.qualityPoints)
+              _QcRow(workOrderId: c.id, point: qp),
           ],
 
           const SizedBox(height: BananSpacing.sm),
@@ -147,18 +167,21 @@ class _WoCardState extends ConsumerState<_WoCard> {
               children: [
                 if (c.state == 'READY')
                   FilledButton.icon(
-                    onPressed: _busy ? null : () => _run(() => api.startWo(c.id)),
+                    onPressed:
+                        _busy ? null : () => _run(() => api.startWo(c.id)),
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: const Text('Bắt đầu'),
                   ),
                 if (c.state == 'PROGRESS') ...[
                   OutlinedButton.icon(
-                    onPressed: _busy ? null : () => _run(() => api.pauseWo(c.id)),
+                    onPressed:
+                        _busy ? null : () => _run(() => api.pauseWo(c.id)),
                     icon: const Icon(Icons.pause, size: 18),
                     label: const Text('Tạm dừng'),
                   ),
                   FilledButton.icon(
-                    onPressed: _busy ? null : () => _run(() => api.doneWo(c.id)),
+                    onPressed:
+                        _busy ? null : () => _run(() => api.doneWo(c.id)),
                     icon: const Icon(Icons.check, size: 18),
                     label: const Text('Hoàn tất'),
                   ),
@@ -203,8 +226,10 @@ class _QcRow extends ConsumerWidget {
           ),
           const SizedBox(width: 6),
           Expanded(
-            child: Text('${point.titleVi}$range',
-                style: Theme.of(context).textTheme.bodySmall,),
+            child: Text(
+              '${point.titleVi}$range',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
           if (canRun)
             TextButton(
@@ -282,19 +307,26 @@ class _QcDialogState extends ConsumerState<_QcDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (p.isMeasure) ...[
-            Text('Ngưỡng đạt: ${p.normMin.toStringAsFixed(0)}–${p.normMax.toStringAsFixed(0)}${p.unit ?? ''}'),
+            Text(
+              'Ngưỡng đạt: ${p.normMin.toStringAsFixed(0)}–${p.normMax.toStringAsFixed(0)}${p.unit ?? ''}',
+            ),
             const SizedBox(height: BananSpacing.sm),
             TextField(
               controller: _value,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: 'Giá trị đo (${p.unit ?? ''})'),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration:
+                  InputDecoration(labelText: 'Giá trị đo (${p.unit ?? ''})'),
             ),
           ] else
             const Text('Đánh giá công đoạn:'),
           if (_error != null) ...[
             const SizedBox(height: BananSpacing.sm),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
           ],
         ],
       ),

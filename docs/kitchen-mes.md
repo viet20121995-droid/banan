@@ -354,10 +354,23 @@ Review-round fixes on top:
 - **`produce` banks standard time** on the work orders it closes
   (`durationReal = durationReal || durationExpected`), so OEE runtime isn't 0 for
   batches closed straight from `produce` rather than the shop floor.
+- **`produce`'s FIFO consume is now a guarded decrement** (`UPDATE … SET
+  quantity = quantity − take WHERE quantity − reservedQty ≥ take`, re-read + retry
+  on 0 rows) — the same EvalPlanQual pattern `reserve` uses. Two MOs producing the
+  same raw can no longer both read the same free stock and each subtract it, which
+  previously drove the shared quant negative (overdraw). The loser re-reads the
+  committed free and backflushes only the true shortfall.
+- **UI**: schedule/shop-floor board columns scroll vertically (`Expanded` +
+  `ListView`) so a busy day/work-center can't `RenderFlex`-overflow; an MO
+  transition invalidates the whole affected provider cluster (list *for every state
+  filter*, counts, schedule, shop-floor, on-hand, expiring) so a filtered list
+  can't keep a stale row; the stock screen shows the UoM (`onHand` now includes
+  `product.uom`, DTO maps `uom.code`).
 
-Integration 33/33 (cross-MO cancel isolation; produce releases its own hold then
-consumes once; produce doesn't eat another MO's reserved lot; availability stays
-AVAILABLE post-reserve; produce banks standard WO time).
+Integration 34/34 (cross-MO cancel isolation; produce releases its own hold then
+consumes once; produce doesn't eat another MO's reserved lot; two MOs never
+overdraw the same free stock concurrently; availability stays AVAILABLE
+post-reserve; produce banks standard WO time).
 
 ## Roadmap
 

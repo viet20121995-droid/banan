@@ -56,7 +56,9 @@ class _Board extends StatelessWidget {
     final byDay = <DateTime, List<MfgScheduleItem>>{};
     for (final it in items) {
       if (it.scheduledDate == null) continue;
-      byDay.putIfAbsent(ScheduleScreen._day(it.scheduledDate!), () => []).add(it);
+      byDay
+          .putIfAbsent(ScheduleScreen._day(it.scheduledDate!), () => [])
+          .add(it);
     }
 
     return SingleChildScrollView(
@@ -122,19 +124,31 @@ class _Column extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: overdue ? BananColors.danger : null,
-                    ),),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: overdue ? BananColors.danger : null,
+                  ),
+                ),
                 const SizedBox(width: 6),
                 Text(subtitle, style: theme.textTheme.bodySmall),
               ],
             ),
             const SizedBox(height: BananSpacing.sm),
-            if (items.isEmpty)
-              Text('—', style: TextStyle(color: theme.colorScheme.outline))
-            else
-              for (final it in items) _Card(item: it, canPlan: canPlan),
+            // The column is viewport-tall inside the horizontal board scroll;
+            // give its cards their own vertical scroll so a busy day doesn't
+            // RenderFlex-overflow and hide the cards below the fold.
+            Expanded(
+              child: items.isEmpty
+                  ? Text('—', style: TextStyle(color: theme.colorScheme.outline))
+                  : ListView(
+                      padding: EdgeInsets.zero,
+                      children: [
+                        for (final it in items)
+                          _Card(item: it, canPlan: canPlan),
+                      ],
+                    ),
+            ),
           ],
         ),
       ),
@@ -172,14 +186,20 @@ class _Card extends ConsumerWidget {
                     child: Text(item.code, style: theme.textTheme.titleSmall),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: c.withValues(alpha: 0.14),
                       borderRadius: BananRadii.rPill,
                     ),
-                    child: Text(mfgStateLabels[item.state] ?? item.state,
-                        style: TextStyle(
-                            color: c, fontSize: 11, fontWeight: FontWeight.w600,),),
+                    child: Text(
+                      mfgStateLabels[item.state] ?? item.state,
+                      style: TextStyle(
+                        color: c,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -191,8 +211,11 @@ class _Card extends ConsumerWidget {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.person_outline,
-                      size: 14, color: theme.colorScheme.outline,),
+                  Icon(
+                    Icons.person_outline,
+                    size: 14,
+                    color: theme.colorScheme.outline,
+                  ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -300,9 +323,11 @@ class _PlanDialogState extends ConsumerState<_PlanDialog> {
                   child: OutlinedButton.icon(
                     onPressed: _pickDate,
                     icon: const Icon(Icons.calendar_today, size: 18),
-                    label: Text(_date == null
-                        ? 'Chọn ngày'
-                        : DateFormat('dd/MM/yyyy').format(_date!),),
+                    label: Text(
+                      _date == null
+                          ? 'Chọn ngày'
+                          : DateFormat('dd/MM/yyyy').format(_date!),
+                    ),
                   ),
                 ),
                 if (_date != null)
@@ -322,8 +347,9 @@ class _PlanDialogState extends ConsumerState<_PlanDialog> {
               error: (e, _) => Text('Không tải được nhân sự: $e'),
               data: (people) => DropdownButtonFormField<String?>(
                 isExpanded: true,
-                initialValue:
-                    people.any((p) => p.id == _responsibleId) ? _responsibleId : null,
+                initialValue: people.any((p) => p.id == _responsibleId)
+                    ? _responsibleId
+                    : null,
                 decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: [
                   const DropdownMenuItem<String?>(
@@ -340,8 +366,10 @@ class _PlanDialogState extends ConsumerState<_PlanDialog> {
             ),
             if (_error != null) ...[
               const SizedBox(height: BananSpacing.sm),
-              Text(_error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ],
           ],
         ),

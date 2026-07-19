@@ -33,9 +33,11 @@ class MoListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(state == null
-            ? 'Lệnh sản xuất'
-            : 'Lệnh · ${mfgStateLabels[state] ?? state}',),
+        title: Text(
+          state == null
+              ? 'Lệnh sản xuất'
+              : 'Lệnh · ${mfgStateLabels[state] ?? state}',
+        ),
       ),
       floatingActionButton: canProduce
           ? FloatingActionButton.extended(
@@ -54,7 +56,8 @@ class MoListScreen extends ConsumerWidget {
               : ListView.separated(
                   padding: const EdgeInsets.all(BananSpacing.md),
                   itemCount: rows.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: BananSpacing.sm),
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: BananSpacing.sm),
                   itemBuilder: (context, i) => _MoTile(order: rows[i]),
                 ),
         ),
@@ -111,8 +114,10 @@ class _StateChip extends StatelessWidget {
         color: c.withValues(alpha: 0.14),
         borderRadius: BananRadii.rPill,
       ),
-      child: Text(mfgStateLabels[state] ?? state,
-          style: TextStyle(color: c, fontWeight: FontWeight.w600, fontSize: 12),),
+      child: Text(
+        mfgStateLabels[state] ?? state,
+        style: TextStyle(color: c, fontWeight: FontWeight.w600, fontSize: 12),
+      ),
     );
   }
 }
@@ -197,8 +202,10 @@ class _CreateMoDialogState extends ConsumerState<_CreateMoDialog> {
             ),
             if (_error != null) ...[
               const SizedBox(height: BananSpacing.sm),
-              Text(_error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ],
           ],
         ),
