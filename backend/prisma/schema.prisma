@@ -1435,10 +1435,29 @@ model MfgStockQuant {
   quantity    Decimal     @default(0) @db.Decimal(14, 3)
   reservedQty Decimal     @default(0) @db.Decimal(14, 3)
 
+  reservations MfgReservation[]
+
   updatedAt DateTime @updatedAt
 
   @@unique([productId, lotId, locationId])
   @@index([productId, lotId, locationId])
+}
+
+/// A per-MO hard allocation: how much of a specific quant an MO has reserved. The
+/// sum of a quant's reservations equals its `reservedQty`; releasing/consuming an
+/// MO touches only its own rows, so cancel/produce can't free another MO's hold.
+model MfgReservation {
+  id        String        @id @default(uuid())
+  moId      String
+  mo        MfgOrder      @relation(fields: [moId], references: [id], onDelete: Cascade)
+  quantId   String
+  quant     MfgStockQuant @relation(fields: [quantId], references: [id], onDelete: Cascade)
+  productId String
+  qty       Decimal       @db.Decimal(14, 3)
+  createdAt DateTime      @default(now())
+
+  @@index([moId])
+  @@index([quantId])
 }
 
 model MfgStockMove {
@@ -1489,6 +1508,7 @@ model MfgOrder {
   scraps        MfgScrap[]
   qualityChecks MfgQualityCheck[]
   qualityAlerts MfgQualityAlert[]
+  reservations  MfgReservation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

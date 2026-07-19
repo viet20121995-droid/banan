@@ -452,9 +452,27 @@ export class ManufacturingService {
   }
 
   /**
+   * Release an MO's hard reservations: give back exactly what it held on each
+   * quant (clamped at 0 so drift can never drive a quant negative) and drop the
+   * ledger rows. Filtering by `moId` means it only ever frees this order's own
+   * hold — never another order's.
+   */
+  private async releaseReservations(db: Tx, moId: string): Promise<void> {
+    const rows = await db.mfgReservation.findMany({ where: { moId } });
+    for (const r of rows) {
+      await db.$executeRaw`
+        UPDATE "MfgStockQuant"
+        SET "reservedQty" = GREATEST(0, "reservedQty" - ${round3(n(r.qty))}::numeric)
+        WHERE "id" = ${r.quantId}`;
+    }
+    await db.mfgReservation.deleteMany({ where: { moId } });
+  }
+
+  /**
    * Reserve available stock against the MO's components (FIFO across lots by
    * expiry). Reserves whatever is on hand up to what's needed — a short
-   * component reserves what it can and stays Not-available.
+   * component reserves what it can and stays Not-available. Each successful
+   * allocation writes a `MfgReservation` ledger row so the hold is owned per-MO.
    */
   async reserve(id: string) {
     const mo = await this.prisma.mfgOrder.findUnique({ where: { id } });
@@ -517,7 +535,13 @@ export class ManufacturingService {
             SET "reservedQty" = "reservedQty" + ${take}::numeric
             WHERE "id" = ${q.id} AND "quantity" - "reservedQty" >= ${take}::numeric
           `;
-          if (reserved === 1) remaining -= take;
+          if (reserved === 1) {
+            remaining -= take;
+            // Record the hard allocation so produce/cancel release only this share.
+            await db.mfgReservation.create({
+              data: { moId: id, quantId: q.id, productId: c.productId, qty: take },
+            });
+          }
         }
         await db.mfgOrderComponent.update({
           where: { id: c.id },
@@ -596,6 +620,11 @@ export class ManufacturingService {
         });
       }
 
+      // Release this MO's own hard reservations first (frees exactly its held
+      // share on each quant), so the FIFO consume below works against real
+      // on-hand without touching any other order's hold.
+      await this.releaseReservations(db, mo.id);
+
       // ── consume components, FIFO by lot, at their current AVCO ──
       let materialCost = 0;
       for (const c of mo.components) {
@@ -623,14 +652,7 @@ export class ManufacturingService {
             refId: mo.id,
             unitCost: n(c.product.avgCost),
           });
-          // Release any reservation we held on this quant — atomic decrement,
-          // clamped by what the loaded row holds so it never goes negative.
-          if (n(q.reservedQty) > 0) {
-            await db.mfgStockQuant.update({
-              where: { id: q.id },
-              data: { reservedQty: { decrement: round3(Math.min(take, n(q.reservedQty))) } },
-            });
-          }
+          // Reservations were already released above, so consume just moves stock.
           remaining -= take;
         }
         // Backflush the shortfall so cost/qty stay whole (quant goes negative).
@@ -763,29 +785,14 @@ export class ManufacturingService {
         return { id, state: 'CANCEL' as const }; // already cancelled — idempotent
       }
 
-      // Release any reservations this MO's components hold.
-      const stock = await this.locationId(db, 'STOCK');
-      const comps = await db.mfgOrderComponent.findMany({ where: { moId: id } });
-      for (const c of comps) {
-        if (n(c.reservedQty) <= 0) continue;
-        let remaining = n(c.reservedQty);
-        const quants = await db.mfgStockQuant.findMany({
-          where: { productId: c.productId, locationId: stock, reservedQty: { gt: 0 } },
-        });
-        for (const q of quants) {
-          if (remaining <= 0) break;
-          const give = Math.min(n(q.reservedQty), remaining);
-          await db.mfgStockQuant.update({
-            where: { id: q.id },
-            data: { reservedQty: { decrement: round3(give) } },
-          });
-          remaining -= give;
-        }
-        await db.mfgOrderComponent.update({
-          where: { id: c.id },
-          data: { reservedQty: 0 },
-        });
-      }
+      // Release only THIS MO's hard reservations (ledger rows filtered by moId),
+      // so a concurrent order's holds are never freed. The claim above ran once,
+      // so this release runs once — reservedQty can't be double-decremented.
+      await this.releaseReservations(db, id);
+      await db.mfgOrderComponent.updateMany({
+        where: { moId: id },
+        data: { reservedQty: 0 },
+      });
       await db.mfgWorkOrder.updateMany({
         where: { moId: id, state: { notIn: ['DONE', 'CANCEL'] } },
         data: { state: 'CANCEL' },

@@ -91,16 +91,15 @@ GET  traceability/lot/:id
 - **Check availability** compares on-hand − reserved against need and sets an
   Available / Not-available badge, but never blocks — advisory, matching the
   observed "warn but continue".
-- **Reservations are advisory by design.** `reserve` is a soft hold: it never
-  overbooks a quant (a guarded update re-checks `quantity − reservedQty ≥ take`
-  in SQL, so two concurrent reserves can't both grab the same stock), but the
-  hold is *not owned per-MO* — `reservedQty` is a running total on the quant, not
-  an allocation. Real on-hand is never at risk from this: `produce` consumes real
-  FIFO stock and backflushes any shortfall, and `produce` itself is guarded by an
-  atomic state claim so a batch is consumed/booked exactly once. Making holds
-  *hard* (a per-MO allocation ledger so cancel/produce only touch their own
-  reservation) is a deliberate future increment, not an accident — deferred
-  because at single-site bakery concurrency the advisory hold is enough.
+- **Reservations are hard (owned per-MO).** `reserve` never overbooks a quant (a
+  guarded update re-checks `quantity − reservedQty ≥ take` in SQL, so two
+  concurrent reserves can't both grab the same stock) **and** each successful
+  allocation writes a `MfgReservation` ledger row (moId, quantId, qty). The sum of
+  a quant's reservations equals its `reservedQty`. `produce` and `cancel` release
+  **only the MO's own** ledger rows (filtered by `moId`), giving back exactly what
+  that order held on each quant — so one order's cancel/produce can never free
+  another order's hold. (This replaced the earlier advisory model, where
+  `reservedQty` was an unowned running total; see increment 9.)
 - **Produce** generates the finished lot (mfg = today, expiry = today +
   `expirationDays`), books it into stock, consumes the **full** BoM FIFO by
   expiry (backflushing any shortfall so cost/qty stay whole), rolls the finished
@@ -327,7 +326,25 @@ the old); flutter analyze clean on new files; kitchen web build OK.
   centre. Integration 28/28 (maintenance plan→complete→reject-second; OEE
   availability drops with recorded downtime).
 
-## Roadmap (next increments)
+## Increment 9 — Hard reservations ✅
 
-9. **Hard reservations** (if needed) — a per-MO allocation ledger so
-   cancel/produce only touch their own hold (today reservations are advisory).
+The advisory hold became a **per-MO allocation ledger** (`MfgReservation`,
+migration `mfg_reservation_ledger`). `reserve` writes one row per successful
+allocation (moId, quantId, productId, qty); the sum of a quant's rows equals its
+`reservedQty`. `produce` and `cancel` call a single `releaseReservations(moId)`
+that gives back exactly what the MO held on each quant (`GREATEST(0, …)` so it
+can't drive a quant negative) and drops the rows — filtered by `moId`, it only
+ever frees that order's own hold. This closes the last deferred finding: two
+orders reserving the same product from different lots, then one cancelling, no
+longer disturbs the other's stock. `reservedQty` is still the fast on-quant total
+(kept in sync by the guarded increment / the release), so availability reads are
+unchanged. Migration `mfg_reservation_quant_cascade` lets a quant delete cascade
+its reservations (only relevant to test teardown; production never deletes a
+reserved quant). Integration 30/30 (cross-MO cancel isolation; produce releases
+its own hold then consumes real stock once).
+
+## Roadmap
+
+The MES roadmap through increment 9 is complete. Remaining ideas are demand-driven
+(not scheduled): demand-netting MPS (plan against sales orders), shift/planned-time
+config to make OEE audit-grade, and a byproduct/co-product yield UI.

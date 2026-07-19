@@ -38,6 +38,8 @@ d('Manufacturing golden path (integration)', () => {
 
   beforeAll(async () => {
     // Clean slate — order matters for FKs.
+    await prisma.mfgReservation.deleteMany();
+    await prisma.mfgMaintenance.deleteMany();
     await prisma.mfgStockMove.deleteMany();
     await prisma.mfgStockQuant.deleteMany();
     await prisma.mfgScrap.deleteMany();
@@ -714,5 +716,126 @@ d('Manufacturing golden path (integration)', () => {
     expect(row!.quality).toBeLessThanOrEqual(1);
     expect(row!.oee).toBeGreaterThanOrEqual(0);
     expect(row!.oee).toBeLessThanOrEqual(1);
+  });
+
+  // ── increment 9: hard reservations (per-MO allocation ledger) ──
+  it("cancelling one MO releases only its own hold, never another MO's", async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    await prisma.mfgReservation.deleteMany();
+    await prisma.mfgStockQuant.deleteMany({
+      where: { productId: ids.flour, locationId: stockLoc.id },
+    });
+    const bom = await bomOf(ids.sponge);
+    const moA = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    const moB = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(moA.id);
+    await mfg.confirmMO(moB.id);
+    // The active BoM sets the flour need; size two lots to exactly that so A fills
+    // one quant and B fills the other (distinct quants — where an ownership-blind
+    // release would free the wrong MO's stock).
+    const flourNeed = Number(
+      (
+        await prisma.mfgOrderComponent.findFirstOrThrow({
+          where: { moId: moA.id, productId: ids.flour },
+        })
+      ).qtyToConsume,
+    );
+    const lot1 = await prisma.mfgLot.create({
+      data: { productId: ids.flour, name: 'HR-L1', mfgDate: new Date() },
+    });
+    const lot2 = await prisma.mfgLot.create({
+      data: { productId: ids.flour, name: 'HR-L2', mfgDate: new Date() },
+    });
+    await prisma.mfgStockQuant.create({
+      data: {
+        productId: ids.flour,
+        lotId: lot1.id,
+        locationId: stockLoc.id,
+        quantity: flourNeed,
+        reservedQty: 0,
+      },
+    });
+    await prisma.mfgStockQuant.create({
+      data: {
+        productId: ids.flour,
+        lotId: lot2.id,
+        locationId: stockLoc.id,
+        quantity: flourNeed,
+        reservedQty: 0,
+      },
+    });
+
+    await mfg.reserve(moA.id); // fills one quant
+    await mfg.reserve(moB.id); // fills the other
+
+    const bRes = await prisma.mfgReservation.findFirstOrThrow({
+      where: { moId: moB.id, productId: ids.flour },
+    });
+    const totalBefore = (
+      await prisma.mfgStockQuant.aggregate({
+        where: { productId: ids.flour, locationId: stockLoc.id },
+        _sum: { reservedQty: true },
+      })
+    )._sum.reservedQty;
+    expect(Number(totalBefore)).toBe(flourNeed * 2); // both holds live
+
+    await mfg.cancelMO(moA.id);
+
+    // A's ledger gone; B's hold — on its OWN quant — untouched.
+    expect(await prisma.mfgReservation.count({ where: { moId: moA.id } })).toBe(0);
+    const bQuant = await prisma.mfgStockQuant.findUniqueOrThrow({ where: { id: bRes.quantId } });
+    expect(Number(bQuant.reservedQty)).toBe(flourNeed);
+    const totalAfter = (
+      await prisma.mfgStockQuant.aggregate({
+        where: { productId: ids.flour, locationId: stockLoc.id },
+        _sum: { reservedQty: true },
+      })
+    )._sum.reservedQty;
+    expect(Number(totalAfter)).toBe(flourNeed); // exactly B's hold remains
+    const bComp = await prisma.mfgOrderComponent.findFirstOrThrow({
+      where: { moId: moB.id, productId: ids.flour },
+    });
+    expect(Number(bComp.reservedQty)).toBe(flourNeed);
+  });
+
+  it('producing an MO releases its reservation and consumes real stock once', async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    await prisma.mfgReservation.deleteMany();
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(mo.id);
+    const flourNeed = Number(
+      (
+        await prisma.mfgOrderComponent.findFirstOrThrow({
+          where: { moId: mo.id, productId: ids.flour },
+        })
+      ).qtyToConsume,
+    );
+    // Fresh 5000 of every sponge component on one clean quant each.
+    for (const pid of [ids.flour, ids.sugar, ids.egg]) {
+      await prisma.mfgStockQuant.deleteMany({ where: { productId: pid, locationId: stockLoc.id } });
+      await prisma.mfgStockQuant.create({
+        data: {
+          productId: pid,
+          lotId: null,
+          locationId: stockLoc.id,
+          quantity: 5000,
+          reservedQty: 0,
+        },
+      });
+    }
+    await mfg.reserve(mo.id);
+    expect(await prisma.mfgReservation.count({ where: { moId: mo.id } })).toBeGreaterThan(0);
+
+    await mfg.produce(mo.id);
+
+    // Ledger cleared, and flour on hand dropped by exactly its need (consumed once).
+    expect(await prisma.mfgReservation.count({ where: { moId: mo.id } })).toBe(0);
+    const flour = await prisma.mfgStockQuant.aggregate({
+      where: { productId: ids.flour, locationId: stockLoc.id },
+      _sum: { quantity: true, reservedQty: true },
+    });
+    expect(Number(flour._sum.quantity)).toBe(5000 - flourNeed);
+    expect(Number(flour._sum.reservedQty)).toBe(0); // hold released, not stranded
   });
 });
