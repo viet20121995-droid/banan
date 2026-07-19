@@ -444,6 +444,26 @@ Review-round fixes on top (13 confirmed by the adversarial pass, 2 refuted):
 Integration 40/40 after the fixes (+ ref-lock, expiry rules, archive gating,
 expiring-lots filter).
 
+Second review round (4 more findings, all fixed):
+- **TOCTOU closed from the ref-creating side too**: `receive()` now locks the
+  product row (`FOR UPDATE`) and reads it INSIDE its transaction before
+  computing base quantities — a pre-transaction snapshot let a concurrent
+  base-UoM edit land between read and write, booking stock in the old unit.
+  `createBom()` likewise runs entirely in one transaction, locking output +
+  component rows (sorted — stable lock order) before validating, which also
+  closes the BoM version-number race as a side effect.
+- **Archive covers ingredients**: a recipe whose line component was archived
+  leaves `listBoms` (`lines.every.component.active`), `createMO` refuses it
+  (`MFG_COMPONENT_ARCHIVED`), and `createBom` refuses referencing it.
+- **BoM type rules**: output must be SEMI/FINISHED (`MFG_BOM_OUTPUT_TYPE`),
+  a FINISHED good can't be an ingredient (`MFG_BOM_COMPONENT_TYPE`) — enforced
+  server-side and mirrored in the editor's pickers.
+- **Duplicate-SKU race maps to 409**: the create/update losing a same-code race
+  past the pre-check now catches P2002 into `MFG_PRODUCT_CODE_TAKEN` instead
+  of surfacing a 500.
+
+Integration 43/43.
+
 ## Roadmap
 
 The MES roadmap through increment 10 is complete. Remaining ideas are demand-driven

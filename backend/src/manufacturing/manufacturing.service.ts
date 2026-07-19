@@ -179,32 +179,37 @@ export class ManufacturingService {
     unitCost: number;
     lotName?: string;
   }) {
-    const product = await this.prisma.mfgProduct.findUnique({
-      where: { id: dto.productId },
-      include: { uom: true },
-    });
-    if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
-    if (!product.active) {
-      throw new BadRequestException({
-        code: 'MFG_PRODUCT_ARCHIVED',
-        message: 'Sản phẩm đã lưu trữ — bật lại trước khi nhập kho.',
-      });
-    }
     if (dto.qty <= 0) {
       throw new BadRequestException({ code: 'MFG_QTY_INVALID' });
     }
-
     const supplier = await this.locationId(this.prisma, 'SUPPLIER');
     const stock = await this.locationId(this.prisma, 'STOCK');
-    // Default to the product's own base UoM when the caller omits one.
-    const moveUom = await this.prisma.mfgUom.findUnique({
-      where: { id: dto.uomId ?? product.uomId },
-    });
-    if (!moveUom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
-
-    const baseQty = toBase(dto.qty, uomLike(moveUom));
 
     return this.prisma.$transaction(async (db) => {
+      // Lock the product row FIRST, then read it inside the transaction. This
+      // serializes the receipt against updateProduct's own FOR UPDATE, so a
+      // concurrent base-UoM edit can't land between our read and our write —
+      // a stale pre-transaction snapshot here would book stock denominated in
+      // the OLD unit right after the edit committed.
+      await db.$executeRaw`SELECT 1 FROM "MfgProduct" WHERE "id" = ${dto.productId} FOR UPDATE`;
+      const product = await db.mfgProduct.findUnique({
+        where: { id: dto.productId },
+        include: { uom: true },
+      });
+      if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
+      if (!product.active) {
+        throw new BadRequestException({
+          code: 'MFG_PRODUCT_ARCHIVED',
+          message: 'Sản phẩm đã lưu trữ — bật lại trước khi nhập kho.',
+        });
+      }
+      // Default to the product's own base UoM when the caller omits one.
+      const moveUom = await db.mfgUom.findUnique({
+        where: { id: dto.uomId ?? product.uomId },
+      });
+      if (!moveUom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
+      const baseQty = toBase(dto.qty, uomLike(moveUom));
+
       const onHand = await this.availableAtStock(db, dto.productId, stock);
       const newAvg = avcoAfterReceipt(onHand, n(product.avgCost), baseQty, dto.unitCost);
 
@@ -331,7 +336,7 @@ export class ManufacturingService {
   }) {
     const bom = await this.prisma.mfgBom.findUnique({
       where: { id: dto.bomId },
-      include: { lines: true, product: true },
+      include: { lines: { include: { component: true } }, product: true },
     });
     if (!bom) throw new NotFoundException({ code: 'MFG_BOM_NOT_FOUND' });
     // Archived output product: its BoM is hidden from the picker, but a stale
@@ -341,6 +346,15 @@ export class ManufacturingService {
       throw new BadRequestException({
         code: 'MFG_PRODUCT_ARCHIVED',
         message: 'Sản phẩm đã lưu trữ — bật lại trước khi tạo lệnh.',
+      });
+    }
+    // Same for an archived INGREDIENT: the recipe still references it, but an
+    // MO would go on consuming a product every picker hides.
+    const deadLine = bom.lines.find((l) => !l.component.active);
+    if (deadLine) {
+      throw new BadRequestException({
+        code: 'MFG_COMPONENT_ARCHIVED',
+        message: `Nguyên liệu "${deadLine.component.nameVi}" đã lưu trữ — sửa công thức trước.`,
       });
     }
     if (dto.qtyToProduce <= 0) {
@@ -1105,21 +1119,33 @@ export class ManufacturingService {
         message: `Mã "${code}" đã tồn tại.`,
       });
     }
-    return this.prisma.mfgProduct.create({
-      data: {
-        code,
-        nameVi,
-        nameEn: dto.nameEn?.trim() || nameVi,
-        categoryId: dto.categoryId,
-        uomId: dto.uomId,
-        type: dto.type,
-        tracking,
-        useExpiration,
-        expirationDays,
-        standardCost: roundCost(dto.standardCost ?? 0),
-      },
-      include: { category: true, uom: true },
-    });
+    try {
+      return await this.prisma.mfgProduct.create({
+        data: {
+          code,
+          nameVi,
+          nameEn: dto.nameEn?.trim() || nameVi,
+          categoryId: dto.categoryId,
+          uomId: dto.uomId,
+          type: dto.type,
+          tracking,
+          useExpiration,
+          expirationDays,
+          standardCost: roundCost(dto.standardCost ?? 0),
+        },
+        include: { category: true, uom: true },
+      });
+    } catch (e) {
+      // Two same-code creates racing past the pre-check: the loser hits the DB
+      // unique constraint — map it to the same 409, not a 500.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException({
+          code: 'MFG_PRODUCT_CODE_TAKEN',
+          message: `Mã "${code}" đã tồn tại.`,
+        });
+      }
+      throw e;
+    }
   }
 
   async updateProduct(
@@ -1192,31 +1218,49 @@ export class ManufacturingService {
           });
         }
       }
-      return db.mfgProduct.update({
-        where: { id },
-        data: {
-          ...(code !== undefined ? { code } : {}),
-          ...(nameVi !== undefined ? { nameVi } : {}),
-          ...(dto.nameEn !== undefined ? { nameEn: dto.nameEn } : {}),
-          ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
-          ...(dto.uomId !== undefined ? { uomId: dto.uomId } : {}),
-          ...(dto.type !== undefined ? { type: dto.type } : {}),
-          ...(dto.tracking !== undefined ? { tracking: dto.tracking } : {}),
-          ...(dto.useExpiration !== undefined ? { useExpiration: dto.useExpiration } : {}),
-          ...(dto.expirationDays !== undefined ? { expirationDays: dto.expirationDays } : {}),
-          ...(dto.standardCost !== undefined ? { standardCost: roundCost(dto.standardCost) } : {}),
-          ...(dto.active !== undefined ? { active: dto.active } : {}),
-        },
-        include: { category: true, uom: true },
-      });
+      try {
+        return await db.mfgProduct.update({
+          where: { id },
+          data: {
+            ...(code !== undefined ? { code } : {}),
+            ...(nameVi !== undefined ? { nameVi } : {}),
+            ...(dto.nameEn !== undefined ? { nameEn: dto.nameEn } : {}),
+            ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
+            ...(dto.uomId !== undefined ? { uomId: dto.uomId } : {}),
+            ...(dto.type !== undefined ? { type: dto.type } : {}),
+            ...(dto.tracking !== undefined ? { tracking: dto.tracking } : {}),
+            ...(dto.useExpiration !== undefined ? { useExpiration: dto.useExpiration } : {}),
+            ...(dto.expirationDays !== undefined ? { expirationDays: dto.expirationDays } : {}),
+            ...(dto.standardCost !== undefined
+              ? { standardCost: roundCost(dto.standardCost) }
+              : {}),
+            ...(dto.active !== undefined ? { active: dto.active } : {}),
+          },
+          include: { category: true, uom: true },
+        });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          throw new ConflictException({
+            code: 'MFG_PRODUCT_CODE_TAKEN',
+            message: `Mã "${code}" đã tồn tại.`,
+          });
+        }
+        throw e;
+      }
     });
   }
 
   listBoms() {
     return this.prisma.mfgBom.findMany({
       // An archived product's recipe must leave the "make a batch" picker too,
-      // or staff can keep producing a product no other list shows.
-      where: { active: true, product: { active: true } },
+      // or staff can keep producing a product no other list shows — and a
+      // recipe whose INGREDIENT was archived would only fail at createMO, so
+      // hide it here as well.
+      where: {
+        active: true,
+        product: { active: true },
+        lines: { every: { component: { active: true } } },
+      },
       include: {
         product: { include: { uom: true } },
         uom: true,
@@ -1253,7 +1297,10 @@ export class ManufacturingService {
    * and production use each line's qty directly. ponytail: no per-line flour-basis
    * flag is persisted, so the basis is the total; fine for the baker's-% hint.
    */
-  private async buildBomData(input: { lines: BomLineInput[]; operations?: BomOperationInput[] }) {
+  private async buildBomData(
+    db: Tx,
+    input: { lines: BomLineInput[]; operations?: BomOperationInput[] },
+  ) {
     if (!input.lines || input.lines.length === 0) {
       throw new BadRequestException({
         code: 'MFG_BOM_NO_LINES',
@@ -1265,24 +1312,39 @@ export class ManufacturingService {
     const wcIds = [...new Set((input.operations ?? []).map((o) => o.workCenterId))];
 
     const [components, uoms, wcs] = await Promise.all([
-      this.prisma.mfgProduct.findMany({
+      db.mfgProduct.findMany({
         where: { id: { in: componentIds } },
-        select: { id: true },
+        select: { id: true, active: true, type: true },
       }),
-      this.prisma.mfgUom.findMany({ where: { id: { in: uomIds } } }),
-      this.prisma.mfgWorkCenter.findMany({ where: { id: { in: wcIds } }, select: { id: true } }),
+      db.mfgUom.findMany({ where: { id: { in: uomIds } } }),
+      db.mfgWorkCenter.findMany({ where: { id: { in: wcIds } }, select: { id: true } }),
     ]);
-    const componentSet = new Set(components.map((c) => c.id));
+    const componentMap = new Map(components.map((c) => [c.id, c]));
     const uomMap = new Map(uoms.map((u) => [u.id, u]));
     const wcSet = new Set(wcs.map((w) => w.id));
 
     const lineBase: number[] = [];
     let totalBase = 0;
     for (const l of input.lines) {
-      if (!componentSet.has(l.componentId)) {
+      const component = componentMap.get(l.componentId);
+      if (!component) {
         throw new BadRequestException({
           code: 'MFG_COMPONENT_NOT_FOUND',
           message: 'Nguyên liệu trong công thức không tồn tại.',
+        });
+      }
+      if (!component.active) {
+        throw new BadRequestException({
+          code: 'MFG_COMPONENT_ARCHIVED',
+          message: 'Nguyên liệu trong công thức đã lưu trữ.',
+        });
+      }
+      // A FINISHED good is a sellable output, never an input — picking one as a
+      // component is a mis-click that would drain sellable stock on produce.
+      if (component.type === 'FINISHED') {
+        throw new BadRequestException({
+          code: 'MFG_BOM_COMPONENT_TYPE',
+          message: 'Thành phẩm không dùng làm nguyên liệu — chọn NVL/bao bì/bán thành phẩm.',
         });
       }
       const uom = uomMap.get(l.uomId);
@@ -1332,19 +1394,41 @@ export class ManufacturingService {
     lines: BomLineInput[];
     operations?: BomOperationInput[];
   }) {
-    const product = await this.prisma.mfgProduct.findUnique({ where: { id: dto.productId } });
-    if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
-    const uom = await this.prisma.mfgUom.findUnique({ where: { id: dto.uomId } });
-    if (!uom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
-
-    const { lines, operations } = await this.buildBomData(dto);
-    const prev = await this.prisma.mfgBom.aggregate({
-      where: { productId: dto.productId },
-      _max: { version: true },
-    });
-    const version = (prev._max.version ?? 0) + 1;
-
     return this.prisma.$transaction(async (db) => {
+      // Lock output + component product rows (sorted — stable lock order, no
+      // deadlock with a sibling createBom), THEN validate inside the same
+      // transaction. Validating first and inserting later let a concurrent
+      // base-UoM edit or archive land in between — the recipe would reference
+      // a product whose unit/state the validation never saw.
+      const lockIds = [...new Set([dto.productId, ...dto.lines.map((l) => l.componentId)])].sort();
+      await db.$executeRaw`
+        SELECT 1 FROM "MfgProduct" WHERE "id" IN (${Prisma.join(lockIds)}) FOR UPDATE
+      `;
+      const product = await db.mfgProduct.findUnique({ where: { id: dto.productId } });
+      if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
+      if (!product.active) {
+        throw new BadRequestException({
+          code: 'MFG_PRODUCT_ARCHIVED',
+          message: 'Sản phẩm đã lưu trữ — bật lại trước khi tạo công thức.',
+        });
+      }
+      // A recipe only makes sense for something the kitchen MAKES.
+      if (product.type !== 'SEMI' && product.type !== 'FINISHED') {
+        throw new BadRequestException({
+          code: 'MFG_BOM_OUTPUT_TYPE',
+          message: 'Công thức chỉ dành cho bán thành phẩm hoặc thành phẩm.',
+        });
+      }
+      const uom = await db.mfgUom.findUnique({ where: { id: dto.uomId } });
+      if (!uom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
+
+      const { lines, operations } = await this.buildBomData(db, dto);
+      const prev = await db.mfgBom.aggregate({
+        where: { productId: dto.productId },
+        _max: { version: true },
+      });
+      const version = (prev._max.version ?? 0) + 1;
+
       await db.mfgBom.updateMany({
         where: { productId: dto.productId, active: true },
         data: { active: false },

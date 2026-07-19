@@ -174,15 +174,24 @@ class _BomEditorScreenState extends ConsumerState<BomEditorScreen> {
 
   Widget _form(List<MfgProduct> products, List<MfgWorkCenter> workCenters) {
     final theme = Theme.of(context);
+    // A recipe outputs something the kitchen MAKES; a FINISHED good is never an
+    // ingredient. Backend enforces the same split (MFG_BOM_OUTPUT_TYPE /
+    // MFG_BOM_COMPONENT_TYPE) — these filters just keep the pickers honest.
+    final outputs = products
+        .where((p) => p.type == 'SEMI' || p.type == 'FINISHED')
+        .toList();
     return ListView(
       padding: const EdgeInsets.all(BananSpacing.lg),
       children: [
         DropdownButtonFormField<String>(
-          initialValue: _outputProductId,
+          initialValue: outputs.any((p) => p.id == _outputProductId)
+              ? _outputProductId
+              : null,
           isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Thành phẩm'),
+          decoration:
+              const InputDecoration(labelText: 'Thành phẩm / bán thành phẩm'),
           items: [
-            for (final p in products)
+            for (final p in outputs)
               DropdownMenuItem(
                 value: p.id,
                 child: Text('${p.nameVi} (${p.code})'),
@@ -233,7 +242,9 @@ class _BomEditorScreenState extends ConsumerState<BomEditorScreen> {
 
   Widget _lineRow(int i, List<MfgProduct> products) {
     final line = _lines[i];
-    final uom = products.where((p) => p.id == line.componentId);
+    // Ingredients: anything BUT a finished good (RAW / PACKAGING / SEMI).
+    final components = products.where((p) => p.type != 'FINISHED').toList();
+    final uom = components.where((p) => p.id == line.componentId);
     final suffix = uom.isEmpty ? '' : uom.first.uomCode;
     return Padding(
       padding: const EdgeInsets.only(bottom: BananSpacing.sm),
@@ -242,14 +253,16 @@ class _BomEditorScreenState extends ConsumerState<BomEditorScreen> {
           Expanded(
             flex: 3,
             child: DropdownButtonFormField<String>(
-              initialValue: line.componentId,
+              initialValue: components.any((p) => p.id == line.componentId)
+                  ? line.componentId
+                  : null,
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Nguyên liệu',
                 isDense: true,
               ),
               items: [
-                for (final p in products)
+                for (final p in components)
                   DropdownMenuItem(
                     value: p.id,
                     child: Text('${p.nameVi} (${p.code})'),

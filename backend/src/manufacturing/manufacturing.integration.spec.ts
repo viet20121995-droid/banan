@@ -1229,4 +1229,75 @@ d('Manufacturing golden path (integration)', () => {
     expect(names).toContain('EXP-LIVE');
     expect(names).not.toContain('EXP-CONSUMED');
   });
+
+  it('createBom enforces output/component types (no RAW output, no FINISHED input)', async () => {
+    const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+
+    // RAW as recipe output → 400.
+    await expect(
+      mfg.createBom({
+        productId: ids.flour,
+        outputQty: 1000,
+        uomId: gram.id,
+        lines: [{ componentId: ids.sugar, qty: 500, uomId: gram.id }],
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // FINISHED good as ingredient → 400.
+    await expect(
+      mfg.createBom({
+        productId: ids.sponge,
+        outputQty: 1000,
+        uomId: gram.id,
+        lines: [{ componentId: ids.cake, qty: 100, uomId: gram.id }],
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('archived ingredient hides the recipe and blocks createMO', async () => {
+    const bom = await bomOf(ids.sponge);
+
+    await mfg.updateProduct(ids.flour, { active: false });
+    try {
+      // Recipe with an archived line component leaves the picker…
+      expect((await mfg.listBoms()).some((b) => b.id === bom.id)).toBe(false);
+      // …and a stale client still can't order it.
+      await expect(mfg.createMO({ bomId: bom.id, qtyToProduce: 500 })).rejects.toMatchObject({
+        status: 400,
+      });
+      // New recipes can't reference it either.
+      const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+      await expect(
+        mfg.createBom({
+          productId: ids.sponge,
+          outputQty: 1000,
+          uomId: gram.id,
+          lines: [{ componentId: ids.flour, qty: 500, uomId: gram.id }],
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    } finally {
+      await mfg.updateProduct(ids.flour, { active: true });
+    }
+    expect((await mfg.listBoms()).some((b) => b.id === bom.id)).toBe(true);
+  });
+
+  it('two same-code creates racing: loser gets 409, never a 500', async () => {
+    const cat = await prisma.mfgCategory.findFirstOrThrow();
+    const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+    const mk = () =>
+      mfg.createProduct({
+        code: 'TEST-PM-RACE',
+        nameVi: 'Đua trùng mã',
+        categoryId: cat.id,
+        uomId: gram.id,
+        type: 'RAW',
+      });
+    const results = await Promise.allSettled([mk(), mk()]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    expect(ok).toBe(1);
+    expect(rejected).toHaveLength(1);
+    // The DB-constraint loser must surface as the same 409 as the pre-check.
+    expect((rejected[0].reason as { status?: number }).status).toBe(409);
+  });
 });
