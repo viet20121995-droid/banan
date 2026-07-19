@@ -1595,6 +1595,8 @@ model MfgQualityAlert {
   product     MfgProduct?   @relation(fields: [productId], references: [id])
   stage       MfgAlertStage @default(NEW)
   description String?
+  // When the scheduler pushed a notification for this alert (dedup — notify once).
+  notifiedAt  DateTime?
   createdAt   DateTime      @default(now())
 
   @@index([stage])

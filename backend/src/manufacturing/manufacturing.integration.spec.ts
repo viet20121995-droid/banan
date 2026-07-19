@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 
 import { seedManufacturing } from '../../prisma/seed-manufacturing';
 
+import { ManufacturingSchedulerService } from './manufacturing-scheduler.service';
 import { ManufacturingService } from './manufacturing.service';
 
 /**
@@ -21,6 +22,16 @@ d('Manufacturing golden path (integration)', () => {
   // The service only touches prisma.* delegates + $transaction, both present on
   // PrismaClient, so a plain client stands in for the Nest PrismaService.
   const mfg = new ManufacturingService(prisma as never);
+  // A stub NotificationsService that records what the scheduler would push.
+  const notifyCalls: Array<{ type: string; body: string }> = [];
+  const scheduler = new ManufacturingSchedulerService(
+    prisma as never,
+    {
+      notifyKitchenRoles: async (t: { type: string; body: string }) => {
+        notifyCalls.push({ type: t.type, body: t.body });
+      },
+    } as never,
+  );
 
   let ids: Awaited<ReturnType<typeof seedManufacturing>>['ids'];
   let gUom: string;
@@ -587,5 +598,38 @@ d('Manufacturing golden path (integration)', () => {
     expect(byReason!.value).toBe(Math.round(1000 * unit));
     const byProduct = rep.byProduct.find((r) => r.productId === ids.flour);
     expect(byProduct!.qty).toBe(1000); // base grams, matching the g uom label
+  });
+
+  // ── increment 6: scheduler jobs (HSD/overdue digest + QC-alert sweep) ──
+  it('QC-alert sweep notifies each new alert once and stamps notifiedAt', async () => {
+    const alert = await prisma.mfgQualityAlert.create({
+      data: { title: 'Test — nhiệt độ lò vượt ngưỡng', stage: 'NEW' },
+    });
+    notifyCalls.length = 0;
+    await scheduler.qcAlertSweep();
+    expect(notifyCalls.some((c) => c.type === 'mfg.qc_alert')).toBe(true);
+    const after = await prisma.mfgQualityAlert.findUniqueOrThrow({ where: { id: alert.id } });
+    expect(after.notifiedAt).not.toBeNull();
+
+    // A second sweep re-notifies nothing (notifiedAt is set).
+    notifyCalls.length = 0;
+    await scheduler.qcAlertSweep();
+    expect(notifyCalls.length).toBe(0);
+  });
+
+  it('daily digest notifies when an MO is overdue', async () => {
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 });
+    await mfg.confirmMO(mo.id);
+    // Backdate its schedule to yesterday → overdue while still open.
+    await prisma.mfgOrder.update({
+      where: { id: mo.id },
+      data: { scheduledDate: new Date(Date.now() - 86400000) },
+    });
+    notifyCalls.length = 0;
+    await scheduler.dailyDigest();
+    expect(notifyCalls.some((c) => c.type === 'mfg.daily_digest' && /quá hạn/.test(c.body))).toBe(
+      true,
+    );
   });
 });

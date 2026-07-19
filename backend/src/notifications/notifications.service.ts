@@ -73,6 +73,27 @@ export class NotificationsService {
     }
   }
 
+  /**
+   * Alert every active kitchen-role user (manager/staff/admin) regardless of
+   * which kitchen — the MES ("Sản xuất") is a single standalone section, not
+   * scoped to a kitchenId. In-app + push, no email.
+   */
+  async notifyKitchenRoles(
+    template: NotificationTemplate,
+    data?: Record<string, unknown>,
+  ): Promise<void> {
+    const staff = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        role: { in: ['KITCHEN_MANAGER', 'KITCHEN_STAFF', 'ADMIN'] },
+      },
+      select: { id: true },
+    });
+    for (const u of staff) {
+      await this.sendToUser(u.id, template, data, { email: false });
+    }
+  }
+
   /** Alert a kitchen's manager + staff (in-app + push, no email). */
   async notifyKitchenStaff(
     kitchenId: string,

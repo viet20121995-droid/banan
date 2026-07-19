@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../features/account/change_password_screen.dart';
 import '../features/analytics/analytics_screen.dart';
 import '../features/kanban/kanban_screen.dart';
+import '../features/notifications/notifications_screen.dart';
 import '../features/production/mo_detail_screen.dart';
 import '../features/production/mo_list_screen.dart';
 import '../features/production/production_dashboard_screen.dart';
@@ -80,6 +81,10 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/production/replenishment',
         builder: (_, __) => const ReplenishmentScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (_, __) => const NotificationsScreen(),
       ),
       GoRoute(
         path: '/change-password',

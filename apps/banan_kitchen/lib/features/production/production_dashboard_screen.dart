@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../notifications/notifications_controller.dart';
 import 'production_providers.dart';
 
 /// Entry point of the "Sản xuất" section — MO counts by state, a warning strip
@@ -25,11 +26,21 @@ class ProductionDashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final counts = ref.watch(moCountsProvider);
     final expiring = ref.watch(expiringLotsProvider);
+    final unread = ref.watch(notificationsControllerProvider.select((s) => s.unread));
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sản xuất'),
         actions: [
+          IconButton(
+            icon: Badge(
+              isLabelVisible: unread > 0,
+              label: Text('$unread'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            tooltip: 'Thông báo',
+            onPressed: () => context.push('/notifications'),
+          ),
           IconButton(
             icon: const Icon(Icons.dashboard_outlined),
             tooltip: 'Bảng đơn (bếp)',

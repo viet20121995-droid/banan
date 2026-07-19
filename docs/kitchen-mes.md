@@ -263,10 +263,30 @@ read-only, reached from the production dashboard. Integration 21/21 on real
 Postgres (the report figures hand-checked: sponge split 37750/142500 = 180250,
 scrap 200 × 209.15 = 41830 from the frozen move cost); kitchen web build OK.
 
+## Increment 6 — Notifications + HSD background job ✅
+
+Reuses the existing app-wide notification stack (`Notification` model,
+`NotificationsService`, realtime gateway, FCM push) — no new notification model.
+A `ManufacturingSchedulerService` (`@nestjs/schedule`) runs two jobs, both routed
+to every active kitchen-role user via `notifyKitchenRoles`:
+
+- **Daily digest** (07:00 ICT) — counts lots at/near expiry that still hold stock
+  + MOs planned before today and still open; if either is non-zero, pushes one
+  "Nhắc việc sản xuất" notification.
+- **QC-alert sweep** (every 10 min) — one urgent "Cảnh báo QC" per new
+  `MfgQualityAlert`, then stamps a new `notifiedAt` column so each fires exactly
+  once (the only schema change — a nullable dedup timestamp; migration
+  `mfg_alert_notified_at`).
+
+Flutter: a kitchen **Thông báo** inbox (`/notifications`, bell + unread badge on
+the production dashboard) reusing the shared `NotificationsRepository` + realtime
+feed; a QC-alert tap deep-links to its MO. Integration 25/25 (sweep notifies once
+then stamps; digest fires on an overdue MO); kitchen web build OK.
+
 ## Roadmap (next increments)
 
-6. **P2** — OEE, maintenance, activities/notifications, HSD background job.
-7. **Hard reservations** (if needed) — a per-MO allocation ledger so
+7. **OEE + maintenance** — equipment effectiveness + maintenance schedules/orders.
+8. **Hard reservations** (if needed) — a per-MO allocation ledger so
    cancel/produce only touch their own hold (today reservations are advisory).
 
 Also deferred UI: BoM editor (create/edit recipes — today recipes come from the
