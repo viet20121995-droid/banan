@@ -997,6 +997,33 @@ export class OrdersService {
         message: `Cannot move from ${order.status} to ${toStatus}.`,
       });
     }
+    if (toStatus === 'COMPLETED') {
+      // An unpaid counter order can't complete — the cake would walk out with
+      // no payment on record. Staff settle first (settle-counter endpoint);
+      // an admin may override but must leave a reason in the audit trail.
+      if (order.source === 'STAFF_COUNTER' && order.settlementMode === 'COUNTER_UNPAID') {
+        if (actor.role !== Role.ADMIN) {
+          throw new BadRequestException({
+            code: 'COUNTER_UNPAID_UNSETTLED',
+            message: 'Đơn tại quầy chưa thu tiền — bấm "Đã thu tiền" trước khi hoàn tất.',
+          });
+        }
+        if (!note?.trim()) {
+          throw new BadRequestException({
+            code: 'OVERRIDE_REASON_REQUIRED',
+            message: 'Admin bỏ qua thu tiền phải ghi lý do.',
+          });
+        }
+      }
+      // Internal transfers complete through the receive-transfer endpoint so
+      // the destination branch confirms WHAT arrived (and who signed for it).
+      if (order.source === 'INTERNAL_TRANSFER' && actor.role !== Role.ADMIN) {
+        throw new BadRequestException({
+          code: 'USE_RECEIVE_ENDPOINT',
+          message: 'Cửa hàng nhận xác nhận "Đã nhận hàng" để hoàn tất đơn nội bộ.',
+        });
+      }
+    }
     const txResult = await this.prisma.$transaction(
       async (tx) => {
         // Status-GUARDED update: only transition if the order is still in the
@@ -2095,6 +2122,19 @@ export class OrdersService {
     const replay = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
     if (replay) return replay;
 
+    // Owner/staff order FOR THEIR OWN branch — only an admin may route the
+    // goods to a different store (otherwise a store could ship product to an
+    // unrelated branch on its own authority).
+    if (
+      principal.role !== Role.ADMIN &&
+      dto.destinationStoreId &&
+      dto.destinationStoreId !== requestingStoreId
+    ) {
+      throw new ForbiddenException({
+        code: 'STORE_SCOPE',
+        message: 'Chỉ admin được chọn cửa hàng nhận khác cửa hàng yêu cầu.',
+      });
+    }
     const destinationStoreId = dto.destinationStoreId ?? requestingStoreId;
     const sendToKitchen = dto.sendToKitchen ?? true;
     const [requesting, destination] = await Promise.all([
@@ -2265,6 +2305,108 @@ export class OrdersService {
         at: new Date().toISOString(),
       },
     );
+    return updated;
+  }
+
+  /**
+   * The DESTINATION branch confirms an internal transfer arrived — who signed
+   * for it, when, and any shortages/damage per line — and only then the order
+   * completes. This is the only non-admin path to COMPLETED for an internal
+   * transfer (generic transition refuses it).
+   * ponytail: no per-branch stock ledger exists yet, so the receipt is an
+   * audit event only; when branch inventory lands, this is where the stock
+   * receipt/move for the destination store gets created.
+   */
+  async receiveInternalTransfer(
+    id: string,
+    actor: { sub: string; role: Role; storeId?: string | null },
+    dto: { note?: string; items?: Array<{ orderItemId: string; receivedQty: number }> } = {},
+  ): Promise<OrderWithIncludes> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: ORDER_INCLUDE,
+    });
+    if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
+    if (order.source !== 'INTERNAL_TRANSFER') {
+      throw new BadRequestException({ code: 'NOT_INTERNAL_TRANSFER' });
+    }
+    // Only the RECEIVING branch (or admin) signs for the goods — the
+    // requesting store's scope is not enough.
+    if (actor.role !== Role.ADMIN) {
+      const isMerchant = actor.role === 'MERCHANT_OWNER' || actor.role === 'MERCHANT_STAFF';
+      if (!isMerchant || !actor.storeId || actor.storeId !== order.destinationStoreId) {
+        throw new ForbiddenException({
+          code: 'NOT_DESTINATION_STORE',
+          message: 'Chỉ cửa hàng nhận hàng xác nhận được đơn nội bộ này.',
+        });
+      }
+    }
+    if (order.status !== 'READY_FOR_PICKUP' && order.status !== 'DELIVERING') {
+      throw new BadRequestException({
+        code: 'ORDER_INVALID_TRANSITION',
+        message: 'Đơn chưa được bếp giao — không thể xác nhận nhận hàng.',
+      });
+    }
+
+    // Human-readable receipt line for the audit trail: full receipt, or the
+    // per-item received/ordered breakdown when the branch reports shortages.
+    let receiptNote = 'Đã nhận đủ hàng.';
+    if (dto.items && dto.items.length > 0) {
+      const byId = new Map(order.items.map((i) => [i.id, i]));
+      const parts: string[] = [];
+      for (const r of dto.items) {
+        const line = byId.get(r.orderItemId);
+        if (!line) throw new BadRequestException({ code: 'ORDER_ITEM_NOT_FOUND' });
+        if (r.receivedQty < 0 || r.receivedQty > line.quantity) {
+          throw new BadRequestException({
+            code: 'RECEIVED_QTY_INVALID',
+            message: `"${line.productName}" nhận ${r.receivedQty}/${line.quantity} không hợp lệ.`,
+          });
+        }
+        if (r.receivedQty !== line.quantity) {
+          parts.push(`${line.productName}: nhận ${r.receivedQty}/${line.quantity}`);
+        }
+      }
+      if (parts.length > 0) receiptNote = `Thiếu/hỏng — ${parts.join('; ')}`;
+    }
+    if (dto.note?.trim()) receiptNote = `${receiptNote} ${dto.note.trim()}`.trim();
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.order.updateMany({
+        where: { id, status: order.status },
+        data: { status: 'COMPLETED' },
+      });
+      if (res.count === 0) {
+        throw new BadRequestException({
+          code: 'ORDER_INVALID_TRANSITION',
+          message: `Order is no longer in ${order.status}.`,
+        });
+      }
+      // actorId + createdAt on the event ARE the receiver + received-at record.
+      await tx.orderStatusEvent.create({
+        data: {
+          orderId: id,
+          fromStatus: order.status,
+          toStatus: 'COMPLETED',
+          actorId: actor.sub,
+          note: receiptNote,
+        },
+      });
+      return tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
+    });
+
+    const rooms = [`order:${id}`, `store:${order.storeId}`];
+    if (order.destinationStoreId && order.destinationStoreId !== order.storeId) {
+      rooms.push(`store:${order.destinationStoreId}`);
+    }
+    if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
+    this.realtime.emit(rooms, 'order.status_changed', {
+      orderId: id,
+      code: order.code,
+      fromStatus: order.status,
+      toStatus: 'COMPLETED',
+      at: new Date().toISOString(),
+    });
     return updated;
   }
 

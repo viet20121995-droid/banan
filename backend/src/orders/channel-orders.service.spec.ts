@@ -83,19 +83,24 @@ function makeTxMock(orderCreate: jest.Mock, paymentCreate: jest.Mock) {
 
 function makeService(prisma: PrismaMock) {
   const realtime = { emit: jest.fn(), evictStaleKitchenSubscribers: jest.fn() };
-  const payments = { initiate: jest.fn(), validate: jest.fn() };
+  const payments = {
+    initiate: jest.fn(),
+    validate: jest.fn(),
+    onOrderCompleted: jest.fn().mockResolvedValue(undefined),
+  };
   const notifications = {
     sendToUser: jest.fn().mockResolvedValue(undefined),
     notifyKitchenStaff: jest.fn().mockResolvedValue(undefined),
     notifyStoreStaff: jest.fn().mockResolvedValue(undefined),
   };
   const noop = {} as never;
+  const loyalty = { earnFor: jest.fn().mockResolvedValue(undefined) };
   const svc = new OrdersService(
     prisma as never,
     realtime as never,
     payments as never,
     noop, // refunds
-    noop, // loyalty
+    loyalty as never,
     noop, // coupons
     notifications as never,
     noop, // auth
@@ -419,6 +424,127 @@ describe('markCounterPaid', () => {
       { response: { code: 'COUNTER_ALREADY_SETTLED' } },
     );
     expect(tx.payment.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('counter settlement gate on COMPLETED', () => {
+  function txFor(order: Record<string, unknown>) {
+    return {
+      order: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(order),
+      },
+      orderStatusEvent: { create: jest.fn() },
+      payment: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+  }
+  const unpaidCounter = orderRowFixture({
+    source: 'STAFF_COUNTER',
+    settlementMode: 'COUNTER_UNPAID',
+    status: 'READY_FOR_PICKUP',
+  });
+
+  it('staff cannot COMPLETE an unpaid counter order', async () => {
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(unpaidCounter) },
+      $transaction: jest.fn(),
+    };
+    const { svc } = makeService(prisma as never);
+    await expect(
+      svc.transition('o1', 'COMPLETED' as never, {
+        sub: 'staff1',
+        role: Role.MERCHANT_STAFF,
+        storeId: 's1',
+      }),
+    ).rejects.toMatchObject({ response: { code: 'COUNTER_UNPAID_UNSETTLED' } });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('admin override requires a reason', async () => {
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(unpaidCounter) },
+      $transaction: jest.fn(),
+    };
+    const { svc } = makeService(prisma as never);
+    await expect(
+      svc.transition('o1', 'COMPLETED' as never, { sub: 'adm', role: Role.ADMIN }),
+    ).rejects.toMatchObject({ response: { code: 'OVERRIDE_REASON_REQUIRED' } });
+  });
+
+  it('admin override WITH a reason completes', async () => {
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(unpaidCounter) },
+      $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(txFor(unpaidCounter))),
+    };
+    const { svc } = makeService(prisma as never);
+    await expect(
+      svc.transition(
+        'o1',
+        'COMPLETED' as never,
+        { sub: 'adm', role: Role.ADMIN },
+        'Khách chuyển khoản riêng',
+      ),
+    ).resolves.toBeDefined();
+  });
+});
+
+describe('internal transfer destination lock + receive', () => {
+  it('owner/staff cannot route goods to another store', async () => {
+    const { svc } = makeService(basePrisma(jest.fn(), jest.fn()));
+    await expect(
+      svc.createInternalTransfer(staff, {
+        items: [{ productId: 'p1', quantity: 1 }],
+        destinationStoreId: 'OTHER',
+      }),
+    ).rejects.toMatchObject({ response: { code: 'STORE_SCOPE' } });
+  });
+
+  const dispatched = orderRowFixture({
+    source: 'INTERNAL_TRANSFER',
+    status: 'READY_FOR_PICKUP',
+    destinationStoreId: 's2',
+    items: [{ id: 'oi1', productName: 'Bánh mì', quantity: 10 }],
+  });
+
+  it('only the DESTINATION store may sign for the goods', async () => {
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(dispatched) },
+      $transaction: jest.fn(),
+    };
+    const { svc } = makeService(prisma as never);
+    await expect(
+      svc.receiveInternalTransfer('o1', {
+        sub: 'staff1',
+        role: Role.MERCHANT_STAFF,
+        storeId: 's1',
+      }),
+    ).rejects.toMatchObject({ response: { code: 'NOT_DESTINATION_STORE' } });
+  });
+
+  it('destination store confirms receipt (with shortages) and the order completes', async () => {
+    const statusEventCreate = jest.fn();
+    const tx = {
+      order: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...dispatched, status: 'COMPLETED' }),
+      },
+      orderStatusEvent: { create: statusEventCreate },
+    };
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(dispatched) },
+      $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
+    };
+    const { svc } = makeService(prisma as never);
+    await svc.receiveInternalTransfer(
+      'o1',
+      { sub: 'dest1', role: Role.MERCHANT_OWNER, storeId: 's2' },
+      { items: [{ orderItemId: 'oi1', receivedQty: 8 }], note: 'Vỡ 2 hộp.' },
+    );
+    const ev = statusEventCreate.mock.calls[0][0].data;
+    expect(ev.toStatus).toBe('COMPLETED');
+    expect(ev.actorId).toBe('dest1');
+    expect(ev.note).toContain('nhận 8/10');
+    expect(ev.note).toContain('Vỡ 2 hộp');
   });
 });
 

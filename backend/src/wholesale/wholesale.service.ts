@@ -295,20 +295,66 @@ export class WholesaleService {
     });
   }
 
-  async markReceivablePaid(id: string, adminId: string) {
-    // Status-guarded: only an outstanding receivable can be settled, and two
-    // concurrent confirms can't both "pay" it.
-    const res = await this.prisma.wholesaleReceivable.updateMany({
-      where: { id, status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] } },
-      data: { status: 'PAID', paidAt: new Date(), confirmedByAdminId: adminId },
-    });
-    if (res.count === 0) {
-      throw new BadRequestException({
-        code: 'RECEIVABLE_NOT_OPEN',
-        message: 'Công nợ này đã được xử lý.',
+  /**
+   * Record one collection against a receivable. Amounts accumulate in a
+   * ledger (WholesalePayment: how much, when, method, bank reference, who
+   * confirmed); the receivable flips PARTIAL while under-collected and PAID
+   * when fully collected. The row lock serializes concurrent confirms.
+   */
+  async recordReceivablePayment(
+    id: string,
+    adminId: string,
+    dto: { amountVnd?: number; method?: string; reference?: string; note?: string } = {},
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "WholesaleReceivable" WHERE "id" = ${id} FOR UPDATE`;
+      const receivable = await tx.wholesaleReceivable.findUnique({ where: { id } });
+      if (!receivable) throw new NotFoundException({ code: 'RECEIVABLE_NOT_FOUND' });
+      if (!['OPEN', 'PARTIAL', 'OVERDUE'].includes(receivable.status)) {
+        throw new BadRequestException({
+          code: 'RECEIVABLE_NOT_OPEN',
+          message: 'Công nợ này đã được xử lý.',
+        });
+      }
+      const remaining =
+        Number(receivable.amountVnd.toString()) - Number(receivable.paidAmountVnd.toString());
+      const amount = dto.amountVnd ?? remaining;
+      if (amount <= 0 || amount > remaining) {
+        throw new BadRequestException({
+          code: 'PAYMENT_AMOUNT_INVALID',
+          message: `Số tiền thu phải trong khoảng 1 – ${new Intl.NumberFormat('vi-VN').format(remaining)} ₫.`,
+        });
+      }
+      await tx.wholesalePayment.create({
+        data: {
+          receivableId: id,
+          amountVnd: new Prisma.Decimal(amount),
+          method: dto.method ?? 'BANK_TRANSFER',
+          reference: dto.reference?.trim() || null,
+          note: dto.note?.trim() || null,
+          confirmedByAdminId: adminId,
+        },
       });
-    }
-    return this.prisma.wholesaleReceivable.findUniqueOrThrow({ where: { id } });
+      const nowPaid = Number(receivable.paidAmountVnd.toString()) + amount;
+      const fullyPaid = nowPaid >= Number(receivable.amountVnd.toString());
+      await tx.wholesaleReceivable.update({
+        where: { id },
+        data: {
+          paidAmountVnd: { increment: new Prisma.Decimal(amount) },
+          status: fullyPaid ? 'PAID' : 'PARTIAL',
+          ...(fullyPaid && { paidAt: new Date(), confirmedByAdminId: adminId }),
+        },
+      });
+      return tx.wholesaleReceivable.findUniqueOrThrow({
+        where: { id },
+        include: { payments: { orderBy: { paidAt: 'desc' } } },
+      });
+    });
+  }
+
+  /** Legacy "mark fully paid" — one ledger entry for the whole remaining balance. */
+  markReceivablePaid(id: string, adminId: string) {
+    return this.recordReceivablePayment(id, adminId, {});
   }
 
   // ── customer (wholesale buyer) ────────────────────────────────────────────
@@ -438,6 +484,23 @@ export class WholesaleService {
     const now = new Date();
     const targetAt = dto.scheduledFor ? new Date(dto.scheduledFor) : now;
 
+    // Idempotency: the buyer IS the creator here, so the same
+    // (createdById, clientRequestId) unique the staff channels use applies —
+    // a double-click or network retry returns the first order, and never
+    // books the debt or the stock twice.
+    if (dto.clientRequestId) {
+      const replay = await this.prisma.order.findUnique({
+        where: {
+          createdById_clientRequestId: {
+            createdById: userId,
+            clientRequestId: dto.clientRequestId,
+          },
+        },
+        include: ORDER_LIST_INCLUDE,
+      });
+      if (replay) return replay;
+    }
+
     const contract = await this.prisma.wholesaleContract.findFirst({
       where: {
         id: dto.contractId,
@@ -535,97 +598,136 @@ export class WholesaleService {
       });
     }
     const orderCode = generateOrderCode();
-    const created = await this.prisma.$transaction(async (tx) => {
-      // Serialize every credit decision for this account. Without this lock,
-      // two concurrent orders can both observe the same free credit and both
-      // pass, overshooting the contract limit.
-      await tx.$queryRaw`
+    const created = await this.prisma
+      .$transaction(async (tx) => {
+        // Serialize every credit decision for this account. Without this lock,
+        // two concurrent orders can both observe the same free credit and both
+        // pass, overshooting the contract limit.
+        await tx.$queryRaw`
         SELECT "id" FROM "WholesaleAccount"
         WHERE "id" = ${account.id}
         FOR UPDATE
       `;
-      const freshAccount = await tx.wholesaleAccount.findUniqueOrThrow({
-        where: { id: account.id },
-        select: { active: true, blockedReason: true, creditLimitVnd: true },
-      });
-      if (!freshAccount.active || freshAccount.blockedReason?.trim()) {
-        throw new ForbiddenException({
-          code: 'WHOLESALE_NOT_ENABLED',
-          message: freshAccount.blockedReason?.trim()
-            ? `Tài khoản wholesale đang bị khoá: ${freshAccount.blockedReason}`
-            : 'Tài khoản wholesale đang bị khoá.',
+        const freshAccount = await tx.wholesaleAccount.findUniqueOrThrow({
+          where: { id: account.id },
+          select: { active: true, blockedReason: true, creditLimitVnd: true },
         });
-      }
-      const overdue = await tx.wholesaleReceivable.count({
-        where: {
-          wholesaleAccountId: account.id,
-          status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] },
-          dueDate: { lt: now },
-        },
-      });
-      if (overdue > 0) {
-        throw new BadRequestException({
-          code: 'WHOLESALE_OVERDUE',
-          message: 'Có công nợ quá hạn — vui lòng thanh toán trước khi đặt đơn mới.',
+        if (!freshAccount.active || freshAccount.blockedReason?.trim()) {
+          throw new ForbiddenException({
+            code: 'WHOLESALE_NOT_ENABLED',
+            message: freshAccount.blockedReason?.trim()
+              ? `Tài khoản wholesale đang bị khoá: ${freshAccount.blockedReason}`
+              : 'Tài khoản wholesale đang bị khoá.',
+          });
+        }
+        const overdue = await tx.wholesaleReceivable.count({
+          where: {
+            wholesaleAccountId: account.id,
+            status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] },
+            dueDate: { lt: now },
+          },
         });
-      }
-      const committed = await tx.wholesaleReceivable.aggregate({
-        _sum: { amountVnd: true },
-        where: {
-          wholesaleAccountId: account.id,
-          status: { in: ['PENDING', 'OPEN', 'PARTIAL', 'OVERDUE'] },
-        },
-      });
-      const committedDebt = Number((committed._sum.amountVnd ?? new Prisma.Decimal(0)).toString());
-      if (committedDebt + totalVnd > freshAccount.creditLimitVnd) {
-        const fmt = new Intl.NumberFormat('vi-VN');
-        throw new BadRequestException({
-          code: 'WHOLESALE_CREDIT_LIMIT',
-          message:
-            `Vượt hạn mức công nợ (${fmt.format(freshAccount.creditLimitVnd)} ₫ — ` +
-            `đã dùng ${fmt.format(committedDebt)} ₫).`,
+        if (overdue > 0) {
+          throw new BadRequestException({
+            code: 'WHOLESALE_OVERDUE',
+            message: 'Có công nợ quá hạn — vui lòng thanh toán trước khi đặt đơn mới.',
+          });
+        }
+        const committed = await tx.wholesaleReceivable.aggregate({
+          _sum: { amountVnd: true, paidAmountVnd: true },
+          where: {
+            wholesaleAccountId: account.id,
+            status: { in: ['PENDING', 'OPEN', 'PARTIAL', 'OVERDUE'] },
+          },
         });
-      }
+        // Outstanding = billed − already collected, so a partial payment frees
+        // credit immediately instead of only when the receivable fully closes.
+        const committedDebt =
+          Number((committed._sum.amountVnd ?? new Prisma.Decimal(0)).toString()) -
+          Number((committed._sum.paidAmountVnd ?? new Prisma.Decimal(0)).toString());
+        if (committedDebt + totalVnd > freshAccount.creditLimitVnd) {
+          const fmt = new Intl.NumberFormat('vi-VN');
+          throw new BadRequestException({
+            code: 'WHOLESALE_CREDIT_LIMIT',
+            message:
+              `Vượt hạn mức công nợ (${fmt.format(freshAccount.creditLimitVnd)} ₫ — ` +
+              `đã dùng ${fmt.format(committedDebt)} ₫).`,
+          });
+        }
 
-      await this.orders.reserveChannelStock(tx, products, lineCreates, targetAt);
-      const order = await tx.order.create({
-        data: {
-          code: orderCode,
-          customerId: userId,
-          storeId,
-          fulfillmentType: 'DELIVERY',
-          scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
-          status: 'PENDING',
-          source: 'WHOLESALE',
-          settlementMode: 'ON_ACCOUNT',
-          wholesaleAccountId: account.id,
-          wholesaleContractId: contract.id,
-          subtotal,
-          total: subtotal,
-          notes: dto.notes,
-          items: { createMany: { data: lineCreates } },
-          statusEvents: {
-            create: {
-              fromStatus: null,
-              toStatus: 'PENDING',
-              actorId: userId,
-              note: 'Đơn wholesale — chờ admin xác nhận',
+        await this.orders.reserveChannelStock(tx, products, lineCreates, targetAt);
+        const order = await tx.order.create({
+          data: {
+            code: orderCode,
+            customerId: userId,
+            storeId,
+            fulfillmentType: 'DELIVERY',
+            scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
+            status: 'PENDING',
+            source: 'WHOLESALE',
+            settlementMode: 'ON_ACCOUNT',
+            wholesaleAccountId: account.id,
+            wholesaleContractId: contract.id,
+            createdById: userId,
+            clientRequestId: dto.clientRequestId ?? null,
+            // Order-time SNAPSHOT — editing the account later must not rewrite
+            // what this order displays (address, tax id, contact, buyer's PO).
+            wholesaleInfo: {
+              companyName: account.companyName,
+              deliveryAddress: account.deliveryAddress ?? null,
+              taxId: account.taxId ?? null,
+              billingEmail: account.billingEmail ?? null,
+              contactName: account.contactName ?? null,
+              contactPhone: account.contactPhone ?? null,
+              poCode: dto.poCode?.trim() || null,
+            },
+            subtotal,
+            total: subtotal,
+            notes: dto.notes,
+            items: { createMany: { data: lineCreates } },
+            statusEvents: {
+              create: {
+                fromStatus: null,
+                toStatus: 'PENDING',
+                actorId: userId,
+                note: 'Đơn wholesale — chờ admin xác nhận',
+              },
             },
           },
-        },
-        include: ORDER_LIST_INCLUDE,
+          include: ORDER_LIST_INCLUDE,
+        });
+        await tx.wholesaleReceivable.create({
+          data: {
+            wholesaleAccountId: account.id,
+            orderId: order.id,
+            amountVnd: subtotal,
+            dueDate: null,
+            status: 'PENDING',
+          },
+        });
+        return order;
+      })
+      .catch(async (e) => {
+        // Two same-key submits racing past the pre-read: the loser hits the
+        // (createdById, clientRequestId) unique — hand back the winner's order.
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002' &&
+          dto.clientRequestId
+        ) {
+          const winner = await this.prisma.order.findUnique({
+            where: {
+              createdById_clientRequestId: {
+                createdById: userId,
+                clientRequestId: dto.clientRequestId,
+              },
+            },
+            include: ORDER_LIST_INCLUDE,
+          });
+          if (winner) return winner;
+        }
+        throw e;
       });
-      await tx.wholesaleReceivable.create({
-        data: {
-          wholesaleAccountId: account.id,
-          orderId: order.id,
-          amountVnd: subtotal,
-          dueDate: null,
-          status: 'PENDING',
-        },
-      });
-      return order;
-    });
     this.orders.notifyWholesaleOrderCreated(created);
     return created;
   }

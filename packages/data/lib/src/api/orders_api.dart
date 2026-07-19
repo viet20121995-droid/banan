@@ -129,6 +129,19 @@ class OrdersApi {
   Future<Result<OrderDto, AppFailure>> markCounterPaid(String id) =>
       _postOrder('/merchant/orders/$id/counter-paid', const {});
 
+  /// Destination branch signs for an internal transfer (→ COMPLETED).
+  /// [receivedItems] reports shortages: {orderItemId, receivedQty} per line.
+  Future<Result<OrderDto, AppFailure>> receiveTransfer(
+    String id, {
+    String? note,
+    List<Map<String, dynamic>>? receivedItems,
+  }) =>
+      _postOrder('/merchant/orders/$id/receive-transfer', {
+        if (note != null && note.isNotEmpty) 'note': note,
+        if (receivedItems != null && receivedItems.isNotEmpty)
+          'items': receivedItems,
+      });
+
   Future<Result<OrderDto, AppFailure>> get(String id) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/orders/$id');

@@ -69,6 +69,11 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
   final notes = TextEditingController();
   DateTime? scheduledFor;
   bool saving = false;
+  // One dedup key per cart attempt: a double-tap or network retry re-sends
+  // the SAME key and the backend returns the first order. Regenerated after
+  // each successful submit (a new cart = a new order).
+  String _requestKey =
+      'wh-${DateTime.now().millisecondsSinceEpoch}-${UniqueKey().hashCode}';
 
   @override
   void dispose() {
@@ -96,6 +101,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
           ],
           scheduledFor: scheduledFor,
           notes: notes.text.trim(),
+          clientRequestId: _requestKey,
         );
     if (!mounted) return;
     setState(() => saving = false);
@@ -104,6 +110,8 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
         quantities.clear();
         notes.clear();
         scheduledFor = null;
+        _requestKey =
+            'wh-${DateTime.now().millisecondsSinceEpoch}-${UniqueKey().hashCode}';
         setState(() {});
         ref
           ..invalidate(_ordersProvider)

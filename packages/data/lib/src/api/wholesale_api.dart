@@ -185,6 +185,8 @@ class WholesaleApi {
     required List<Map<String, dynamic>> items,
     DateTime? scheduledFor,
     String? notes,
+    String? poCode,
+    String? clientRequestId,
   }) =>
       _post('/wholesale/orders', {
         'contractId': contractId,
@@ -192,6 +194,8 @@ class WholesaleApi {
         if (scheduledFor != null)
           'scheduledFor': scheduledFor.toUtc().toIso8601String(),
         if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (poCode != null && poCode.isNotEmpty) 'poCode': poCode,
+        if (clientRequestId != null) 'clientRequestId': clientRequestId,
       });
 
   Future<Result<List<OrderDto>, AppFailure>> myOrders() =>
@@ -271,6 +275,21 @@ class WholesaleApi {
 
   Future<Result<Map<String, dynamic>, AppFailure>> adminMarkPaid(String id) =>
       _postRaw('/admin/wholesale/receivables/$id/mark-paid', const {});
+
+  /// Record ONE collection (possibly partial) with method/reference/note.
+  Future<Result<Map<String, dynamic>, AppFailure>> adminRecordPayment(
+    String id, {
+    int? amountVnd,
+    String? method,
+    String? reference,
+    String? note,
+  }) =>
+      _postRaw('/admin/wholesale/receivables/$id/payments', {
+        if (amountVnd != null) 'amountVnd': amountVnd,
+        if (method != null) 'method': method,
+        if (reference != null && reference.isNotEmpty) 'reference': reference,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
 
   // ── plumbing ──
   Future<Result<List<T>, AppFailure>> _getList<T>(

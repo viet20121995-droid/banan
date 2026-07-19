@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEmail,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -15,6 +16,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -277,6 +279,43 @@ export class CreateWholesaleOrderDto {
   @IsString()
   @MaxLength(280)
   notes?: string;
+
+  /** Buyer's own PO code — snapshot onto the order for their reconciliation. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  poCode?: string;
+
+  /** Dedup key: a retried POST with the same key returns the first order. */
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(64)
+  clientRequestId?: string;
+}
+
+/** One confirmed collection against a receivable. */
+export class RecordWholesalePaymentDto {
+  /** Omit to settle the full remaining balance. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  amountVnd?: number;
+
+  @IsOptional()
+  @IsIn(['CASH', 'BANK_TRANSFER', 'CARD', 'OTHER'])
+  method?: 'CASH' | 'BANK_TRANSFER' | 'CARD' | 'OTHER';
+
+  /** Bank transaction reference for reconciliation. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  reference?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(280)
+  note?: string;
 }
 
 export class RejectWholesaleOrderDto {

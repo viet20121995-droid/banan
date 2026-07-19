@@ -22,6 +22,7 @@ import {
   CreateContractDto,
   CreateWholesaleAccountDto,
   CreateWholesaleOrderDto,
+  RecordWholesalePaymentDto,
   RejectWholesaleOrderDto,
   UpdateContractDto,
   UpdateContractLineDto,
@@ -120,6 +121,17 @@ export class AdminWholesaleController {
   @HttpCode(HttpStatus.OK)
   markPaid(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
     return this.wholesale.markReceivablePaid(id, user.sub);
+  }
+
+  /** Record ONE collection (possibly partial) with method/reference/note. */
+  @Post('receivables/:id/payments')
+  @HttpCode(HttpStatus.OK)
+  recordPayment(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id') id: string,
+    @Body() dto: RecordWholesalePaymentDto,
+  ) {
+    return this.wholesale.recordReceivablePayment(id, user.sub, dto);
   }
 }
 

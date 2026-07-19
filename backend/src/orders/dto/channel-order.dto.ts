@@ -7,10 +7,12 @@ import {
   IsDateString,
   IsEmail,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -118,4 +120,30 @@ export class InternalTransferDto {
   @MinLength(8)
   @MaxLength(64)
   clientRequestId?: string;
+}
+
+/** One received line: how many of an order item actually arrived. */
+export class ReceivedItemDto {
+  @IsUUID()
+  orderItemId!: string;
+
+  @IsInt()
+  @Min(0)
+  receivedQty!: number;
+}
+
+/** Destination branch signs for an internal transfer (→ COMPLETED). */
+export class ReceiveTransferDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(280)
+  note?: string;
+
+  /** Omit for a full receipt; include lines to report shortages/damage. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => ReceivedItemDto)
+  items?: ReceivedItemDto[];
 }

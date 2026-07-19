@@ -21,7 +21,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
-import { CounterOrderDto, InternalTransferDto } from './dto/channel-order.dto';
+import { CounterOrderDto, InternalTransferDto, ReceiveTransferDto } from './dto/channel-order.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { TransferToKitchenDto } from './dto/transfer-order.dto';
@@ -158,8 +158,20 @@ export class MerchantOrdersController {
   }
 
   @Post(':id/counter-paid')
+  @HttpCode(HttpStatus.OK)
   markCounterPaid(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
     return this.orders.markCounterPaid(id, user);
+  }
+
+  /** Destination branch signs for an internal transfer → COMPLETED. */
+  @Post(':id/receive-transfer')
+  @HttpCode(HttpStatus.OK)
+  receiveTransfer(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id') id: string,
+    @Body() dto: ReceiveTransferDto,
+  ) {
+    return this.orders.receiveInternalTransfer(id, user, dto);
   }
 
   /// VAT-invoice issuance — fills `invoiceIssuedAt` (now) and (optionally)

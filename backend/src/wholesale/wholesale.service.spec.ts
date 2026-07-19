@@ -83,6 +83,7 @@ type Overrides = {
   overdueCount?: number;
   openDebt?: number;
   products?: unknown[];
+  receivable?: unknown;
 };
 
 function makeService(over: Overrides = {}) {
@@ -102,7 +103,12 @@ function makeService(over: Overrides = {}) {
       count: jest.fn().mockResolvedValue(over.overdueCount ?? 0),
       aggregate: jest.fn().mockResolvedValue({ _sum: { amountVnd: decimal(over.openDebt ?? 0) } }),
       create: receivableCreate,
+      // recordReceivablePayment path (row-locked read → ledger → update).
+      findUnique: jest.fn().mockImplementation(() => Promise.resolve(over.receivable ?? null)),
+      update: jest.fn().mockResolvedValue({}),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'r1', status: 'PAID' }),
     },
+    wholesalePayment: { create: jest.fn().mockResolvedValue({ id: 'wp1' }) },
   };
   const prisma = {
     wholesaleAccount: {
@@ -130,7 +136,7 @@ function makeService(over: Overrides = {}) {
     confirmWholesaleOrder: jest.fn().mockResolvedValue({ id: 'o1', status: 'SENT_TO_KITCHEN' }),
   };
   const svc = new WholesaleService(prisma as never, orders as never);
-  return { svc, prisma, orders, orderCreate, receivableCreate };
+  return { svc, prisma, tx, orders, orderCreate, receivableCreate };
 }
 
 const dto = { contractId: 'wc1', items: [{ productId: 'p1', quantity: 5 }] };
@@ -243,21 +249,68 @@ describe('WholesaleService.rejectOrder', () => {
   });
 });
 
-describe('WholesaleService.markReceivablePaid', () => {
-  it('status-guarded: an already-paid receivable cannot be re-paid', async () => {
-    const { svc, prisma } = makeService();
-    prisma.wholesaleReceivable.updateMany = jest.fn().mockResolvedValue({ count: 0 });
+describe('WholesaleService.recordReceivablePayment (ledger)', () => {
+  const openReceivable = {
+    id: 'r1',
+    status: 'OPEN',
+    amountVnd: decimal(1_000_000),
+    paidAmountVnd: decimal(0),
+  };
+
+  it('an already-paid receivable cannot be re-paid', async () => {
+    const { svc } = makeService({
+      receivable: { ...openReceivable, status: 'PAID' },
+    });
     await expect(svc.markReceivablePaid('r1', 'adm')).rejects.toMatchObject({
       response: { code: 'RECEIVABLE_NOT_OPEN' },
     });
   });
 
-  it('stamps paidAt + the confirming admin', async () => {
-    const { svc, prisma } = makeService();
-    await svc.markReceivablePaid('r1', 'adm');
-    const args = (prisma.wholesaleReceivable.updateMany as jest.Mock).mock.calls[0][0];
-    expect(args.where.status.in).toEqual(['OPEN', 'PARTIAL', 'OVERDUE']);
-    expect(args.data.status).toBe('PAID');
-    expect(args.data.confirmedByAdminId).toBe('adm');
+  it('a PARTIAL collection is recorded in the ledger and leaves the rest open', async () => {
+    const { svc, tx } = makeService({ receivable: openReceivable });
+    await svc.recordReceivablePayment('r1', 'adm', {
+      amountVnd: 400_000,
+      method: 'BANK_TRANSFER',
+      reference: 'FT2607',
+    });
+    const ledger = (tx.wholesalePayment.create as jest.Mock).mock.calls[0][0].data;
+    expect(Number(ledger.amountVnd.toString())).toBe(400_000);
+    expect(ledger.method).toBe('BANK_TRANSFER');
+    expect(ledger.reference).toBe('FT2607');
+    expect(ledger.confirmedByAdminId).toBe('adm');
+    const upd = (tx.wholesaleReceivable.update as jest.Mock).mock.calls[0][0].data;
+    expect(upd.status).toBe('PARTIAL');
+    expect(upd.paidAt).toBeUndefined();
+  });
+
+  it('collecting the full remaining balance flips PAID with paidAt + admin', async () => {
+    const { svc, tx } = makeService({
+      receivable: { ...openReceivable, status: 'PARTIAL', paidAmountVnd: decimal(400_000) },
+    });
+    await svc.markReceivablePaid('r1', 'adm'); // no amount = remaining 600k
+    const ledger = (tx.wholesalePayment.create as jest.Mock).mock.calls[0][0].data;
+    expect(Number(ledger.amountVnd.toString())).toBe(600_000);
+    const upd = (tx.wholesaleReceivable.update as jest.Mock).mock.calls[0][0].data;
+    expect(upd.status).toBe('PAID');
+    expect(upd.paidAt).toBeInstanceOf(Date);
+    expect(upd.confirmedByAdminId).toBe('adm');
+  });
+
+  it('rejects a collection above the remaining balance', async () => {
+    const { svc } = makeService({ receivable: openReceivable });
+    await expect(
+      svc.recordReceivablePayment('r1', 'adm', { amountVnd: 1_200_000 }),
+    ).rejects.toMatchObject({ response: { code: 'PAYMENT_AMOUNT_INVALID' } });
+  });
+});
+
+describe('wholesale order idempotency', () => {
+  it('replays the SAME order for a duplicate clientRequestId (no second create)', async () => {
+    const existing = { id: 'first', code: 'BAN-W-0' };
+    const { svc, prisma, orderCreate } = makeService();
+    prisma.order.findUnique = jest.fn().mockResolvedValue(existing);
+    const res = await svc.createOrder('u1', { ...dto, clientRequestId: 'wh-12345678' });
+    expect(res).toBe(existing);
+    expect(orderCreate).not.toHaveBeenCalled();
   });
 });

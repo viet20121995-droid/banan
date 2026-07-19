@@ -609,6 +609,10 @@ model Order {
   destinationStoreId  String?
   destinationStore    Store?               @relation("OrderDestinationStore", fields: [destinationStoreId], references: [id])
   receivable          WholesaleReceivable?
+  /// WHOLESALE order-time snapshot { companyName, deliveryAddress, taxId,
+  /// billingEmail, contactName, contactPhone, poCode } — editing the account
+  /// later must not rewrite what old orders display.
+  wholesaleInfo       Json?
 
   // Money — all in minor units of order currency (default VND has none, so plain integer-ish decimals).
   currency          String         @default("VND")
@@ -771,15 +775,37 @@ model WholesaleReceivable {
   orderId            String                    @unique
   order              Order                     @relation(fields: [orderId], references: [id])
   amountVnd          Decimal                   @db.Decimal(12, 2)
+  /// Sum of confirmed payments (ledger below). PARTIAL while 0 < paid < amount.
+  paidAmountVnd      Decimal                   @default(0) @db.Decimal(12, 2)
   dueDate            DateTime?
   status             WholesaleReceivableStatus @default(PENDING)
   paidAt             DateTime?
   confirmedByAdminId String?
 
+  payments WholesalePayment[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([wholesaleAccountId, status])
+}
+
+/// One confirmed collection against a receivable — who took how much, when,
+/// how (CASH/BANK_TRANSFER/...), with the bank reference for reconciliation.
+model WholesalePayment {
+  id                 String              @id @default(uuid())
+  receivableId       String
+  receivable         WholesaleReceivable @relation(fields: [receivableId], references: [id])
+  amountVnd          Decimal             @db.Decimal(12, 2)
+  method             String              @default("BANK_TRANSFER")
+  reference          String?
+  note               String?
+  confirmedByAdminId String
+  paidAt             DateTime            @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([receivableId])
 }
 
 model OrderItem {
