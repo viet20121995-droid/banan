@@ -7,6 +7,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
 import {
+  CreateBomDto,
   CreateMoDto,
   CreateQualityPointDto,
   PlanMoDto,
@@ -51,6 +52,12 @@ export class ManufacturingController {
   @Get('boms/:id')
   getBom(@Param('id') id: string) {
     return this.mfg.getBom(id);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('boms')
+  createBom(@Body() dto: CreateBomDto) {
+    return this.mfg.createBom(dto);
   }
 
   @Roles(...KITCHEN_READ)

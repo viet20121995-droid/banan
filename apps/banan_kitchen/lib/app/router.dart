@@ -7,6 +7,8 @@ import '../features/account/change_password_screen.dart';
 import '../features/analytics/analytics_screen.dart';
 import '../features/kanban/kanban_screen.dart';
 import '../features/notifications/notifications_screen.dart';
+import '../features/production/bom_editor_screen.dart';
+import '../features/production/bom_list_screen.dart';
 import '../features/production/mo_detail_screen.dart';
 import '../features/production/mo_list_screen.dart';
 import '../features/production/production_dashboard_screen.dart';
@@ -96,6 +98,18 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/production/alerts',
         builder: (_, __) => const QualityAlertsScreen(),
+      ),
+      GoRoute(
+        path: '/production/boms',
+        builder: (_, __) => const BomListScreen(),
+      ),
+      GoRoute(
+        path: '/production/boms/new',
+        builder: (_, __) => const BomEditorScreen(),
+      ),
+      GoRoute(
+        path: '/production/boms/:id/edit',
+        builder: (_, state) => BomEditorScreen(bomId: state.pathParameters['id']),
       ),
       GoRoute(
         path: '/notifications',

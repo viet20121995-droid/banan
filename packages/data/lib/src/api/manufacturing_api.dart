@@ -17,6 +17,7 @@ class MfgProduct {
     required this.code,
     required this.nameVi,
     required this.type,
+    required this.uomId,
     required this.uomCode,
     required this.avgCost,
   });
@@ -26,6 +27,8 @@ class MfgProduct {
         code: j['code'] as String,
         nameVi: j['nameVi'] as String,
         type: j['type'] as String,
+        uomId: (j['uom'] as Map?)?['id'] as String? ??
+            (j['uomId'] as String? ?? ''),
         uomCode: (j['uom'] as Map?)?['code'] as String? ?? '',
         avgCost: _num(j['avgCost']),
       );
@@ -34,8 +37,120 @@ class MfgProduct {
   final String code;
   final String nameVi;
   final String type; // RAW | SEMI | FINISHED | PACKAGING
+  final String uomId;
   final String uomCode;
   final double avgCost;
+}
+
+class MfgWorkCenter {
+  const MfgWorkCenter(
+      {required this.id, required this.code, required this.nameVi});
+
+  factory MfgWorkCenter.fromJson(Map<String, dynamic> j) => MfgWorkCenter(
+        id: j['id'] as String,
+        code: j['code'] as String? ?? '',
+        nameVi: j['nameVi'] as String? ?? '',
+      );
+
+  final String id;
+  final String code;
+  final String nameVi;
+}
+
+class MfgBomLineDetail {
+  const MfgBomLineDetail({
+    required this.componentId,
+    required this.componentNameVi,
+    required this.qty,
+    required this.uomId,
+    required this.uomCode,
+    required this.ratioPercent,
+  });
+
+  factory MfgBomLineDetail.fromJson(Map<String, dynamic> j) => MfgBomLineDetail(
+        componentId: j['componentId'] as String,
+        componentNameVi: (j['component'] as Map?)?['nameVi'] as String? ?? '',
+        qty: _num(j['qty']),
+        uomId:
+            j['uomId'] as String? ?? (j['uom'] as Map?)?['id'] as String? ?? '',
+        uomCode: (j['uom'] as Map?)?['code'] as String? ?? '',
+        ratioPercent: _num(j['ratioPercent']),
+      );
+
+  final String componentId;
+  final String componentNameVi;
+  final double qty;
+  final String uomId;
+  final String uomCode;
+  final double ratioPercent;
+}
+
+class MfgBomOperationDetail {
+  const MfgBomOperationDetail({
+    required this.sequence,
+    required this.nameVi,
+    required this.workCenterId,
+    required this.workCenterName,
+    required this.durationMinutes,
+  });
+
+  factory MfgBomOperationDetail.fromJson(Map<String, dynamic> j) =>
+      MfgBomOperationDetail(
+        sequence: (j['sequence'] as num?)?.toInt() ?? 0,
+        nameVi: j['nameVi'] as String? ?? '',
+        workCenterId: j['workCenterId'] as String? ?? '',
+        workCenterName: (j['workCenter'] as Map?)?['nameVi'] as String? ?? '',
+        durationMinutes: (j['durationMinutes'] as num?)?.toInt() ?? 0,
+      );
+
+  final int sequence;
+  final String nameVi;
+  final String workCenterId;
+  final String workCenterName;
+  final int durationMinutes;
+}
+
+class MfgBomDetail {
+  const MfgBomDetail({
+    required this.id,
+    required this.productId,
+    required this.productNameVi,
+    required this.outputQty,
+    required this.uomId,
+    required this.uomCode,
+    required this.lines,
+    required this.operations,
+  });
+
+  factory MfgBomDetail.fromJson(Map<String, dynamic> j) {
+    final product = j['product'] as Map<String, dynamic>? ?? const {};
+    return MfgBomDetail(
+      id: j['id'] as String,
+      productId: j['productId'] as String,
+      productNameVi: product['nameVi'] as String? ?? '',
+      outputQty: _num(j['outputQty']),
+      uomId:
+          j['uomId'] as String? ?? (j['uom'] as Map?)?['id'] as String? ?? '',
+      uomCode: (j['uom'] as Map?)?['code'] as String? ?? '',
+      lines: ((j['lines'] as List?) ?? const [])
+          .map((e) =>
+              MfgBomLineDetail.fromJson((e as Map).cast<String, dynamic>()))
+          .toList(),
+      operations: ((j['operations'] as List?) ?? const [])
+          .map((e) => MfgBomOperationDetail.fromJson(
+              (e as Map).cast<String, dynamic>()))
+          .toList(),
+    );
+  }
+
+  final String id;
+  final String productId;
+  final String productNameVi;
+  final double outputQty;
+  final String uomId;
+  final String uomCode;
+  final List<MfgBomLineDetail> lines;
+  final List<MfgBomOperationDetail> operations;
 }
 
 class MfgBomSummary {
@@ -713,13 +828,56 @@ class ManufacturingApi {
         parse: (res) => _list(res, MfgBomSummary.fromJson),
       );
 
-  /// Master-data product list (for scrap/receipt pickers). [type] filters by
+  /// Master-data product list (for scrap/receipt/BoM pickers). [type] filters by
   /// RAW/SEMI/FINISHED/PACKAGING.
   Future<Result<List<MfgProduct>, AppFailure>> listProducts({String? type}) =>
       _get(
         '$_base/products',
         query: {if (type != null) 'type': type},
         parse: (res) => _list(res, MfgProduct.fromJson),
+      );
+
+  Future<Result<List<MfgWorkCenter>, AppFailure>> listWorkCenters() => _get(
+        '$_base/work-centers',
+        parse: (res) => _list(res, MfgWorkCenter.fromJson),
+      );
+
+  /// Full BoM (lines + operations) for the recipe editor.
+  Future<Result<MfgBomDetail, AppFailure>> getBom(String id) => _get(
+        '$_base/boms/$id',
+        parse: (res) => MfgBomDetail.fromJson(
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  /// Save a recipe as a new active version (editing posts here too).
+  Future<Result<void, AppFailure>> createBom({
+    required String productId,
+    required double outputQty,
+    required String uomId,
+    required List<({String componentId, double qty, String uomId})> lines,
+    required List<({String nameVi, String workCenterId, int durationMinutes})>
+        operations,
+  }) =>
+      _postVoid(
+        '$_base/boms',
+        body: {
+          'productId': productId,
+          'outputQty': outputQty,
+          'uomId': uomId,
+          'lines': [
+            for (final l in lines)
+              {'componentId': l.componentId, 'qty': l.qty, 'uomId': l.uomId},
+          ],
+          'operations': [
+            for (final o in operations)
+              {
+                'nameVi': o.nameVi,
+                'workCenterId': o.workCenterId,
+                'durationMinutes': o.durationMinutes,
+              },
+          ],
+        },
       );
 
   Future<Result<MfgCost, AppFailure>> bomCost(String bomId) => _get(

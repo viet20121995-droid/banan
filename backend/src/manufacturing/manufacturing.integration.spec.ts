@@ -632,4 +632,33 @@ d('Manufacturing golden path (integration)', () => {
       true,
     );
   });
+
+  // ── increment 7: BoM authoring ──
+  it('createBom saves a new active version, derives ratio %, and retires the old one', async () => {
+    const before = await bomOf(ids.sponge);
+    const wc = await prisma.mfgWorkCenter.findFirstOrThrow();
+    const created = await mfg.createBom({
+      productId: ids.sponge,
+      outputQty: 1000,
+      uomId: gUom,
+      lines: [
+        { componentId: ids.flour, qty: 600, uomId: gUom },
+        { componentId: ids.sugar, qty: 400, uomId: gUom },
+      ],
+      operations: [{ nameVi: 'Trộn', nameEn: 'Mix', workCenterId: wc.id, durationMinutes: 15 }],
+    });
+
+    expect(created.active).toBe(true);
+    expect(created.version).toBeGreaterThan(before.version);
+    expect(created.lines).toHaveLength(2);
+    // Ratio vs total base weight: flour 600/1000 = 60%.
+    const flourLine = created.lines.find((l) => l.componentId === ids.flour)!;
+    expect(Number(flourLine.ratioPercent)).toBe(60);
+
+    // The old version is retired; bomOf now resolves the new one.
+    const nowActive = await bomOf(ids.sponge);
+    expect(nowActive.id).toBe(created.id);
+    const old = await prisma.mfgBom.findUniqueOrThrow({ where: { id: before.id } });
+    expect(old.active).toBe(false);
+  });
 });

@@ -110,6 +110,12 @@ class ProductionDashboardScreen extends ConsumerWidget {
             ),
             const SizedBox(height: BananSpacing.sm),
             OutlinedButton.icon(
+              onPressed: () => context.push('/production/boms'),
+              icon: const Icon(Icons.menu_book_outlined),
+              label: const Text('Công thức (BoM)'),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            OutlinedButton.icon(
               onPressed: () => context.push('/production/reports'),
               icon: const Icon(Icons.bar_chart_outlined),
               label: const Text('Báo cáo (sản xuất/giá thành/hao hụt)'),

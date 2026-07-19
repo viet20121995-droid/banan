@@ -8,6 +8,7 @@ import { Prisma, Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
+import type { BomLineInput, BomOperationInput } from './dto/manufacturing.dto';
 import {
   avcoAfterReceipt,
   expiryDate,
@@ -979,6 +980,125 @@ export class ManufacturingService {
     return this.prisma.mfgWorkCenter.findMany({
       where: { active: true },
       orderBy: { code: 'asc' },
+    });
+  }
+
+  // ── BoM authoring (create/edit recipes) ───────────────────────────────────
+
+  /**
+   * Validate editor input and shape the nested line/operation rows. Ratio % is
+   * derived vs the total base weight of weight-tracked lines — display only, cost
+   * and production use each line's qty directly. ponytail: no per-line flour-basis
+   * flag is persisted, so the basis is the total; fine for the baker's-% hint.
+   */
+  private async buildBomData(input: { lines: BomLineInput[]; operations?: BomOperationInput[] }) {
+    if (!input.lines || input.lines.length === 0) {
+      throw new BadRequestException({
+        code: 'MFG_BOM_NO_LINES',
+        message: 'Công thức phải có ít nhất một nguyên liệu.',
+      });
+    }
+    const componentIds = [...new Set(input.lines.map((l) => l.componentId))];
+    const uomIds = [...new Set(input.lines.map((l) => l.uomId))];
+    const wcIds = [...new Set((input.operations ?? []).map((o) => o.workCenterId))];
+
+    const [components, uoms, wcs] = await Promise.all([
+      this.prisma.mfgProduct.findMany({
+        where: { id: { in: componentIds } },
+        select: { id: true },
+      }),
+      this.prisma.mfgUom.findMany({ where: { id: { in: uomIds } } }),
+      this.prisma.mfgWorkCenter.findMany({ where: { id: { in: wcIds } }, select: { id: true } }),
+    ]);
+    const componentSet = new Set(components.map((c) => c.id));
+    const uomMap = new Map(uoms.map((u) => [u.id, u]));
+    const wcSet = new Set(wcs.map((w) => w.id));
+
+    const lineBase: number[] = [];
+    let totalBase = 0;
+    for (const l of input.lines) {
+      if (!componentSet.has(l.componentId)) {
+        throw new BadRequestException({
+          code: 'MFG_COMPONENT_NOT_FOUND',
+          message: 'Nguyên liệu trong công thức không tồn tại.',
+        });
+      }
+      const uom = uomMap.get(l.uomId);
+      if (!uom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
+      if (!(l.qty > 0)) throw new BadRequestException({ code: 'MFG_QTY_INVALID' });
+      const base = toBase(l.qty, uomLike(uom));
+      lineBase.push(base);
+      if (uom.category === 'weight') totalBase += base; // baker's % is a weight ratio
+    }
+
+    const lines = input.lines.map((l, i) => ({
+      componentId: l.componentId,
+      qty: round3(l.qty),
+      uomId: l.uomId,
+      ratioPercent: totalBase > 0 ? Math.round((lineBase[i] / totalBase) * 100 * 10000) / 10000 : 0,
+    }));
+
+    const operations = (input.operations ?? []).map((o, i) => {
+      if (!wcSet.has(o.workCenterId)) {
+        throw new BadRequestException({
+          code: 'MFG_WORKCENTER_NOT_FOUND',
+          message: 'Công đoạn dùng tổ máy không tồn tại.',
+        });
+      }
+      return {
+        sequence: i + 1,
+        nameVi: o.nameVi,
+        nameEn: o.nameEn && o.nameEn.length > 0 ? o.nameEn : o.nameVi,
+        workCenterId: o.workCenterId,
+        durationMinutes: Math.max(0, Math.round(o.durationMinutes ?? 0)),
+      };
+    });
+
+    return { lines, operations };
+  }
+
+  /**
+   * Create a recipe as a NEW active version and retire the product's previous
+   * active BoM, so `bomOf` resolves the latest. Editing in the app posts here too
+   * (versioning) rather than mutating in place — that keeps historical MOs and
+   * their work orders pointing at the operations they were built from.
+   */
+  async createBom(dto: {
+    productId: string;
+    outputQty: number;
+    uomId: string;
+    lines: BomLineInput[];
+    operations?: BomOperationInput[];
+  }) {
+    const product = await this.prisma.mfgProduct.findUnique({ where: { id: dto.productId } });
+    if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
+    const uom = await this.prisma.mfgUom.findUnique({ where: { id: dto.uomId } });
+    if (!uom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
+
+    const { lines, operations } = await this.buildBomData(dto);
+    const prev = await this.prisma.mfgBom.aggregate({
+      where: { productId: dto.productId },
+      _max: { version: true },
+    });
+    const version = (prev._max.version ?? 0) + 1;
+
+    return this.prisma.$transaction(async (db) => {
+      await db.mfgBom.updateMany({
+        where: { productId: dto.productId, active: true },
+        data: { active: false },
+      });
+      return db.mfgBom.create({
+        data: {
+          productId: dto.productId,
+          outputQty: round3(dto.outputQty),
+          uomId: dto.uomId,
+          version,
+          active: true,
+          lines: { create: lines },
+          operations: { create: operations },
+        },
+        include: { lines: true, operations: true },
+      });
     });
   }
 

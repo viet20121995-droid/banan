@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsDateString,
   IsIn,
   IsNumber,
@@ -8,6 +9,43 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+
+/**
+ * A BoM line / operation as posted by the editor. Contents are validated in the
+ * service (component/work-center existence, qty > 0) — matching the module's
+ * "validate deeply in the service" style rather than nested class-validator.
+ */
+export interface BomLineInput {
+  componentId: string;
+  qty: number;
+  uomId: string;
+}
+
+export interface BomOperationInput {
+  nameVi: string;
+  nameEn?: string;
+  workCenterId: string;
+  durationMinutes: number;
+}
+
+export class CreateBomDto {
+  @IsUUID()
+  productId!: string;
+
+  @IsNumber()
+  @Min(0.001)
+  outputQty!: number;
+
+  @IsUUID()
+  uomId!: string;
+
+  @IsArray()
+  lines!: BomLineInput[];
+
+  @IsOptional()
+  @IsArray()
+  operations?: BomOperationInput[];
+}
 
 export class CreateMoDto {
   @IsUUID()

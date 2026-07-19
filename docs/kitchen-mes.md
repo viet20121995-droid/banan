@@ -283,11 +283,32 @@ the production dashboard) reusing the shared `NotificationsRepository` + realtim
 feed; a QC-alert tap deep-links to its MO. Integration 25/25 (sweep notifies once
 then stamps; digest fires on an overdue MO); kitchen web build OK.
 
+## Increment 7 — The missing workflow UI ✅
+
+The forms the app was missing, so the whole flow is doable in-app:
+
+- **Ghi hao hụt** (`/production/scrap`) and **Nhập kho NVL** (`/production/receipt`)
+  wire to the existing scrap/receive endpoints. Both post a quantity in the
+  product's **own base unit** — `ScrapDto`/`ReceiveDto` `uomId` is now optional and
+  defaults to the product's base UoM server-side, so there's no UoM picker (and
+  the base-vs-input-UoM class of bug can't arise on this path).
+- **Cảnh báo QC** (`/production/alerts`) lists quality alerts and advances them
+  NEW → CONFIRMED → SOLVED (manager only), open ones first.
+- **Công thức (BoM)** — a recipe list (`/production/boms`) + editor
+  (`/production/boms/new`, `/production/boms/:id/edit`). The editor adds/removes
+  ingredient lines (component + qty) and operations (name + work centre + minutes).
+  **Saving always creates a new active version** (`POST boms`) and retires the
+  product's previous BoM — editing never mutates in place, so historical MOs and
+  their work orders keep pointing at the operations they were built from. Ratio %
+  is derived server-side vs the total base weight (display-only; cost/production
+  use each line's qty). New API: `POST boms`, plus Dart `getBom`/`listProducts`/
+  `listWorkCenters`/`createBom`.
+
+Integration 26/26 (createBom saves a new version, derives 60% flour ratio, retires
+the old); flutter analyze clean on new files; kitchen web build OK.
+
 ## Roadmap (next increments)
 
-7. **OEE + maintenance** — equipment effectiveness + maintenance schedules/orders.
-8. **Hard reservations** (if needed) — a per-MO allocation ledger so
+8. **OEE + maintenance** — equipment effectiveness + maintenance schedules/orders.
+9. **Hard reservations** (if needed) — a per-MO allocation ledger so
    cancel/produce only touch their own hold (today reservations are advisory).
-
-Also deferred UI: BoM editor (create/edit recipes — today recipes come from the
-seed or the API), scrap form, receipt form, quality-alerts screen.

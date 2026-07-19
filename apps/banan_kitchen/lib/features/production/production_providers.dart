@@ -136,3 +136,15 @@ final alertsProvider = FutureProvider.autoDispose
     await ref.watch(manufacturingApiProvider).listAlerts(stage: stage),
   );
 });
+
+// ── BoM editor (increment 7) ──
+final workCentersProvider =
+    FutureProvider.autoDispose<List<MfgWorkCenter>>((ref) async {
+  return _orThrow(await ref.watch(manufacturingApiProvider).listWorkCenters());
+});
+
+/// Full BoM for editing an existing recipe.
+final bomDetailProvider =
+    FutureProvider.autoDispose.family<MfgBomDetail, String>((ref, id) async {
+  return _orThrow(await ref.watch(manufacturingApiProvider).getBom(id));
+});
