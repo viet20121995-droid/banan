@@ -26,8 +26,17 @@ const mfgTypeLabels = {
 
 class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   String? _type; // null = all
-  String _search = '';
+  // Controller, not a plain String: an error/retry cycle rebuilds the
+  // TextField, and a controller-less field would come back empty while the
+  // stale query kept filtering the list invisibly.
+  final _searchCtl = TextEditingController();
   bool _showArchived = false;
+
+  @override
+  void dispose() {
+    _searchCtl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +64,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
             ),
           ),
           data: (rows) {
-            final q = _search.trim().toLowerCase();
+            final q = _searchCtl.text.trim().toLowerCase();
             final filtered = rows.where((p) {
               if (!_showArchived && !p.active) return false;
               if (_type != null && p.type != _type) return false;
@@ -72,12 +81,13 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
               padding: const EdgeInsets.all(BananSpacing.md),
               children: [
                 TextField(
+                  controller: _searchCtl,
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search),
                     hintText: 'Tìm theo tên hoặc mã…',
                     isDense: true,
                   ),
-                  onChanged: (v) => setState(() => _search = v),
+                  onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: BananSpacing.sm),
                 Wrap(

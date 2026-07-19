@@ -413,6 +413,37 @@ Integration 36/36 (+ product CRUD/archive/duplicate-code, base-UoM lock).
 TODO (deliberate, small): category/uom CRUD stays seed-only — the bakery's set
 is stable; add endpoints when a real need appears.
 
+Review-round fixes on top (13 confirmed by the adversarial pass, 2 refuted):
+- **Base-UoM lock widened**: any reference locks the unit — stock moves, BoM
+  lines, BoMs, MO components/outputs — not just moves. (The hole: a FINISHED
+  product has no moves until first produce, so `g→kg` between BoM authoring and
+  produce would book 1000× the stock at 1/1000 the cost.) The whole
+  check-then-update now runs in one transaction with the product row locked
+  (`SELECT … FOR UPDATE`), closing the TOCTOU against a concurrent first
+  receive.
+- **Expiry coherence**: `useExpiration` requires `tracking=LOT` and
+  `expirationDays ≥ 1`, enforced on create AND on the post-merge values of a
+  partial update (and mirrored client-side). Before, HSD-on with 0 days
+  silently created every lot with a null expiry — invisible to the expiring
+  report, consumed LAST by FEFO.
+- **Archive is now real**: an archived product's BoM leaves the batch picker
+  (`listBoms` filters `product.active`), and `createMO`/`receive` refuse
+  archived products (`MFG_PRODUCT_ARCHIVED`). Scrap stays allowed (clearing
+  leftover stock is the point of archiving).
+- **Empty/whitespace code & name refused** (trimmed server-side; the falsy
+  `dto.code &&` dup-check bypass is gone).
+- **`expiringLots` only reports lots with stock on hand** — fully consumed
+  lots no longer pile up on the dashboard forever.
+- **Flutter**: edit form gates on load/error/not-found (a deep-linked blank
+  form could save create-defaults over the real product); standard-cost field
+  is digits-only (`15.000` no longer parses as 15 đ); HSD ≥ 1 validated;
+  `pop()` falls back to `go()` on a deep-linked one-entry stack; the search box
+  keeps its text across error/retry; QC-alert and expiring KPIs render `—`
+  while loading/failed instead of a reassuring green 0.
+
+Integration 40/40 after the fixes (+ ref-lock, expiry rules, archive gating,
+expiring-lots filter).
+
 ## Roadmap
 
 The MES roadmap through increment 10 is complete. Remaining ideas are demand-driven

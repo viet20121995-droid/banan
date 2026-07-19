@@ -184,6 +184,12 @@ export class ManufacturingService {
       include: { uom: true },
     });
     if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
+    if (!product.active) {
+      throw new BadRequestException({
+        code: 'MFG_PRODUCT_ARCHIVED',
+        message: 'Sản phẩm đã lưu trữ — bật lại trước khi nhập kho.',
+      });
+    }
     if (dto.qty <= 0) {
       throw new BadRequestException({ code: 'MFG_QTY_INVALID' });
     }
@@ -328,6 +334,15 @@ export class ManufacturingService {
       include: { lines: true, product: true },
     });
     if (!bom) throw new NotFoundException({ code: 'MFG_BOM_NOT_FOUND' });
+    // Archived output product: its BoM is hidden from the picker, but a stale
+    // client (or raw API call) could still post the id — refuse, don't book
+    // stock into a product no default list shows.
+    if (!bom.product.active) {
+      throw new BadRequestException({
+        code: 'MFG_PRODUCT_ARCHIVED',
+        message: 'Sản phẩm đã lưu trữ — bật lại trước khi tạo lệnh.',
+      });
+    }
     if (dto.qtyToProduce <= 0) {
       throw new BadRequestException({ code: 'MFG_QTY_INVALID' });
     }
@@ -967,7 +982,13 @@ export class ManufacturingService {
 
   expiringLots(beforeIso: string) {
     return this.prisma.mfgLot.findMany({
-      where: { expiryDate: { not: null, lte: new Date(beforeIso) } },
+      // Only lots with stock still on hand: a fully consumed/scrapped lot is
+      // history, not a warning — without this filter every expired lot ever
+      // made stays on the dashboard forever and the count never returns to 0.
+      where: {
+        expiryDate: { not: null, lte: new Date(beforeIso) },
+        quants: { some: { quantity: { gt: 0 } } },
+      },
       include: { product: true },
       orderBy: { expiryDate: 'asc' },
     });
@@ -1015,7 +1036,7 @@ export class ManufacturingService {
 
   // ── product authoring (create/edit/archive master data) ───────────────────
 
-  private async assertProductRefs(db: PrismaService, categoryId?: string, uomId?: string) {
+  private async assertProductRefs(db: Tx | PrismaService, categoryId?: string, uomId?: string) {
     if (categoryId) {
       const cat = await db.mfgCategory.findUnique({ where: { id: categoryId } });
       if (!cat) throw new BadRequestException({ code: 'MFG_CATEGORY_NOT_FOUND' });
@@ -1024,6 +1045,38 @@ export class ManufacturingService {
       const uom = await db.mfgUom.findUnique({ where: { id: uomId } });
       if (!uom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
     }
+  }
+
+  /**
+   * tracking/useExpiration/expirationDays must be coherent as a WHOLE (post-merge
+   * values): expiry only makes sense on lot-tracked products, and useExpiration
+   * with 0 days would silently create every lot with a null expiry — the report
+   * never warns and FEFO consumes those lots LAST, the opposite of the intent.
+   */
+  private assertExpiryCoherent(p: {
+    tracking: string;
+    useExpiration: boolean;
+    expirationDays: number;
+  }) {
+    if (p.tracking !== 'LOT' && p.useExpiration) {
+      throw new BadRequestException({
+        code: 'MFG_EXPIRY_NEEDS_LOT',
+        message: 'HSD chỉ dùng được khi sản phẩm theo dõi theo lô.',
+      });
+    }
+    if (p.useExpiration && p.expirationDays < 1) {
+      throw new BadRequestException({
+        code: 'MFG_EXPIRY_DAYS_INVALID',
+        message: 'Bật HSD thì số ngày sử dụng phải ≥ 1.',
+      });
+    }
+  }
+
+  /** Trimmed, non-empty string or a 400 — whitespace SKUs break lot names/search. */
+  private cleanRequired(value: string, code: string) {
+    const v = value.trim();
+    if (!v) throw new BadRequestException({ code });
+    return v;
   }
 
   async createProduct(dto: {
@@ -1038,25 +1091,31 @@ export class ManufacturingService {
     expirationDays?: number;
     standardCost?: number;
   }) {
+    const code = this.cleanRequired(dto.code, 'MFG_PRODUCT_CODE_EMPTY');
+    const nameVi = this.cleanRequired(dto.nameVi, 'MFG_PRODUCT_NAME_EMPTY');
+    const tracking = dto.tracking ?? 'NONE';
+    const useExpiration = dto.useExpiration ?? false;
+    const expirationDays = dto.expirationDays ?? 0;
+    this.assertExpiryCoherent({ tracking, useExpiration, expirationDays });
     await this.assertProductRefs(this.prisma, dto.categoryId, dto.uomId);
-    const taken = await this.prisma.mfgProduct.findUnique({ where: { code: dto.code } });
+    const taken = await this.prisma.mfgProduct.findUnique({ where: { code } });
     if (taken) {
       throw new ConflictException({
         code: 'MFG_PRODUCT_CODE_TAKEN',
-        message: `Mã "${dto.code}" đã tồn tại.`,
+        message: `Mã "${code}" đã tồn tại.`,
       });
     }
     return this.prisma.mfgProduct.create({
       data: {
-        code: dto.code,
-        nameVi: dto.nameVi,
-        nameEn: dto.nameEn ?? dto.nameVi,
+        code,
+        nameVi,
+        nameEn: dto.nameEn?.trim() || nameVi,
         categoryId: dto.categoryId,
         uomId: dto.uomId,
         type: dto.type,
-        tracking: dto.tracking ?? 'NONE',
-        useExpiration: dto.useExpiration ?? false,
-        expirationDays: dto.expirationDays ?? 0,
+        tracking,
+        useExpiration,
+        expirationDays,
         standardCost: roundCost(dto.standardCost ?? 0),
       },
       include: { category: true, uom: true },
@@ -1079,51 +1138,85 @@ export class ManufacturingService {
       active?: boolean;
     },
   ) {
-    const product = await this.prisma.mfgProduct.findUnique({ where: { id } });
-    if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
-    await this.assertProductRefs(this.prisma, dto.categoryId, dto.uomId);
-    if (dto.code && dto.code !== product.code) {
-      const taken = await this.prisma.mfgProduct.findUnique({ where: { code: dto.code } });
-      if (taken) {
-        throw new ConflictException({
-          code: 'MFG_PRODUCT_CODE_TAKEN',
-          message: `Mã "${dto.code}" đã tồn tại.`,
-        });
+    const code =
+      dto.code !== undefined ? this.cleanRequired(dto.code, 'MFG_PRODUCT_CODE_EMPTY') : undefined;
+    const nameVi =
+      dto.nameVi !== undefined
+        ? this.cleanRequired(dto.nameVi, 'MFG_PRODUCT_NAME_EMPTY')
+        : undefined;
+
+    // The whole check-then-update runs in one transaction with the product row
+    // locked: receive()/produce() update the product row (AVCO) inside their own
+    // transactions, so the lock serializes this edit against a concurrent first
+    // stock move — the UoM-lock check below can't be raced stale (TOCTOU).
+    return this.prisma.$transaction(async (db) => {
+      await db.$executeRaw`SELECT 1 FROM "MfgProduct" WHERE "id" = ${id} FOR UPDATE`;
+      const product = await db.mfgProduct.findUnique({ where: { id } });
+      if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
+
+      // Coherence is judged on the POST-merge values, so a partial update can't
+      // sneak an incoherent combination past the create-time rule.
+      this.assertExpiryCoherent({
+        tracking: dto.tracking ?? product.tracking,
+        useExpiration: dto.useExpiration ?? product.useExpiration,
+        expirationDays: dto.expirationDays ?? product.expirationDays,
+      });
+      await this.assertProductRefs(db, dto.categoryId, dto.uomId);
+      if (code !== undefined && code !== product.code) {
+        const taken = await db.mfgProduct.findUnique({ where: { code } });
+        if (taken) {
+          throw new ConflictException({
+            code: 'MFG_PRODUCT_CODE_TAKEN',
+            message: `Mã "${code}" đã tồn tại.`,
+          });
+        }
       }
-    }
-    // Changing the base UoM after stock has moved would silently reinterpret
-    // every existing quant/move/BoM qty in the new unit — refuse it.
-    if (dto.uomId && dto.uomId !== product.uomId) {
-      const moved = await this.prisma.mfgStockMove.count({ where: { productId: id } });
-      if (moved > 0) {
-        throw new ConflictException({
-          code: 'MFG_PRODUCT_UOM_LOCKED',
-          message: 'Sản phẩm đã có giao dịch kho — không đổi được đơn vị gốc.',
-        });
+      // Changing the base UoM would silently reinterpret every qty already
+      // denominated in it. Stock moves are the obvious case, but BoM lines, BoMs
+      // and MO components also freeze quantities against this unit (produce()
+      // converts the output with the product's CURRENT uom), so any reference
+      // locks it. A freshly created, unwired product stays editable.
+      if (dto.uomId && dto.uomId !== product.uomId) {
+        const [moves, bomLines, boms, moComponents, moOutputs] = await Promise.all([
+          db.mfgStockMove.count({ where: { productId: id } }),
+          db.mfgBomLine.count({ where: { componentId: id } }),
+          db.mfgBom.count({ where: { productId: id } }),
+          db.mfgOrderComponent.count({ where: { productId: id } }),
+          db.mfgOrder.count({ where: { productId: id } }),
+        ]);
+        if (moves + bomLines + boms + moComponents + moOutputs > 0) {
+          throw new ConflictException({
+            code: 'MFG_PRODUCT_UOM_LOCKED',
+            message:
+              'Sản phẩm đã có giao dịch kho, công thức hoặc lệnh sản xuất — không đổi được đơn vị gốc.',
+          });
+        }
       }
-    }
-    return this.prisma.mfgProduct.update({
-      where: { id },
-      data: {
-        ...(dto.code !== undefined ? { code: dto.code } : {}),
-        ...(dto.nameVi !== undefined ? { nameVi: dto.nameVi } : {}),
-        ...(dto.nameEn !== undefined ? { nameEn: dto.nameEn } : {}),
-        ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
-        ...(dto.uomId !== undefined ? { uomId: dto.uomId } : {}),
-        ...(dto.type !== undefined ? { type: dto.type } : {}),
-        ...(dto.tracking !== undefined ? { tracking: dto.tracking } : {}),
-        ...(dto.useExpiration !== undefined ? { useExpiration: dto.useExpiration } : {}),
-        ...(dto.expirationDays !== undefined ? { expirationDays: dto.expirationDays } : {}),
-        ...(dto.standardCost !== undefined ? { standardCost: roundCost(dto.standardCost) } : {}),
-        ...(dto.active !== undefined ? { active: dto.active } : {}),
-      },
-      include: { category: true, uom: true },
+      return db.mfgProduct.update({
+        where: { id },
+        data: {
+          ...(code !== undefined ? { code } : {}),
+          ...(nameVi !== undefined ? { nameVi } : {}),
+          ...(dto.nameEn !== undefined ? { nameEn: dto.nameEn } : {}),
+          ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
+          ...(dto.uomId !== undefined ? { uomId: dto.uomId } : {}),
+          ...(dto.type !== undefined ? { type: dto.type } : {}),
+          ...(dto.tracking !== undefined ? { tracking: dto.tracking } : {}),
+          ...(dto.useExpiration !== undefined ? { useExpiration: dto.useExpiration } : {}),
+          ...(dto.expirationDays !== undefined ? { expirationDays: dto.expirationDays } : {}),
+          ...(dto.standardCost !== undefined ? { standardCost: roundCost(dto.standardCost) } : {}),
+          ...(dto.active !== undefined ? { active: dto.active } : {}),
+        },
+        include: { category: true, uom: true },
+      });
     });
   }
 
   listBoms() {
     return this.prisma.mfgBom.findMany({
-      where: { active: true },
+      // An archived product's recipe must leave the "make a batch" picker too,
+      // or staff can keep producing a product no other list shows.
+      where: { active: true, product: { active: true } },
       include: {
         product: { include: { uom: true } },
         uom: true,

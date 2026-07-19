@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -51,10 +52,12 @@ export class CreateBomDto {
 
 export class CreateProductDto {
   @IsString()
+  @IsNotEmpty()
   @MaxLength(40)
   code!: string;
 
   @IsString()
+  @IsNotEmpty()
   @MaxLength(160)
   nameVi!: string;
 

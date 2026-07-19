@@ -1063,4 +1063,170 @@ d('Manufacturing golden path (integration)', () => {
       status: 409,
     });
   });
+
+  it('product base UoM locks on BoM references too, not just stock moves', async () => {
+    const cat = await prisma.mfgCategory.findFirstOrThrow();
+    const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+    const unit = await prisma.mfgUom.findFirstOrThrow({ where: { category: 'unit' } });
+
+    // Fresh output product + fresh line component: ZERO stock moves, only a BoM
+    // wires them. Both must refuse a base-UoM change (produce() converts the
+    // output with the product's CURRENT uom; line qty is denominated in the
+    // component's unit) — this was the g→kg AVCO-corruption hole.
+    const out = await mfg.createProduct({
+      code: 'TEST-PM-UOMREF-OUT',
+      nameVi: 'Ref output',
+      categoryId: cat.id,
+      uomId: gram.id,
+      type: 'FINISHED',
+    });
+    const comp = await mfg.createProduct({
+      code: 'TEST-PM-UOMREF-COMP',
+      nameVi: 'Ref component',
+      categoryId: cat.id,
+      uomId: gram.id,
+      type: 'RAW',
+    });
+    await prisma.mfgBom.create({
+      data: {
+        productId: out.id,
+        outputQty: 1000,
+        uomId: gram.id,
+        version: 1,
+        active: true,
+        lines: { create: [{ componentId: comp.id, qty: 500, uomId: gram.id }] },
+      },
+    });
+
+    await expect(mfg.updateProduct(out.id, { uomId: unit.id })).rejects.toMatchObject({
+      status: 409,
+    });
+    await expect(mfg.updateProduct(comp.id, { uomId: unit.id })).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  it('product expiry rules: LOT required for HSD, days >= 1 when enabled', async () => {
+    const cat = await prisma.mfgCategory.findFirstOrThrow();
+    const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+
+    // useExpiration without lot tracking → 400.
+    await expect(
+      mfg.createProduct({
+        code: 'TEST-PM-EXP1',
+        nameVi: 'HSD không lô',
+        categoryId: cat.id,
+        uomId: gram.id,
+        type: 'RAW',
+        useExpiration: true,
+        expirationDays: 5,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // useExpiration with 0 days → 400 (every lot would silently get no expiry).
+    await expect(
+      mfg.createProduct({
+        code: 'TEST-PM-EXP2',
+        nameVi: 'HSD 0 ngày',
+        categoryId: cat.id,
+        uomId: gram.id,
+        type: 'RAW',
+        tracking: 'LOT',
+        useExpiration: true,
+        expirationDays: 0,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // Partial update can't sneak an incoherent merge past the rule either.
+    const ok = await mfg.createProduct({
+      code: 'TEST-PM-EXP3',
+      nameVi: 'HSD hợp lệ',
+      categoryId: cat.id,
+      uomId: gram.id,
+      type: 'RAW',
+      tracking: 'LOT',
+      useExpiration: true,
+      expirationDays: 7,
+    });
+    await expect(mfg.updateProduct(ok.id, { expirationDays: 0 })).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(mfg.updateProduct(ok.id, { tracking: 'NONE' })).rejects.toMatchObject({
+      status: 400,
+    });
+
+    // Empty/whitespace code refused (would break lot names + the dup check).
+    await expect(
+      mfg.createProduct({
+        code: '   ',
+        nameVi: 'Mã rỗng',
+        categoryId: cat.id,
+        uomId: gram.id,
+        type: 'RAW',
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(mfg.updateProduct(ok.id, { code: '' })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('archiving a product hides its BoM and blocks receive/createMO', async () => {
+    const cat = await prisma.mfgCategory.findFirstOrThrow();
+    const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+    const p = await mfg.createProduct({
+      code: 'TEST-PM-ARCH',
+      nameVi: 'Bánh ngừng bán',
+      categoryId: cat.id,
+      uomId: gram.id,
+      type: 'FINISHED',
+    });
+    const bom = await prisma.mfgBom.create({
+      data: {
+        productId: p.id,
+        outputQty: 1000,
+        uomId: gram.id,
+        version: 1,
+        active: true,
+        lines: { create: [{ componentId: ids.flour, qty: 500, uomId: gram.id }] },
+      },
+    });
+
+    await mfg.updateProduct(p.id, { active: false });
+
+    // BoM gone from the batch picker.
+    const boms = await mfg.listBoms();
+    expect(boms.some((b) => b.id === bom.id)).toBe(false);
+    // createMO + receive refuse the archived product.
+    await expect(mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 })).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(mfg.receive({ productId: p.id, qty: 100, unitCost: 10 })).rejects.toMatchObject({
+      status: 400,
+    });
+
+    // Reactivate → picker shows it again.
+    await mfg.updateProduct(p.id, { active: true });
+    expect((await mfg.listBoms()).some((b) => b.id === bom.id)).toBe(true);
+  });
+
+  it('expiringLots only reports lots with stock still on hand', async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    const soon = new Date(Date.now() + 24 * 3600 * 1000);
+    const consumed = await prisma.mfgLot.create({
+      data: { productId: ids.flour, name: 'EXP-CONSUMED', mfgDate: new Date(), expiryDate: soon },
+    });
+    const live = await prisma.mfgLot.create({
+      data: { productId: ids.flour, name: 'EXP-LIVE', mfgDate: new Date(), expiryDate: soon },
+    });
+    // Consumed lot: quant exists but is empty. Live lot: stock on hand.
+    await prisma.mfgStockQuant.create({
+      data: { productId: ids.flour, lotId: consumed.id, locationId: stockLoc.id, quantity: 0 },
+    });
+    await prisma.mfgStockQuant.create({
+      data: { productId: ids.flour, lotId: live.id, locationId: stockLoc.id, quantity: 250 },
+    });
+
+    const rows = await mfg.expiringLots(new Date(Date.now() + 3 * 86400000).toISOString());
+    const names = rows.map((r) => r.name);
+    expect(names).toContain('EXP-LIVE');
+    expect(names).not.toContain('EXP-CONSUMED');
+  });
 });

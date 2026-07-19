@@ -70,13 +70,22 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     final code = _code.text.trim();
     final nameVi = _nameVi.text.trim();
     final expDays = int.tryParse(_expDays.text.trim()) ?? 0;
-    final stdCost = double.tryParse(_stdCost.text.trim()) ?? 0;
+    // Digits-only field (VND has no decimals) — '.' would silently parse
+    // '15.000' as 15, so the formatter below never lets it in.
+    final stdCost = (int.tryParse(_stdCost.text.trim()) ?? 0).toDouble();
     if (code.isEmpty ||
         nameVi.isEmpty ||
         _categoryId == null ||
         _uomId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Điền mã, tên, nhóm và đơn vị.')),
+      );
+      return;
+    }
+    // HSD bật mà 0 ngày = mọi lô sinh ra không có hạn — backend cũng từ chối.
+    if (_lotTracked && _useExpiration && expDays < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bật HSD thì số ngày sử dụng phải ≥ 1.')),
       );
       return;
     }
@@ -119,7 +128,12 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(_isEdit ? 'Đã lưu.' : 'Đã thêm sản phẩm.')),
         );
-        context.pop();
+        // Deep-link/refresh gives a one-entry stack — pop() would throw.
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/production/products');
+        }
       },
       failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Lỗi: ${f.message ?? f.code}')),
@@ -132,14 +146,42 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     final uoms = ref.watch(mfgUomsProvider);
     final categories = ref.watch(mfgCategoriesProvider);
 
-    // Edit mode: seed the form once from the loaded product.
+    // Edit mode: seed once from the loaded product — but never show an editable
+    // form before the product arrives (a deep-link/browser refresh lands here
+    // with the provider still loading; a blank "edit" form that saves
+    // create-defaults over the real product would corrupt it).
     if (_isEdit && !_seeded) {
-      final loaded = ref
-          .watch(adminProductsProvider)
-          .valueOrNull
-          ?.where((p) => p.id == widget.productId)
-          .firstOrNull;
-      if (loaded != null) _seed(loaded);
+      final products = ref.watch(adminProductsProvider);
+      final gate = products.when<Widget?>(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(
+          child: ErrorState(
+            title: 'Không tải được sản phẩm',
+            message: '$e',
+            onRetry: () => ref.invalidate(adminProductsProvider),
+          ),
+        ),
+        data: (rows) {
+          final loaded =
+              rows.where((p) => p.id == widget.productId).firstOrNull;
+          if (loaded == null) {
+            return const Center(
+              child: EmptyState(
+                title: 'Không tìm thấy sản phẩm',
+                icon: Icons.search_off,
+              ),
+            );
+          }
+          _seed(loaded);
+          return null; // seeded — fall through to the form
+        },
+      );
+      if (gate != null) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Sửa sản phẩm')),
+          body: gate,
+        );
+      }
     }
 
     return Scaffold(
@@ -229,10 +271,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               helperText:
                   'AVCO tự cập nhật khi nhập kho; đây là giá tham chiếu.',
             ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp('[0-9.]')),
-            ],
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
           const SizedBox(height: BananSpacing.sm),
           SwitchListTile(

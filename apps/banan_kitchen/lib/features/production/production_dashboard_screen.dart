@@ -97,22 +97,28 @@ class ProductionDashboardScreen extends ConsumerWidget {
                         onTap: () =>
                             context.push('/production/orders?state=${e.$1}'),
                       ),
+                    // count null (still loading / fetch failed) renders '—',
+                    // never a reassuring green 0.
                     _KpiCard(
                       label: 'Cảnh báo QC',
-                      count: alertCount ?? 0,
+                      count: alertCount,
                       icon: Icons.warning_amber_outlined,
-                      color: (alertCount ?? 0) > 0
-                          ? BananColors.danger
-                          : BananColors.success,
+                      color: alertCount == null
+                          ? BananColors.outline
+                          : alertCount > 0
+                              ? BananColors.danger
+                              : BananColors.success,
                       onTap: () => context.push('/production/alerts'),
                     ),
                     _KpiCard(
                       label: 'Lô sắp hết hạn',
-                      count: expiringCount ?? 0,
+                      count: expiringCount,
                       icon: Icons.schedule,
-                      color: (expiringCount ?? 0) > 0
-                          ? BananColors.gold
-                          : BananColors.success,
+                      color: expiringCount == null
+                          ? BananColors.outline
+                          : expiringCount > 0
+                              ? BananColors.gold
+                              : BananColors.success,
                       onTap: () => context.push('/production/stock'),
                     ),
                   ],
@@ -193,7 +199,9 @@ class _KpiCard extends StatelessWidget {
     required this.onTap,
   });
   final String label;
-  final int count;
+
+  /// null = unknown (loading/error) — rendered as '—', not a fake 0.
+  final int? count;
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
@@ -220,7 +228,7 @@ class _KpiCard extends StatelessWidget {
                 Icon(icon, size: 16, color: color),
                 const Spacer(),
                 Text(
-                  '$count',
+                  count == null ? '—' : '$count',
                   style: theme.textTheme.titleLarge
                       ?.copyWith(fontWeight: FontWeight.w700),
                 ),
