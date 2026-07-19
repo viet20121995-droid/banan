@@ -174,7 +174,7 @@ export class ManufacturingService {
   async receive(dto: {
     productId: string;
     qty: number;
-    uomId: string;
+    uomId?: string;
     unitCost: number;
     lotName?: string;
   }) {
@@ -189,7 +189,10 @@ export class ManufacturingService {
 
     const supplier = await this.locationId(this.prisma, 'SUPPLIER');
     const stock = await this.locationId(this.prisma, 'STOCK');
-    const moveUom = await this.prisma.mfgUom.findUnique({ where: { id: dto.uomId } });
+    // Default to the product's own base UoM when the caller omits one.
+    const moveUom = await this.prisma.mfgUom.findUnique({
+      where: { id: dto.uomId ?? product.uomId },
+    });
     if (!moveUom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
 
     const baseQty = toBase(dto.qty, uomLike(moveUom));
@@ -796,7 +799,7 @@ export class ManufacturingService {
   async scrap(dto: {
     productId: string;
     qty: number;
-    uomId: string;
+    uomId?: string;
     reason: string;
     lotId?: string;
     moId?: string;
@@ -806,7 +809,9 @@ export class ManufacturingService {
       where: { id: dto.productId },
     });
     if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
-    const uom = await this.prisma.mfgUom.findUnique({ where: { id: dto.uomId } });
+    // Default to the product's own base UoM when the caller omits one.
+    const uomId = dto.uomId ?? product.uomId;
+    const uom = await this.prisma.mfgUom.findUnique({ where: { id: uomId } });
     if (!uom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
 
     const stock = await this.locationId(this.prisma, 'STOCK');
@@ -819,7 +824,7 @@ export class ManufacturingService {
           productId: dto.productId,
           lotId: dto.lotId ?? null,
           qty: round3(dto.qty),
-          uomId: dto.uomId,
+          uomId,
           locationId: scrapLoc,
           reason: dto.reason,
           moId: dto.moId ?? null,

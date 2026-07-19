@@ -10,9 +10,12 @@ import '../features/notifications/notifications_screen.dart';
 import '../features/production/mo_detail_screen.dart';
 import '../features/production/mo_list_screen.dart';
 import '../features/production/production_dashboard_screen.dart';
+import '../features/production/quality_alerts_screen.dart';
+import '../features/production/receipt_form_screen.dart';
 import '../features/production/replenishment_screen.dart';
 import '../features/production/reports_screen.dart';
 import '../features/production/schedule_screen.dart';
+import '../features/production/scrap_form_screen.dart';
 import '../features/production/shop_floor_screen.dart';
 import '../features/production/stock_screen.dart';
 
@@ -81,6 +84,18 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/production/replenishment',
         builder: (_, __) => const ReplenishmentScreen(),
+      ),
+      GoRoute(
+        path: '/production/scrap',
+        builder: (_, __) => const ScrapFormScreen(),
+      ),
+      GoRoute(
+        path: '/production/receipt',
+        builder: (_, __) => const ReceiptFormScreen(),
+      ),
+      GoRoute(
+        path: '/production/alerts',
+        builder: (_, __) => const QualityAlertsScreen(),
       ),
       GoRoute(
         path: '/notifications',

@@ -34,8 +34,11 @@ export class ReceiveDto {
   @Min(0.001)
   qty!: number;
 
+  // Optional — defaults to the product's own base UoM (so the app can post a
+  // quantity in the product's unit without a UoM picker).
+  @IsOptional()
   @IsUUID()
-  uomId!: string;
+  uomId?: string;
 
   @IsNumber()
   @Min(0)
@@ -55,8 +58,10 @@ export class ScrapDto {
   @Min(0.001)
   qty!: number;
 
+  // Optional — defaults to the product's own base UoM.
+  @IsOptional()
   @IsUUID()
-  uomId!: string;
+  uomId?: string;
 
   @IsString()
   @MaxLength(200)

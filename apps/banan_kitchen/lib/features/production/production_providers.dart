@@ -119,3 +119,20 @@ final replenishmentProvider =
     FutureProvider.autoDispose<MfgReplenishment>((ref) async {
   return _orThrow(await ref.watch(manufacturingApiProvider).replenishment());
 });
+
+// ── master data + quality alerts (increment 7 forms) ──
+/// `type` filters RAW/SEMI/FINISHED/PACKAGING; null = all active products.
+final productsProvider = FutureProvider.autoDispose
+    .family<List<MfgProduct>, String?>((ref, type) async {
+  return _orThrow(
+    await ref.watch(manufacturingApiProvider).listProducts(type: type),
+  );
+});
+
+/// `stage` filters NEW/CONFIRMED/SOLVED; null = all.
+final alertsProvider = FutureProvider.autoDispose
+    .family<List<MfgQualityAlert>, String?>((ref, stage) async {
+  return _orThrow(
+    await ref.watch(manufacturingApiProvider).listAlerts(stage: stage),
+  );
+});

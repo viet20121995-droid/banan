@@ -26,7 +26,9 @@ class ProductionDashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final counts = ref.watch(moCountsProvider);
     final expiring = ref.watch(expiringLotsProvider);
-    final unread = ref.watch(notificationsControllerProvider.select((s) => s.unread));
+    final unread =
+        ref.watch(notificationsControllerProvider.select((s) => s.unread));
+    final canProduce = ref.watch(canProduceProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -118,6 +120,26 @@ class ProductionDashboardScreen extends ConsumerWidget {
               icon: const Icon(Icons.shopping_cart_outlined),
               label: const Text('Gợi ý mua hàng'),
             ),
+            const SizedBox(height: BananSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/production/alerts'),
+              icon: const Icon(Icons.warning_amber_outlined),
+              label: const Text('Cảnh báo QC'),
+            ),
+            if (canProduce) ...[
+              const SizedBox(height: BananSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: () => context.push('/production/receipt'),
+                icon: const Icon(Icons.add_box_outlined),
+                label: const Text('Nhập kho NVL'),
+              ),
+              const SizedBox(height: BananSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: () => context.push('/production/scrap'),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Ghi hao hụt'),
+              ),
+            ],
 
             const SizedBox(height: BananSpacing.xl),
             // ── HSD sắp hết ──

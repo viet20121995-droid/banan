@@ -713,6 +713,15 @@ class ManufacturingApi {
         parse: (res) => _list(res, MfgBomSummary.fromJson),
       );
 
+  /// Master-data product list (for scrap/receipt pickers). [type] filters by
+  /// RAW/SEMI/FINISHED/PACKAGING.
+  Future<Result<List<MfgProduct>, AppFailure>> listProducts({String? type}) =>
+      _get(
+        '$_base/products',
+        query: {if (type != null) 'type': type},
+        parse: (res) => _list(res, MfgProduct.fromJson),
+      );
+
   Future<Result<MfgCost, AppFailure>> bomCost(String bomId) => _get(
         '$_base/boms/$bomId/cost',
         parse: (res) => MfgCost.fromJson(
@@ -859,19 +868,43 @@ class ManufacturingApi {
   Future<Result<void, AppFailure>> cancel(String id) =>
       _postVoid('$_base/orders/$id/cancel');
 
+  /// Log a scrap. [uomId] defaults server-side to the product's base UoM, so the
+  /// app posts [qty] in the product's own unit; [lotId] optionally pins the lot.
   Future<Result<void, AppFailure>> scrap({
     required String productId,
     required double qty,
-    required String uomId,
     required String reason,
+    String? uomId,
+    String? lotId,
   }) =>
       _postVoid(
         '$_base/scraps',
         body: {
           'productId': productId,
           'qty': qty,
-          'uomId': uomId,
           'reason': reason,
+          if (uomId != null) 'uomId': uomId,
+          if (lotId != null) 'lotId': lotId,
+        },
+      );
+
+  /// Receive raw material into stock (rolls AVCO). [uomId] defaults to the
+  /// product's base UoM; [lotName] names the lot for lot-tracked products.
+  Future<Result<void, AppFailure>> receive({
+    required String productId,
+    required double qty,
+    required double unitCost,
+    String? uomId,
+    String? lotName,
+  }) =>
+      _postVoid(
+        '$_base/receipts',
+        body: {
+          'productId': productId,
+          'qty': qty,
+          'unitCost': unitCost,
+          if (uomId != null) 'uomId': uomId,
+          if (lotName != null) 'lotName': lotName,
         },
       );
 
