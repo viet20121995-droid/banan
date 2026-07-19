@@ -540,4 +540,52 @@ d('Manufacturing golden path (integration)', () => {
     expect(row!.avgCost).toBe(Number(flourProduct.avgCost));
     expect(row!.estCost).toBe(Math.round(row!.shortfall * row!.avgCost));
   });
+
+  // ── increment-5 review fixes ──
+  it('replenishment counts reserved stock as on-hand — no re-buy after reserve()', async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    // Isolate flour demand: cancel every still-open MO left by earlier tests.
+    const open = await prisma.mfgOrder.findMany({
+      where: { state: { in: ['DRAFT', 'CONFIRMED', 'PROGRESS'] } },
+    });
+    for (const m of open) await mfg.cancelMO(m.id);
+    // Exactly enough flour on hand for one sponge MO, then reserve all of it.
+    await prisma.mfgStockQuant.deleteMany({
+      where: { productId: ids.flour, locationId: stockLoc.id },
+    });
+    await prisma.mfgStockQuant.create({
+      data: {
+        productId: ids.flour,
+        lotId: null,
+        locationId: stockLoc.id,
+        quantity: 500,
+        reservedQty: 0,
+      },
+    });
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 }); // flour 500
+    await mfg.confirmMO(mo.id);
+    await mfg.reserve(mo.id); // reserves all 500g flour
+
+    // 500 need vs 500 gross on-hand → shortfall 0, even fully reserved. The old
+    // net-free-stock formula returned 500 here (double-counting the reservation).
+    const rep = await mfg.replenishment();
+    expect(rep.rows.find((r) => r.productId === ids.flour)).toBeUndefined();
+  });
+
+  it('scrap report values a kg-entered scrap from its base-gram quantity', async () => {
+    const kg = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'kg' } });
+    await mfg.receive({ productId: ids.flour, qty: 3000, uomId: gUom, unitCost: 10 });
+    const flour = await prisma.mfgProduct.findUniqueOrThrow({ where: { id: ids.flour } });
+    const unit = Number(flour.avgCost); // đồng per gram, frozen onto the scrap move
+    await mfg.scrap({ productId: ids.flour, qty: 1, uomId: kg.id, reason: 'Ẩm mốc' });
+
+    const rep = await mfg.scrapReport();
+    // 1 kg = 1000 g × unit cost — NOT 1 × unit (the pre-fix mis-valuation).
+    const byReason = rep.byReason.find((r) => r.reason === 'Ẩm mốc');
+    expect(byReason).toBeDefined();
+    expect(byReason!.value).toBe(Math.round(1000 * unit));
+    const byProduct = rep.byProduct.find((r) => r.productId === ids.flour);
+    expect(byProduct!.qty).toBe(1000); // base grams, matching the g uom label
+  });
 });

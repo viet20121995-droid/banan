@@ -140,13 +140,16 @@ Widget _empty(BuildContext context, String message) => Padding(
 Widget _reportBody<T>(
   BuildContext context,
   WidgetRef ref,
-  ProviderBase<AsyncValue<T>> provider,
+  AutoDisposeFutureProvider<T> provider,
   List<Widget> Function(T data) children,
 ) {
   final async = ref.watch(provider);
   return RefreshIndicator(
-    onRefresh: () async => ref.invalidate(provider),
+    // refresh(...future) awaits the refetch so the spinner holds until it lands.
+    onRefresh: () => ref.refresh(provider.future),
     child: ListView(
+      // AlwaysScrollable so pull-to-refresh works on short/loading/error content.
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(BananSpacing.lg),
       children: async.when(
         loading: () => const [

@@ -21,8 +21,9 @@ class ReplenishmentScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Gợi ý mua hàng')),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(replenishmentProvider),
+        onRefresh: () => ref.refresh(replenishmentProvider.future),
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(BananSpacing.lg),
           children: rep.when(
             loading: () => const [

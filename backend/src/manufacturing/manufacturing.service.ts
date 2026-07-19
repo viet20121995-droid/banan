@@ -988,18 +988,33 @@ export class ManufacturingService {
 
   // ── reports + replenishment (increment 5) ─────────────────────────────────
 
+  // ponytail: single-site VN bakery on fixed ICT (UTC+7, no DST). Make this
+  // configurable if the MES ever runs multi-region.
+  private static readonly REPORT_TZ = '+07:00';
+
   /**
-   * Optional ISO date-range → a Prisma filter. `from` is inclusive; `to` is
-   * inclusive of the whole calendar day (floored to UTC midnight, then +1 day as
-   * an exclusive upper bound) so a `to` of 2026-07-18 still catches that evening.
+   * Optional date-only range → a Prisma filter, anchored to VN **local** calendar
+   * days (not UTC) so a batch made at 06:00 local lands in the right day. `from`
+   * is inclusive; `to` covers its whole local day (upper bound = next local
+   * midnight, exclusive). Throws 400 on an unparseable date rather than handing
+   * Prisma an Invalid Date (which would surface as a 500).
    */
   private dateRange(from?: string, to?: string): { gte?: Date; lt?: Date } | undefined {
+    const atLocalMidnight = (day: string): Date => {
+      const d = new Date(`${day.slice(0, 10)}T00:00:00${ManufacturingService.REPORT_TZ}`);
+      if (Number.isNaN(d.getTime())) {
+        throw new BadRequestException({
+          code: 'MFG_DATE_INVALID',
+          message: `Ngày không hợp lệ: "${day}".`,
+        });
+      }
+      return d;
+    };
     const range: { gte?: Date; lt?: Date } = {};
-    if (from) range.gte = new Date(from);
+    if (from) range.gte = atLocalMidnight(from);
     if (to) {
-      const end = new Date(to);
-      end.setUTCHours(0, 0, 0, 0);
-      end.setUTCDate(end.getUTCDate() + 1);
+      const end = atLocalMidnight(to);
+      end.setUTCDate(end.getUTCDate() + 1); // next local midnight, exclusive
       range.lt = end;
     }
     return range.gte || range.lt ? range : undefined;
@@ -1091,9 +1106,13 @@ export class ManufacturingService {
 
     const moves = await this.prisma.mfgStockMove.findMany({
       where: { refType: 'SCRAP', refId: { in: scraps.map((s) => s.id) } },
-      select: { refId: true, unitCost: true },
+      select: { refId: true, qty: true, unitCost: true },
     });
-    const costOf = new Map(moves.map((m) => [m.refId, n(m.unitCost)]));
+    // Value and qty come from the paired move, not from MfgScrap.qty: the move
+    // holds the base-UoM quantity and the frozen đồng-per-base unit cost, while
+    // MfgScrap.qty is in the caller's input UoM (kg vs g) — multiplying scrap.qty
+    // by a per-base cost mis-values any non-base-UoM scrap.
+    const moveOf = new Map(moves.map((m) => [m.refId, m]));
 
     const byReason = new Map<string, { reason: string; value: number; count: number }>();
     const byProduct = new Map<
@@ -1110,7 +1129,9 @@ export class ManufacturingService {
     >();
     let totalValue = 0;
     for (const s of scraps) {
-      const value = n(s.qty) * (costOf.get(s.id) ?? 0);
+      const mv = moveOf.get(s.id);
+      const baseQty = mv ? n(mv.qty) : 0; // base UoM (matches product.uom.code)
+      const value = baseQty * (mv ? n(mv.unitCost) : 0);
       totalValue += value;
 
       const r = byReason.get(s.reason) ?? { reason: s.reason, value: 0, count: 0 };
@@ -1127,7 +1148,7 @@ export class ManufacturingService {
         value: 0,
         count: 0,
       };
-      p.qty += n(s.qty);
+      p.qty += baseQty;
       p.value += value;
       p.count += 1;
       byProduct.set(s.productId, p);
@@ -1215,8 +1236,14 @@ export class ManufacturingService {
    * shortfall between demand from open MOs and free stock. Advisory only — it
    * recommends what to buy (act on it in Odoo); it creates nothing.
    *   demand    = Σ (qtyToConsume − qtyConsumed) over DRAFT/CONFIRMED/PROGRESS MOs
-   *   available = Σ (quantity − reservedQty) at STOCK
-   *   shortfall = demand − available (only positive rows are returned)
+   *   onHand    = Σ quantity at STOCK (gross — see below)
+   *   shortfall = demand − onHand (only positive rows are returned)
+   *
+   * On-hand is **gross**, not free (quantity, not quantity − reservedQty): a
+   * reserved quant is still physically in stock and earmarked for one of the very
+   * open MOs whose full remaining need is already in `demand`. Subtracting
+   * reservedQty would net that stock out of supply while its demand stays gross —
+   * double-counting the reservation and recommending you re-buy stock you hold.
    */
   async replenishment() {
     const stock = await this.locationId(this.prisma, 'STOCK');
@@ -1242,20 +1269,21 @@ export class ManufacturingService {
       demandBy.set(c.productId, (demandBy.get(c.productId) ?? 0) + need);
     }
 
-    // Free stock at STOCK, grouped by product.
+    // Gross on-hand at STOCK, grouped by product (reservedQty is NOT subtracted —
+    // see the method docstring for why netting it would double-count).
     const quants = await this.prisma.mfgStockQuant.findMany({
       where: { locationId: stock, productId: { in: [...purchasedIds] } },
-      select: { productId: true, quantity: true, reservedQty: true },
+      select: { productId: true, quantity: true },
     });
-    const availBy = new Map<string, number>();
+    const onHandBy = new Map<string, number>();
     for (const q of quants) {
-      availBy.set(q.productId, (availBy.get(q.productId) ?? 0) + n(q.quantity) - n(q.reservedQty));
+      onHandBy.set(q.productId, (onHandBy.get(q.productId) ?? 0) + n(q.quantity));
     }
 
     const rows = products
       .map((p) => {
         const demand = demandBy.get(p.id) ?? 0;
-        const available = availBy.get(p.id) ?? 0;
+        const available = onHandBy.get(p.id) ?? 0;
         const shortfall = demand - available;
         const avgCost = n(p.avgCost);
         return {

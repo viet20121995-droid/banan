@@ -242,11 +242,19 @@ sourced from the existing `Mfg*` tables.
   qty is mixed-UoM) and by product (qty + value).
 - **Replenishment** (`GET replenishment`) — an advisory buy list: for each
   purchased item (`RAW`/`PACKAGING`), `shortfall = open-MO demand
-  (qtyToConsume − qtyConsumed over DRAFT/CONFIRMED/PROGRESS) − free stock
-  (quantity − reservedQty at STOCK)`. It recommends what to buy and roughly what
-  it costs; it **creates nothing** — the actual purchase orders are placed in
-  Odoo (the system of record for procurement). A full purchase-request lifecycle
-  in the MES was deliberately skipped rather than duplicate Odoo.
+  (qtyToConsume − qtyConsumed over DRAFT/CONFIRMED/PROGRESS) − gross on-hand
+  (quantity at STOCK)`. On-hand is **gross**, not free — a reserved quant is
+  still physically in stock and earmarked for one of the very open MOs whose full
+  need is already in `demand`, so subtracting `reservedQty` would double-count the
+  reservation and recommend re-buying stock you already hold. It recommends what
+  to buy and roughly what it costs; it **creates nothing** — the actual purchase
+  orders are placed in Odoo (the system of record for procurement). A full
+  purchase-request lifecycle in the MES was deliberately skipped rather than
+  duplicate Odoo.
+
+Report date windows (`from`/`to`) are anchored to **VN local** calendar days
+(fixed ICT, UTC+7), not UTC, so a batch made at 06:00 local lands in the right
+day; an unparseable date returns 400, not a 500.
 
 Flutter: a **Báo cáo sản xuất** screen (`/production/reports`) with 3 tabs
 (Sản xuất / Giá thành / Hao hụt) and quick date-range presets (7 / 30 ngày /
