@@ -7,7 +7,9 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
 import {
+  CompleteMaintenanceDto,
   CreateBomDto,
+  CreateMaintenanceDto,
   CreateMoDto,
   CreateQualityPointDto,
   PlanMoDto,
@@ -95,6 +97,32 @@ export class ManufacturingController {
   @Get('replenishment')
   replenishment() {
     return this.mfg.replenishment();
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('reports/oee')
+  oeeReport(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.mfg.oeeReport(from, to);
+  }
+
+  // ── maintenance ───────────────────────────────────────────────────────────
+  @Roles(...KITCHEN_READ)
+  @Get('maintenance')
+  listMaintenance(@Query('state') state?: string) {
+    return this.mfg.listMaintenance(state);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('maintenance')
+  createMaintenance(@Body() dto: CreateMaintenanceDto) {
+    return this.mfg.createMaintenance(dto);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @HttpCode(HttpStatus.OK)
+  @Post('maintenance/:id/complete')
+  completeMaintenance(@Param('id') id: string, @Body() dto: CompleteMaintenanceDto) {
+    return this.mfg.completeMaintenance(id, dto);
   }
 
   // ── planning (schedule + employee assignment) ─────────────────────────────

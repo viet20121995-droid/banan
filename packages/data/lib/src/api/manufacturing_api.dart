@@ -789,6 +789,85 @@ class MfgReplenishment {
   final double estCost;
 }
 
+// ── maintenance + OEE (increment 8) ──────────────────────────────────────────
+
+class MfgMaintenance {
+  const MfgMaintenance({
+    required this.id,
+    required this.workCenterId,
+    required this.workCenterName,
+    required this.type,
+    required this.state,
+    required this.scheduledDate,
+    required this.doneDate,
+    required this.downtimeMin,
+    required this.note,
+  });
+
+  factory MfgMaintenance.fromJson(Map<String, dynamic> j) => MfgMaintenance(
+        id: j['id'] as String,
+        workCenterId: j['workCenterId'] as String,
+        workCenterName: (j['workCenter'] as Map?)?['nameVi'] as String? ?? '',
+        type: j['type'] as String,
+        state: j['state'] as String,
+        scheduledDate: DateTime.tryParse('${j['scheduledDate']}'),
+        doneDate: DateTime.tryParse('${j['doneDate']}'),
+        downtimeMin: (j['downtimeMin'] as num?)?.toInt() ?? 0,
+        note: j['note'] as String?,
+      );
+
+  final String id;
+  final String workCenterId;
+  final String workCenterName;
+  final String type; // PREVENTIVE | CORRECTIVE
+  final String state; // PLANNED | DONE
+  final DateTime? scheduledDate;
+  final DateTime? doneDate;
+  final int downtimeMin;
+  final String? note;
+
+  bool get isDone => state == 'DONE';
+}
+
+class MfgOeeRow {
+  const MfgOeeRow({
+    required this.workCenterId,
+    required this.code,
+    required this.nameVi,
+    required this.woCount,
+    required this.runtimeMin,
+    required this.downtimeMin,
+    required this.availability,
+    required this.performance,
+    required this.quality,
+    required this.oee,
+  });
+
+  factory MfgOeeRow.fromJson(Map<String, dynamic> j) => MfgOeeRow(
+        workCenterId: j['workCenterId'] as String,
+        code: j['code'] as String? ?? '',
+        nameVi: j['nameVi'] as String? ?? '',
+        woCount: (j['woCount'] as num?)?.toInt() ?? 0,
+        runtimeMin: (j['runtimeMin'] as num?)?.toInt() ?? 0,
+        downtimeMin: (j['downtimeMin'] as num?)?.toInt() ?? 0,
+        availability: _num(j['availability']),
+        performance: _num(j['performance']),
+        quality: _num(j['quality']),
+        oee: _num(j['oee']),
+      );
+
+  final String workCenterId;
+  final String code;
+  final String nameVi;
+  final int woCount;
+  final int runtimeMin;
+  final int downtimeMin;
+  final double availability;
+  final double performance;
+  final double quality;
+  final double oee;
+}
+
 // ── client ──────────────────────────────────────────────────────────────────
 
 class ManufacturingApi {
@@ -963,6 +1042,60 @@ class ManufacturingApi {
         parse: (res) => MfgReplenishment.fromJson(
           (res.data?['data'] as Map).cast<String, dynamic>(),
         ),
+      );
+
+  // ── maintenance + OEE ──
+  Future<Result<List<MfgOeeRow>, AppFailure>> oeeReport({
+    DateTime? from,
+    DateTime? to,
+  }) =>
+      _get(
+        '$_base/reports/oee',
+        query: {
+          if (_day(from) != null) 'from': _day(from),
+          if (_day(to) != null) 'to': _day(to)
+        },
+        parse: (res) {
+          final data =
+              (res.data?['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+          return ((data['rows'] as List?) ?? const [])
+              .map(
+                  (e) => MfgOeeRow.fromJson((e as Map).cast<String, dynamic>()))
+              .toList();
+        },
+      );
+
+  Future<Result<List<MfgMaintenance>, AppFailure>> listMaintenance(
+          {String? state}) =>
+      _get(
+        '$_base/maintenance',
+        query: {if (state != null) 'state': state},
+        parse: (res) => _list(res, MfgMaintenance.fromJson),
+      );
+
+  Future<Result<void, AppFailure>> createMaintenance({
+    required String workCenterId,
+    required DateTime scheduledDate,
+    String? type,
+    String? note,
+  }) =>
+      _postVoid(
+        '$_base/maintenance',
+        body: {
+          'workCenterId': workCenterId,
+          'scheduledDate': DateTime.utc(
+                  scheduledDate.year, scheduledDate.month, scheduledDate.day)
+              .toIso8601String(),
+          if (type != null) 'type': type,
+          if (note != null && note.isNotEmpty) 'note': note,
+        },
+      );
+
+  Future<Result<void, AppFailure>> completeMaintenance(String id,
+          {int? downtimeMin}) =>
+      _postVoid(
+        '$_base/maintenance/$id/complete',
+        body: {if (downtimeMin != null) 'downtimeMin': downtimeMin},
       );
 
   // ── planning ──

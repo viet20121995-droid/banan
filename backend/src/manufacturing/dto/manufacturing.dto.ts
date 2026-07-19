@@ -47,6 +47,30 @@ export class CreateBomDto {
   operations?: BomOperationInput[];
 }
 
+export class CreateMaintenanceDto {
+  @IsUUID()
+  workCenterId!: string;
+
+  @IsOptional()
+  @IsIn(['PREVENTIVE', 'CORRECTIVE'])
+  type?: 'PREVENTIVE' | 'CORRECTIVE';
+
+  @IsDateString()
+  scheduledDate!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
+}
+
+export class CompleteMaintenanceDto {
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  downtimeMin?: number;
+}
+
 export class CreateMoDto {
   @IsUUID()
   bomId!: string;

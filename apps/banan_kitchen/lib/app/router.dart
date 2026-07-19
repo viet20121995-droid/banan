@@ -9,8 +9,10 @@ import '../features/kanban/kanban_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/production/bom_editor_screen.dart';
 import '../features/production/bom_list_screen.dart';
+import '../features/production/maintenance_screen.dart';
 import '../features/production/mo_detail_screen.dart';
 import '../features/production/mo_list_screen.dart';
+import '../features/production/oee_screen.dart';
 import '../features/production/production_dashboard_screen.dart';
 import '../features/production/quality_alerts_screen.dart';
 import '../features/production/receipt_form_screen.dart';
@@ -110,6 +112,14 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/production/boms/:id/edit',
         builder: (_, state) => BomEditorScreen(bomId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '/production/maintenance',
+        builder: (_, __) => const MaintenanceScreen(),
+      ),
+      GoRoute(
+        path: '/production/oee',
+        builder: (_, __) => const OeeScreen(),
       ),
       GoRoute(
         path: '/notifications',

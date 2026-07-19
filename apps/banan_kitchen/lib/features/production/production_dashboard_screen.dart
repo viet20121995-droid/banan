@@ -132,6 +132,18 @@ class ProductionDashboardScreen extends ConsumerWidget {
               icon: const Icon(Icons.warning_amber_outlined),
               label: const Text('Cảnh báo QC'),
             ),
+            const SizedBox(height: BananSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/production/oee'),
+              icon: const Icon(Icons.speed_outlined),
+              label: const Text('OEE (hiệu suất thiết bị)'),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/production/maintenance'),
+              icon: const Icon(Icons.build_outlined),
+              label: const Text('Bảo trì thiết bị'),
+            ),
             if (canProduce) ...[
               const SizedBox(height: BananSpacing.sm),
               OutlinedButton.icon(

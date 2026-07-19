@@ -137,6 +137,24 @@ final alertsProvider = FutureProvider.autoDispose
   );
 });
 
+// ── maintenance + OEE (increment 8) ──
+final oeeReportProvider = FutureProvider.autoDispose
+    .family<List<MfgOeeRow>, MfgReportRange>((ref, range) async {
+  return _orThrow(
+    await ref
+        .watch(manufacturingApiProvider)
+        .oeeReport(from: range.$1, to: range.$2),
+  );
+});
+
+/// `state` filters PLANNED/DONE; null = all.
+final maintenanceProvider = FutureProvider.autoDispose
+    .family<List<MfgMaintenance>, String?>((ref, state) async {
+  return _orThrow(
+    await ref.watch(manufacturingApiProvider).listMaintenance(state: state),
+  );
+});
+
 // ── BoM editor (increment 7) ──
 final workCentersProvider =
     FutureProvider.autoDispose<List<MfgWorkCenter>>((ref) async {

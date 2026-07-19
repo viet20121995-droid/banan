@@ -661,4 +661,58 @@ d('Manufacturing golden path (integration)', () => {
     const old = await prisma.mfgBom.findUniqueOrThrow({ where: { id: before.id } });
     expect(old.active).toBe(false);
   });
+
+  // ── increment 8: maintenance + OEE ──
+  it('maintenance: plan → complete records downtime; a second complete is rejected', async () => {
+    const wc = await prisma.mfgWorkCenter.findFirstOrThrow();
+    const m = await mfg.createMaintenance({
+      workCenterId: wc.id,
+      scheduledDate: new Date().toISOString(),
+      note: 'Vệ sinh lò',
+    });
+    expect(m.state).toBe('PLANNED');
+
+    const done = await mfg.completeMaintenance(m.id, { downtimeMin: 30 });
+    expect(done.state).toBe('DONE');
+    expect(done.downtimeMin).toBe(30);
+    expect(done.doneDate).not.toBeNull();
+
+    await expect(mfg.completeMaintenance(m.id, { downtimeMin: 5 })).rejects.toThrow(/hoàn tất/);
+  });
+
+  it('OEE report aggregates per work centre; downtime lowers availability', async () => {
+    const bom = await bomOf(ids.cake); // cake ops carry no QC → doneWO not gated
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 });
+    await mfg.confirmMO(mo.id);
+    const wo = await prisma.mfgWorkOrder.findFirstOrThrow({
+      where: { moId: mo.id },
+      orderBy: { sequence: 'asc' },
+    });
+    // Run it for ~20 real minutes, then finish (banks durationReal).
+    await prisma.mfgWorkOrder.update({
+      where: { id: wo.id },
+      data: { state: 'PROGRESS', dateStart: new Date(Date.now() - 20 * 60000) },
+    });
+    const doneWo = await mfg.doneWO(wo.id);
+    expect(doneWo.durationReal).toBeGreaterThanOrEqual(19);
+
+    const wcId = wo.workCenterId;
+    const m = await mfg.createMaintenance({
+      workCenterId: wcId,
+      scheduledDate: new Date().toISOString(),
+    });
+    await mfg.completeMaintenance(m.id, { downtimeMin: 60 });
+
+    const oee = await mfg.oeeReport();
+    const row = oee.rows.find((r) => r.workCenterId === wcId);
+    expect(row).toBeDefined();
+    expect(row!.runtimeMin).toBeGreaterThanOrEqual(19);
+    expect(row!.downtimeMin).toBeGreaterThanOrEqual(60);
+    // availability = runtime / (runtime + downtime): strictly between 0 and 1 here.
+    expect(row!.availability).toBeGreaterThan(0);
+    expect(row!.availability).toBeLessThan(1);
+    expect(row!.quality).toBeLessThanOrEqual(1);
+    expect(row!.oee).toBeGreaterThanOrEqual(0);
+    expect(row!.oee).toBeLessThanOrEqual(1);
+  });
 });

@@ -1432,6 +1432,155 @@ export class ManufacturingService {
     };
   }
 
+  // ── maintenance + OEE (increment 8) ───────────────────────────────────────
+
+  async createMaintenance(dto: {
+    workCenterId: string;
+    type?: 'PREVENTIVE' | 'CORRECTIVE';
+    scheduledDate: string;
+    note?: string;
+  }) {
+    const wc = await this.prisma.mfgWorkCenter.findUnique({ where: { id: dto.workCenterId } });
+    if (!wc) throw new NotFoundException({ code: 'MFG_WORKCENTER_NOT_FOUND' });
+    return this.prisma.mfgMaintenance.create({
+      data: {
+        workCenterId: dto.workCenterId,
+        type: dto.type ?? 'PREVENTIVE',
+        scheduledDate: new Date(dto.scheduledDate),
+        note: dto.note ?? null,
+      },
+      include: { workCenter: true },
+    });
+  }
+
+  listMaintenance(state?: string) {
+    return this.prisma.mfgMaintenance.findMany({
+      where: state ? { state: state as never } : undefined,
+      include: { workCenter: true },
+      orderBy: [{ state: 'asc' }, { scheduledDate: 'asc' }],
+    });
+  }
+
+  /** Close a planned job: stamp doneDate + record its downtime (feeds OEE). */
+  async completeMaintenance(id: string, dto: { downtimeMin?: number }) {
+    const claim = await this.prisma.mfgMaintenance.updateMany({
+      where: { id, state: 'PLANNED' },
+      data: {
+        state: 'DONE',
+        doneDate: new Date(),
+        downtimeMin: Math.max(0, Math.round(dto.downtimeMin ?? 0)),
+      },
+    });
+    if (claim.count === 0) {
+      const exists = await this.prisma.mfgMaintenance.findUnique({ where: { id } });
+      if (!exists) throw new NotFoundException({ code: 'MFG_MAINT_NOT_FOUND' });
+      throw new ConflictException({
+        code: 'MFG_MAINT_STATE',
+        message: 'Việc bảo trì đã hoàn tất.',
+      });
+    }
+    return this.prisma.mfgMaintenance.findUniqueOrThrow({
+      where: { id },
+      include: { workCenter: true },
+    });
+  }
+
+  /**
+   * OEE per work centre over a window. **Approximate by design** — a bakery has no
+   * shift/planned-time config, so:
+   *   - availability = runtime / (runtime + maintenance downtime)
+   *   - performance  = Σ standard minutes / Σ real minutes (>1 = faster than std)
+   *   - quality      = passed QC checks / total QC checks (1 if none)
+   *   - OEE          = availability × min(performance, 1) × quality
+   * Directional, not audit-grade; documented in docs/kitchen-mes.md.
+   */
+  async oeeReport(from?: string, to?: string) {
+    const when = this.dateRange(from, to);
+    const woWhere = { state: 'DONE' as const, ...(when ? { dateFinished: when } : {}) };
+    const [wos, maint, checks, centers] = await Promise.all([
+      this.prisma.mfgWorkOrder.findMany({
+        where: woWhere,
+        select: { workCenterId: true, durationReal: true, durationExpected: true },
+      }),
+      this.prisma.mfgMaintenance.findMany({
+        where: { state: 'DONE', ...(when ? { doneDate: when } : {}) },
+        select: { workCenterId: true, downtimeMin: true },
+      }),
+      this.prisma.mfgQualityCheck.findMany({
+        where: { workOrder: woWhere },
+        select: { result: true, workOrder: { select: { workCenterId: true } } },
+      }),
+      this.prisma.mfgWorkCenter.findMany({
+        where: { active: true },
+        select: { id: true, code: true, nameVi: true },
+      }),
+    ]);
+
+    type Acc = {
+      runtime: number;
+      standard: number;
+      downtime: number;
+      checks: number;
+      fails: number;
+      woCount: number;
+    };
+    const agg = new Map<string, Acc>();
+    const acc = (id: string): Acc => {
+      let a = agg.get(id);
+      if (!a) {
+        a = { runtime: 0, standard: 0, downtime: 0, checks: 0, fails: 0, woCount: 0 };
+        agg.set(id, a);
+      }
+      return a;
+    };
+    for (const w of wos) {
+      const a = acc(w.workCenterId);
+      a.runtime += w.durationReal;
+      a.standard += w.durationExpected;
+      a.woCount += 1;
+    }
+    for (const m of maint) acc(m.workCenterId).downtime += m.downtimeMin;
+    for (const c of checks) {
+      if (!c.workOrder) continue;
+      const a = acc(c.workOrder.workCenterId);
+      a.checks += 1;
+      if (c.result === 'FAIL') a.fails += 1;
+    }
+
+    const r2 = (x: number) => Math.round(x * 100) / 100;
+    const rows = centers
+      .map((wc) => {
+        const a = agg.get(wc.id) ?? {
+          runtime: 0,
+          standard: 0,
+          downtime: 0,
+          checks: 0,
+          fails: 0,
+          woCount: 0,
+        };
+        const availability = a.runtime + a.downtime > 0 ? a.runtime / (a.runtime + a.downtime) : 1;
+        const performance = a.runtime > 0 ? a.standard / a.runtime : 0;
+        const quality = a.checks > 0 ? (a.checks - a.fails) / a.checks : 1;
+        const oee = availability * Math.min(performance, 1) * quality;
+        return {
+          workCenterId: wc.id,
+          code: wc.code,
+          nameVi: wc.nameVi,
+          woCount: a.woCount,
+          runtimeMin: a.runtime,
+          downtimeMin: a.downtime,
+          availability: r2(availability),
+          performance: r2(performance),
+          quality: r2(quality),
+          oee: r2(oee),
+        };
+      })
+      .filter((r) => r.woCount > 0 || r.downtimeMin > 0)
+      .sort((a, b) => b.oee - a.oee);
+
+    return { from: from ?? null, to: to ?? null, rows };
+  }
+
   // ── planning (schedule + employee assignment) ─────────────────────────────
 
   /** Kitchen users who can be assigned to run an MO. */

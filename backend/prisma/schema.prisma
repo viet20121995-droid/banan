@@ -1293,8 +1293,37 @@ model MfgWorkCenter {
 
   bomOperations MfgBomOperation[]
   workOrders    MfgWorkOrder[]
+  maintenances  MfgMaintenance[]
 
   createdAt DateTime @default(now())
+}
+
+enum MfgMaintenanceType {
+  PREVENTIVE // bảo trì định kỳ
+  CORRECTIVE // sửa chữa hỏng hóc
+}
+
+enum MfgMaintenanceState {
+  PLANNED
+  DONE
+}
+
+/// A maintenance job on a work centre. Done jobs carry `downtimeMin`, which feeds
+/// the OEE availability calculation for that centre.
+model MfgMaintenance {
+  id            String              @id @default(uuid())
+  workCenterId  String
+  workCenter    MfgWorkCenter       @relation(fields: [workCenterId], references: [id])
+  type          MfgMaintenanceType  @default(PREVENTIVE)
+  state         MfgMaintenanceState @default(PLANNED)
+  scheduledDate DateTime
+  doneDate      DateTime?
+  downtimeMin   Int                 @default(0)
+  note          String?
+  createdAt     DateTime            @default(now())
+
+  @@index([workCenterId, state])
+  @@index([doneDate])
 }
 
 model MfgBom {

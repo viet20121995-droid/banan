@@ -307,8 +307,27 @@ The forms the app was missing, so the whole flow is doable in-app:
 Integration 26/26 (createBom saves a new version, derives 60% flour ratio, retires
 the old); flutter analyze clean on new files; kitchen web build OK.
 
+## Increment 8 — Maintenance + OEE ✅
+
+- **Maintenance** (`MfgMaintenance`, migration `mfg_maintenance`) — plan a job on a
+  work centre (preventive/corrective, a date, a note), then complete it with the
+  actual **downtime minutes**. Completion is a guarded state claim
+  (PLANNED → DONE, second complete rejected). Endpoints `GET/POST maintenance`,
+  `POST maintenance/:id/complete`. Flutter **Bảo trì thiết bị** screen (plan
+  dialog + complete dialog, manager-gated).
+- **OEE** (`GET reports/oee?from&to`) per work centre — **approximate by design**
+  (a bakery has no shift/planned-time config), documented as directional:
+  - *availability* = runtime / (runtime + maintenance downtime),
+  - *performance* = Σ standard minutes / Σ real minutes (>1 = faster than std),
+  - *quality* = passed QC checks / total QC checks (1 if none),
+  - *OEE* = availability × min(performance, 1) × quality.
+  Runtime/standard come from finished work orders' banked `durationReal` /
+  `durationExpected`; downtime from completed maintenance; quality from QC checks
+  joined through the work order. Flutter **OEE** screen shows A/P/Q bars + OEE per
+  centre. Integration 28/28 (maintenance plan→complete→reject-second; OEE
+  availability drops with recorded downtime).
+
 ## Roadmap (next increments)
 
-8. **OEE + maintenance** — equipment effectiveness + maintenance schedules/orders.
 9. **Hard reservations** (if needed) — a per-MO allocation ledger so
    cancel/produce only touch their own hold (today reservations are advisory).
