@@ -1,7 +1,9 @@
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -45,6 +47,100 @@ export class CreateBomDto {
   @IsOptional()
   @IsArray()
   operations?: BomOperationInput[];
+}
+
+export class CreateProductDto {
+  @IsString()
+  @MaxLength(40)
+  code!: string;
+
+  @IsString()
+  @MaxLength(160)
+  nameVi!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  nameEn?: string;
+
+  @IsUUID()
+  categoryId!: string;
+
+  @IsUUID()
+  uomId!: string;
+
+  @IsIn(['RAW', 'SEMI', 'FINISHED', 'PACKAGING'])
+  type!: 'RAW' | 'SEMI' | 'FINISHED' | 'PACKAGING';
+
+  @IsOptional()
+  @IsIn(['NONE', 'LOT'])
+  tracking?: 'NONE' | 'LOT';
+
+  @IsOptional()
+  @IsBoolean()
+  useExpiration?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expirationDays?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  standardCost?: number;
+}
+
+/** Partial update — every field optional; `active: false` archives the product. */
+export class UpdateProductDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  code?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  nameVi?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  nameEn?: string;
+
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  uomId?: string;
+
+  @IsOptional()
+  @IsIn(['RAW', 'SEMI', 'FINISHED', 'PACKAGING'])
+  type?: 'RAW' | 'SEMI' | 'FINISHED' | 'PACKAGING';
+
+  @IsOptional()
+  @IsIn(['NONE', 'LOT'])
+  tracking?: 'NONE' | 'LOT';
+
+  @IsOptional()
+  @IsBoolean()
+  useExpiration?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expirationDays?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  standardCost?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 }
 
 export class CreateMaintenanceDto {

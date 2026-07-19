@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
@@ -72,7 +74,7 @@ class MoListScreen extends ConsumerWidget {
     );
     if (created != null && context.mounted) {
       ref.invalidate(moListProvider(state));
-      context.push('/production/orders/$created');
+      unawaited(context.push('/production/orders/$created'));
     }
   }
 }
@@ -177,22 +179,32 @@ class _CreateMoDialogState extends ConsumerState<_CreateMoDialog> {
             boms.when(
               loading: () => const LinearProgressIndicator(),
               error: (e, _) => Text('Không tải được công thức: $e'),
-              data: (list) => DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: _bomId,
-                decoration: const InputDecoration(labelText: 'Công thức (BoM)'),
-                items: [
-                  for (final b in list)
-                    DropdownMenuItem(
-                      value: b.id,
-                      child: Text(
-                        '${b.productNameVi} · ${b.outputQty.toStringAsFixed(0)}${b.uomCode}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
+              data: (list) => list.isEmpty
+                  ? Text(
+                      'Chưa có công thức nào — tạo BoM trước.',
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
+                    )
+                  : DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: _bomId,
+                      decoration:
+                          const InputDecoration(labelText: 'Công thức (BoM)'),
+                      items: [
+                        for (final b in list)
+                          DropdownMenuItem(
+                            value: b.id,
+                            child: Text(
+                              // Code + name + batch size so same-name recipes
+                              // (retired versions, size variants) stay tellable.
+                              '${b.productCode} · ${b.productNameVi} — mẻ '
+                              '${b.outputQty.toStringAsFixed(0)}${b.uomCode}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _bomId = v),
                     ),
-                ],
-                onChanged: (v) => setState(() => _bomId = v),
-              ),
             ),
             const SizedBox(height: BananSpacing.md),
             TextField(

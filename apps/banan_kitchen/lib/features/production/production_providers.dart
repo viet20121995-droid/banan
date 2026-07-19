@@ -137,6 +137,29 @@ final alertsProvider = FutureProvider.autoDispose
   );
 });
 
+// ── product management (create/edit/archive master data) ──
+/// Management list — includes archived products so they can be reactivated.
+final adminProductsProvider =
+    FutureProvider.autoDispose<List<MfgProduct>>((ref) async {
+  return _orThrow(
+    await ref
+        .watch(manufacturingApiProvider)
+        .listProducts(includeInactive: true),
+  );
+});
+
+final mfgUomsProvider =
+    FutureProvider.autoDispose<List<MfgUomOption>>((ref) async {
+  return _orThrow(await ref.watch(manufacturingApiProvider).listUoms());
+});
+
+// "mfg" prefix: banan_data already exports a categoriesProvider (menu
+// categories) — an unprefixed name here is ambiguous at the import site.
+final mfgCategoriesProvider =
+    FutureProvider.autoDispose<List<MfgCategoryOption>>((ref) async {
+  return _orThrow(await ref.watch(manufacturingApiProvider).listCategories());
+});
+
 // ── maintenance + OEE (increment 8) ──
 final oeeReportProvider = FutureProvider.autoDispose
     .family<List<MfgOeeRow>, MfgReportRange>((ref, range) async {

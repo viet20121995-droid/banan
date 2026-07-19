@@ -996,11 +996,128 @@ export class ManufacturingService {
 
   // ── master-data reads (for the Sản xuất UI: pick a BoM to build, etc.) ─────
 
-  listProducts(type?: string) {
+  /** [all] includes archived products — the management screen needs them back. */
+  listProducts(type?: string, all = false) {
     return this.prisma.mfgProduct.findMany({
-      where: { active: true, ...(type ? { type: type as never } : {}) },
+      where: { ...(all ? {} : { active: true }), ...(type ? { type: type as never } : {}) },
       include: { category: true, uom: true },
       orderBy: { code: 'asc' },
+    });
+  }
+
+  listCategories() {
+    return this.prisma.mfgCategory.findMany({ orderBy: { nameVi: 'asc' } });
+  }
+
+  listUoms() {
+    return this.prisma.mfgUom.findMany({ orderBy: [{ category: 'asc' }, { factor: 'asc' }] });
+  }
+
+  // ── product authoring (create/edit/archive master data) ───────────────────
+
+  private async assertProductRefs(db: PrismaService, categoryId?: string, uomId?: string) {
+    if (categoryId) {
+      const cat = await db.mfgCategory.findUnique({ where: { id: categoryId } });
+      if (!cat) throw new BadRequestException({ code: 'MFG_CATEGORY_NOT_FOUND' });
+    }
+    if (uomId) {
+      const uom = await db.mfgUom.findUnique({ where: { id: uomId } });
+      if (!uom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
+    }
+  }
+
+  async createProduct(dto: {
+    code: string;
+    nameVi: string;
+    nameEn?: string;
+    categoryId: string;
+    uomId: string;
+    type: 'RAW' | 'SEMI' | 'FINISHED' | 'PACKAGING';
+    tracking?: 'NONE' | 'LOT';
+    useExpiration?: boolean;
+    expirationDays?: number;
+    standardCost?: number;
+  }) {
+    await this.assertProductRefs(this.prisma, dto.categoryId, dto.uomId);
+    const taken = await this.prisma.mfgProduct.findUnique({ where: { code: dto.code } });
+    if (taken) {
+      throw new ConflictException({
+        code: 'MFG_PRODUCT_CODE_TAKEN',
+        message: `Mã "${dto.code}" đã tồn tại.`,
+      });
+    }
+    return this.prisma.mfgProduct.create({
+      data: {
+        code: dto.code,
+        nameVi: dto.nameVi,
+        nameEn: dto.nameEn ?? dto.nameVi,
+        categoryId: dto.categoryId,
+        uomId: dto.uomId,
+        type: dto.type,
+        tracking: dto.tracking ?? 'NONE',
+        useExpiration: dto.useExpiration ?? false,
+        expirationDays: dto.expirationDays ?? 0,
+        standardCost: roundCost(dto.standardCost ?? 0),
+      },
+      include: { category: true, uom: true },
+    });
+  }
+
+  async updateProduct(
+    id: string,
+    dto: {
+      code?: string;
+      nameVi?: string;
+      nameEn?: string;
+      categoryId?: string;
+      uomId?: string;
+      type?: 'RAW' | 'SEMI' | 'FINISHED' | 'PACKAGING';
+      tracking?: 'NONE' | 'LOT';
+      useExpiration?: boolean;
+      expirationDays?: number;
+      standardCost?: number;
+      active?: boolean;
+    },
+  ) {
+    const product = await this.prisma.mfgProduct.findUnique({ where: { id } });
+    if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
+    await this.assertProductRefs(this.prisma, dto.categoryId, dto.uomId);
+    if (dto.code && dto.code !== product.code) {
+      const taken = await this.prisma.mfgProduct.findUnique({ where: { code: dto.code } });
+      if (taken) {
+        throw new ConflictException({
+          code: 'MFG_PRODUCT_CODE_TAKEN',
+          message: `Mã "${dto.code}" đã tồn tại.`,
+        });
+      }
+    }
+    // Changing the base UoM after stock has moved would silently reinterpret
+    // every existing quant/move/BoM qty in the new unit — refuse it.
+    if (dto.uomId && dto.uomId !== product.uomId) {
+      const moved = await this.prisma.mfgStockMove.count({ where: { productId: id } });
+      if (moved > 0) {
+        throw new ConflictException({
+          code: 'MFG_PRODUCT_UOM_LOCKED',
+          message: 'Sản phẩm đã có giao dịch kho — không đổi được đơn vị gốc.',
+        });
+      }
+    }
+    return this.prisma.mfgProduct.update({
+      where: { id },
+      data: {
+        ...(dto.code !== undefined ? { code: dto.code } : {}),
+        ...(dto.nameVi !== undefined ? { nameVi: dto.nameVi } : {}),
+        ...(dto.nameEn !== undefined ? { nameEn: dto.nameEn } : {}),
+        ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
+        ...(dto.uomId !== undefined ? { uomId: dto.uomId } : {}),
+        ...(dto.type !== undefined ? { type: dto.type } : {}),
+        ...(dto.tracking !== undefined ? { tracking: dto.tracking } : {}),
+        ...(dto.useExpiration !== undefined ? { useExpiration: dto.useExpiration } : {}),
+        ...(dto.expirationDays !== undefined ? { expirationDays: dto.expirationDays } : {}),
+        ...(dto.standardCost !== undefined ? { standardCost: roundCost(dto.standardCost) } : {}),
+        ...(dto.active !== undefined ? { active: dto.active } : {}),
+      },
+      include: { category: true, uom: true },
     });
   }
 

@@ -20,6 +20,14 @@ class MfgProduct {
     required this.uomId,
     required this.uomCode,
     required this.avgCost,
+    this.nameEn = '',
+    this.categoryId = '',
+    this.categoryName = '',
+    this.tracking = 'NONE',
+    this.useExpiration = false,
+    this.expirationDays = 0,
+    this.standardCost = 0,
+    this.active = true,
   });
 
   factory MfgProduct.fromJson(Map<String, dynamic> j) => MfgProduct(
@@ -31,6 +39,15 @@ class MfgProduct {
             (j['uomId'] as String? ?? ''),
         uomCode: (j['uom'] as Map?)?['code'] as String? ?? '',
         avgCost: _num(j['avgCost']),
+        nameEn: j['nameEn'] as String? ?? '',
+        categoryId: (j['category'] as Map?)?['id'] as String? ??
+            (j['categoryId'] as String? ?? ''),
+        categoryName: (j['category'] as Map?)?['nameVi'] as String? ?? '',
+        tracking: j['tracking'] as String? ?? 'NONE',
+        useExpiration: j['useExpiration'] as bool? ?? false,
+        expirationDays: (j['expirationDays'] as num?)?.toInt() ?? 0,
+        standardCost: _num(j['standardCost']),
+        active: j['active'] as bool? ?? true,
       );
 
   final String id;
@@ -40,6 +57,48 @@ class MfgProduct {
   final String uomId;
   final String uomCode;
   final double avgCost;
+  final String nameEn;
+  final String categoryId;
+  final String categoryName;
+  final String tracking; // NONE | LOT
+  final bool useExpiration;
+  final int expirationDays;
+  final double standardCost;
+  final bool active;
+}
+
+class MfgUomOption {
+  const MfgUomOption({
+    required this.id,
+    required this.code,
+    required this.nameVi,
+    required this.category,
+  });
+
+  factory MfgUomOption.fromJson(Map<String, dynamic> j) => MfgUomOption(
+        id: j['id'] as String,
+        code: j['code'] as String? ?? '',
+        nameVi: j['nameVi'] as String? ?? '',
+        category: j['category'] as String? ?? '',
+      );
+
+  final String id;
+  final String code;
+  final String nameVi;
+  final String category; // weight | unit | volume
+}
+
+class MfgCategoryOption {
+  const MfgCategoryOption({required this.id, required this.nameVi});
+
+  factory MfgCategoryOption.fromJson(Map<String, dynamic> j) =>
+      MfgCategoryOption(
+        id: j['id'] as String,
+        nameVi: j['nameVi'] as String? ?? '',
+      );
+
+  final String id;
+  final String nameVi;
 }
 
 class MfgWorkCenter {
@@ -312,6 +371,9 @@ class MfgOnHand {
     required this.locationCode,
     required this.quantity,
     required this.uomCode,
+    this.reservedQty = 0,
+    this.expiryDate,
+    this.productType = '',
   });
 
   factory MfgOnHand.fromJson(Map<String, dynamic> j) => MfgOnHand(
@@ -321,6 +383,9 @@ class MfgOnHand {
         lotName: (j['lot'] as Map?)?['name'] as String?,
         locationCode: (j['location'] as Map?)?['code'] as String? ?? '',
         quantity: _num(j['quantity']),
+        reservedQty: _num(j['reservedQty']),
+        expiryDate: DateTime.tryParse('${(j['lot'] as Map?)?['expiryDate']}'),
+        productType: (j['product'] as Map?)?['type'] as String? ?? '',
       );
 
   final String productNameVi;
@@ -329,6 +394,11 @@ class MfgOnHand {
   final String locationCode;
   final double quantity;
   final String uomCode;
+  final double reservedQty;
+  final DateTime? expiryDate;
+  final String productType;
+
+  double get freeQty => quantity - reservedQty;
 }
 
 class MfgExpiringLot {
@@ -908,12 +978,89 @@ class ManufacturingApi {
       );
 
   /// Master-data product list (for scrap/receipt/BoM pickers). [type] filters by
-  /// RAW/SEMI/FINISHED/PACKAGING.
-  Future<Result<List<MfgProduct>, AppFailure>> listProducts({String? type}) =>
+  /// RAW/SEMI/FINISHED/PACKAGING. [includeInactive] adds archived products
+  /// (management screen only).
+  Future<Result<List<MfgProduct>, AppFailure>> listProducts({
+    String? type,
+    bool includeInactive = false,
+  }) =>
       _get(
         '$_base/products',
-        query: {if (type != null) 'type': type},
+        query: {
+          if (type != null) 'type': type,
+          if (includeInactive) 'all': '1',
+        },
         parse: (res) => _list(res, MfgProduct.fromJson),
+      );
+
+  Future<Result<List<MfgUomOption>, AppFailure>> listUoms() => _get(
+        '$_base/uoms',
+        parse: (res) => _list(res, MfgUomOption.fromJson),
+      );
+
+  Future<Result<List<MfgCategoryOption>, AppFailure>> listCategories() => _get(
+        '$_base/categories',
+        parse: (res) => _list(res, MfgCategoryOption.fromJson),
+      );
+
+  Future<Result<void, AppFailure>> createProduct({
+    required String code,
+    required String nameVi,
+    required String categoryId,
+    required String uomId,
+    required String type,
+    String? nameEn,
+    String tracking = 'NONE',
+    bool useExpiration = false,
+    int expirationDays = 0,
+    double standardCost = 0,
+  }) =>
+      _postVoid(
+        '$_base/products',
+        body: {
+          'code': code,
+          'nameVi': nameVi,
+          if (nameEn != null && nameEn.isNotEmpty) 'nameEn': nameEn,
+          'categoryId': categoryId,
+          'uomId': uomId,
+          'type': type,
+          'tracking': tracking,
+          'useExpiration': useExpiration,
+          'expirationDays': expirationDays,
+          'standardCost': standardCost,
+        },
+      );
+
+  /// Partial update; only non-null fields are sent. `active: false` archives.
+  Future<Result<void, AppFailure>> updateProduct(
+    String id, {
+    String? code,
+    String? nameVi,
+    String? nameEn,
+    String? categoryId,
+    String? uomId,
+    String? type,
+    String? tracking,
+    bool? useExpiration,
+    int? expirationDays,
+    double? standardCost,
+    bool? active,
+  }) =>
+      _patchVoid(
+        '$_base/products/$id',
+        body: {
+          if (code != null) 'code': code,
+          if (nameVi != null) 'nameVi': nameVi,
+          if (nameEn != null) 'nameEn': nameEn,
+          if (categoryId != null) 'categoryId': categoryId,
+          if (uomId != null) 'uomId': uomId,
+          if (type != null) 'type': type,
+          if (tracking != null) 'tracking': tracking,
+          if (useExpiration != null) 'useExpiration': useExpiration,
+          if (expirationDays != null) 'expirationDays': expirationDays,
+          if (standardCost != null) 'standardCost': standardCost,
+          if (active != null) 'active': active,
+        },
       );
 
   Future<Result<List<MfgWorkCenter>, AppFailure>> listWorkCenters() => _get(
@@ -1286,6 +1433,21 @@ class ManufacturingApi {
   }) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>(path, data: body);
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
+      return const Result.success(null);
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  Future<Result<void, AppFailure>> _patchVoid(
+    String path, {
+    Object? body,
+  }) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(path, data: body);
       if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       return const Result.success(null);
     } on DioException catch (e) {

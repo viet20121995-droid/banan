@@ -988,4 +988,79 @@ d('Manufacturing golden path (integration)', () => {
     });
     expect(lotConsumes).toBe(1);
   });
+
+  it('product CRUD: create, duplicate-code 409, edit, archive hides from pickers', async () => {
+    const cat = await prisma.mfgCategory.findFirstOrThrow();
+    const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+
+    const created = await mfg.createProduct({
+      code: 'TEST-PM-BUTTER',
+      nameVi: 'Bơ lạt test',
+      categoryId: cat.id,
+      uomId: gram.id,
+      type: 'RAW',
+      tracking: 'LOT',
+      useExpiration: true,
+      expirationDays: 30,
+      standardCost: 250,
+    });
+    expect(created.code).toBe('TEST-PM-BUTTER');
+    expect(created.tracking).toBe('LOT');
+    expect(Number(created.standardCost)).toBe(250);
+
+    // Duplicate code refused.
+    await expect(
+      mfg.createProduct({
+        code: 'TEST-PM-BUTTER',
+        nameVi: 'Trùng mã',
+        categoryId: cat.id,
+        uomId: gram.id,
+        type: 'RAW',
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    // Edit fields.
+    const updated = await mfg.updateProduct(created.id, {
+      nameVi: 'Bơ lạt Anchor',
+      expirationDays: 45,
+    });
+    expect(updated.nameVi).toBe('Bơ lạt Anchor');
+    expect(updated.expirationDays).toBe(45);
+
+    // Archive: gone from the default picker list, still on the management list.
+    await mfg.updateProduct(created.id, { active: false });
+    const pickers = await mfg.listProducts('RAW');
+    expect(pickers.some((p) => p.id === created.id)).toBe(false);
+    const admin = await mfg.listProducts(undefined, true);
+    expect(admin.some((p) => p.id === created.id)).toBe(true);
+
+    // Reactivate + master-data reads used by the form.
+    await mfg.updateProduct(created.id, { active: true });
+    expect((await mfg.listCategories()).length).toBeGreaterThan(0);
+    expect((await mfg.listUoms()).some((u) => u.code === 'g')).toBe(true);
+  });
+
+  it('product base UoM locks once stock has moved', async () => {
+    const cat = await prisma.mfgCategory.findFirstOrThrow();
+    const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+    const unit = await prisma.mfgUom.findFirstOrThrow({
+      where: { category: 'unit' },
+    });
+
+    const p = await mfg.createProduct({
+      code: 'TEST-PM-UOMLOCK',
+      nameVi: 'Test khoá đơn vị',
+      categoryId: cat.id,
+      uomId: gram.id,
+      type: 'RAW',
+    });
+    // Before any movement the UoM may still change.
+    await mfg.updateProduct(p.id, { uomId: unit.id });
+    await mfg.updateProduct(p.id, { uomId: gram.id });
+
+    await mfg.receive({ productId: p.id, qty: 100, unitCost: 10 });
+    await expect(mfg.updateProduct(p.id, { uomId: unit.id })).rejects.toMatchObject({
+      status: 409,
+    });
+  });
 });

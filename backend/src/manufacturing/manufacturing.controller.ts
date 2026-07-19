@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
@@ -11,12 +21,14 @@ import {
   CreateBomDto,
   CreateMaintenanceDto,
   CreateMoDto,
+  CreateProductDto,
   CreateQualityPointDto,
   PlanMoDto,
   ReceiveDto,
   RecordCheckDto,
   ScrapDto,
   SetAlertStageDto,
+  UpdateProductDto,
 } from './dto/manufacturing.dto';
 import { ManufacturingService } from './manufacturing.service';
 
@@ -40,8 +52,32 @@ export class ManufacturingController {
   // ── master data (for the Sản xuất UI) ────────────────────────────────────
   @Roles(...KITCHEN_READ)
   @Get('products')
-  listProducts(@Query('type') type?: string) {
-    return this.mfg.listProducts(type);
+  listProducts(@Query('type') type?: string, @Query('all') all?: string) {
+    return this.mfg.listProducts(type, all === '1');
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('products')
+  createProduct(@Body() dto: CreateProductDto) {
+    return this.mfg.createProduct(dto);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Patch('products/:id')
+  updateProduct(@Param('id') id: string, @Body() dto: UpdateProductDto) {
+    return this.mfg.updateProduct(id, dto);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('categories')
+  listCategories() {
+    return this.mfg.listCategories();
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('uoms')
+  listUoms() {
+    return this.mfg.listUoms();
   }
 
   @Roles(...KITCHEN_READ)

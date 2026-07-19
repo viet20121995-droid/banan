@@ -372,8 +372,49 @@ consumes once; produce doesn't eat another MO's reserved lot; two MOs never
 overdraw the same free stock concurrently; availability stays AVAILABLE
 post-reserve; produce banks standard WO time).
 
+## Increment 10 — Production workspace UI + product master data ✅
+
+The "Sản xuất" section went from a raw button list to a workspace, and products
+became first-class editable master data.
+
+**Backend** (all under `/v1/manufacturing`):
+- `POST /products` + `PATCH /products/:id` (KITCHEN_WRITE) — create/edit/archive
+  `MfgProduct`. Validations: category/uom existence, unique `code` (409
+  `MFG_PRODUCT_CODE_TAKEN`), and **base-UoM lock**: once a product has any stock
+  move, changing `uomId` is refused (409 `MFG_PRODUCT_UOM_LOCKED`) because every
+  historical qty would silently reinterpret in the new unit. Archive = `active:
+  false` (soft; hidden from pickers, restorable).
+- `GET /categories`, `GET /uoms` (KITCHEN_READ) — dropdown data for the form.
+- `GET /products?all=1` — includes archived rows (management screen only).
+- No migration — the schema already had every field.
+
+**Kitchen app**:
+- **Dashboard** rebuilt as a workspace: compact KPI cards (4 MO states + QC
+  alerts + expiring lots, tap-through), a "Việc hôm nay" list (overdue-first
+  schedule slice + unscheduled count), a responsive quick-action grid in
+  workflow order (sản phẩm → BoM → nhập kho → lệnh → lịch/xưởng → tồn kho →
+  báo cáo), and the expiring-lot strip. Write-only actions (nhập kho, hao hụt)
+  hide for read-only staff.
+- **Products screen** (`/production/products`): search + type filter chips +
+  archived toggle; create/edit form (`/production/products/new`, `…/:id/edit`)
+  with code/names/type/category/uom/tracking/HSD/standard-cost/active. Staff can
+  browse; only managers get the FAB/edit (server enforces regardless).
+- **Stock screen**: grouped by product type, each row shows qty + unit, lot,
+  HSD (red when ≤3 days), and reserved/free split when a hold exists; negative
+  quants render red; empty state links to the receipt form.
+- **MO-create dialog**: BoM dropdown now reads `code · name — mẻ N uom` and the
+  empty case says to create a BoM first.
+- New Dart DTOs (`MfgUomOption`, `MfgCategoryOption`, extended `MfgProduct` /
+  `MfgOnHand`) + `_patchVoid` helper; providers `adminProductsProvider`,
+  `mfgUomsProvider`, `mfgCategoriesProvider` (prefixed — `banan_data` already
+  exports a menu `categoriesProvider`).
+
+Integration 36/36 (+ product CRUD/archive/duplicate-code, base-UoM lock).
+TODO (deliberate, small): category/uom CRUD stays seed-only — the bakery's set
+is stable; add endpoints when a real need appears.
+
 ## Roadmap
 
-The MES roadmap through increment 9 is complete. Remaining ideas are demand-driven
+The MES roadmap through increment 10 is complete. Remaining ideas are demand-driven
 (not scheduled): demand-netting MPS (plan against sales orders), shift/planned-time
 config to make OEE audit-grade, and a byproduct/co-product yield UI.

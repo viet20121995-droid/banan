@@ -140,7 +140,10 @@ class _Column extends StatelessWidget {
             // RenderFlex-overflow and hide the cards below the fold.
             Expanded(
               child: items.isEmpty
-                  ? Text('—', style: TextStyle(color: theme.colorScheme.outline))
+                  ? Text(
+                      '—',
+                      style: TextStyle(color: theme.colorScheme.outline),
+                    )
                   : ListView(
                       padding: EdgeInsets.zero,
                       children: [
