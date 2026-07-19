@@ -1281,6 +1281,71 @@ d('Manufacturing golden path (integration)', () => {
     expect((await mfg.listBoms()).some((b) => b.id === bom.id)).toBe(true);
   });
 
+  it('legacy invalid BoMs (pre-type-rules) are hidden from the picker and refused by createMO', async () => {
+    const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+
+    // Authored straight in the DB, as the old UI could: RAW output.
+    const rawOut = await prisma.mfgBom.create({
+      data: {
+        productId: ids.flour, // RAW
+        outputQty: 1000,
+        uomId: gram.id,
+        version: 99,
+        active: true,
+        lines: { create: [{ componentId: ids.sugar, qty: 500, uomId: gram.id }] },
+      },
+    });
+    // And a FINISHED good as an ingredient.
+    const finishedIn = await prisma.mfgBom.create({
+      data: {
+        productId: ids.sponge, // SEMI — valid output
+        outputQty: 1000,
+        uomId: gram.id,
+        version: 99,
+        active: true,
+        lines: { create: [{ componentId: ids.cake, qty: 100, uomId: gram.id }] },
+      },
+    });
+
+    try {
+      const visible = (await mfg.listBoms()).map((b) => b.id);
+      expect(visible).not.toContain(rawOut.id);
+      expect(visible).not.toContain(finishedIn.id);
+
+      await expect(mfg.createMO({ bomId: rawOut.id, qtyToProduce: 100 })).rejects.toMatchObject({
+        status: 400,
+      });
+      await expect(mfg.createMO({ bomId: finishedIn.id, qtyToProduce: 100 })).rejects.toMatchObject(
+        { status: 400 },
+      );
+    } finally {
+      await prisma.mfgBom.delete({ where: { id: rawOut.id } });
+      await prisma.mfgBom.delete({ where: { id: finishedIn.id } });
+    }
+  });
+
+  it('createMO refuses a retired (inactive) BoM version', async () => {
+    const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });
+    // A retired version, straight in the DB (as createBom leaves behind).
+    const retired = await prisma.mfgBom.create({
+      data: {
+        productId: ids.sponge,
+        outputQty: 1000,
+        uomId: gram.id,
+        version: 98,
+        active: false,
+        lines: { create: [{ componentId: ids.flour, qty: 500, uomId: gram.id }] },
+      },
+    });
+    try {
+      await expect(mfg.createMO({ bomId: retired.id, qtyToProduce: 100 })).rejects.toMatchObject({
+        status: 400,
+      });
+    } finally {
+      await prisma.mfgBom.delete({ where: { id: retired.id } });
+    }
+  });
+
   it('two same-code creates racing: loser gets 409, never a 500', async () => {
     const cat = await prisma.mfgCategory.findFirstOrThrow();
     const gram = await prisma.mfgUom.findFirstOrThrow({ where: { code: 'g' } });

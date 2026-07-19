@@ -464,6 +464,18 @@ Second review round (4 more findings, all fixed):
 
 Integration 43/43.
 
+Third review round (user review, 3 findings, all fixed):
+- **Type rules re-applied on READ**: `listBoms` also filters legacy BoMs
+  (authored before the rules) with a RAW/PACKAGING output or FINISHED input,
+  and `createMO` re-checks both (`MFG_BOM_OUTPUT_TYPE` /
+  `MFG_BOM_COMPONENT_TYPE`) so a stale client can't order from one.
+- **`createMO` refuses retired BoM versions** (`MFG_BOM_INACTIVE`) — createBom
+  retires the previous version; its id could still be posted raw.
+- **`createBom`'s lock query orders in SQL** (`ORDER BY "id" FOR UPDATE`) —
+  sorting the JS array alone doesn't constrain the scan order of `IN(...)`.
+
+Integration 45/45.
+
 ## Roadmap
 
 The MES roadmap through increment 10 is complete. Remaining ideas are demand-driven

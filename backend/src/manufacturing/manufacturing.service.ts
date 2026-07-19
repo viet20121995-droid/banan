@@ -339,6 +339,15 @@ export class ManufacturingService {
       include: { lines: { include: { component: true } }, product: true },
     });
     if (!bom) throw new NotFoundException({ code: 'MFG_BOM_NOT_FOUND' });
+    // A retired version (createBom retires the old one when saving a new one):
+    // hidden from the picker, but a stale client can still post its id — an MO
+    // from it would consume the OLD recipe's quantities.
+    if (!bom.active) {
+      throw new BadRequestException({
+        code: 'MFG_BOM_INACTIVE',
+        message: 'Công thức đã có phiên bản mới hơn — tải lại danh sách.',
+      });
+    }
     // Archived output product: its BoM is hidden from the picker, but a stale
     // client (or raw API call) could still post the id — refuse, don't book
     // stock into a product no default list shows.
@@ -355,6 +364,22 @@ export class ManufacturingService {
       throw new BadRequestException({
         code: 'MFG_COMPONENT_ARCHIVED',
         message: `Nguyên liệu "${deadLine.component.nameVi}" đã lưu trữ — sửa công thức trước.`,
+      });
+    }
+    // Type rules re-checked here too: a legacy BoM (authored before the rules)
+    // can carry a RAW output or FINISHED input — listBoms hides it, but a
+    // stale/raw client can still post its id.
+    if (bom.product.type !== 'SEMI' && bom.product.type !== 'FINISHED') {
+      throw new BadRequestException({
+        code: 'MFG_BOM_OUTPUT_TYPE',
+        message: 'Công thức chỉ dành cho bán thành phẩm hoặc thành phẩm.',
+      });
+    }
+    const finishedLine = bom.lines.find((l) => l.component.type === 'FINISHED');
+    if (finishedLine) {
+      throw new BadRequestException({
+        code: 'MFG_BOM_COMPONENT_TYPE',
+        message: `"${finishedLine.component.nameVi}" là thành phẩm — không dùng làm nguyên liệu.`,
       });
     }
     if (dto.qtyToProduce <= 0) {
@@ -1255,11 +1280,13 @@ export class ManufacturingService {
       // An archived product's recipe must leave the "make a batch" picker too,
       // or staff can keep producing a product no other list shows — and a
       // recipe whose INGREDIENT was archived would only fail at createMO, so
-      // hide it here as well.
+      // hide it here as well. Type rules are re-applied on READ, not just at
+      // createBom: BoMs authored before the rules existed (old UI allowed any
+      // product) may sit in the DB with a RAW output or FINISHED input.
       where: {
         active: true,
-        product: { active: true },
-        lines: { every: { component: { active: true } } },
+        product: { active: true, type: { in: ['SEMI', 'FINISHED'] } },
+        lines: { every: { component: { active: true, type: { not: 'FINISHED' } } } },
       },
       include: {
         product: { include: { uom: true } },
@@ -1401,8 +1428,11 @@ export class ManufacturingService {
       // base-UoM edit or archive land in between — the recipe would reference
       // a product whose unit/state the validation never saw.
       const lockIds = [...new Set([dto.productId, ...dto.lines.map((l) => l.componentId)])].sort();
+      // ORDER BY makes the DB acquire the row locks in id order — sorting the
+      // JS array alone doesn't constrain the scan order of an IN(...) plan.
       await db.$executeRaw`
-        SELECT 1 FROM "MfgProduct" WHERE "id" IN (${Prisma.join(lockIds)}) FOR UPDATE
+        SELECT 1 FROM "MfgProduct" WHERE "id" IN (${Prisma.join(lockIds)})
+        ORDER BY "id" FOR UPDATE
       `;
       const product = await db.mfgProduct.findUnique({ where: { id: dto.productId } });
       if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
