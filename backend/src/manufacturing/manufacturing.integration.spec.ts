@@ -838,4 +838,93 @@ d('Manufacturing golden path (integration)', () => {
     expect(Number(flour._sum.quantity)).toBe(5000 - flourNeed);
     expect(Number(flour._sum.reservedQty)).toBe(0); // hold released, not stranded
   });
+
+  // ── increment 9 review fixes ──
+  it("produce consumes only free stock — it never eats another MO's reservation", async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    await prisma.mfgReservation.deleteMany();
+    const bom = await bomOf(ids.sponge);
+    const moA = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(moA.id);
+    const flourNeed = Number(
+      (
+        await prisma.mfgOrderComponent.findFirstOrThrow({
+          where: { moId: moA.id, productId: ids.flour },
+        })
+      ).qtyToConsume,
+    );
+    // Exactly enough flour for ONE MO on a lot-quant, reserved entirely to A.
+    await prisma.mfgStockQuant.deleteMany({
+      where: { productId: ids.flour, locationId: stockLoc.id },
+    });
+    const lot = await prisma.mfgLot.create({
+      data: { productId: ids.flour, name: 'HR-P1', mfgDate: new Date() },
+    });
+    await prisma.mfgStockQuant.create({
+      data: {
+        productId: ids.flour,
+        lotId: lot.id,
+        locationId: stockLoc.id,
+        quantity: flourNeed,
+        reservedQty: 0,
+      },
+    });
+    await mfg.reserve(moA.id);
+
+    // A second sponge MO produces — it must NOT touch A's reserved flour.
+    const moB = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(moB.id);
+    await mfg.produce(moB.id);
+
+    // B saw 0 free on A's lot-quant → its shortfall backflushed to a separate
+    // (negative) quant; A's reserved lot-quant is physically untouched.
+    const aQuant = await prisma.mfgStockQuant.findFirstOrThrow({
+      where: { productId: ids.flour, lotId: lot.id, locationId: stockLoc.id },
+    });
+    expect(Number(aQuant.quantity)).toBe(flourNeed);
+    expect(Number(aQuant.reservedQty)).toBe(flourNeed);
+    expect(await prisma.mfgReservation.count({ where: { moId: moA.id } })).toBeGreaterThan(0);
+  });
+
+  it('checkAvailability stays AVAILABLE for the MO that just reserved', async () => {
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    await prisma.mfgReservation.deleteMany();
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(mo.id);
+    // Exactly each component's need on hand — so after reserving, free stock is 0.
+    const detail = await mfg.getMO(mo.id);
+    for (const c of detail!.components) {
+      await prisma.mfgStockQuant.deleteMany({
+        where: { productId: c.productId, locationId: stockLoc.id },
+      });
+      await prisma.mfgStockQuant.create({
+        data: {
+          productId: c.productId,
+          lotId: null,
+          locationId: stockLoc.id,
+          quantity: Number(c.qtyToConsume),
+          reservedQty: 0,
+        },
+      });
+    }
+    const reserved = await mfg.reserve(mo.id);
+    // Its own hold counts toward availability — it must not flip to Not-available.
+    for (const c of reserved.components) expect(c.status).toBe('AVAILABLE');
+  });
+
+  it('direct produce banks standard time on its work orders (OEE runtime nonzero)', async () => {
+    await prisma.mfgReservation.deleteMany();
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
+    await mfg.confirmMO(mo.id);
+    await mfg.produce(mo.id); // WOs closed via produce, never run on the shop floor
+
+    const wos = await prisma.mfgWorkOrder.findMany({ where: { moId: mo.id } });
+    expect(wos.length).toBeGreaterThan(0);
+    for (const wo of wos) {
+      expect(wo.state).toBe('DONE');
+      expect(wo.durationReal).toBe(wo.durationExpected); // standard time banked, not 0
+    }
+  });
 });

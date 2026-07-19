@@ -340,8 +340,24 @@ longer disturbs the other's stock. `reservedQty` is still the fast on-quant tota
 (kept in sync by the guarded increment / the release), so availability reads are
 unchanged. Migration `mfg_reservation_quant_cascade` lets a quant delete cascade
 its reservations (only relevant to test teardown; production never deletes a
-reserved quant). Integration 30/30 (cross-MO cancel isolation; produce releases
-its own hold then consumes real stock once).
+reserved quant). `mfg_reservation_reconcile` zeroes any pre-ledger orphan
+`reservedQty` (no backing row) on first deploy.
+
+Review-round fixes on top:
+- **`produce` consumes only free stock** (`quantity − reservedQty`, after
+  releasing its own hold), so a second order can't consume stock a first order
+  reserved. (Ceiling: a shortfall backflush still lands on the null-lot quant, so
+  a reservation on a *non-lot-tracked* item's null-lot quant can be drawn negative
+  — lot-tracked stock, i.e. every expiry-tracked ingredient, is fully protected.)
+- **`checkAvailability` counts the MO's own reservation** (`free + ownReserved ≥
+  need`), so the order that just reserved doesn't flip itself to Not-available.
+- **`produce` banks standard time** on the work orders it closes
+  (`durationReal = durationReal || durationExpected`), so OEE runtime isn't 0 for
+  batches closed straight from `produce` rather than the shop floor.
+
+Integration 33/33 (cross-MO cancel isolation; produce releases its own hold then
+consumes once; produce doesn't eat another MO's reserved lot; availability stays
+AVAILABLE post-reserve; produce banks standard WO time).
 
 ## Roadmap
 

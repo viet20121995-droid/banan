@@ -434,7 +434,10 @@ export class ManufacturingService {
 
     const rows = [];
     for (const c of mo.components) {
-      const avail = await this.availableAtStock(this.prisma, c.productId, stock);
+      // Free stock PLUS what this MO already holds — otherwise an order that just
+      // reserved would flip itself to Not-available (its own hold lowered free).
+      const free = await this.availableAtStock(this.prisma, c.productId, stock);
+      const avail = round3(free + n(c.reservedQty));
       const ok = avail >= n(c.qtyToConsume);
       await this.prisma.mfgOrderComponent.update({
         where: { id: c.id },
@@ -639,7 +642,11 @@ export class ManufacturingService {
         });
         for (const q of quants) {
           if (remaining <= 0) break;
-          const take = Math.min(n(q.quantity), remaining);
+          // Consume only FREE stock. This MO's own hold was released above, so any
+          // remaining reservedQty on the quant belongs to OTHER orders — taking it
+          // would eat a reservation this batch doesn't own. The shortfall (incl.
+          // stock another order has reserved) backflushes below.
+          const take = Math.min(n(q.quantity) - n(q.reservedQty), remaining);
           if (take <= 0) continue;
           await this.move(db, {
             productId: c.productId,
@@ -652,10 +659,15 @@ export class ManufacturingService {
             refId: mo.id,
             unitCost: n(c.product.avgCost),
           });
-          // Reservations were already released above, so consume just moves stock.
           remaining -= take;
         }
         // Backflush the shortfall so cost/qty stay whole (quant goes negative).
+        // ponytail: the backflush hits the null-lot quant. If a component is NOT
+        // lot-tracked, another MO's reservation could sit on that same null-lot
+        // quant and this negative would draw it below its reservedQty. Lot-tracked
+        // stock (every expiry-tracked ingredient — the norm here) is unaffected:
+        // its reservation sits on a lot-quant while the shortfall lands on the
+        // separate null-lot quant. Per-quant backflush routing if this ever bites.
         if (remaining > 0) {
           await this.move(db, {
             productId: c.productId,
@@ -684,6 +696,9 @@ export class ManufacturingService {
           where: { id: wo.id },
           data: {
             state: 'DONE',
+            // Closing straight from produce (never run on the shop floor) banks the
+            // standard time, so OEE runtime reflects it instead of reading 0.
+            durationReal: wo.durationReal || wo.durationExpected,
             dateFinished: wo.dateFinished ?? new Date(),
           },
         });
