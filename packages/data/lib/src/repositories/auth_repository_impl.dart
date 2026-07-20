@@ -21,12 +21,21 @@ class AuthRepositoryImpl implements AuthRepository {
   AuthSession? get currentSession => _session;
 
   @override
-  Stream<AuthSession?> watchSession() async* {
+  Stream<AuthSession?> watchSession() {
     // Replay the current session to every new listener: bootstrap() emits
     // before widgets subscribe, so a bare broadcast stream would leave
     // late subscribers (every screen after a page reload) stuck on null.
-    yield _session;
-    yield* _sessionController.stream;
+    // Subscribe FIRST, then enqueue the replay — both happen in one
+    // synchronous block, so no emit can slip into a gap (an async*
+    // generator subscribes only after its first yield is consumed, which
+    // leaves a miss window). _emit() updates _session before adding, so
+    // the replay is never staler than a forwarded event.
+    final out = StreamController<AuthSession?>();
+    final sub = _sessionController.stream.listen(out.add, onDone: out.close);
+    out
+      ..add(_session)
+      ..onCancel = sub.cancel;
+    return out.stream;
   }
 
   @override
