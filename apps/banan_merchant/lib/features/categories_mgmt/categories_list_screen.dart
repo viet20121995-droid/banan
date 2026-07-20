@@ -159,7 +159,7 @@ class _Body extends StatelessWidget {
       return const EmptyState(
         title: 'Chưa có danh mục',
         message:
-            'Tạo danh mục để phân loại sản phẩm ("Bánh kem", "Cupcake"…) — '
+            'Tạo danh mục để phân loại sản phẩm ("Bánh kem", "Cupcake"…). '
             'danh mục được ghim sẽ hiển thị thành dải sản phẩm ở trang chủ.',
         icon: Icons.category_outlined,
       );
@@ -232,7 +232,7 @@ class _Body extends StatelessWidget {
         title: Text('Xoá "${category.name}"?'),
         content: const Text(
           'Chỉ xoá được danh mục khi không còn sản phẩm. Nếu còn sản phẩm, '
-          'chọn "Xoá cả sản phẩm" để xoá luôn — sản phẩm đã có trong đơn hàng '
+          'chọn "Xoá cả sản phẩm" để xoá luôn. Sản phẩm đã có trong đơn hàng '
           'sẽ được giữ lại và chặn xoá (hãy ẩn danh mục trong trường hợp đó).',
         ),
         actions: [

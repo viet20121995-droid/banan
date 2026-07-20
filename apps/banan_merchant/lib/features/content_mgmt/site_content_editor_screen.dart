@@ -141,8 +141,8 @@ class _FaqEditorState extends ConsumerState<_FaqEditor> {
       children: [
         if (!canEdit)
           const ReadOnlyBanner(
-            'Bạn xem được nội dung này nhưng không sửa được — nó hiển thị trên '
-            'site của toàn chuỗi nên chỉ quản trị viên (ADMIN) mới đổi được.',
+            'Bạn xem được nội dung này nhưng không sửa được. Nội dung hiển thị '
+            'trên site của toàn chuỗi nên chỉ quản trị viên (ADMIN) mới đổi được.',
           ),
         Text(
           'Câu hỏi thường gặp hiển thị cho khách ở trang /faq. Kéo thêm/bớt '
@@ -308,8 +308,8 @@ class _AboutEditorState extends ConsumerState<_AboutEditor> {
       children: [
         if (!canEdit)
           const ReadOnlyBanner(
-            'Bạn xem được nội dung này nhưng không sửa được — nó hiển thị trên '
-            'site của toàn chuỗi nên chỉ quản trị viên (ADMIN) mới đổi được.',
+            'Bạn xem được nội dung này nhưng không sửa được. Nội dung hiển thị '
+            'trên site của toàn chuỗi nên chỉ quản trị viên (ADMIN) mới đổi được.',
           ),
         Text(
           'Nội dung trang "Về Banan" (/about). Mỗi mục có tiêu đề + nội dung; '

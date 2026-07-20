@@ -179,7 +179,7 @@ class _Body extends ConsumerWidget {
         ref.invalidate(storeOrdersControllerProvider);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Đã ghi nhận nhận hàng — đơn hoàn tất.')),
+              content: Text('Đã ghi nhận nhận hàng, đơn hoàn tất.')),
         );
       },
       failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
@@ -781,7 +781,7 @@ class _MerchantPersonalizationBlock extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                'Cá nhân hoá — hướng dẫn bếp',
+                'Cá nhân hoá · Hướng dẫn bếp',
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: BananColors.primary,
                   fontWeight: FontWeight.w700,

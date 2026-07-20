@@ -465,7 +465,7 @@ class _Vi extends AppStrings {
       'báo "đã giao" ngay khi đến nơi.';
   @override
   String get pickupNote =>
-      'Ghé cửa hàng bất cứ lúc nào — đơn đã sẵn ở quầy.';
+      'Ghé cửa hàng bất cứ lúc nào, đơn đã sẵn ở quầy.';
 
   @override
   String get loginTitle => 'Banan Fukuoka Saigon';
@@ -554,7 +554,7 @@ class _Vi extends AppStrings {
   @override
   String michoUntilNextTier(int n) => 'Còn $n Micho để lên hạng tiếp theo';
   @override
-  String get topTier => 'Bạn đang ở hạng cao nhất — cảm ơn bạn!';
+  String get topTier => 'Bạn đang ở hạng cao nhất, cảm ơn bạn!';
   @override
   String loyaltyHowText(String earn, String value) =>
       'Tích 1 Micho cho mỗi $earn chi tiêu. '

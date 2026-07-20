@@ -5,7 +5,7 @@ import '../../tokens/spacing.dart';
 class ErrorState extends StatelessWidget {
   const ErrorState({
     required this.message,
-    this.title = 'Something went wrong',
+    this.title = 'Có lỗi xảy ra',
     this.onRetry,
     super.key,
   });
@@ -13,6 +13,16 @@ class ErrorState extends StatelessWidget {
   final String title;
   final String message;
   final VoidCallback? onRetry;
+
+  /// Callers commonly pass `e.toString()` where `e` is an `Exception('…')`,
+  /// which renders a leaked "Exception: " prefix. Strip it here once instead
+  /// of at every call site.
+  String get _displayMessage {
+    const prefix = 'Exception: ';
+    return message.startsWith(prefix)
+        ? message.substring(prefix.length)
+        : message;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +48,7 @@ class ErrorState extends StatelessWidget {
               ),
               const SizedBox(height: BananSpacing.sm),
               Text(
-                message,
+                _displayMessage,
                 style: theme.textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
@@ -47,7 +57,7 @@ class ErrorState extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onRetry,
                   icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: const Text('Try again'),
+                  label: const Text('Thử lại'),
                 ),
               ],
             ],

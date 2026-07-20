@@ -179,7 +179,7 @@ class _BodyState extends ConsumerState<_Body> {
                   title: 'Trạng thái nhận đơn',
                   description:
                       'Công tắc tổng dừng nhận mọi đơn. Hai công tắc kênh '
-                      'dưới chỉ áp dụng riêng — ví dụ hết shipper thì tạm '
+                      'dưới chỉ áp dụng riêng, ví dụ hết shipper thì tạm '
                       'dừng giao, nhưng vẫn nhận khách đến quầy.',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

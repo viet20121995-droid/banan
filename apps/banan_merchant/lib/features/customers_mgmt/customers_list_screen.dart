@@ -192,7 +192,7 @@ class _CustomersListScreenState extends ConsumerState<CustomersListScreen> {
                 controller: tag,
                 maxLength: 40,
                 decoration: const InputDecoration(
-                  labelText: 'Nhãn (tuỳ chọn — vd VIP)',
+                  labelText: 'Nhãn (tuỳ chọn, vd VIP)',
                 ),
               ),
             ],
@@ -268,7 +268,7 @@ class _CustomersListScreenState extends ConsumerState<CustomersListScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Số điện thoại *',
                     prefixIcon: Icon(Icons.phone_outlined),
-                    helperText: 'Dùng để định danh — khách đặt cùng SĐT '
+                    helperText: 'Dùng để định danh. Khách đặt cùng SĐT '
                         'lần sau sẽ tự liên kết.',
                   ),
                 ),

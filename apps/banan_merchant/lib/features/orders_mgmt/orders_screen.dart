@@ -383,6 +383,57 @@ class _Filter extends StatelessWidget {
   }
 }
 
+/// Ghost order rows shown during the first load, matching the real card
+/// layout so content doesn't jump when data arrives.
+class _OrdersSkeleton extends StatelessWidget {
+  const _OrdersSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ghost = theme.colorScheme.onSurface.withValues(alpha: 0.06);
+    Widget block(double width, double height) => Container(
+          width: width,
+          height: height,
+          decoration:
+              BoxDecoration(color: ghost, borderRadius: BananRadii.rsm),
+        );
+    return ListView.separated(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: BananSpacing.huge),
+      itemCount: 6,
+      separatorBuilder: (_, __) => const SizedBox(height: BananSpacing.md),
+      itemBuilder: (_, __) => Container(
+        padding: const EdgeInsets.all(BananSpacing.md),
+        decoration: BoxDecoration(
+          borderRadius: BananRadii.rlg,
+          color: theme.colorScheme.surface,
+          border: Border.all(
+            color: theme.dividerTheme.color ?? Colors.black12,
+          ),
+        ),
+        child: Row(
+          children: [
+            block(24, 24),
+            const SizedBox(width: BananSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  block(140, 16),
+                  const SizedBox(height: BananSpacing.xs),
+                  block(220, 12),
+                ],
+              ),
+            ),
+            block(64, 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Body extends StatelessWidget {
   const _Body({
     required this.state,
@@ -398,7 +449,7 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     final visible = state.visibleOrders;
     if (state.loading && visible.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const _OrdersSkeleton();
     }
     if (state.failure != null && visible.isEmpty) {
       return ErrorState(

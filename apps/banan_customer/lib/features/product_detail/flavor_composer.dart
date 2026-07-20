@@ -85,7 +85,7 @@ class FlavorComposer extends StatelessWidget {
           Text(
             isComplete
                 ? 'Đủ rồi! Bạn có thể thêm vào giỏ.'
-                : 'Còn $remaining cái — chọn thêm (có thể nhiều cái cùng vị).',
+                : 'Còn $remaining cái, chọn thêm (có thể nhiều cái cùng vị).',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.outline,
             ),

@@ -16,7 +16,7 @@ class CoverImagePicker extends ConsumerStatefulWidget {
     required this.url,
     required this.onChanged,
     this.label = 'Ảnh bìa',
-    this.helperText = 'Tuỳ chọn — hiển thị trên trang khách hàng.',
+    this.helperText = 'Tuỳ chọn, hiển thị trên trang khách hàng.',
     this.recommendedSize = '1200×800px (tỉ lệ 3:2)',
     this.recommendedFileSizeMb = 8,
     this.hardMaxFileSizeMb = 20,
@@ -254,13 +254,13 @@ class _FileMeta extends StatelessWidget {
         ? (
             Icons.error_outline_rounded,
             theme.colorScheme.error,
-            '  · vượt giới hạn server ($hardMaxMb MB) — sẽ bị từ chối',
+            '  · vượt giới hạn server ($hardMaxMb MB), sẽ bị từ chối',
           )
         : overSoft
             ? (
                 Icons.warning_amber_rounded,
                 Colors.orange.shade700,
-                '  · vượt mức khuyến nghị ($recommendedMb MB) — vẫn tải lên được',
+                '  · vượt mức khuyến nghị ($recommendedMb MB), vẫn tải lên được',
               )
             : (
                 Icons.check_circle_outline,

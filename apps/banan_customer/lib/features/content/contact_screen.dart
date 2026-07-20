@@ -82,7 +82,7 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
               const SizedBox(height: BananSpacing.xs),
               Text(
                 'Có thắc mắc về đơn hàng, đặt bánh theo yêu cầu hay hợp tác? '
-                'Gửi tin nhắn cho chúng tôi — hoặc gọi hotline để được hỗ trợ '
+                'Gửi tin nhắn cho chúng tôi, hoặc gọi hotline để được hỗ trợ '
                 'ngay.',
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.outline),

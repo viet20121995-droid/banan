@@ -81,7 +81,7 @@ class _VoucherList extends StatelessWidget {
         children: [
           const SizedBox(height: BananSpacing.xxl),
           EmptyState(
-            title: 'Trống',
+            title: 'Chưa có voucher',
             message: emptyMessage,
             icon: Icons.confirmation_number_outlined,
           ),

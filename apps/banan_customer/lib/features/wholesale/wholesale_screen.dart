@@ -40,7 +40,7 @@ class WholesaleScreen extends StatelessWidget {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Đặt hàng wholesale'),
+          title: const Text('Đặt hàng sỉ'),
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Đặt hàng'),
@@ -142,7 +142,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
             children: [
               const Icon(Icons.lock_outline, size: 44),
               const SizedBox(height: 12),
-              const Text('Tài khoản chưa được phép đặt wholesale.'),
+              const Text('Tài khoản chưa được phép đặt sỉ.'),
               const SizedBox(height: 8),
               Text('$error', textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -281,7 +281,7 @@ class _ContractOrderForm extends StatelessWidget {
         TextField(
           controller: poCode,
           decoration: const InputDecoration(
-            labelText: 'Mã đơn mua hàng (PO) — tuỳ chọn',
+            labelText: 'Mã đơn mua hàng (PO), tuỳ chọn',
             helperText: 'Mã PO nội bộ của công ty bạn, in kèm đơn để đối soát.',
           ),
         ),
@@ -360,7 +360,7 @@ class _MyOrdersTab extends ConsumerWidget {
                   SizedBox(height: 160),
                   EmptyState(
                     title: 'Chưa có đơn',
-                    message: 'Đơn wholesale đã đặt sẽ hiển thị tại đây.',
+                    message: 'Đơn sỉ đã đặt sẽ hiển thị tại đây.',
                   ),
                 ],
               )

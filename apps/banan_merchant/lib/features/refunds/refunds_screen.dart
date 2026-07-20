@@ -216,7 +216,7 @@ class _Row extends StatelessWidget {
     if (!context.mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không duyệt được — thử lại.')),
+        const SnackBar(content: Text('Không duyệt được, thử lại.')),
       );
     }
   }
@@ -228,7 +228,7 @@ class _Row extends StatelessWidget {
     if (!context.mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không từ chối được — thử lại.')),
+        const SnackBar(content: Text('Không từ chối được, thử lại.')),
       );
     }
   }

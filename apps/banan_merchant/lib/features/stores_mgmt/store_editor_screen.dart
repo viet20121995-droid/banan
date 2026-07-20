@@ -226,7 +226,7 @@ class _StoreEditorScreenState extends ConsumerState<StoreEditorScreen> {
                           decoration: const InputDecoration(
                             labelText: 'Mã phường (tuỳ chọn)',
                             helperText:
-                                'Slug phường tại TP.HCM — quyết định phí giao '
+                                'Slug phường tại TP.HCM, quyết định phí giao '
                                 'cùng phường / khác phường. Để trống nếu chưa rõ.',
                           ),
                         ),
@@ -318,7 +318,7 @@ class _StoreEditorScreenState extends ConsumerState<StoreEditorScreen> {
           ),
           items: [
             const DropdownMenuItem<String?>(
-              child: Text('— Chưa gán —'),
+              child: Text('Chưa gán'),
             ),
             for (final k in kitchens)
               DropdownMenuItem<String?>(value: k.id, child: Text(k.name)),

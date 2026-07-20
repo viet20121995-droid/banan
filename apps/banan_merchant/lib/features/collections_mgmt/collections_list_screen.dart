@@ -126,8 +126,8 @@ class _Body extends StatelessWidget {
       return const EmptyState(
         title: 'Chưa có bộ sưu tập',
         message:
-            'Nhóm sản phẩm theo chủ đề ("Đặc sắc hôm nay", "Sinh nhật"…) — '
-            'các bộ ghim sẽ hiển thị ở trang chủ khách hàng.',
+            'Nhóm sản phẩm theo chủ đề ("Đặc sắc hôm nay", "Sinh nhật"…). '
+            'Các bộ ghim sẽ hiển thị ở trang chủ khách hàng.',
         icon: Icons.collections_bookmark_outlined,
       );
     }
@@ -185,7 +185,7 @@ class _Body extends StatelessWidget {
             content: Text(
               ok
                   ? 'Đã xoá bộ sưu tập "${collection.name}".'
-                  : 'Không xoá được — thử lại.',
+                  : 'Không xoá được, thử lại.',
             ),
           ),
         );

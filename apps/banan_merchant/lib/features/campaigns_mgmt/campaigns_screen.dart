@@ -908,7 +908,7 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
                 controller: _minSubtotal,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'Đơn tối thiểu (₫) — tuỳ chọn',
+                  labelText: 'Đơn tối thiểu (₫), tuỳ chọn',
                   hintText: 'Trống = áp dụng mọi đơn đầu',
                 ),
                 validator: (v) {
@@ -1365,7 +1365,11 @@ class _ProductMultiSelectSheetState
                   }
                   final products = snap.data ?? const [];
                   if (products.isEmpty) {
-                    return const Center(child: Text('Chưa có sản phẩm.'));
+                    return const EmptyState(
+                      title: 'Chưa có sản phẩm',
+                      message: 'Tạo sản phẩm ở mục Thực đơn trước.',
+                      icon: Icons.cake_outlined,
+                    );
                   }
                   return ListView.builder(
                     itemCount: products.length,
@@ -1438,7 +1442,11 @@ class _CategoryMultiSelectSheetState
                 error: (e, _) => Center(child: Text('Lỗi: $e')),
                 data: (categories) {
                   if (categories.isEmpty) {
-                    return const Center(child: Text('Chưa có danh mục.'));
+                    return const EmptyState(
+                      title: 'Chưa có danh mục',
+                      message: 'Tạo danh mục ở mục Danh mục trước.',
+                      icon: Icons.category_outlined,
+                    );
                   }
                   return ListView.builder(
                     itemCount: categories.length,

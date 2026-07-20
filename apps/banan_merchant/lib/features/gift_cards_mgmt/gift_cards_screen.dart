@@ -177,7 +177,11 @@ class _GiftCardsScreenState extends ConsumerState<GiftCardsScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Lỗi: $e'),
             data: (cards) => cards.isEmpty
-                ? Text('Chưa có thẻ nào.', style: theme.textTheme.bodyMedium)
+                ? Text(
+                    'Chưa có thẻ nào.',
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: theme.colorScheme.outline),
+                  )
                 : Column(
                     children: [
                       for (final c in cards)

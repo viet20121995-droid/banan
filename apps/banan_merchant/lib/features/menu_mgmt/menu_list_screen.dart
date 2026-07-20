@@ -208,7 +208,7 @@ class _Body extends StatelessWidget {
                     content: Text(
                       ok
                           ? 'Đã đưa "${p.name}" trở lại menu.'
-                          : 'Không khôi phục được — thử lại.',
+                          : 'Không khôi phục được, thử lại.',
                     ),
                   ),
                 );
@@ -250,7 +250,7 @@ class _Body extends StatelessWidget {
       final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();
       if (outcome == null) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Không xoá được — thử lại.')),
+          const SnackBar(content: Text('Không xoá được, thử lại.')),
         );
       } else if (outcome.deleted) {
         messenger.showSnackBar(
@@ -262,7 +262,7 @@ class _Body extends StatelessWidget {
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-              '"${product.name}" đã có đơn cũ — chuyển sang trạng thái '
+              '"${product.name}" đã có đơn cũ, chuyển sang trạng thái '
               'Đã ẩn, không bán nữa nhưng giữ lịch sử đơn.',
             ),
             duration: const Duration(seconds: 5),

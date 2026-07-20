@@ -58,7 +58,7 @@ class ContactFab extends ConsumerWidget {
               ),
               const SizedBox(height: BananSpacing.xs),
               Text(
-                'Chọn kênh phù hợp — đội Banan trả lời nhanh nhất qua '
+                'Chọn kênh phù hợp. Đội Banan trả lời nhanh nhất qua '
                 'Zalo trong giờ mở cửa.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.outline,

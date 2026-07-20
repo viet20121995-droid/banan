@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'content_page.dart';
 
 const _fallbackIntro =
-    'Banan Fukuoka Saigon mang tinh thần kissaten Nhật Bản đến Sài Gòn — '
+    'Banan Fukuoka Saigon mang tinh thần kissaten Nhật Bản đến Sài Gòn, '
     'nơi mỗi chiếc bánh được làm thủ công, tươi mỗi ngày.';
 
 const _fallbackSections = <ContentSection>[

@@ -468,7 +468,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // warn up front instead of letting the picker show every day and only
       // failing at checkout. Otherwise show the normal allowed-days note.
       if (cart.hasDayConflict)
-        'Các món trong giỏ không bán cùng một ngày — vui lòng bỏ bớt món để '
+        'Các món trong giỏ không bán cùng một ngày. Vui lòng bỏ bớt món để '
             'đặt được, hoặc tách thành nhiều đơn.'
       else
         dayConstraintNote(
@@ -843,7 +843,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         padding: const EdgeInsets.only(top: BananSpacing.xs),
                         child: Text(
                           'Thẻ $_giftCode · số dư ${fmt.format(_giftBalance)} '
-                          '— trừ ${fmt.format(giftPreview)} vào đơn này.',
+                          '· trừ ${fmt.format(giftPreview)} vào đơn này.',
                           style: theme.textTheme.bodySmall
                               ?.copyWith(color: BananColors.success),
                         ),
@@ -1722,7 +1722,7 @@ class _CheckoutWardPicker extends ConsumerWidget {
             decoration: const InputDecoration(
               labelText: 'Phường (TP.HCM)',
               helperText:
-                  'Sau cải cách 7/2025 — chọn phường để tính phí giao hàng',
+                  'Sau cải cách 7/2025, chọn phường để tính phí giao hàng',
               suffixIcon: Icon(Icons.arrow_drop_down),
             ),
             child: Text(
@@ -1967,12 +1967,12 @@ class _DeliveryQuoteBox extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '• Phân loại: $tierLabel — $bandLabel',
+                      '• Phân loại: $tierLabel · $bandLabel',
                       style: theme.textTheme.bodySmall,
                     ),
                     if (q.tier == DeliveryFeeTier.birthdayCake)
                       Text(
-                        '• Đơn có bánh sinh nhật — áp dụng biểu phí riêng',
+                        '• Đơn có bánh sinh nhật, áp dụng biểu phí riêng',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.w600,
@@ -2104,7 +2104,7 @@ class _TimelineErrorPanel extends StatelessWidget {
                       text: v.name,
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    TextSpan(text: ' — ${_reasonText(v)}'),
+                    TextSpan(text: ': ${_reasonText(v)}'),
                   ],
                 ),
               ),

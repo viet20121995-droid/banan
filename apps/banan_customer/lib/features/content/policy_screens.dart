@@ -28,7 +28,7 @@ class ShippingPolicyScreen extends StatelessWidget {
               'khi đặt hàng.',
         ]),
         ContentSection('2. Thời gian giao hàng', [
-          'Đơn được giao theo khung giờ bạn chọn lúc đặt — giao ngay hoặc đặt '
+          'Đơn được giao theo khung giờ bạn chọn lúc đặt: giao ngay hoặc đặt '
               'lịch trước.',
           'Bánh sinh nhật và đơn theo yêu cầu cần đặt trước theo thời gian '
               'chuẩn bị của sản phẩm.',
@@ -111,7 +111,7 @@ class RefundPolicyScreen extends StatelessWidget {
       sections: [
         ContentSection('1. Nguyên tắc chung', [
           'Vì là thực phẩm tươi, chúng tôi chỉ đổi hoặc hoàn tiền khi lỗi do '
-              'shop — chẳng hạn giao sai sản phẩm, hoặc sản phẩm bị hư hỏng / '
+              'shop, chẳng hạn giao sai sản phẩm, hoặc sản phẩm bị hư hỏng / '
               'không đạt chất lượng khi nhận.',
         ]),
         ContentSection('2. Điều kiện & thời hạn', [

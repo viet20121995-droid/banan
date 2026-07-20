@@ -161,7 +161,7 @@ class _MarketingScreenState extends ConsumerState<MarketingScreen> {
         children: [
           if (!_canEdit)
             const ReadOnlyBanner(
-              'Bạn xem được cấu hình này nhưng không sửa được — các chương '
+              'Bạn xem được cấu hình này nhưng không sửa được. Các chương '
               'trình marketing áp dụng cho toàn hệ thống nên chỉ quản trị '
               'viên (ADMIN) mới đổi được.',
             ),

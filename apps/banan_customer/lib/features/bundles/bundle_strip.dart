@@ -33,7 +33,7 @@ class BundleStrip extends ConsumerWidget {
         return _BundlesCarousel(
           overline: 'Tiết kiệm hơn',
           title: 'Combo nổi bật',
-          subtitle: 'Đặt set có sẵn — rẻ hơn 10-20% so với mua lẻ.',
+          subtitle: 'Đặt set có sẵn, rẻ hơn 10-20% so với mua lẻ.',
           bundles: bundles,
         );
       },
@@ -63,7 +63,7 @@ class AllBundlesStrip extends ConsumerWidget {
         return _BundlesCarousel(
           overline: 'Combo',
           title: 'Tất cả combo',
-          subtitle: 'Mọi set đang bán — chọn combo bạn thích.',
+          subtitle: 'Mọi set đang bán. Chọn combo bạn thích.',
           bundles: rest,
         );
       },

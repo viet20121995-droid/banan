@@ -324,7 +324,7 @@ class _BundleEditorScreenState extends ConsumerState<BundleEditorScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Slug',
                         helperText:
-                            'Tự sinh từ tên — dùng cho URL. Chỉ chứa '
+                            'Tự sinh từ tên, dùng cho URL. Chỉ chứa '
                             'chữ thường + số + dấu gạch.',
                       ),
                     ),
@@ -336,8 +336,8 @@ class _BundleEditorScreenState extends ConsumerState<BundleEditorScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Mô tả (tuỳ chọn)',
                         hintText:
-                            'Mô tả ngắn để khách hiểu combo gồm gì + lý do '
-                            'nên chọn — hiện trên trang combo và thẻ '
+                            'Mô tả ngắn để khách hiểu combo gồm gì và lý do '
+                            'nên chọn. Hiện trên trang combo và thẻ '
                             'sản phẩm.',
                       ),
                     ),
@@ -426,7 +426,7 @@ class _BundleEditorScreenState extends ConsumerState<BundleEditorScreen> {
                             decoration: const InputDecoration(
                               labelText: 'Giá combo (₫) *',
                               helperText:
-                                  'Giá bán cố định cho cả combo — thường '
+                                  'Giá bán cố định cho cả combo. Thường '
                                   'thấp hơn 10-25% so với tổng giá lẻ.',
                               suffixText: '₫',
                             ),
@@ -445,7 +445,7 @@ class _BundleEditorScreenState extends ConsumerState<BundleEditorScreen> {
                                   child: Text(
                                     savings > 0
                                         ? 'Khách tiết kiệm ${fmt.format(savings)} so với mua lẻ.'
-                                        : 'Giá combo hiện cao hơn hoặc bằng tổng giá lẻ — khách không tiết kiệm.',
+                                        : 'Giá combo hiện cao hơn hoặc bằng tổng giá lẻ, khách không tiết kiệm.',
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: savings > 0
                                           ? BananColors.success
@@ -473,7 +473,7 @@ class _BundleEditorScreenState extends ConsumerState<BundleEditorScreen> {
                       subtitle: Text(
                         _isActive
                             ? 'Khách hàng nhìn thấy combo trong menu.'
-                            : 'Combo bị ẩn — khách hàng không nhìn thấy.',
+                            : 'Combo bị ẩn, khách hàng không nhìn thấy.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.outline,
                         ),

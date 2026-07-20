@@ -438,7 +438,7 @@ class _WardPicker extends ConsumerWidget {
             child: InputDecorator(
               decoration: const InputDecoration(
                 labelText: 'Phường (TP.HCM)',
-                helperText: 'Sau cải cách 7/2025 — chọn phường thay cho quận',
+                helperText: 'Sau cải cách 7/2025, chọn phường thay cho quận',
                 suffixIcon: Icon(Icons.arrow_drop_down),
               ),
               child: Text(

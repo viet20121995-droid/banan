@@ -471,7 +471,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                       title: 'Khả dụng & quy tắc đặt hàng',
                       children: [
                         Text(
-                          'Tuỳ chọn — bỏ trống nếu sản phẩm bán bình thường '
+                          'Tuỳ chọn, bỏ trống nếu sản phẩm bán bình thường '
                           'mọi ngày và dùng quy tắc chung của cửa hàng.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
@@ -564,7 +564,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                               return 'Nhập 0 để tắt, hoặc từ 2 trở lên';
                             }
                             if (n >= 2 && _flavorOptions.isEmpty) {
-                              return 'Đã đặt số vị — hãy thêm danh sách vị bên dưới';
+                              return 'Đã đặt số vị, hãy thêm danh sách vị bên dưới';
                             }
                             return null;
                           },

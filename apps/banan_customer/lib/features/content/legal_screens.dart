@@ -43,7 +43,7 @@ class PrivacyScreen extends StatelessWidget {
           'Chúng tôi chỉ xử lý dữ liệu khi bạn đồng ý, hoặc khi cần thiết để '
               'thực hiện hợp đồng (đơn hàng của bạn), hoặc theo yêu cầu của '
               'pháp luật.',
-          'Bạn có thể rút lại sự đồng ý bất kỳ lúc nào — việc này không ảnh '
+          'Bạn có thể rút lại sự đồng ý bất kỳ lúc nào. Việc này không ảnh '
               'hưởng đến các xử lý đã thực hiện trước đó.',
         ]),
         ContentSection('4. Chia sẻ dữ liệu', [

@@ -105,7 +105,7 @@ class _GalleryImagePickerState extends ConsumerState<GalleryImagePicker> {
         Text('Thư viện ảnh', style: theme.textTheme.labelLarge),
         const SizedBox(height: BananSpacing.xs),
         Text(
-          'Đã có ${widget.urls.length}/${widget.maxImages} ảnh — ảnh đầu tiên '
+          'Đã có ${widget.urls.length}/${widget.maxImages} ảnh. Ảnh đầu tiên '
           'làm ảnh bìa. Chạm vào một ảnh để chọn làm ảnh bìa.',
           style: theme.textTheme.bodySmall,
         ),

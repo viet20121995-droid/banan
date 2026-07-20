@@ -153,7 +153,7 @@ class _CartSection extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: BananSpacing.sm),
         child: Text(
-          'Chưa có món nào — tìm và thêm sản phẩm ở trên.',
+          'Chưa có món nào. Tìm và thêm sản phẩm ở trên.',
           style: TextStyle(color: theme.colorScheme.outline),
         ),
       );
@@ -437,7 +437,7 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
             subtitle: Text(
               _paid
                   ? 'Ghi nhận thanh toán tiền mặt (CASH)'
-                  : 'Chưa thu — thu khi khách nhận bánh',
+                  : 'Chưa thu, thu khi khách nhận bánh',
             ),
             value: _paid,
             onChanged: (v) => setState(() => _paid = v),
@@ -570,7 +570,7 @@ class _InternalTransferScreenState
         padding: const EdgeInsets.all(BananSpacing.lg),
         children: [
           Text(
-            'Bếp làm và giao về chi nhánh — không phải đơn bán lẻ, '
+            'Bếp làm và giao về chi nhánh. Không phải đơn bán lẻ, '
             'không tính doanh thu.',
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.outline),

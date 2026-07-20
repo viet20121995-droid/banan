@@ -121,7 +121,7 @@ class _Body extends StatelessWidget {
       return const EmptyState(
         title: 'Chưa có bài đăng',
         message:
-            'Bài đăng là những mẩu tin ngắn hiển thị trên trang chủ của khách — '
+            'Bài đăng là những mẩu tin ngắn hiển thị trên trang chủ của khách, '
             'dùng cho hàng mới, tin theo mùa hoặc hậu trường.',
         icon: Icons.forum_outlined,
       );
@@ -171,7 +171,7 @@ class _Body extends StatelessWidget {
       final ok = await controller.delete(thread.id);
       if (!ok && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không xoá được — thử lại.')),
+          const SnackBar(content: Text('Không xoá được, thử lại.')),
         );
       }
     }

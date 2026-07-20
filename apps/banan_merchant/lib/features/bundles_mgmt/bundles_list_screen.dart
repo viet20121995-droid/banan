@@ -55,8 +55,8 @@ class BundlesListScreen extends ConsumerWidget {
             return const EmptyState(
               title: 'Chưa có combo nào',
               message:
-                  'Tạo combo đầu tiên bằng cách bấm "Combo mới" — chọn '
-                  'các sản phẩm + đặt giá set, hệ thống tự tính phần khách '
+                  'Tạo combo đầu tiên bằng cách bấm "Combo mới": chọn '
+                  'các sản phẩm và đặt giá set, hệ thống tự tính phần khách '
                   'tiết kiệm.',
               icon: Icons.local_offer_outlined,
             );

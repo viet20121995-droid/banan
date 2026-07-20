@@ -11,7 +11,7 @@ class LegalInfo {
   static const taxCode = '0317041580';
 
   static const bizRegNo =
-      '0317041580 — cấp ngày 10/08/2025 tại Phòng Đăng ký Kinh doanh';
+      '0317041580, cấp ngày 10/08/2025 tại Phòng Đăng ký Kinh doanh';
 
   static const address =
       '34 Ngô Quang Huy, Phường An Khánh, Thành phố Hồ Chí Minh, Việt Nam';

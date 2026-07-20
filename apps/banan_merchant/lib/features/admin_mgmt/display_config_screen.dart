@@ -80,7 +80,7 @@ class _DisplayConfigScreenState
               children: [
                 if (!canEdit)
                   const ReadOnlyBanner(
-                    'Bạn xem được cấu hình này nhưng không sửa được — nó áp '
+                    'Bạn xem được cấu hình này nhưng không sửa được. Nó áp '
                     'dụng cho toàn chuỗi và mọi khách hàng, nên chỉ quản trị '
                     'viên (ADMIN) mới đổi được.',
                   ),

@@ -277,8 +277,8 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: _login,
         builder: (_, __) => const LoginScreen(
-          title: 'Banan · Merchant',
-          subtitle: 'Sign in to manage your store.',
+          title: 'Banan · Cửa hàng',
+          subtitle: 'Đăng nhập để quản lý cửa hàng của bạn.',
         ),
       ),
       GoRoute(

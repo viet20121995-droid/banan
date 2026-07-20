@@ -685,13 +685,17 @@ class _BestSellersList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     if (items.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: BananSpacing.lg),
-        child: Text('Chưa có đơn hoàn thành trong khoảng thời gian này.'),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: BananSpacing.lg),
+        child: Text(
+          'Chưa có đơn hoàn thành trong khoảng thời gian này.',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.outline),
+        ),
       );
     }
-    final theme = Theme.of(context);
     return Column(
       children: [
         for (var i = 0; i < items.length; i++)

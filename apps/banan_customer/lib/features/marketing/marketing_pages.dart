@@ -264,7 +264,7 @@ class _CateringScreenState extends ConsumerState<CateringScreen> {
         if (_sent) {
           return const EmptyState(
             title: 'Đã gửi yêu cầu!',
-            message: 'Cảm ơn bạn — cửa hàng sẽ liên hệ tư vấn sớm nhất.',
+            message: 'Cảm ơn bạn, cửa hàng sẽ liên hệ tư vấn sớm nhất.',
             icon: Icons.check_circle_outline,
           );
         }
@@ -364,8 +364,8 @@ class RewardsScreen extends ConsumerWidget {
               }),
             const SizedBox(height: BananSpacing.md),
             Text(
-              'Để đổi quà, vui lòng liên hệ / tới quầy — nhân viên sẽ xác nhận '
-              'và trừ điểm cho bạn.',
+              'Để đổi quà, vui lòng liên hệ hoặc tới quầy. Nhân viên sẽ xác '
+              'nhận và trừ điểm cho bạn.',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline),
             ),

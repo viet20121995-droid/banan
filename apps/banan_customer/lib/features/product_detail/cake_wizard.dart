@@ -208,7 +208,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
               const SizedBox(height: BananSpacing.xs),
               Text(
                 'Tất cả trường đều tuỳ chọn. Để trống các phần bạn không '
-                'cần — bánh sẽ làm theo mặc định.',
+                'cần. Bánh sẽ làm theo mặc định.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.outline,
                 ),

@@ -5,21 +5,21 @@ String authFailureMessage(AppFailure failure) {
   if (failure is AuthFailure) {
     switch (failure.code) {
       case 'AUTH_INVALID_CREDENTIALS':
-        return 'Invalid email or password.';
+        return 'Email hoặc mật khẩu không đúng.';
       case 'AUTH_FORBIDDEN':
-        return 'Your account is not allowed to do that.';
+        return 'Tài khoản của bạn không được phép thực hiện thao tác này.';
       case 'AUTH_REFRESH_INVALID':
-        return 'Session expired — please sign in again.';
+        return 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.';
     }
   }
   if (failure is ValidationFailure) {
-    return failure.message ?? 'Please check the form and try again.';
+    return failure.message ?? 'Vui lòng kiểm tra lại thông tin và thử lại.';
   }
   if (failure is NetworkFailure || failure is TimeoutFailure) {
-    return 'Cannot reach the kitchen — check your connection.';
+    return 'Không kết nối được máy chủ, kiểm tra lại mạng của bạn.';
   }
   if (failure is ServerFailure && failure.code == 'AUTH_EMAIL_TAKEN') {
-    return 'An account with that email or phone already exists.';
+    return 'Email hoặc số điện thoại này đã có tài khoản.';
   }
-  return failure.message ?? 'Something went wrong. Please try again.';
+  return failure.message ?? 'Có lỗi xảy ra. Vui lòng thử lại.';
 }

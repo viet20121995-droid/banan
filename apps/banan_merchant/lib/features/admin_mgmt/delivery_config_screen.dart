@@ -164,7 +164,7 @@ class _FormState extends ConsumerState<_Form> {
                   child: Text(
                     'Khi đơn có ít nhất 1 sản phẩm thuộc danh mục Bánh sinh '
                     'nhật, áp dụng biểu phí "Bánh sinh nhật" thay vì "Sản '
-                    'phẩm thường". Danh mục này được đặt ở mục Danh mục — bật '
+                    'phẩm thường". Danh mục này được đặt ở mục Danh mục, bật '
                     '"Đây là danh mục Bánh sinh nhật".',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,
@@ -196,8 +196,8 @@ class _FormState extends ConsumerState<_Form> {
                 _Section(
                   title: 'Bánh sinh nhật',
                   description:
-                      'Bánh sinh nhật cồng kềnh và dễ vỡ — phí thường cao '
-                      'hơn sản phẩm thường ở cả hai band. Sản phẩm được tính '
+                      'Bánh sinh nhật cồng kềnh và dễ vỡ nên phí thường cao '
+                      'hơn sản phẩm thường ở cả hai mức. Sản phẩm được tính '
                       'là bánh sinh nhật khi thuộc danh mục Bánh sinh nhật '
                       '(đặt ở mục Danh mục).',
                   child: Column(

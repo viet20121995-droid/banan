@@ -243,7 +243,7 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Nội dung',
                         helperText:
-                            'Dùng #hashtag trong nội dung — chúng sẽ trở thành '
+                            'Dùng #hashtag trong nội dung, chúng sẽ trở thành '
                             'bộ lọc bấm được trên feed khách hàng.',
                       ),
                       validator: (v) =>
@@ -270,7 +270,7 @@ class _ThreadEditorScreenState extends ConsumerState<ThreadEditorScreen> {
                         style: theme.textTheme.titleSmall,),
                     const SizedBox(height: BananSpacing.xs),
                     Text(
-                      'Tuỳ chọn — liên kết bài đăng với một sản phẩm của bạn.',
+                      'Tuỳ chọn, liên kết bài đăng với một sản phẩm của bạn.',
                       style: theme.textTheme.bodySmall,
                     ),
                     const SizedBox(height: BananSpacing.sm),

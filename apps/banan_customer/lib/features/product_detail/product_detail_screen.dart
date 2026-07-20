@@ -362,7 +362,7 @@ class _Details extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Sắp hết — còn ${product.totalLimitedStock} cái',
+                  'Sắp hết, còn ${product.totalLimitedStock} cái',
                   style: const TextStyle(
                     color: BananColors.accent,
                     fontSize: 12,

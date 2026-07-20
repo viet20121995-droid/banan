@@ -484,7 +484,7 @@ String? dayConstraintNote({
       : (names.length <= 2
           ? names.join(', ')
           : '${names.take(2).join(', ')} và ${names.length - 2} món khác');
-  return '$who chỉ bán vào $days — lịch nhận chỉ hiện các ngày này.';
+  return '$who chỉ bán vào $days, lịch nhận chỉ hiện các ngày này.';
 }
 
 /// Builds the "needs preparation time" notice, or null when nothing in the
@@ -500,7 +500,7 @@ String? prepLeadNote({required int leadHours, required List<String> names}) {
           ? names.join(', ')
           : '${names.take(2).join(', ')} và ${names.length - 2} món khác');
   return '$who cần đặt trước $span để chuẩn bị. Chúng tôi đã chọn sẵn '
-      'thời gian nhận sớm nhất — bạn có thể đổi sang giờ muộn hơn.';
+      'thời gian nhận sớm nhất. Bạn có thể đổi sang giờ muộn hơn.';
 }
 
 /// Wraps [ScheduleSection] with cart-driven lead-time awareness. When the cart

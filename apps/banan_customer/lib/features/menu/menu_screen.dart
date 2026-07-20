@@ -364,7 +364,7 @@ class MenuScreen extends ConsumerWidget {
               value: 'wholesale',
               child: ListTile(
                 leading: Icon(Icons.handshake_outlined),
-                title: Text('Wholesale'),
+                title: Text('Đặt sỉ'),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
@@ -985,7 +985,7 @@ class _PausedBannerBody extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       '• ${s.name}: ${channelLabel(s)}'
-                      '${(s.pauseReason?.isNotEmpty ?? false) ? ' — ${s.pauseReason}' : ''}',
+                      '${(s.pauseReason?.isNotEmpty ?? false) ? ' · ${s.pauseReason}' : ''}',
                       style: theme.textTheme.bodySmall?.copyWith(color: fg),
                     ),
                   ),
@@ -1157,7 +1157,19 @@ class _BodyState extends ConsumerState<_Body> {
           ],
           SliverToBoxAdapter(child: header),
           if (loadingFirst)
-            filler(const CircularProgressIndicator())
+            SliverPadding(
+              padding: const EdgeInsets.only(bottom: BananSpacing.lg),
+              sliver: SliverGrid.builder(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxis,
+                  crossAxisSpacing: BananSpacing.lg,
+                  mainAxisSpacing: BananSpacing.lg,
+                  childAspectRatio: 0.75,
+                ),
+                itemCount: crossAxis * 3,
+                itemBuilder: (_, __) => const _ProductCardSkeleton(),
+              ),
+            )
           else if (errored)
             filler(
               ErrorState(
@@ -2403,7 +2415,7 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
           _busy = false;
           _ok = true;
           _msg = r.alreadyConfirmed
-              ? 'Bạn đã đăng ký rồi — cảm ơn!'
+              ? 'Bạn đã đăng ký rồi, cảm ơn!'
               : 'Đã gửi email xác nhận, mời kiểm tra hộp thư.';
           if (!r.alreadyConfirmed) _email.clear();
         });
@@ -2412,7 +2424,7 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
         setState(() {
           _busy = false;
           _ok = false;
-          _msg = f.message ?? 'Có lỗi xảy ra — vui lòng thử lại.';
+          _msg = f.message ?? 'Có lỗi xảy ra, vui lòng thử lại.';
         });
       },
     );
@@ -2451,7 +2463,7 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
               const SizedBox(height: BananSpacing.xs),
               Text(
                 'Đăng ký email để nhận thông tin bánh mới + ưu đãi mùa lễ. '
-                'Tối đa 2 email / tháng — không spam.',
+                'Tối đa 2 email mỗi tháng, không spam.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.outline,
                 ),
@@ -2498,6 +2510,40 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Ghost card mimicking [ProductCard] while the first menu page loads, so
+/// the grid keeps its shape instead of collapsing to a spinner.
+class _ProductCardSkeleton extends StatelessWidget {
+  const _ProductCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final ghost =
+        Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.06);
+    Widget block(double width, double height) => Container(
+          width: width,
+          height: height,
+          decoration:
+              BoxDecoration(color: ghost, borderRadius: BananRadii.rsm),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            decoration:
+                BoxDecoration(color: ghost, borderRadius: BananRadii.rlg),
+          ),
+        ),
+        const SizedBox(height: BananSpacing.sm),
+        block(120, 16),
+        const SizedBox(height: BananSpacing.xs),
+        block(72, 14),
+      ],
     );
   }
 }
