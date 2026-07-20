@@ -181,12 +181,13 @@ class MerchantOrdersScreen extends ConsumerWidget {
     return MerchantShell(
       title: s.orders,
       onRefresh: controller.refresh,
-      action: _CreateOrderMenu(
-        canCreateInternal: isAdmin || role == Role.merchantOwner,
-      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _CreateOrderButtons(
+            canCreateInternal: isAdmin || role == Role.merchantOwner,
+          ),
+          const SizedBox(height: BananSpacing.md),
           if (state.newOrderCount > 0)
             _NewOrderBanner(
               count: state.newOrderCount,
@@ -218,36 +219,29 @@ class MerchantOrdersScreen extends ConsumerWidget {
   }
 }
 
-class _CreateOrderMenu extends StatelessWidget {
-  const _CreateOrderMenu({required this.canCreateInternal});
+/// Full-width labeled entry points for creating orders — always visible
+/// instead of hidden behind a "+" popup.
+class _CreateOrderButtons extends StatelessWidget {
+  const _CreateOrderButtons({required this.canCreateInternal});
 
   final bool canCreateInternal;
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      tooltip: 'Tạo đơn',
-      icon: const Icon(Icons.add_circle_outline),
-      onSelected: (value) => context.push(value),
-      itemBuilder: (_) => [
-        const PopupMenuItem(
-          value: '/orders/counter',
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.point_of_sale_outlined),
-            title: Text('Đơn tại quầy'),
-            subtitle: Text('Khách đặt trước và thanh toán tại cửa hàng'),
-          ),
+    return Wrap(
+      spacing: BananSpacing.sm,
+      runSpacing: BananSpacing.sm,
+      children: [
+        FilledButton.icon(
+          onPressed: () => context.push('/orders/counter'),
+          icon: const Icon(Icons.point_of_sale_outlined, size: 18),
+          label: const Text('Khách đặt tại quầy'),
         ),
         if (canCreateInternal)
-          const PopupMenuItem(
-            value: '/orders/internal-transfer',
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.local_shipping_outlined),
-              title: Text('Đặt hàng nội bộ'),
-              subtitle: Text('Bếp sản xuất và giao về chi nhánh'),
-            ),
+          FilledButton.tonalIcon(
+            onPressed: () => context.push('/orders/internal-transfer'),
+            icon: const Icon(Icons.local_shipping_outlined, size: 18),
+            label: const Text('Đặt hàng nội bộ'),
           ),
       ],
     );

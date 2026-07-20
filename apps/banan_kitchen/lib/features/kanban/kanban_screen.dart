@@ -25,10 +25,16 @@ class KanbanScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(s.productionBoard),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.factory_outlined),
-            tooltip: 'Sản xuất',
-            onPressed: () => context.push('/production'),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: BananSpacing.sm,
+              horizontal: BananSpacing.xs,
+            ),
+            child: FilledButton.tonalIcon(
+              onPressed: () => context.push('/production'),
+              icon: const Icon(Icons.factory_outlined, size: 18),
+              label: const Text('Sản xuất'),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.bar_chart_outlined),
