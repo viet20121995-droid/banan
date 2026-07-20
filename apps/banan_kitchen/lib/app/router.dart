@@ -148,15 +148,15 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: _login,
         builder: (_, __) => const LoginScreen(
-          title: 'Banan · Kitchen',
-          subtitle: "Sign in to view today's production board.",
+          title: 'Banan · Bếp',
+          subtitle: 'Đăng nhập để xem bảng sản xuất hôm nay.',
         ),
       ),
       GoRoute(
         path: _wrongApp,
         builder: (_, __) => const WrongAppScreen(
-          expected: 'kitchen staff',
-          actual: 'a different role',
+          expected: 'nhân viên bếp',
+          actual: 'vai trò khác',
         ),
       ),
     ],

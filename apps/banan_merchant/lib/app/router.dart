@@ -284,8 +284,8 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: _wrongApp,
         builder: (_, __) => const WrongAppScreen(
-          expected: 'store staff',
-          actual: 'a different role',
+          expected: 'nhân sự cửa hàng',
+          actual: 'vai trò khác',
         ),
       ),
     ],

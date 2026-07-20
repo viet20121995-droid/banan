@@ -33,20 +33,20 @@ class WrongAppScreen extends ConsumerWidget {
               ),
               const SizedBox(height: BananSpacing.lg),
               Text(
-                'Wrong app for your role',
+                'Nhầm trang đăng nhập',
                 style: Theme.of(context).textTheme.headlineSmall,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: BananSpacing.sm),
               Text(
-                'This app is for $expected, but your account is $actual. '
-                'Please sign out and sign in with a $expected account.',
+                'Trang này dành cho $expected, còn tài khoản của bạn là '
+                '$actual. Hãy đăng xuất rồi vào đúng trang của bạn.',
                 style: Theme.of(context).textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: BananSpacing.xl),
               PrimaryButton(
-                label: 'Sign out',
+                label: 'Đăng xuất',
                 expand: true,
                 onPressed: () =>
                     ref.read(authControllerProvider.notifier).logout(),

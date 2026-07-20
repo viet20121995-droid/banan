@@ -9,9 +9,8 @@ import 'package:intl/intl.dart';
 
 final _summaryProvider = FutureProvider.autoDispose
     .family<KitchenAnalyticsSummary, String>((ref, range) async {
-  final res = await ref
-      .watch(analyticsApiProvider)
-      .kitchenSummary(range: range);
+  final res =
+      await ref.watch(analyticsApiProvider).kitchenSummary(range: range);
   return res.when(
     success: (s) => s,
     failure: (f) => throw Exception(f.message ?? f.code),
@@ -46,8 +45,7 @@ class _KitchenAnalyticsScreenState
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: s.signOut,
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).logout(),
+            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
           ),
         ],
       ),
@@ -94,9 +92,9 @@ class _Body extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: BananSpacing.lg),
           child: SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: '24h', label: Text('24h')),
-              ButtonSegment(value: '7d', label: Text('7 days')),
-              ButtonSegment(value: '30d', label: Text('30 days')),
+              ButtonSegment(value: '24h', label: Text('24 giờ')),
+              ButtonSegment(value: '7d', label: Text('7 ngày')),
+              ButtonSegment(value: '30d', label: Text('30 ngày')),
             ],
             selected: {range},
             onSelectionChanged: (s) => onRange(s.first),
@@ -114,25 +112,26 @@ class _Body extends StatelessWidget {
               childAspectRatio: 1.7,
               children: [
                 StatCard(
-                  label: 'Orders received',
+                  label: 'Đơn nhận vào',
                   value: '$received',
                   icon: Icons.move_to_inbox_outlined,
                 ),
                 StatCard(
-                  label: 'In progress',
+                  label: 'Đang làm',
                   value: '$inProgress',
                   icon: Icons.kitchen_outlined,
                   intent: StatIntent.warning,
                 ),
                 StatCard(
-                  label: 'Dispatched',
+                  label: 'Đã xuất đi',
                   value: '$dispatched',
                   icon: Icons.local_shipping_outlined,
                   intent: StatIntent.success,
                 ),
                 StatCard(
-                  label: 'Avg dispatch',
-                  value: avgMin == 0 ? '—' : '${avgMin.toStringAsFixed(0)} min',
+                  label: 'TB xuất một đơn',
+                  value:
+                      avgMin == 0 ? '—' : '${avgMin.toStringAsFixed(0)} phút',
                   icon: Icons.timer_outlined,
                 ),
               ],
@@ -141,7 +140,7 @@ class _Body extends StatelessWidget {
         ),
         const SizedBox(height: BananSpacing.xl),
         _Section(
-          title: 'Daily production',
+          title: 'Sản lượng theo ngày',
           child: SizedBox(
             height: 220,
             child: _DailyBarChart(daily: summary.daily),
@@ -149,7 +148,7 @@ class _Body extends StatelessWidget {
         ),
         const SizedBox(height: BananSpacing.xl),
         _Section(
-          title: 'Capacity utilization',
+          title: 'Mức dùng công suất',
           child: _CapacityBar(value: capacity),
         ),
         const SizedBox(height: BananSpacing.huge),
@@ -263,7 +262,7 @@ class _CapacityBar extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$pct% of theoretical capacity'),
+        Text('$pct% công suất lý thuyết'),
         const SizedBox(height: BananSpacing.sm),
         ClipRRect(
           borderRadius: BananRadii.rPill,
@@ -276,7 +275,7 @@ class _CapacityBar extends StatelessWidget {
         ),
         const SizedBox(height: BananSpacing.xs),
         Text(
-          'Capacity = capacityPerHour × 24 × days',
+          'Công suất = công suất mỗi giờ × 24 giờ × số ngày',
           style: theme.textTheme.bodySmall,
         ),
       ],

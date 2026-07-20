@@ -88,13 +88,64 @@ class KanbanScreen extends ConsumerWidget {
         ],
       ),
       body: state.loading && state.orders.isEmpty
-          ? const Center(child: CircularProgressIndicator())
+          ? const _BoardSkeleton()
           : (state.failure != null && state.orders.isEmpty)
               ? ErrorState(
                   message: authFailureMessage(state.failure!),
                   onRetry: controller.refresh,
                 )
               : _Board(state: state, controller: controller),
+    );
+  }
+}
+
+/// Loading placeholder shaped like the real board (stats bar + 4 columns
+/// with ghost cards) so the layout doesn't jump when data arrives.
+class _BoardSkeleton extends StatelessWidget {
+  const _BoardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final ghost =
+        Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.06);
+
+    Widget block(double h, {double? w}) => Container(
+          width: w,
+          height: h,
+          decoration: BoxDecoration(color: ghost, borderRadius: BananRadii.rmd),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.all(BananSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          block(72),
+          const SizedBox(height: BananSpacing.lg),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var c = 0; c < 4; c++) ...[
+                  if (c > 0) const SizedBox(width: BananSpacing.lg),
+                  SizedBox(
+                    width: 300,
+                    child: Column(
+                      children: [
+                        block(20),
+                        const SizedBox(height: BananSpacing.md),
+                        block(96),
+                        const SizedBox(height: BananSpacing.sm),
+                        block(96),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -124,8 +175,8 @@ class _Board extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Column(
-                    title: 'Pending',
-                    subtitle: 'Waiting for you to accept',
+                    title: 'Chờ nhận',
+                    subtitle: 'Đơn mới, chờ bếp nhận',
                     accent: BananColors.warning,
                     cards: byColumn[KitchenStatus.pendingAck] ?? const [],
                     cardBuilder: (order) => _PendingCard(
@@ -135,8 +186,8 @@ class _Board extends StatelessWidget {
                   ),
                   const SizedBox(width: BananSpacing.lg),
                   _Column(
-                    title: 'Preparing',
-                    subtitle: 'In the oven',
+                    title: 'Đang làm',
+                    subtitle: 'Đang trong bếp',
                     accent: BananColors.gold,
                     cards: byColumn[KitchenStatus.preparing] ?? const [],
                     cardBuilder: (order) => _PreparingCard(
@@ -146,8 +197,8 @@ class _Board extends StatelessWidget {
                   ),
                   const SizedBox(width: BananSpacing.lg),
                   _Column(
-                    title: 'Ready',
-                    subtitle: 'For pickup / delivery',
+                    title: 'Sẵn sàng giao',
+                    subtitle: 'Chờ giao đi / khách lấy',
                     accent: BananColors.success,
                     cards: byColumn[KitchenStatus.readyDispatch] ?? const [],
                     cardBuilder: (order) => _ReadyCard(
@@ -157,8 +208,8 @@ class _Board extends StatelessWidget {
                   ),
                   const SizedBox(width: BananSpacing.lg),
                   _Column(
-                    title: 'Completed today',
-                    subtitle: 'Dispatched from kitchen',
+                    title: 'Xong hôm nay',
+                    subtitle: 'Đã xuất khỏi bếp trong ngày',
                     accent: BananColors.cocoaSoft,
                     cards: completed,
                     cardBuilder: (order) => _CompletedCard(order: order),
@@ -196,7 +247,7 @@ class _StatsBar extends StatelessWidget {
       child: Row(
         children: [
           _Stat(
-            label: 'Pending',
+            label: 'Chờ nhận',
             value: pending.toString(),
             icon: Icons.notifications_active_outlined,
             color: BananColors.warning,
@@ -204,14 +255,14 @@ class _StatsBar extends StatelessWidget {
           ),
           _StatDivider(),
           _Stat(
-            label: 'Preparing',
+            label: 'Đang làm',
             value: preparing.toString(),
             icon: Icons.cake_outlined,
             color: BananColors.gold,
           ),
           _StatDivider(),
           _Stat(
-            label: 'Ready',
+            label: 'Sẵn sàng',
             value: ready.toString(),
             icon: Icons.local_shipping_outlined,
             color: BananColors.success,
@@ -219,7 +270,7 @@ class _StatsBar extends StatelessWidget {
           ),
           _StatDivider(),
           _Stat(
-            label: 'Done today',
+            label: 'Xong hôm nay',
             value: completed.toString(),
             icon: Icons.task_alt,
             color: BananColors.cocoaSoft,
@@ -361,10 +412,20 @@ class _Column extends StatelessWidget {
           if (cards.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: BananSpacing.xl),
-              child: Text(
-                'Empty',
-                style: theme.textTheme.bodySmall,
-                textAlign: TextAlign.center,
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 28,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                  ),
+                  const SizedBox(height: BananSpacing.xs),
+                  Text(
+                    'Chưa có đơn',
+                    style: theme.textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             )
           else
@@ -440,8 +501,8 @@ class _CardFrame extends StatelessWidget {
                 ),
               Text(
                 order.fulfillmentType == FulfillmentType.delivery
-                    ? 'delivery'
-                    : 'pickup',
+                    ? 'Giao hàng'
+                    : 'Đến lấy',
                 style: theme.textTheme.labelSmall,
               ),
             ],
@@ -552,12 +613,12 @@ class _PendingCard extends StatelessWidget {
           if (!context.mounted) return;
           if (!ok) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not accept — try again.')),
+              const SnackBar(content: Text('Chưa nhận được đơn, thử lại.')),
             );
           }
         },
         icon: const Icon(Icons.play_arrow, size: 16),
-        label: const Text('Accept & start'),
+        label: const Text('Nhận đơn, bắt đầu làm'),
       ),
     );
   }
@@ -578,12 +639,12 @@ class _PreparingCard extends StatelessWidget {
           if (!context.mounted) return;
           if (!ok) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not update — try again.')),
+              const SnackBar(content: Text('Chưa cập nhật được, thử lại.')),
             );
           }
         },
         icon: const Icon(Icons.check, size: 16),
-        label: const Text('Mark ready'),
+        label: const Text('Làm xong'),
       ),
     );
   }
@@ -604,12 +665,12 @@ class _ReadyCard extends StatelessWidget {
           if (!context.mounted) return;
           if (!ok) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not dispatch — try again.')),
+              const SnackBar(content: Text('Chưa xuất được đơn, thử lại.')),
             );
           }
         },
         icon: const Icon(Icons.local_shipping_outlined, size: 16),
-        label: const Text('Dispatch'),
+        label: const Text('Xuất khỏi bếp'),
       ),
     );
   }
@@ -643,11 +704,11 @@ class _CompletedCard extends StatelessWidget {
   String _statusLabel(OrderStatus s) {
     switch (s) {
       case OrderStatus.readyForPickup:
-        return 'Ready for pickup';
+        return 'Chờ khách lấy';
       case OrderStatus.delivering:
-        return 'Out for delivery';
+        return 'Đang giao';
       case OrderStatus.completed:
-        return 'Completed';
+        return 'Hoàn tất';
       default:
         return s.label;
     }
