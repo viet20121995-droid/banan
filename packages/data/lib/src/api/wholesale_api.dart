@@ -283,12 +283,14 @@ class WholesaleApi {
     String? method,
     String? reference,
     String? note,
+    String? clientRequestId,
   }) =>
       _postRaw('/admin/wholesale/receivables/$id/payments', {
         if (amountVnd != null) 'amountVnd': amountVnd,
         if (method != null) 'method': method,
         if (reference != null && reference.isNotEmpty) 'reference': reference,
         if (note != null && note.isNotEmpty) 'note': note,
+        if (clientRequestId != null) 'clientRequestId': clientRequestId,
       });
 
   // ── plumbing ──

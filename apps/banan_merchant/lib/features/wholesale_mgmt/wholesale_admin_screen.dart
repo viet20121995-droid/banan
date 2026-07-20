@@ -324,14 +324,95 @@ Future<void> _confirmWholesale(
   );
 }
 
+/// Collection dialog: amount (blank = full remaining), method, bank
+/// reference, note. Sends a per-attempt dedup key so a double-tap can't
+/// record the same collection twice.
 Future<void> _markPaid(BuildContext context, WidgetRef ref, String id) async {
-  final result = await ref.read(wholesaleApiProvider).adminMarkPaid(id);
+  final amountCtl = TextEditingController();
+  final refCtl = TextEditingController();
+  final noteCtl = TextEditingController();
+  var method = 'BANK_TRANSFER';
+  final requestKey =
+      'pay-${DateTime.now().millisecondsSinceEpoch}-${UniqueKey().hashCode}';
+  final approved = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Ghi nhận thu tiền'),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountCtl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Số tiền (đ)',
+                helperText: 'Bỏ trống = thu toàn bộ phần còn lại',
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            StatefulBuilder(
+              builder: (context, setState) => DropdownButtonFormField<String>(
+                initialValue: method,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Phương thức'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'BANK_TRANSFER',
+                    child: Text('Chuyển khoản'),
+                  ),
+                  DropdownMenuItem(value: 'CASH', child: Text('Tiền mặt')),
+                  DropdownMenuItem(value: 'CARD', child: Text('Thẻ')),
+                  DropdownMenuItem(value: 'OTHER', child: Text('Khác')),
+                ],
+                onChanged: (v) => setState(() => method = v ?? 'BANK_TRANSFER'),
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            TextField(
+              controller: refCtl,
+              decoration: const InputDecoration(
+                labelText: 'Mã giao dịch ngân hàng (tuỳ chọn)',
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            TextField(
+              controller: noteCtl,
+              decoration:
+                  const InputDecoration(labelText: 'Ghi chú (tuỳ chọn)'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Quay lại'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Ghi nhận'),
+        ),
+      ],
+    ),
+  );
+  if (approved != true || !context.mounted) return;
+  final amount = int.tryParse(amountCtl.text.replaceAll(RegExp('[^0-9]'), ''));
+  final result = await ref.read(wholesaleApiProvider).adminRecordPayment(
+        id,
+        amountVnd: amount,
+        method: method,
+        reference: refCtl.text.trim(),
+        note: noteCtl.text.trim(),
+        clientRequestId: requestKey,
+      );
   if (!context.mounted) return;
   result.when(
     success: (_) {
       ref.invalidate(_receivablesProvider);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã ghi nhận thanh toán công nợ.')),
+        const SnackBar(content: Text('Đã ghi nhận thu tiền công nợ.')),
       );
     },
     failure: (failure) => ScaffoldMessenger.of(context).showSnackBar(
@@ -681,6 +762,18 @@ class _AccountDetailState extends ConsumerState<_AccountDetail> {
                               ListTile(
                                 contentPadding:
                                     const EdgeInsets.only(left: 72, right: 16),
+                                // Tap = edit price/discount/minQty in place —
+                                // no more deactivate-and-re-add to change a price.
+                                onTap: () async {
+                                  final saved = await showDialog<bool>(
+                                    context: context,
+                                    builder: (_) => _ContractLineEditDialog(
+                                      contractId: contract['id'] as String,
+                                      line: line,
+                                    ),
+                                  );
+                                  if (saved ?? false) await reload();
+                                },
                                 title: Text(
                                   (line['product'] as Map?)?['name']
                                           as String? ??
@@ -1007,6 +1100,134 @@ class _ContractLineDialogState extends ConsumerState<_ContractLineDialog> {
           FilledButton(onPressed: save, child: const Text('Thêm sản phẩm')),
         ],
       );
+}
+
+/// Edit an EXISTING contract line: fixed price / discount % / minQty /
+/// lead time. Product + variant stay fixed (add a new line for a different
+/// product); PATCHes via adminUpdateLine.
+class _ContractLineEditDialog extends ConsumerStatefulWidget {
+  const _ContractLineEditDialog({required this.contractId, required this.line});
+  final String contractId;
+  final Map<String, dynamic> line;
+  @override
+  ConsumerState<_ContractLineEditDialog> createState() =>
+      _ContractLineEditDialogState();
+}
+
+class _ContractLineEditDialogState
+    extends ConsumerState<_ContractLineEditDialog> {
+  late final fixedPrice = TextEditingController(
+    text: widget.line['fixedPriceVnd'] == null
+        ? ''
+        : '${_asNumber(widget.line['fixedPriceVnd']).toInt()}',
+  );
+  late final discount = TextEditingController(
+    text: widget.line['discountPct'] == null
+        ? ''
+        : '${_asNumber(widget.line['discountPct'])}',
+  );
+  late final minQty =
+      TextEditingController(text: '${widget.line['minQty'] ?? 1}');
+  late final leadTime = TextEditingController(
+    text: widget.line['leadTimeHours'] == null
+        ? ''
+        : '${widget.line['leadTimeHours']}',
+  );
+
+  @override
+  void dispose() {
+    fixedPrice.dispose();
+    discount.dispose();
+    minQty.dispose();
+    leadTime.dispose();
+    super.dispose();
+  }
+
+  Future<void> save() async {
+    final result = await ref.read(wholesaleApiProvider).adminUpdateLine(
+      widget.contractId,
+      widget.line['id'] as String,
+      {
+        if (fixedPrice.text.trim().isNotEmpty)
+          'fixedPriceVnd':
+              int.tryParse(fixedPrice.text.replaceAll(RegExp(r'\D'), ''))
+        else
+          'fixedPriceVnd': null,
+        if (discount.text.trim().isNotEmpty)
+          'discountPct': double.tryParse(discount.text)
+        else
+          'discountPct': null,
+        'minQty': int.tryParse(minQty.text) ?? 1,
+        if (leadTime.text.trim().isNotEmpty)
+          'leadTimeHours': int.tryParse(leadTime.text)
+        else
+          'leadTimeHours': null,
+      },
+    );
+    if (!mounted) return;
+    result.when(
+      success: (_) => Navigator.pop(context, true),
+      failure: (failure) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure.message ?? failure.code)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final productName =
+        (widget.line['product'] as Map?)?['name'] as String? ?? 'Sản phẩm';
+    return AlertDialog(
+      title: Text('Sửa giá · $productName'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: fixedPrice,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Giá hợp đồng cố định (đ)',
+                helperText: 'Bỏ trống để dùng chiết khấu %',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: discount,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Chiết khấu riêng (%)',
+                helperText: 'Bỏ trống = dùng chiết khấu mặc định của hợp đồng',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: minQty,
+              keyboardType: TextInputType.number,
+              decoration:
+                  const InputDecoration(labelText: 'Số lượng tối thiểu'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: leadTime,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Đặt trước tối thiểu (giờ)',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Hủy'),
+        ),
+        FilledButton(onPressed: save, child: const Text('Lưu')),
+      ],
+    );
+  }
 }
 
 String _date(dynamic value) => value == null

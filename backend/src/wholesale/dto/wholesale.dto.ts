@@ -316,6 +316,13 @@ export class RecordWholesalePaymentDto {
   @IsString()
   @MaxLength(280)
   note?: string;
+
+  /** Dedup key: a retried confirm returns the first ledger entry. */
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(64)
+  clientRequestId?: string;
 }
 
 export class RejectWholesaleOrderDto {

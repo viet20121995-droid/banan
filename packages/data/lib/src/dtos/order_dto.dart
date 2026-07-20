@@ -161,6 +161,8 @@ class OrderDto {
     this.settlementMode = 'ONLINE',
     this.requestingStoreName,
     this.destinationStoreName,
+    this.requestingStoreId,
+    this.destinationStoreId,
     this.wholesaleCompanyName,
     this.wholesaleDeliveryAddress,
   });
@@ -226,6 +228,8 @@ class OrderDto {
           (json['requestingStore'] as Map?)?['name'] as String?,
       destinationStoreName:
           (json['destinationStore'] as Map?)?['name'] as String?,
+      requestingStoreId: json['requestingStoreId'] as String?,
+      destinationStoreId: json['destinationStoreId'] as String?,
       wholesaleCompanyName:
           (json['wholesaleAccount'] as Map?)?['companyName'] as String?,
       wholesaleDeliveryAddress:
@@ -280,6 +284,8 @@ class OrderDto {
   final String settlementMode;
   final String? requestingStoreName;
   final String? destinationStoreName;
+  final String? requestingStoreId;
+  final String? destinationStoreId;
   final String? wholesaleCompanyName;
   final String? wholesaleDeliveryAddress;
   final DateTime createdAt;
@@ -334,6 +340,8 @@ class OrderDto {
         settlementMode: settlementMode,
         requestingStoreName: requestingStoreName,
         destinationStoreName: destinationStoreName,
+        requestingStoreId: requestingStoreId,
+        destinationStoreId: destinationStoreId,
         wholesaleCompanyName: wholesaleCompanyName,
         wholesaleDeliveryAddress: wholesaleDeliveryAddress,
         createdAt: createdAt,

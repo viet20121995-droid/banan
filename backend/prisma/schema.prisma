@@ -609,6 +609,7 @@ model Order {
   destinationStoreId  String?
   destinationStore    Store?               @relation("OrderDestinationStore", fields: [destinationStoreId], references: [id])
   receivable          WholesaleReceivable?
+  transferReceipt     InternalTransferReceipt?
   /// WHOLESALE order-time snapshot { companyName, deliveryAddress, taxId,
   /// billingEmail, contactName, contactPhone, poCode } — editing the account
   /// later must not rewrite what old orders display.
@@ -802,10 +803,40 @@ model WholesalePayment {
   note               String?
   confirmedByAdminId String
   paidAt             DateTime            @default(now())
+  /// Client dedup key: a retried confirm with the same key returns the first
+  /// ledger entry instead of collecting the amount twice.
+  clientRequestId    String?
 
   createdAt DateTime @default(now())
 
+  @@unique([receivableId, clientRequestId])
   @@index([receivableId])
+}
+
+/// Signed goods-receipt of an internal transfer at the destination branch —
+/// structured (not just a status-event note) so shortage/damage rates can be
+/// reported and, once per-branch inventory exists, stock can be booked in.
+model InternalTransferReceipt {
+  id           String  @id @default(uuid())
+  orderId      String  @unique
+  order        Order   @relation(fields: [orderId], references: [id])
+  receivedById String
+  note         String?
+
+  lines InternalTransferReceiptLine[]
+
+  createdAt DateTime @default(now())
+}
+
+model InternalTransferReceiptLine {
+  id          String                  @id @default(uuid())
+  receiptId   String
+  receipt     InternalTransferReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderItemId String
+  orderedQty  Int
+  receivedQty Int
+
+  @@index([receiptId])
 }
 
 model OrderItem {

@@ -118,6 +118,8 @@ class Order extends Equatable {
     this.settlementMode = 'ONLINE',
     this.requestingStoreName,
     this.destinationStoreName,
+    this.requestingStoreId,
+    this.destinationStoreId,
     this.wholesaleCompanyName,
     this.wholesaleDeliveryAddress,
   });
@@ -203,6 +205,8 @@ class Order extends Equatable {
   /// INTERNAL_TRANSFER only — the branch that asked / the branch receiving.
   final String? requestingStoreName;
   final String? destinationStoreName;
+  final String? requestingStoreId;
+  final String? destinationStoreId;
 
   /// WHOLESALE only — the buyer's company name.
   final String? wholesaleCompanyName;
@@ -265,6 +269,8 @@ class Order extends Equatable {
         settlementMode,
         requestingStoreName,
         destinationStoreName,
+        requestingStoreId,
+        destinationStoreId,
         wholesaleCompanyName,
         wholesaleDeliveryAddress,
         createdAt,

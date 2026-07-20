@@ -38,21 +38,26 @@ export class WholesaleSchedulerService {
     });
     if (due.length === 0) return;
 
-    const flipped = await this.prisma.wholesaleReceivable.updateMany({
-      where: {
-        id: { in: due.map((r) => r.id) },
-        status: { in: ['OPEN', 'PARTIAL'] },
-      },
-      data: { status: 'OVERDUE' },
-    });
-    this.logger.log(`Wholesale receivables overdue: ${flipped.count}`);
+    // Flip per-id (status-guarded) and notify ONLY the rows that actually
+    // flipped — a receivable paid between the read and this update no longer
+    // matches, and its buyer must not get a false overdue alert.
+    const flipped: typeof due = [];
+    for (const r of due) {
+      const res = await this.prisma.wholesaleReceivable.updateMany({
+        where: { id: r.id, status: { in: ['OPEN', 'PARTIAL'] } },
+        data: { status: 'OVERDUE' },
+      });
+      if (res.count === 1) flipped.push(r);
+    }
+    this.logger.log(`Wholesale receivables overdue: ${flipped.length}`);
+    if (flipped.length === 0) return;
 
     const admins = await this.prisma.user.findMany({
       where: { role: 'ADMIN', isActive: true },
       select: { id: true },
     });
     const fmt = new Intl.NumberFormat('vi-VN');
-    for (const r of due) {
+    for (const r of flipped) {
       const remaining = Number(r.amountVnd.toString()) - Number(r.paidAmountVnd.toString());
       const body = `${r.account.companyName} · ${r.order.code} — còn ${fmt.format(remaining)} ₫, hạn ${r.dueDate!.toISOString().slice(0, 10)}`;
       for (const admin of admins) {

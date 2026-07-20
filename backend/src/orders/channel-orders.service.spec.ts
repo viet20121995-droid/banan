@@ -523,12 +523,14 @@ describe('internal transfer destination lock + receive', () => {
 
   it('destination store confirms receipt (with shortages) and the order completes', async () => {
     const statusEventCreate = jest.fn();
+    const receiptCreate = jest.fn().mockResolvedValue({ id: 'rcpt1' });
     const tx = {
       order: {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...dispatched, status: 'COMPLETED' }),
       },
       orderStatusEvent: { create: statusEventCreate },
+      internalTransferReceipt: { create: receiptCreate },
     };
     const prisma = {
       order: { findUnique: jest.fn().mockResolvedValue(dispatched) },
@@ -545,6 +547,30 @@ describe('internal transfer destination lock + receive', () => {
     expect(ev.actorId).toBe('dest1');
     expect(ev.note).toContain('nhận 8/10');
     expect(ev.note).toContain('Vỡ 2 hộp');
+    // Structured receipt: per-line ordered vs received, receiver recorded.
+    const receipt = receiptCreate.mock.calls[0][0].data;
+    expect(receipt.receivedById).toBe('dest1');
+    expect(receipt.lines.createMany.data).toEqual([
+      { orderItemId: 'oi1', orderedQty: 10, receivedQty: 8 },
+    ]);
+  });
+});
+
+describe('destination-store visibility', () => {
+  it('the merchant list includes transfers the store RECEIVES, not just fulfils', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = {
+      order: { findMany, count },
+      $transaction: jest.fn((ops: Array<Promise<unknown>>) => Promise.all(ops)),
+    };
+    const { svc } = makeService(prisma as never);
+    await svc.listForStore('s2', {});
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.OR).toEqual([
+      { storeId: 's2' },
+      { source: 'INTERNAL_TRANSFER', destinationStoreId: 's2' },
+    ]);
   });
 });
 

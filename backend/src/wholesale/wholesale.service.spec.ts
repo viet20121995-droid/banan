@@ -108,7 +108,10 @@ function makeService(over: Overrides = {}) {
       update: jest.fn().mockResolvedValue({}),
       findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'r1', status: 'PAID' }),
     },
-    wholesalePayment: { create: jest.fn().mockResolvedValue({ id: 'wp1' }) },
+    wholesalePayment: {
+      create: jest.fn().mockResolvedValue({ id: 'wp1' }),
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
   };
   const prisma = {
     wholesaleAccount: {
@@ -301,6 +304,41 @@ describe('WholesaleService.recordReceivablePayment (ledger)', () => {
     await expect(
       svc.recordReceivablePayment('r1', 'adm', { amountVnd: 1_200_000 }),
     ).rejects.toMatchObject({ response: { code: 'PAYMENT_AMOUNT_INVALID' } });
+  });
+});
+
+describe('receivable payment idempotency + overdue preservation', () => {
+  it('a retried confirm with the same key returns without a second ledger entry', async () => {
+    const { svc, tx } = makeService({
+      receivable: {
+        id: 'r1',
+        status: 'OPEN',
+        amountVnd: decimal(1_000_000),
+        paidAmountVnd: decimal(0),
+      },
+    });
+    (tx.wholesalePayment.findUnique as jest.Mock).mockResolvedValue({ id: 'wp0' });
+    await svc.recordReceivablePayment('r1', 'adm', {
+      amountVnd: 400_000,
+      clientRequestId: 'pay-12345678',
+    });
+    expect(tx.wholesalePayment.create).not.toHaveBeenCalled();
+    expect(tx.wholesaleReceivable.update).not.toHaveBeenCalled();
+  });
+
+  it('a partial payment on a PAST-DUE receivable stays OVERDUE (not PARTIAL)', async () => {
+    const { svc, tx } = makeService({
+      receivable: {
+        id: 'r1',
+        status: 'OVERDUE',
+        amountVnd: decimal(1_000_000),
+        paidAmountVnd: decimal(0),
+        dueDate: new Date(Date.now() - 86_400_000),
+      },
+    });
+    await svc.recordReceivablePayment('r1', 'adm', { amountVnd: 400_000 });
+    const upd = (tx.wholesaleReceivable.update as jest.Mock).mock.calls[0][0].data;
+    expect(upd.status).toBe('OVERDUE');
   });
 });
 

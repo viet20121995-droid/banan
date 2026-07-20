@@ -67,6 +67,7 @@ class _CatalogTab extends ConsumerStatefulWidget {
 class _CatalogTabState extends ConsumerState<_CatalogTab> {
   final quantities = <String, int>{};
   final notes = TextEditingController();
+  final poCode = TextEditingController();
   DateTime? scheduledFor;
   bool saving = false;
   // One dedup key per cart attempt: a double-tap or network retry re-sends
@@ -78,6 +79,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
   @override
   void dispose() {
     notes.dispose();
+    poCode.dispose();
     super.dispose();
   }
 
@@ -101,6 +103,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
           ],
           scheduledFor: scheduledFor,
           notes: notes.text.trim(),
+          poCode: poCode.text.trim(),
           clientRequestId: _requestKey,
         );
     if (!mounted) return;
@@ -109,6 +112,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
       success: (order) {
         quantities.clear();
         notes.clear();
+        poCode.clear();
         scheduledFor = null;
         _requestKey =
             'wh-${DateTime.now().millisecondsSinceEpoch}-${UniqueKey().hashCode}';
@@ -165,6 +169,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
                 contract: contracts[index],
                 quantities: quantities,
                 notes: notes,
+                poCode: poCode,
                 scheduledFor: scheduledFor,
                 saving: saving,
                 onQuantity: (line, quantity) => setState(() {
@@ -187,6 +192,7 @@ class _ContractOrderForm extends StatelessWidget {
     required this.contract,
     required this.quantities,
     required this.notes,
+    required this.poCode,
     required this.scheduledFor,
     required this.saving,
     required this.onQuantity,
@@ -197,6 +203,7 @@ class _ContractOrderForm extends StatelessWidget {
   final WholesaleContractView contract;
   final Map<String, int> quantities;
   final TextEditingController notes;
+  final TextEditingController poCode;
   final DateTime? scheduledFor;
   final bool saving;
   final void Function(WholesaleCatalogLine, int) onQuantity;
@@ -268,6 +275,14 @@ class _ContractOrderForm extends StatelessWidget {
             scheduledFor == null
                 ? 'Chọn thời gian cần giao'
                 : 'Giao ${DateFormat('dd/MM/yyyy HH:mm').format(scheduledFor!)}',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: poCode,
+          decoration: const InputDecoration(
+            labelText: 'Mã đơn mua hàng (PO) — tuỳ chọn',
+            helperText: 'Mã PO nội bộ của công ty bạn, in kèm đơn để đối soát.',
           ),
         ),
         const SizedBox(height: 12),

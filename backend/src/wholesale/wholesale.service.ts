@@ -304,52 +304,99 @@ export class WholesaleService {
   async recordReceivablePayment(
     id: string,
     adminId: string,
-    dto: { amountVnd?: number; method?: string; reference?: string; note?: string } = {},
+    dto: {
+      amountVnd?: number;
+      method?: string;
+      reference?: string;
+      note?: string;
+      clientRequestId?: string;
+    } = {},
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "WholesaleReceivable" WHERE "id" = ${id} FOR UPDATE`;
-      const receivable = await tx.wholesaleReceivable.findUnique({ where: { id } });
-      if (!receivable) throw new NotFoundException({ code: 'RECEIVABLE_NOT_FOUND' });
-      if (!['OPEN', 'PARTIAL', 'OVERDUE'].includes(receivable.status)) {
-        throw new BadRequestException({
-          code: 'RECEIVABLE_NOT_OPEN',
-          message: 'Công nợ này đã được xử lý.',
-        });
-      }
-      const remaining =
-        Number(receivable.amountVnd.toString()) - Number(receivable.paidAmountVnd.toString());
-      const amount = dto.amountVnd ?? remaining;
-      if (amount <= 0 || amount > remaining) {
-        throw new BadRequestException({
-          code: 'PAYMENT_AMOUNT_INVALID',
-          message: `Số tiền thu phải trong khoảng 1 – ${new Intl.NumberFormat('vi-VN').format(remaining)} ₫.`,
-        });
-      }
-      await tx.wholesalePayment.create({
-        data: {
-          receivableId: id,
-          amountVnd: new Prisma.Decimal(amount),
-          method: dto.method ?? 'BANK_TRANSFER',
-          reference: dto.reference?.trim() || null,
-          note: dto.note?.trim() || null,
-          confirmedByAdminId: adminId,
-        },
-      });
-      const nowPaid = Number(receivable.paidAmountVnd.toString()) + amount;
-      const fullyPaid = nowPaid >= Number(receivable.amountVnd.toString());
-      await tx.wholesaleReceivable.update({
-        where: { id },
-        data: {
-          paidAmountVnd: { increment: new Prisma.Decimal(amount) },
-          status: fullyPaid ? 'PAID' : 'PARTIAL',
-          ...(fullyPaid && { paidAt: new Date(), confirmedByAdminId: adminId }),
-        },
-      });
-      return tx.wholesaleReceivable.findUniqueOrThrow({
+    const settled = () =>
+      this.prisma.wholesaleReceivable.findUniqueOrThrow({
         where: { id },
         include: { payments: { orderBy: { paidAt: 'desc' } } },
       });
-    });
+    return this.prisma
+      .$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "WholesaleReceivable" WHERE "id" = ${id} FOR UPDATE`;
+        // Idempotency: the same confirm retried (double-click, network retry)
+        // must NOT collect twice — the second attempt still fits the remaining
+        // balance, so the amount guard alone can't catch it.
+        if (dto.clientRequestId) {
+          const existing = await tx.wholesalePayment.findUnique({
+            where: {
+              receivableId_clientRequestId: {
+                receivableId: id,
+                clientRequestId: dto.clientRequestId,
+              },
+            },
+          });
+          if (existing) {
+            return tx.wholesaleReceivable.findUniqueOrThrow({
+              where: { id },
+              include: { payments: { orderBy: { paidAt: 'desc' } } },
+            });
+          }
+        }
+        const receivable = await tx.wholesaleReceivable.findUnique({ where: { id } });
+        if (!receivable) throw new NotFoundException({ code: 'RECEIVABLE_NOT_FOUND' });
+        if (!['OPEN', 'PARTIAL', 'OVERDUE'].includes(receivable.status)) {
+          throw new BadRequestException({
+            code: 'RECEIVABLE_NOT_OPEN',
+            message: 'Công nợ này đã được xử lý.',
+          });
+        }
+        const remaining =
+          Number(receivable.amountVnd.toString()) - Number(receivable.paidAmountVnd.toString());
+        const amount = dto.amountVnd ?? remaining;
+        if (amount <= 0 || amount > remaining) {
+          throw new BadRequestException({
+            code: 'PAYMENT_AMOUNT_INVALID',
+            message: `Số tiền thu phải trong khoảng 1 – ${new Intl.NumberFormat('vi-VN').format(remaining)} ₫.`,
+          });
+        }
+        await tx.wholesalePayment.create({
+          data: {
+            receivableId: id,
+            amountVnd: new Prisma.Decimal(amount),
+            method: dto.method ?? 'BANK_TRANSFER',
+            reference: dto.reference?.trim() || null,
+            note: dto.note?.trim() || null,
+            confirmedByAdminId: adminId,
+            clientRequestId: dto.clientRequestId ?? null,
+          },
+        });
+        const nowPaid = Number(receivable.paidAmountVnd.toString()) + amount;
+        const fullyPaid = nowPaid >= Number(receivable.amountVnd.toString());
+        // Under-collected AND past due stays OVERDUE — a partial payment must
+        // not hide the debt from the overdue filter until the next cron.
+        const stillOverdue =
+          receivable.dueDate != null && receivable.dueDate.getTime() < Date.now();
+        await tx.wholesaleReceivable.update({
+          where: { id },
+          data: {
+            paidAmountVnd: { increment: new Prisma.Decimal(amount) },
+            status: fullyPaid ? 'PAID' : stillOverdue ? 'OVERDUE' : 'PARTIAL',
+            ...(fullyPaid && { paidAt: new Date(), confirmedByAdminId: adminId }),
+          },
+        });
+        return tx.wholesaleReceivable.findUniqueOrThrow({
+          where: { id },
+          include: { payments: { orderBy: { paidAt: 'desc' } } },
+        });
+      })
+      .catch((e) => {
+        // Same-key race past the in-tx pre-read: return the settled state.
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002' &&
+          dto.clientRequestId
+        ) {
+          return settled();
+        }
+        throw e;
+      });
   }
 
   /** Legacy "mark fully paid" — one ledger entry for the whole remaining balance. */
@@ -404,7 +451,7 @@ export class WholesaleService {
     if (line.fixedPriceVnd != null) return new Prisma.Decimal(line.fixedPriceVnd);
     const pct = line.discountPct ?? contract.defaultDiscountPct ?? new Prisma.Decimal(0);
     const price = retail.times(new Prisma.Decimal(100).minus(pct)).dividedBy(100);
-    return price.toDecimalPlaces(0); // whole ₫
+    return price.toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN); // whole ₫, làm tròn xuống có lợi cho khách
   }
 
   /** The buyer's catalog: active contracts + their active lines with prices. */

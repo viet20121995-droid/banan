@@ -958,11 +958,14 @@ export class OrdersService {
   ) {
     const page = opts.page ?? 1;
     const perPage = opts.perPage ?? 30;
-    // `storeId == null` → admin view, no scope. We spread the storeId key
-    // only when set so Prisma never receives `{ storeId: null }`, which
-    // would fail against the non-nullable foreign key column.
+    // `storeId == null` → admin view, no scope. A merchant's scope covers the
+    // orders their store FULFILS plus internal transfers their store RECEIVES
+    // (an admin-created A→B transfer keeps storeId=A, but B has to find it to
+    // sign for the goods).
     const where: Prisma.OrderWhereInput = {
-      ...(storeId != null && { storeId }),
+      ...(storeId != null && {
+        OR: [{ storeId }, { source: 'INTERNAL_TRANSFER' as const, destinationStoreId: storeId }],
+      }),
       ...(opts.status && { status: opts.status }),
       ...(opts.source && { source: opts.source }),
     };
@@ -2382,6 +2385,27 @@ export class OrdersService {
           message: `Order is no longer in ${order.status}.`,
         });
       }
+      // Structured receipt: one line per order item (received = ordered unless
+      // the branch reported otherwise). This is what shortage/damage reports —
+      // and, later, the destination-branch stock booking — read from; the
+      // status-event note below is only the human-readable trail.
+      const reportedById = new Map((dto.items ?? []).map((r) => [r.orderItemId, r.receivedQty]));
+      await tx.internalTransferReceipt.create({
+        data: {
+          orderId: id,
+          receivedById: actor.sub,
+          note: dto.note?.trim() || null,
+          lines: {
+            createMany: {
+              data: order.items.map((i) => ({
+                orderItemId: i.id,
+                orderedQty: i.quantity,
+                receivedQty: reportedById.get(i.id) ?? i.quantity,
+              })),
+            },
+          },
+        },
+      });
       // actorId + createdAt on the event ARE the receiver + received-at record.
       await tx.orderStatusEvent.create({
         data: {
@@ -2993,14 +3017,24 @@ export class OrdersService {
   }
 
   private assertCanRead(
-    order: { customerId: string; storeId: string; kitchenId: string | null },
+    order: {
+      customerId: string;
+      storeId: string;
+      kitchenId: string | null;
+      source?: OrderSource;
+      destinationStoreId?: string | null;
+    },
     principal: { sub: string; role: Role; storeId?: string | null; kitchenId?: string | null },
   ) {
     if (principal.role === 'ADMIN') return;
     if (principal.role === 'CUSTOMER' && order.customerId === principal.sub) return;
     if (
       (principal.role === 'MERCHANT_OWNER' || principal.role === 'MERCHANT_STAFF') &&
-      principal.storeId === order.storeId
+      principal.storeId != null &&
+      (principal.storeId === order.storeId ||
+        // The RECEIVING branch of an internal transfer must be able to open
+        // the order to sign for the goods (admin A→B keeps storeId=A).
+        (order.source === 'INTERNAL_TRANSFER' && principal.storeId === order.destinationStoreId))
     ) {
       return;
     }

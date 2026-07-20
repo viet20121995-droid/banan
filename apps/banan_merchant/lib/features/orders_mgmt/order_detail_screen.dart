@@ -92,6 +92,102 @@ class _Body extends ConsumerWidget {
     );
   }
 
+  /// Receive dialog: per-line received qty (defaults to ordered) + note, then
+  /// POST receive-transfer → COMPLETED with a structured receipt.
+  Future<void> _receiveTransfer(BuildContext context, WidgetRef ref) async {
+    final qtyCtls = {
+      for (final i in order.items)
+        i.id: TextEditingController(text: '${i.quantity}'),
+    };
+    final noteCtl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận nhận hàng'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final i in order.items)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: BananSpacing.sm),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            i.productName,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 72,
+                          child: TextField(
+                            controller: qtyCtls[i.id],
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              suffixText: '/${i.quantity}',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                TextField(
+                  controller: noteCtl,
+                  decoration: const InputDecoration(
+                    labelText: 'Ghi chú (thiếu/hỏng…)',
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Huỷ'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xác nhận nhận hàng'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final received = <Map<String, dynamic>>[];
+    for (final i in order.items) {
+      final qty = int.tryParse(qtyCtls[i.id]!.text.trim()) ?? i.quantity;
+      if (qty != i.quantity) {
+        received.add({'orderItemId': i.id, 'receivedQty': qty});
+      }
+    }
+    final res = await ref.read(ordersApiProvider).receiveTransfer(
+          order.id,
+          note: noteCtl.text.trim(),
+          receivedItems: received,
+        );
+    if (!context.mounted) return;
+    res.when(
+      success: (_) {
+        ref.invalidate(_orderProvider(order.id));
+        ref.invalidate(storeOrdersControllerProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Đã ghi nhận nhận hàng — đơn hoàn tất.')),
+        );
+      },
+      failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(authFailureMessage(f))),
+      ),
+    );
+  }
+
   Future<void> _markCounterPaid(BuildContext context, WidgetRef ref) async {
     final res = await ref.read(ordersApiProvider).markCounterPaid(order.id);
     if (!context.mounted) return;
@@ -281,6 +377,29 @@ class _Body extends ConsumerWidget {
                     onPressed: () => _markCounterPaid(context, ref),
                     icon: const Icon(Icons.payments_outlined),
                     label: const Text('Xác nhận đã thu tiền tại quầy'),
+                  ),
+                  const SizedBox(height: BananSpacing.md),
+                ],
+                // Destination branch signs for an internal transfer after the
+                // kitchen dispatched it — the only path to COMPLETED for it.
+                if (order.source == 'INTERNAL_TRANSFER' &&
+                    (order.status == OrderStatus.readyForPickup ||
+                        order.status == OrderStatus.delivering)) ...[
+                  Builder(
+                    builder: (context) {
+                      final user =
+                          ref.watch(authSessionProvider).valueOrNull?.user;
+                      final canReceive = user != null &&
+                          (user.role.isAdmin ||
+                              (user.storeId != null &&
+                                  user.storeId == order.destinationStoreId));
+                      if (!canReceive) return const SizedBox.shrink();
+                      return FilledButton.icon(
+                        onPressed: () => _receiveTransfer(context, ref),
+                        icon: const Icon(Icons.inventory_outlined),
+                        label: const Text('Đã nhận hàng tại chi nhánh'),
+                      );
+                    },
                   ),
                   const SizedBox(height: BananSpacing.md),
                 ],
