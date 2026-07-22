@@ -7,6 +7,7 @@ class ProductVariantDto {
     required this.flavor,
     required this.priceDelta,
     required this.stockMode,
+    this.sku,
     this.stockQty,
     this.isAvailable = true,
   });
@@ -16,6 +17,7 @@ class ProductVariantDto {
       id: json['id'] as String,
       size: json['size'] as String,
       flavor: json['flavor'] as String,
+      sku: json['sku'] as String?,
       priceDelta: _toDouble(json['priceDelta']),
       stockMode: json['stockMode'] as String,
       stockQty: (json['stockQty'] as num?)?.toInt(),
@@ -26,6 +28,7 @@ class ProductVariantDto {
   final String id;
   final String size;
   final String flavor;
+  final String? sku;
   final double priceDelta;
   final String stockMode;
   final int? stockQty;
@@ -35,6 +38,7 @@ class ProductVariantDto {
         id: id,
         size: size,
         flavor: flavor,
+        sku: sku,
         priceDelta: priceDelta,
         stockMode: StockMode.fromWire(stockMode),
         stockQty: stockQty,

@@ -203,6 +203,8 @@ class CatalogRepositoryImpl implements CatalogRepository {
               if (v.id != null) 'id': v.id,
               'size': v.size,
               'flavor': v.flavor,
+              // Always sent — null explicitly clears a previously-saved SKU.
+              'sku': (v.sku?.trim().isEmpty ?? true) ? null : v.sku!.trim(),
               'priceDelta': v.priceDelta,
               if (v.stockQty != null) 'stockQty': v.stockQty,
               'isAvailable': v.isAvailable,

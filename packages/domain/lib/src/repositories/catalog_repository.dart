@@ -62,6 +62,7 @@ class ProductDraft {
 class VariantDraft {
   VariantDraft({
     required this.size, required this.flavor, this.id,
+    this.sku,
     this.priceDelta = 0,
     this.stockQty,
     this.isAvailable = true,
@@ -71,6 +72,9 @@ class VariantDraft {
   String? id;
   String size;
   String flavor;
+
+  /// Unified SKU — same code as the kitchen MES product. Empty clears it.
+  String? sku;
   double priceDelta;
   int? stockQty;
   bool isAvailable;

@@ -21,6 +21,26 @@ const PRODUCT_INCLUDE = {
   category: true,
 } satisfies Prisma.ProductInclude;
 
+/** Trims + uppercases; empty becomes null so the unique index ignores it. */
+function normalizeSku(sku: string | null | undefined): string | null {
+  return sku?.trim().toUpperCase() || null;
+}
+
+/** Maps the unique-index violation on ProductVariant.sku to a friendly 409. */
+function rethrowSkuConflict(e: unknown): never {
+  if (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    e.code === 'P2002' &&
+    ((e.meta?.target as string[] | undefined) ?? []).includes('sku')
+  ) {
+    throw new ConflictException({
+      code: 'SKU_TAKEN',
+      message: 'SKU này đã được dùng cho sản phẩm/biến thể khác.',
+    });
+  }
+  throw e;
+}
+
 @Injectable()
 export class ProductsService {
   constructor(
@@ -332,6 +352,7 @@ export class ProductsService {
           create: dto.variants.map((v) => ({
             size: v.size,
             flavor: v.flavor,
+            sku: normalizeSku(v.sku),
             priceDelta: new Prisma.Decimal(v.priceDelta ?? 0),
             stockMode: v.stockQty == null ? 'UNLIMITED' : 'LIMITED',
             stockQty: v.stockQty,
@@ -340,7 +361,7 @@ export class ProductsService {
         },
       },
       include: PRODUCT_INCLUDE,
-    });
+    }).catch(rethrowSkuConflict);
   }
 
   /**
@@ -419,7 +440,7 @@ export class ProductsService {
         where: { id },
         include: PRODUCT_INCLUDE,
       });
-    });
+    }).catch(rethrowSkuConflict);
   }
 
   /// Deactivates every combo that contains the given product (it can no longer
@@ -498,6 +519,7 @@ export class ProductsService {
       const data = {
         size: v.size,
         flavor: v.flavor,
+        sku: normalizeSku(v.sku),
         priceDelta: new Prisma.Decimal(v.priceDelta ?? 0),
         stockMode: (v.stockQty == null ? 'UNLIMITED' : 'LIMITED') as 'UNLIMITED' | 'LIMITED',
         stockQty: v.stockQty ?? null,

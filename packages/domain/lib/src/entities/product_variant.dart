@@ -14,6 +14,7 @@ class ProductVariant extends Equatable {
     required this.size,
     required this.flavor,
     required this.priceDelta,
+    this.sku,
     this.stockMode = StockMode.unlimited,
     this.stockQty,
     this.isAvailable = true,
@@ -22,6 +23,9 @@ class ProductVariant extends Equatable {
   final String id;
   final String size;
   final String flavor;
+
+  /// Unified SKU — same code as the kitchen MES product (e.g. VT00708).
+  final String? sku;
   final double priceDelta;
   final StockMode stockMode;
   final int? stockQty;
@@ -31,5 +35,5 @@ class ProductVariant extends Equatable {
 
   @override
   List<Object?> get props =>
-      [id, size, flavor, priceDelta, stockMode, stockQty, isAvailable];
+      [id, size, flavor, sku, priceDelta, stockMode, stockQty, isAvailable];
 }

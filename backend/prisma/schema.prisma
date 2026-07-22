@@ -380,6 +380,9 @@ model ProductVariant {
   // Size + flavor are required, even if "Default" — keeps the order item shape uniform.
   size              String
   flavor            String
+  // Unified SKU: same value as MfgProduct.code for this sellable item, so menu,
+  // kitchen and the CukCuk POS all name one thing with one code.
+  sku               String?                 @unique
   priceDelta        Decimal                 @default(0) @db.Decimal(12, 2)
   stockMode         StockMode               @default(UNLIMITED)
   stockQty          Int?
@@ -1422,6 +1425,14 @@ enum MfgMoveRef {
   SCRAP
 }
 
+enum MfgPoState {
+  DRAFT
+  CONFIRMED
+  PARTIAL // some lines received, not all
+  RECEIVED
+  CANCELLED
+}
+
 model MfgUom {
   id       String  @id @default(uuid())
   code     String  @unique
@@ -1440,6 +1451,7 @@ model MfgUom {
   orders       MfgOrder[]
   scraps       MfgScrap[]
   moves        MfgStockMove[]
+  poLines      MfgPurchaseOrderLine[]
 
   createdAt DateTime @default(now())
 }
@@ -1485,11 +1497,63 @@ model MfgProduct {
   scraps          MfgScrap[]
   qualityPoints   MfgQualityPoint[]
   qualityAlerts   MfgQualityAlert[]
+  poLines         MfgPurchaseOrderLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([type, active])
+}
+
+model MfgSupplier {
+  id      String  @id @default(uuid())
+  name    String
+  phone   String?
+  email   String?
+  address String?
+  note    String?
+  active  Boolean @default(true)
+
+  purchaseOrders MfgPurchaseOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MfgPurchaseOrder {
+  id           String      @id @default(uuid())
+  code         String      @unique
+  supplierId   String
+  supplier     MfgSupplier @relation(fields: [supplierId], references: [id])
+  state        MfgPoState  @default(DRAFT)
+  expectedDate DateTime?
+  note         String?
+  // User id of the creator (no FK — users live in the retail side of the schema
+  // and MES rows should survive account deletion).
+  createdById  String?
+
+  lines MfgPurchaseOrderLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([state])
+}
+
+model MfgPurchaseOrderLine {
+  id          String           @id @default(uuid())
+  poId        String
+  po          MfgPurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  productId   String
+  product     MfgProduct       @relation(fields: [productId], references: [id])
+  qty         Decimal          @db.Decimal(14, 3)
+  qtyReceived Decimal          @default(0) @db.Decimal(14, 3)
+  uomId       String
+  uom         MfgUom           @relation(fields: [uomId], references: [id])
+  unitPrice   Decimal          @db.Decimal(14, 2)
+
+  @@index([poId])
+  @@index([productId])
 }
 
 model MfgWorkCenter {

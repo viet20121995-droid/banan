@@ -107,6 +107,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
             id: v.id,
             size: v.size,
             flavor: v.flavor,
+            sku: v.sku,
             priceDelta: v.priceDelta,
             stockQty: v.stockQty,
             isAvailable: v.isAvailable,
@@ -960,12 +961,15 @@ class _VariantRowState extends State<_VariantRow> {
   late final TextEditingController _delta = TextEditingController(
     text: widget.variant.priceDelta.toStringAsFixed(0),
   );
+  late final TextEditingController _sku =
+      TextEditingController(text: widget.variant.sku ?? '');
 
   @override
   void dispose() {
     _size.dispose();
     _flavor.dispose();
     _delta.dispose();
+    _sku.dispose();
     super.dispose();
   }
 
@@ -993,6 +997,20 @@ class _VariantRowState extends State<_VariantRow> {
             onChanged: (v) => widget.variant.flavor = v,
             validator: (v) =>
                 (v == null || v.isEmpty) ? 'Bắt buộc' : null,
+          ),
+        ),
+        const SizedBox(width: BananSpacing.sm),
+        SizedBox(
+          width: 130,
+          child: TextFormField(
+            controller: _sku,
+            maxLength: 30,
+            decoration: const InputDecoration(
+              labelText: 'SKU',
+              helperText: 'Trùng mã bếp',
+              counterText: '',
+            ),
+            onChanged: (v) => widget.variant.sku = v,
           ),
         ),
         const SizedBox(width: BananSpacing.sm),
