@@ -38,6 +38,9 @@ d('Manufacturing golden path (integration)', () => {
 
   beforeAll(async () => {
     // Clean slate — order matters for FKs.
+    await prisma.mfgPurchaseOrderLine.deleteMany();
+    await prisma.mfgPurchaseOrder.deleteMany();
+    await prisma.mfgSupplier.deleteMany();
     await prisma.mfgReservation.deleteMany();
     await prisma.mfgMaintenance.deleteMany();
     await prisma.mfgStockMove.deleteMany();
@@ -1364,5 +1367,64 @@ d('Manufacturing golden path (integration)', () => {
     expect(rejected).toHaveLength(1);
     // The DB-constraint loser must surface as the same 409 as the pre-check.
     expect((rejected[0].reason as { status?: number }).status).toBe(409);
+  });
+
+  // ── purchasing (P2: supplier → PO → receipt → history) ──
+  it('runs a PO from draft to received, driving qtyReceived, state and history', async () => {
+    const supplier = await mfg.createSupplier({ name: 'Bột Mì Phương Nam' });
+
+    // Draft with 2 lines, in the products' base UoM (g).
+    const po = await mfg.createPurchaseOrder({
+      supplierId: supplier.id,
+      note: 'Đợt bột tháng 7',
+      lines: [
+        { productId: ids.flour, qty: 1000, unitPrice: 28 },
+        { productId: ids.sugar, qty: 500, unitPrice: 24 },
+      ],
+    });
+    expect(po.state).toBe('DRAFT');
+    expect(po.code).toMatch(/^PO-\d{5}$/);
+
+    // Receiving against a draft PO must refuse.
+    const flourLine = po.lines.find((l) => l.productId === ids.flour)!;
+    await expect(
+      mfg.receive({ productId: ids.flour, qty: 1000, uomId: gUom, unitCost: 28, poLineId: flourLine.id }),
+    ).rejects.toMatchObject({ status: 400 });
+
+    await mfg.confirmPurchaseOrder(po.id);
+
+    // Receive the flour line in full → PO goes PARTIAL, line filled.
+    await mfg.receive({
+      productId: ids.flour, qty: 1000, uomId: gUom, unitCost: 28, poLineId: flourLine.id,
+    });
+    let fresh = await mfg.getPurchaseOrder(po.id);
+    expect(fresh.state).toBe('PARTIAL');
+    expect(Number(fresh.lines.find((l) => l.productId === ids.flour)!.qtyReceived)).toBe(1000);
+
+    // Wrong product against the sugar line must refuse.
+    const sugarLine = fresh.lines.find((l) => l.productId === ids.sugar)!;
+    await expect(
+      mfg.receive({ productId: ids.flour, qty: 100, uomId: gUom, unitCost: 24, poLineId: sugarLine.id }),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // Receive sugar in two parts → PARTIAL until complete, then RECEIVED.
+    await mfg.receive({ productId: ids.sugar, qty: 200, uomId: gUom, unitCost: 24, poLineId: sugarLine.id });
+    fresh = await mfg.getPurchaseOrder(po.id);
+    expect(fresh.state).toBe('PARTIAL');
+    await mfg.receive({ productId: ids.sugar, qty: 300, uomId: gUom, unitCost: 24, poLineId: sugarLine.id });
+    fresh = await mfg.getPurchaseOrder(po.id);
+    expect(fresh.state).toBe('RECEIVED');
+
+    // History carries the supplier + PO code on linked receipts, null on legacy.
+    const history = await mfg.purchaseHistory(ids.flour);
+    expect(history[0].supplierName).toBe('Bột Mì Phương Nam');
+    expect(history[0].poCode).toBe(po.code);
+    expect(history[0].unitCost).toBe(28);
+    expect(history.some((h) => h.supplierName === null)).toBe(true); // earlier ad-hoc receives
+
+    // Draft-only edit guard: the received PO can no longer be edited.
+    await expect(
+      mfg.updatePurchaseOrder(po.id, { note: 'sửa muộn' }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

@@ -209,6 +209,122 @@ export class ReceiveDto {
   @IsString()
   @MaxLength(60)
   lotName?: string;
+
+  /** Books this receipt against a purchase-order line (updates qtyReceived + PO state). */
+  @IsOptional()
+  @IsUUID()
+  poLineId?: string;
+}
+
+export class CreateSupplierDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(160)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+}
+
+/** Partial update — every field optional; `active: false` archives the supplier. */
+export class UpdateSupplierDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(160)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+}
+
+/**
+ * A PO line as posted by the editor. Quantities are in the product's own base
+ * UoM (same convention as ReceiveDto's default). Deep-validated in the service.
+ */
+export interface PoLineInput {
+  productId: string;
+  qty: number;
+  unitPrice: number;
+}
+
+export class CreatePoDto {
+  @IsUUID()
+  supplierId!: string;
+
+  @IsOptional()
+  @IsDateString()
+  expectedDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
+
+  @IsArray()
+  lines!: PoLineInput[];
+}
+
+/** Draft-only edit; supplying `lines` replaces the whole line list. */
+export class UpdatePoDto {
+  @IsOptional()
+  @IsUUID()
+  supplierId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  expectedDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
+
+  @IsOptional()
+  @IsArray()
+  lines?: PoLineInput[];
 }
 
 export class ScrapDto {

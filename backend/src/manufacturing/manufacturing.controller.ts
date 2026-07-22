@@ -21,14 +21,18 @@ import {
   CreateBomDto,
   CreateMaintenanceDto,
   CreateMoDto,
+  CreatePoDto,
   CreateProductDto,
   CreateQualityPointDto,
+  CreateSupplierDto,
   PlanMoDto,
   ReceiveDto,
   RecordCheckDto,
   ScrapDto,
   SetAlertStageDto,
+  UpdatePoDto,
   UpdateProductDto,
+  UpdateSupplierDto,
 } from './dto/manufacturing.dto';
 import { ManufacturingService } from './manufacturing.service';
 
@@ -236,6 +240,69 @@ export class ManufacturingController {
   @Post('orders/:id/cancel')
   cancelMO(@Param('id') id: string) {
     return this.mfg.cancelMO(id);
+  }
+
+  // ── purchasing (suppliers + POs + history) ───────────────────────────────
+  @Roles(...KITCHEN_READ)
+  @Get('suppliers')
+  listSuppliers(@Query('all') all?: string) {
+    return this.mfg.listSuppliers(all === '1');
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('suppliers')
+  createSupplier(@Body() dto: CreateSupplierDto) {
+    return this.mfg.createSupplier(dto);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Patch('suppliers/:id')
+  updateSupplier(@Param('id') id: string, @Body() dto: UpdateSupplierDto) {
+    return this.mfg.updateSupplier(id, dto);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('purchase-orders')
+  listPurchaseOrders(@Query('state') state?: string) {
+    return this.mfg.listPurchaseOrders(state);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('purchase-orders/:id')
+  getPurchaseOrder(@Param('id') id: string) {
+    return this.mfg.getPurchaseOrder(id);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Post('purchase-orders')
+  createPurchaseOrder(@Body() dto: CreatePoDto, @CurrentUser() user: AuthPrincipal) {
+    return this.mfg.createPurchaseOrder(dto, user.sub);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @Patch('purchase-orders/:id')
+  updatePurchaseOrder(@Param('id') id: string, @Body() dto: UpdatePoDto) {
+    return this.mfg.updatePurchaseOrder(id, dto);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @HttpCode(HttpStatus.OK)
+  @Post('purchase-orders/:id/confirm')
+  confirmPurchaseOrder(@Param('id') id: string) {
+    return this.mfg.confirmPurchaseOrder(id);
+  }
+
+  @Roles(...KITCHEN_WRITE)
+  @HttpCode(HttpStatus.OK)
+  @Post('purchase-orders/:id/cancel')
+  cancelPurchaseOrder(@Param('id') id: string) {
+    return this.mfg.cancelPurchaseOrder(id);
+  }
+
+  @Roles(...KITCHEN_READ)
+  @Get('products/:id/purchase-history')
+  purchaseHistory(@Param('id') id: string) {
+    return this.mfg.purchaseHistory(id);
   }
 
   // ── stock ────────────────────────────────────────────────────────────────

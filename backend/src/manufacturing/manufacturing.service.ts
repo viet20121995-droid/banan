@@ -8,7 +8,14 @@ import { Prisma, Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
-import type { BomLineInput, BomOperationInput } from './dto/manufacturing.dto';
+import type {
+  BomLineInput,
+  BomOperationInput,
+  CreatePoDto,
+  CreateSupplierDto,
+  UpdatePoDto,
+  UpdateSupplierDto,
+} from './dto/manufacturing.dto';
 import {
   avcoAfterReceipt,
   expiryDate,
@@ -178,6 +185,7 @@ export class ManufacturingService {
     uomId?: string;
     unitCost: number;
     lotName?: string;
+    poLineId?: string;
   }) {
     if (dto.qty <= 0) {
       throw new BadRequestException({ code: 'MFG_QTY_INVALID' });
@@ -210,6 +218,30 @@ export class ManufacturingService {
       if (!moveUom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
       const baseQty = toBase(dto.qty, uomLike(moveUom));
 
+      // Optional PO link: the receipt books against a confirmed PO line for the
+      // same product, driving qtyReceived and the PO's PARTIAL/RECEIVED state.
+      let poLine: { id: string; poId: string } | null = null;
+      if (dto.poLineId) {
+        const line = await db.mfgPurchaseOrderLine.findUnique({
+          where: { id: dto.poLineId },
+          include: { po: true },
+        });
+        if (!line) throw new NotFoundException({ code: 'MFG_PO_LINE_NOT_FOUND' });
+        if (line.productId !== dto.productId) {
+          throw new BadRequestException({
+            code: 'MFG_PO_LINE_PRODUCT_MISMATCH',
+            message: 'Dòng đơn mua thuộc sản phẩm khác.',
+          });
+        }
+        if (line.po.state !== 'CONFIRMED' && line.po.state !== 'PARTIAL') {
+          throw new BadRequestException({
+            code: 'MFG_PO_NOT_OPEN',
+            message: 'Đơn mua chưa xác nhận hoặc đã đóng.',
+          });
+        }
+        poLine = { id: line.id, poId: line.poId };
+      }
+
       const onHand = await this.availableAtStock(db, dto.productId, stock);
       const newAvg = avcoAfterReceipt(onHand, n(product.avgCost), baseQty, dto.unitCost);
 
@@ -234,12 +266,27 @@ export class ManufacturingService {
         srcLocationId: supplier,
         destLocationId: stock,
         refType: 'RECEIPT',
+        refId: poLine?.poId,
         unitCost: dto.unitCost,
       });
       await db.mfgProduct.update({
         where: { id: dto.productId },
         data: { avgCost: newAvg },
       });
+      if (poLine) {
+        await db.mfgPurchaseOrderLine.update({
+          where: { id: poLine.id },
+          data: { qtyReceived: { increment: round3(baseQty) } },
+        });
+        const lines = await db.mfgPurchaseOrderLine.findMany({
+          where: { poId: poLine.poId },
+        });
+        const allDone = lines.every((l) => n(l.qtyReceived) >= n(l.qty));
+        await db.mfgPurchaseOrder.update({
+          where: { id: poLine.poId },
+          data: { state: allDone ? 'RECEIVED' : 'PARTIAL' },
+        });
+      }
       return { productId: dto.productId, avgCost: newAvg, lotId };
     });
   }
@@ -2285,5 +2332,203 @@ export class ManufacturingService {
     const alert = await this.prisma.mfgQualityAlert.findUnique({ where: { id } });
     if (!alert) throw new NotFoundException({ code: 'MFG_ALERT_NOT_FOUND' });
     return this.prisma.mfgQualityAlert.update({ where: { id }, data: { stage } });
+  }
+
+  // ── purchasing (P2: suppliers + purchase orders + history) ────────────────
+
+  private static readonly PO_INCLUDE = {
+    supplier: true,
+    lines: { include: { product: { include: { uom: true } } } },
+  } satisfies Prisma.MfgPurchaseOrderInclude;
+
+  listSuppliers(includeInactive = false) {
+    return this.prisma.mfgSupplier.findMany({
+      where: includeInactive ? undefined : { active: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  createSupplier(dto: CreateSupplierDto) {
+    return this.prisma.mfgSupplier.create({ data: { ...dto } });
+  }
+
+  async updateSupplier(id: string, dto: UpdateSupplierDto) {
+    const existing = await this.prisma.mfgSupplier.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException({ code: 'MFG_SUPPLIER_NOT_FOUND' });
+    return this.prisma.mfgSupplier.update({ where: { id }, data: { ...dto } });
+  }
+
+  listPurchaseOrders(state?: string) {
+    return this.prisma.mfgPurchaseOrder.findMany({
+      where: state ? { state: state as never } : undefined,
+      include: ManufacturingService.PO_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getPurchaseOrder(id: string) {
+    const po = await this.prisma.mfgPurchaseOrder.findUnique({
+      where: { id },
+      include: ManufacturingService.PO_INCLUDE,
+    });
+    if (!po) throw new NotFoundException({ code: 'MFG_PO_NOT_FOUND' });
+    return po;
+  }
+
+  /**
+   * Line quantities are in the product's own base UoM — the same convention
+   * receive() defaults to, so a PO line and its receipts always compare 1:1.
+   */
+  private async validatePoLines(lines: { productId: string; qty: number; unitPrice: number }[]) {
+    if (!Array.isArray(lines) || lines.length === 0) {
+      throw new BadRequestException({
+        code: 'MFG_PO_LINES_EMPTY',
+        message: 'Đơn mua cần ít nhất một dòng hàng.',
+      });
+    }
+    const products = await this.prisma.mfgProduct.findMany({
+      where: { id: { in: lines.map((l) => l.productId) } },
+      select: { id: true, uomId: true, active: true },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    return lines.map((l) => {
+      const p = byId.get(l.productId);
+      if (!p || !p.active) {
+        throw new BadRequestException({
+          code: 'MFG_PO_PRODUCT_INVALID',
+          message: 'Một dòng hàng trỏ tới sản phẩm không tồn tại hoặc đã lưu trữ.',
+        });
+      }
+      if (!(l.qty > 0) || l.unitPrice < 0) {
+        throw new BadRequestException({
+          code: 'MFG_PO_LINE_INVALID',
+          message: 'Số lượng phải > 0 và đơn giá không âm.',
+        });
+      }
+      return {
+        productId: l.productId,
+        qty: new Prisma.Decimal(round3(l.qty)),
+        uomId: p.uomId,
+        unitPrice: new Prisma.Decimal(roundCost(l.unitPrice)),
+      };
+    });
+  }
+
+  async createPurchaseOrder(dto: CreatePoDto, userId?: string) {
+    const supplier = await this.prisma.mfgSupplier.findUnique({
+      where: { id: dto.supplierId },
+    });
+    if (!supplier || !supplier.active) {
+      throw new BadRequestException({
+        code: 'MFG_SUPPLIER_INVALID',
+        message: 'Nhà cung cấp không tồn tại hoặc đã ngừng hợp tác.',
+      });
+    }
+    const lines = await this.validatePoLines(dto.lines);
+    const count = await this.prisma.mfgPurchaseOrder.count();
+    return this.prisma.mfgPurchaseOrder.create({
+      data: {
+        code: `PO-${String(count + 1).padStart(5, '0')}`,
+        supplierId: dto.supplierId,
+        expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : null,
+        note: dto.note,
+        createdById: userId ?? null,
+        lines: { create: lines },
+      },
+      include: ManufacturingService.PO_INCLUDE,
+    });
+  }
+
+  async updatePurchaseOrder(id: string, dto: UpdatePoDto) {
+    const po = await this.getPurchaseOrder(id);
+    if (po.state !== 'DRAFT') {
+      throw new BadRequestException({
+        code: 'MFG_PO_NOT_DRAFT',
+        message: 'Chỉ sửa được đơn mua ở trạng thái nháp.',
+      });
+    }
+    const lines = dto.lines ? await this.validatePoLines(dto.lines) : null;
+    return this.prisma.mfgPurchaseOrder.update({
+      where: { id },
+      data: {
+        ...(dto.supplierId && { supplierId: dto.supplierId }),
+        ...(dto.expectedDate !== undefined && {
+          expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : null,
+        }),
+        ...(dto.note !== undefined && { note: dto.note }),
+        ...(lines && { lines: { deleteMany: {}, create: lines } }),
+      },
+      include: ManufacturingService.PO_INCLUDE,
+    });
+  }
+
+  async confirmPurchaseOrder(id: string) {
+    const po = await this.getPurchaseOrder(id);
+    if (po.state !== 'DRAFT') {
+      throw new BadRequestException({
+        code: 'MFG_PO_NOT_DRAFT',
+        message: 'Đơn mua đã xác nhận hoặc đã đóng.',
+      });
+    }
+    if (po.lines.length === 0) {
+      throw new BadRequestException({
+        code: 'MFG_PO_LINES_EMPTY',
+        message: 'Đơn mua cần ít nhất một dòng hàng.',
+      });
+    }
+    return this.prisma.mfgPurchaseOrder.update({
+      where: { id },
+      data: { state: 'CONFIRMED' },
+      include: ManufacturingService.PO_INCLUDE,
+    });
+  }
+
+  /** Stock already received stays in stock — cancel only closes the remainder. */
+  async cancelPurchaseOrder(id: string) {
+    const po = await this.getPurchaseOrder(id);
+    if (po.state === 'RECEIVED' || po.state === 'CANCELLED') {
+      throw new BadRequestException({
+        code: 'MFG_PO_CLOSED',
+        message: 'Đơn mua đã đóng.',
+      });
+    }
+    return this.prisma.mfgPurchaseOrder.update({
+      where: { id },
+      data: { state: 'CANCELLED' },
+      include: ManufacturingService.PO_INCLUDE,
+    });
+  }
+
+  /**
+   * Every goods receipt for one product, newest first — who it was bought
+   * from, when, at what price, into which lot. Receipts made without a PO
+   * (legacy or ad-hoc) appear with a null PO/supplier.
+   */
+  async purchaseHistory(productId: string) {
+    const moves = await this.prisma.mfgStockMove.findMany({
+      where: { productId, refType: 'RECEIPT' },
+      orderBy: { date: 'desc' },
+      take: 200,
+      include: { lot: true, uom: true },
+    });
+    const poIds = [...new Set(moves.map((m) => m.refId).filter((x): x is string => !!x))];
+    const pos = await this.prisma.mfgPurchaseOrder.findMany({
+      where: { id: { in: poIds } },
+      include: { supplier: true },
+    });
+    const byId = new Map(pos.map((p) => [p.id, p]));
+    return moves.map((m) => {
+      const po = m.refId ? byId.get(m.refId) : undefined;
+      return {
+        date: m.date,
+        qty: n(m.qty),
+        uomCode: m.uom.code,
+        unitCost: n(m.unitCost),
+        lotName: m.lot?.name ?? null,
+        poId: po?.id ?? null,
+        poCode: po?.code ?? null,
+        supplierName: po?.supplier.name ?? null,
+      };
+    });
   }
 }
