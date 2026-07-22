@@ -613,6 +613,9 @@ model Order {
   destinationStore    Store?               @relation("OrderDestinationStore", fields: [destinationStoreId], references: [id])
   receivable          WholesaleReceivable?
   transferReceipt     InternalTransferReceipt?
+  // INTERNAL_TRANSFER only — kitchen-warehouse goods (milk, fruit, cups…)
+  // the branch orders alongside menu items. Issued from MES stock on receipt.
+  mfgItems            InternalTransferMfgItem[]
   /// WHOLESALE order-time snapshot { companyName, deliveryAddress, taxId,
   /// billingEmail, contactName, contactPhone, poCode } — editing the account
   /// later must not rewrite what old orders display.
@@ -840,6 +843,22 @@ model InternalTransferReceiptLine {
   receivedQty Int
 
   @@index([receiptId])
+}
+
+// A kitchen-warehouse (MES) line on an internal transfer: supplies the branch
+// orders that are not menu products — milk, fruit, cups, packaging. Quantities
+// are in the MfgProduct's base UoM. `receivedQty` is set when the branch signs
+// for the goods; that is also the moment the MES stock is issued (STOCK→STORE).
+model InternalTransferMfgItem {
+  id           String     @id @default(uuid())
+  orderId      String
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  mfgProductId String
+  mfgProduct   MfgProduct @relation(fields: [mfgProductId], references: [id])
+  qty          Decimal    @db.Decimal(14, 3)
+  receivedQty  Decimal?   @db.Decimal(14, 3)
+
+  @@index([orderId])
 }
 
 model OrderItem {
@@ -1484,6 +1503,10 @@ model MfgProduct {
   // receipts/produces roll in.
   standardCost   Decimal        @default(0) @db.Decimal(14, 2)
   avgCost        Decimal        @default(0) @db.Decimal(14, 2)
+  // Reorder point (base UoM): free stock at STOCK below this raises a
+  // replenishment row. Rule of thumb: sales rate × lead time (+ safety).
+  // 0 = no minimum watched.
+  reorderPoint   Decimal        @default(0) @db.Decimal(14, 3)
   active         Boolean        @default(true)
 
   boms            MfgBom[]            @relation("ProductBoms")
@@ -1498,6 +1521,7 @@ model MfgProduct {
   qualityPoints   MfgQualityPoint[]
   qualityAlerts   MfgQualityAlert[]
   poLines         MfgPurchaseOrderLine[]
+  transferItems   InternalTransferMfgItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

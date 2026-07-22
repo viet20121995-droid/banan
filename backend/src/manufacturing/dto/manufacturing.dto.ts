@@ -92,6 +92,12 @@ export class CreateProductDto {
   @IsNumber()
   @Min(0)
   standardCost?: number;
+
+  /** Reorder point in the base UoM — sales rate × lead time (+ safety). 0 = off. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderPoint?: number;
 }
 
 /** Partial update — every field optional; `active: false` archives the product. */
@@ -140,6 +146,12 @@ export class UpdateProductDto {
   @IsNumber()
   @Min(0)
   standardCost?: number;
+
+  /** Reorder point in the base UoM — sales rate × lead time (+ safety). 0 = off. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderPoint?: number;
 
   @IsOptional()
   @IsBoolean()

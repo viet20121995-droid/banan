@@ -22,6 +22,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import type { PaymentInstructions } from '../payments/dto/payment-instructions';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ManufacturingService } from '../manufacturing/manufacturing.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { RefundsService } from '../refunds/refunds.service';
@@ -59,6 +60,14 @@ type ExpandedLineInput = {
 
 const ORDER_INCLUDE = {
   items: true,
+  // MES supply lines on internal transfers (empty for every other source).
+  mfgItems: {
+    include: {
+      mfgProduct: {
+        select: { id: true, code: true, nameVi: true, uom: { select: { code: true } } },
+      },
+    },
+  },
   address: true,
   store: { select: { id: true, name: true, slug: true } },
   statusEvents: { orderBy: { createdAt: 'asc' } },
@@ -127,6 +136,7 @@ export class OrdersService {
     private readonly storeRouter: StoreRouterService,
     private readonly deliveryConfig: DeliveryConfigService,
     private readonly promotions: PromotionsService,
+    private readonly manufacturing: ManufacturingService,
   ) {}
 
   /**
@@ -2113,6 +2123,7 @@ export class OrdersService {
     principal: { sub: string; role: Role; storeId?: string | null },
     dto: {
       items: CreateOrderDto['items'];
+      mfgItems?: Array<{ mfgProductId: string; qty: number }>;
       scheduledFor?: string;
       notes?: string;
       requestingStoreId?: string;
@@ -2121,6 +2132,27 @@ export class OrdersService {
       clientRequestId?: string;
     },
   ): Promise<OrderWithIncludes> {
+    const mfgItems = dto.mfgItems ?? [];
+    if (dto.items.length === 0 && mfgItems.length === 0) {
+      throw new BadRequestException({
+        code: 'TRANSFER_EMPTY',
+        message: 'Đơn nội bộ cần ít nhất một món hoặc một vật tư.',
+      });
+    }
+    // Validate the MES lines up-front: product must exist and be active.
+    if (mfgItems.length > 0) {
+      const found = await this.prisma.mfgProduct.findMany({
+        where: { id: { in: mfgItems.map((m) => m.mfgProductId) }, active: true },
+        select: { id: true },
+      });
+      const ok = new Set(found.map((p) => p.id));
+      if (mfgItems.some((m) => !ok.has(m.mfgProductId))) {
+        throw new BadRequestException({
+          code: 'MFG_PRODUCT_INVALID',
+          message: 'Một vật tư không tồn tại hoặc đã lưu trữ.',
+        });
+      }
+    }
     const requestingStoreId = this.resolveActorStore(principal, dto.requestingStoreId);
     const replay = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
     if (replay) return replay;
@@ -2191,6 +2223,16 @@ export class OrdersService {
             total: subtotal,
             notes: dto.notes,
             items: { createMany: { data: lineCreates } },
+            ...(mfgItems.length > 0 && {
+              mfgItems: {
+                createMany: {
+                  data: mfgItems.map((m) => ({
+                    mfgProductId: m.mfgProductId,
+                    qty: new Prisma.Decimal(m.qty),
+                  })),
+                },
+              },
+            }),
             statusEvents: {
               createMany: {
                 data: [
@@ -2323,7 +2365,11 @@ export class OrdersService {
   async receiveInternalTransfer(
     id: string,
     actor: { sub: string; role: Role; storeId?: string | null },
-    dto: { note?: string; items?: Array<{ orderItemId: string; receivedQty: number }> } = {},
+    dto: {
+      note?: string;
+      items?: Array<{ orderItemId: string; receivedQty: number }>;
+      mfgItems?: Array<{ itemId: string; receivedQty: number }>;
+    } = {},
   ): Promise<OrderWithIncludes> {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -2372,6 +2418,31 @@ export class OrdersService {
       }
       if (parts.length > 0) receiptNote = `Thiếu/hỏng — ${parts.join('; ')}`;
     }
+
+    // MES supply lines: received = ordered unless the branch reports otherwise.
+    const mfgReported = new Map((dto.mfgItems ?? []).map((r) => [r.itemId, r.receivedQty]));
+    const mfgLines = order.mfgItems ?? [];
+    const mfgShort: string[] = [];
+    for (const line of mfgLines) {
+      const reported = mfgReported.get(line.id);
+      if (reported === undefined) continue;
+      const ordered = Number(line.qty);
+      if (reported < 0 || reported > ordered) {
+        throw new BadRequestException({
+          code: 'RECEIVED_QTY_INVALID',
+          message: `"${line.mfgProduct.nameVi}" nhận ${reported}/${ordered} không hợp lệ.`,
+        });
+      }
+      if (reported !== ordered) {
+        mfgShort.push(`${line.mfgProduct.nameVi}: nhận ${reported}/${ordered}`);
+      }
+    }
+    if (mfgShort.length > 0) {
+      const prefix = receiptNote === 'Đã nhận đủ hàng.' ? 'Thiếu/hỏng — ' : '; ';
+      receiptNote = receiptNote === 'Đã nhận đủ hàng.'
+        ? `${prefix}${mfgShort.join('; ')}`
+        : `${receiptNote}${prefix}${mfgShort.join('; ')}`;
+    }
     if (dto.note?.trim()) receiptNote = `${receiptNote} ${dto.note.trim()}`.trim();
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -2406,6 +2477,20 @@ export class OrdersService {
           },
         },
       });
+      // MES supplies leave the kitchen warehouse the moment the branch signs:
+      // record receivedQty and issue the stock (STOCK → STORE, AVCO, FEFO).
+      for (const line of mfgLines) {
+        const received = mfgReported.get(line.id) ?? Number(line.qty);
+        await tx.internalTransferMfgItem.update({
+          where: { id: line.id },
+          data: { receivedQty: new Prisma.Decimal(received) },
+        });
+        await this.manufacturing.issueForTransfer(tx, {
+          productId: line.mfgProductId,
+          qty: received,
+          refId: id,
+        });
+      }
       // actorId + createdAt on the event ARE the receiver + received-at record.
       await tx.orderStatusEvent.create({
         data: {

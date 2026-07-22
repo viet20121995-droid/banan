@@ -8,6 +8,7 @@ import {
   IsEmail,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -77,17 +78,37 @@ export class CounterOrderDto {
   clientRequestId?: string;
 }
 
+/** One kitchen-warehouse (MES) line: supplies that are not menu products. */
+export class TransferMfgItemDto {
+  @IsUUID()
+  mfgProductId!: string;
+
+  /** In the MES product's base UoM. */
+  @IsNumber()
+  @Min(0.001)
+  qty!: number;
+}
+
 /**
  * A branch orders goods from the kitchen for itself (restock / display case).
  * Internal — no customer, no payment, excluded from retail revenue.
+ * At least one of [items] (menu products) or [mfgItems] (supplies) must be
+ * non-empty — enforced in the service.
  */
 export class InternalTransferDto {
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(40)
   @ValidateNested({ each: true })
   @Type(() => OrderItemInputDto)
   items!: OrderItemInputDto[];
+
+  /** Kitchen-warehouse supplies (milk, fruit, cups…) to deliver to the branch. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => TransferMfgItemDto)
+  mfgItems?: TransferMfgItemDto[];
 
   /** When the branch needs the goods. */
   @IsOptional()
@@ -132,6 +153,16 @@ export class ReceivedItemDto {
   receivedQty!: number;
 }
 
+/** One received MES line: how much of a supply item actually arrived. */
+export class ReceivedMfgItemDto {
+  @IsUUID()
+  itemId!: string;
+
+  @IsNumber()
+  @Min(0)
+  receivedQty!: number;
+}
+
 /** Destination branch signs for an internal transfer (→ COMPLETED). */
 export class ReceiveTransferDto {
   @IsOptional()
@@ -146,4 +177,12 @@ export class ReceiveTransferDto {
   @ValidateNested({ each: true })
   @Type(() => ReceivedItemDto)
   items?: ReceivedItemDto[];
+
+  /** Same, for the kitchen-warehouse (MES) lines. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => ReceivedMfgItemDto)
+  mfgItems?: ReceivedMfgItemDto[];
 }

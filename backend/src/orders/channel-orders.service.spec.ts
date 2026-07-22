@@ -107,6 +107,7 @@ function makeService(prisma: PrismaMock) {
     noop, // storeRouter
     noop, // deliveryConfig
     noop, // promotions
+    noop, // manufacturing
   );
   return { svc, realtime, payments, notifications };
 }

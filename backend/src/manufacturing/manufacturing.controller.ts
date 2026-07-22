@@ -44,6 +44,10 @@ import { ManufacturingService } from './manufacturing.service';
  */
 const KITCHEN_READ = [Role.KITCHEN_MANAGER, Role.KITCHEN_STAFF, Role.ADMIN];
 const KITCHEN_WRITE = [Role.KITCHEN_MANAGER, Role.ADMIN];
+// The shop counter reads the MES catalogue + on-hand too: the internal-transfer
+// picker lists supplies, and the cashier checks stock without calling the
+// kitchen. Read-only — counter roles never move MES stock directly.
+const COUNTER_READ = [...KITCHEN_READ, Role.MERCHANT_OWNER, Role.MERCHANT_STAFF];
 // Shop-floor actions (start/done a work order, record a QC check) are the
 // baker's/QC's daily job, so staff may do them too.
 const KITCHEN_FLOOR = [Role.KITCHEN_MANAGER, Role.KITCHEN_STAFF, Role.ADMIN];
@@ -54,7 +58,7 @@ export class ManufacturingController {
   constructor(private readonly mfg: ManufacturingService) {}
 
   // ── master data (for the Sản xuất UI) ────────────────────────────────────
-  @Roles(...KITCHEN_READ)
+  @Roles(...COUNTER_READ)
   @Get('products')
   listProducts(@Query('type') type?: string, @Query('all') all?: string) {
     return this.mfg.listProducts(type, all === '1');
@@ -318,7 +322,7 @@ export class ManufacturingController {
     return this.mfg.scrap(dto);
   }
 
-  @Roles(...KITCHEN_READ)
+  @Roles(...COUNTER_READ)
   @Get('stock/on-hand')
   onHand(@Query('productId') productId?: string) {
     return this.mfg.onHand(productId);

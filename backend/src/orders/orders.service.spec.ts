@@ -40,6 +40,7 @@ function makeService(prismaUser: { findUnique?: jest.Mock; create?: jest.Mock })
     noop, // storeRouter
     noop, // deliveryConfig
     noop, // promotions
+    noop, // manufacturing
   );
   return { svc, prisma };
 }
@@ -215,6 +216,7 @@ describe('OrdersService.transition (status-guarded)', () => {
       noop, // storeRouter
       noop, // deliveryConfig
       promotions as never,
+      noop, // manufacturing
     );
     return { svc, tx, loyalty, payments, coupons, promotions };
   }
@@ -253,6 +255,7 @@ describe('OrdersService.dispatchFromKitchen (no resurrect of a cancelled order)'
     const noop = {} as never;
     const svc = new OrdersService(
       prisma as never,
+      noop,
       noop,
       noop,
       noop,
@@ -315,6 +318,7 @@ describe('OrdersService.transferToKitchen (kitchen routing authz)', () => {
     const noop = {} as never;
     const svc = new OrdersService(
       prisma as never,
+      noop,
       noop,
       noop,
       noop,
@@ -794,6 +798,7 @@ describe('OrdersService.trackByCapability (public tracking)', () => {
       noop, // storeRouter
       noop, // deliveryConfig
       noop, // promotions
+      noop, // manufacturing
     );
   }
 

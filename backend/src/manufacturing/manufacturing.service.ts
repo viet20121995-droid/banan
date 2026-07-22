@@ -1176,6 +1176,7 @@ export class ManufacturingService {
     useExpiration?: boolean;
     expirationDays?: number;
     standardCost?: number;
+    reorderPoint?: number;
   }) {
     const code = this.cleanRequired(dto.code, 'MFG_PRODUCT_CODE_EMPTY');
     const nameVi = this.cleanRequired(dto.nameVi, 'MFG_PRODUCT_NAME_EMPTY');
@@ -1204,6 +1205,7 @@ export class ManufacturingService {
           useExpiration,
           expirationDays,
           standardCost: roundCost(dto.standardCost ?? 0),
+          reorderPoint: round3(dto.reorderPoint ?? 0),
         },
         include: { category: true, uom: true },
       });
@@ -1233,6 +1235,7 @@ export class ManufacturingService {
       useExpiration?: boolean;
       expirationDays?: number;
       standardCost?: number;
+      reorderPoint?: number;
       active?: boolean;
     },
   ) {
@@ -1305,6 +1308,9 @@ export class ManufacturingService {
             ...(dto.expirationDays !== undefined ? { expirationDays: dto.expirationDays } : {}),
             ...(dto.standardCost !== undefined
               ? { standardCost: roundCost(dto.standardCost) }
+              : {}),
+            ...(dto.reorderPoint !== undefined
+              ? { reorderPoint: round3(dto.reorderPoint) }
               : {}),
             ...(dto.active !== undefined ? { active: dto.active } : {}),
           },
@@ -1796,13 +1802,22 @@ export class ManufacturingService {
   async replenishment() {
     const stock = await this.locationId(this.prisma, 'STOCK');
 
-    // Purchased products only — SEMI/FINISHED are produced, not bought.
+    // Purchased products always; produced ones (SEMI/FINISHED) only when a
+    // reorder point watches them — their shortfall means "make more", not "buy".
     const products = await this.prisma.mfgProduct.findMany({
-      where: { active: true, type: { in: ['RAW', 'PACKAGING'] } },
+      where: {
+        active: true,
+        OR: [
+          { type: { in: ['RAW', 'PACKAGING'] } },
+          { reorderPoint: { gt: 0 } },
+        ],
+      },
       include: { uom: true },
       orderBy: { code: 'asc' },
     });
-    const purchasedIds = new Set(products.map((p) => p.id));
+    const purchasedIds = new Set(
+      products.filter((p) => p.type === 'RAW' || p.type === 'PACKAGING').map((p) => p.id),
+    );
 
     // Demand: open-MO component needs, grouped by product.
     const components = await this.prisma.mfgOrderComponent.findMany({
@@ -1820,7 +1835,7 @@ export class ManufacturingService {
     // Gross on-hand at STOCK, grouped by product (reservedQty is NOT subtracted —
     // see the method docstring for why netting it would double-count).
     const quants = await this.prisma.mfgStockQuant.findMany({
-      where: { locationId: stock, productId: { in: [...purchasedIds] } },
+      where: { locationId: stock, productId: { in: products.map((p) => p.id) } },
       select: { productId: true, quantity: true },
     });
     const onHandBy = new Map<string, number>();
@@ -1830,7 +1845,10 @@ export class ManufacturingService {
 
     const rows = products
       .map((p) => {
-        const demand = demandBy.get(p.id) ?? 0;
+        // Demand = open-MO needs, floored by the product's reorder point — so a
+        // watched item raises a row as soon as free stock dips under its
+        // minimum, even with no MO open.
+        const demand = Math.max(demandBy.get(p.id) ?? 0, n(p.reorderPoint));
         const available = onHandBy.get(p.id) ?? 0;
         const shortfall = demand - available;
         const avgCost = n(p.avgCost);
@@ -1839,6 +1857,8 @@ export class ManufacturingService {
           productCode: p.code,
           productNameVi: p.nameVi,
           uomCode: p.uom.code,
+          // BUY = purchased from a supplier; MAKE = produced in the kitchen.
+          kind: purchasedIds.has(p.id) ? ('BUY' as const) : ('MAKE' as const),
           demand: round3(demand),
           available: round3(available),
           shortfall: round3(shortfall),
@@ -2497,6 +2517,65 @@ export class ManufacturingService {
       data: { state: 'CANCELLED' },
       include: ManufacturingService.PO_INCLUDE,
     });
+  }
+
+  /**
+   * Issue stock to the shop counter for an internal transfer: STOCK → STORE,
+   * valued at AVCO, FEFO across lots for lot-tracked products. Runs inside the
+   * caller's transaction (the order-receipt one) so order state and stock move
+   * together.
+   *
+   * ponytail: stock may go negative — the goods were physically delivered, so
+   * the move is booked even when the ledger disagrees; negative on-hand is the
+   * stocktake signal, not a reason to block the branch's receipt.
+   */
+  async issueForTransfer(
+    db: Tx,
+    args: { productId: string; qty: number; refId: string },
+  ): Promise<void> {
+    const qty = round3(args.qty);
+    if (qty <= 0) return;
+    const stock = await this.locationId(db, 'STOCK');
+    const store = await this.locationId(db, 'STORE');
+    const product = await db.mfgProduct.findUnique({
+      where: { id: args.productId },
+    });
+    if (!product) throw new NotFoundException({ code: 'MFG_PRODUCT_NOT_FOUND' });
+
+    const base = {
+      productId: args.productId,
+      uomId: product.uomId,
+      srcLocationId: stock,
+      destLocationId: store,
+      refType: 'INTERNAL' as const,
+      refId: args.refId,
+      unitCost: n(product.avgCost),
+    };
+
+    let remaining = qty;
+    if (product.tracking === 'LOT') {
+      // FEFO: drain lots by earliest expiry first (no-expiry lots last).
+      const quants = await db.mfgStockQuant.findMany({
+        where: { productId: args.productId, locationId: stock, quantity: { gt: 0 } },
+        include: { lot: true },
+      });
+      quants.sort((a, b) => {
+        const ax = a.lot?.expiryDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const bx = b.lot?.expiryDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        return ax - bx;
+      });
+      for (const q of quants) {
+        if (remaining <= 0) break;
+        const free = n(q.quantity) - n(q.reservedQty);
+        if (free <= 0) continue;
+        const take = round3(Math.min(remaining, free));
+        await this.move(db, { ...base, lotId: q.lotId, qty: take });
+        remaining = round3(remaining - take);
+      }
+    }
+    if (remaining > 0) {
+      await this.move(db, { ...base, lotId: null, qty: remaining });
+    }
   }
 
   /**
