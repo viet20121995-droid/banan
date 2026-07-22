@@ -10,6 +10,55 @@ import 'package:intl/intl.dart';
 
 import 'kanban_controller.dart';
 
+class _PrioritySignal {
+  const _PrioritySignal(this.reason, {required this.overdue});
+
+  final String reason;
+  final bool overdue;
+}
+
+/// Operational priority is intentionally derived from timestamps already on
+/// the order, so every kitchen client applies the same deterministic rule.
+_PrioritySignal? _prioritySignal(Order order, [DateTime? clock]) {
+  if (order.status != OrderStatus.sentToKitchen) return null;
+  final now = clock ?? DateTime.now();
+  final scheduled = order.scheduledFor?.toLocal();
+  if (scheduled != null) {
+    final remaining = scheduled.difference(now);
+    if (remaining <= Duration.zero) {
+      return _PrioritySignal(
+        'quá giờ ${_shortDuration(-remaining)}',
+        overdue: true,
+      );
+    }
+    if (remaining <= const Duration(hours: 2)) {
+      return _PrioritySignal(
+        'còn ${_shortDuration(remaining)}',
+        overdue: false,
+      );
+    }
+  }
+
+  if (order.kitchenStatus == KitchenStatus.pendingAck) {
+    final waiting = now.difference(order.createdAt.toLocal());
+    if (waiting >= const Duration(minutes: 15)) {
+      return _PrioritySignal(
+        'chờ nhận ${_shortDuration(waiting)}',
+        overdue: true,
+      );
+    }
+  }
+  return null;
+}
+
+String _shortDuration(Duration duration) {
+  final minutes = duration.inMinutes.abs();
+  if (minutes < 60) return '${minutes.clamp(1, 59)} phút';
+  final hours = minutes ~/ 60;
+  final remainder = minutes % 60;
+  return remainder == 0 ? '$hours giờ' : '$hours giờ $remainder phút';
+}
+
 /// Simplified 4-column kanban: **Pending → Preparing → Ready → Completed**.
 /// The first three are the live kitchen workflow; "Completed" is a virtual
 /// column populated from today's dispatched orders so staff can see the
@@ -34,14 +83,7 @@ class _KanbanScreenState extends ConsumerState<KanbanScreen> {
 
   bool _matches(Order order) {
     if (_source != 'ALL' && order.source != _source) return false;
-    if (_urgentOnly) {
-      final now = DateTime.now();
-      final dueSoon = order.scheduledFor != null &&
-          order.scheduledFor!.isBefore(now.add(const Duration(hours: 2)));
-      final waitingTooLong = order.kitchenStatus == KitchenStatus.pendingAck &&
-          order.createdAt.isBefore(now.subtract(const Duration(minutes: 30)));
-      if (!dueSoon && !waitingTooLong) return false;
-    }
+    if (_urgentOnly && _prioritySignal(order) == null) return false;
     final query = _searchController.text.trim().toLowerCase();
     if (query.isEmpty) return true;
     final searchable = [
@@ -69,31 +111,20 @@ class _KanbanScreenState extends ConsumerState<KanbanScreen> {
       appBar: AppBar(
         title: Text(s.productionBoard),
         actions: [
-          // Narrow phones can't fit the labeled button next to the other
-          // actions — fall back to the compact icon there.
-          if (MediaQuery.sizeOf(context).width >= 480)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                vertical: BananSpacing.sm,
-                horizontal: BananSpacing.xs,
-              ),
-              child: FilledButton.tonalIcon(
-                onPressed: () => context.push('/production'),
-                icon: const Icon(Icons.factory_outlined, size: 18),
-                label: const Text('Sản xuất'),
-              ),
-            )
-          else
+          // Desktop navigation lives in the workspace sidebar. Keep these
+          // routes reachable on smaller layouts where the sidebar is absent.
+          if (MediaQuery.sizeOf(context).width < 1280) ...[
             IconButton(
               icon: const Icon(Icons.factory_outlined),
               tooltip: 'Sản xuất',
               onPressed: () => context.push('/production'),
             ),
-          IconButton(
-            icon: const Icon(Icons.table_chart_outlined),
-            tooltip: 'Tổng đặt nội bộ',
-            onPressed: () => context.push('/transfer-summary'),
-          ),
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Tổng đặt nội bộ',
+              onPressed: () => context.push('/transfer-summary'),
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.bar_chart_outlined),
             tooltip: s.analytics,
@@ -234,6 +265,45 @@ class _Board extends StatelessWidget {
   Widget build(BuildContext context) {
     final byColumn = state.activeByColumn;
     final completed = state.completedToday;
+    final columns = [
+      _Column(
+        title: 'Chờ nhận',
+        subtitle: 'Đơn mới, chờ bếp nhận',
+        accent: BananColors.warning,
+        cards: byColumn[KitchenStatus.pendingAck] ?? const [],
+        cardBuilder: (order) => _PendingCard(
+          order: order,
+          controller: controller,
+        ),
+      ),
+      _Column(
+        title: 'Đang làm',
+        subtitle: 'Đang trong bếp',
+        accent: BananColors.gold,
+        cards: byColumn[KitchenStatus.preparing] ?? const [],
+        cardBuilder: (order) => _PreparingCard(
+          order: order,
+          controller: controller,
+        ),
+      ),
+      _Column(
+        title: 'Sẵn sàng giao',
+        subtitle: 'Chờ giao đi / khách lấy',
+        accent: BananColors.success,
+        cards: byColumn[KitchenStatus.readyDispatch] ?? const [],
+        cardBuilder: (order) => _ReadyCard(
+          order: order,
+          controller: controller,
+        ),
+      ),
+      _Column(
+        title: 'Xong hôm nay',
+        subtitle: 'Đã xuất khỏi bếp trong ngày',
+        accent: BananColors.cocoaSoft,
+        cards: completed,
+        cardBuilder: (order) => _CompletedCard(order: order),
+      ),
+    ];
 
     return Padding(
       padding: const EdgeInsets.all(BananSpacing.lg),
@@ -252,54 +322,7 @@ class _Board extends StatelessWidget {
           ),
           const SizedBox(height: BananSpacing.md),
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Column(
-                    title: 'Chờ nhận',
-                    subtitle: 'Đơn mới, chờ bếp nhận',
-                    accent: BananColors.warning,
-                    cards: byColumn[KitchenStatus.pendingAck] ?? const [],
-                    cardBuilder: (order) => _PendingCard(
-                      order: order,
-                      controller: controller,
-                    ),
-                  ),
-                  const SizedBox(width: BananSpacing.lg),
-                  _Column(
-                    title: 'Đang làm',
-                    subtitle: 'Đang trong bếp',
-                    accent: BananColors.gold,
-                    cards: byColumn[KitchenStatus.preparing] ?? const [],
-                    cardBuilder: (order) => _PreparingCard(
-                      order: order,
-                      controller: controller,
-                    ),
-                  ),
-                  const SizedBox(width: BananSpacing.lg),
-                  _Column(
-                    title: 'Sẵn sàng giao',
-                    subtitle: 'Chờ giao đi / khách lấy',
-                    accent: BananColors.success,
-                    cards: byColumn[KitchenStatus.readyDispatch] ?? const [],
-                    cardBuilder: (order) => _ReadyCard(
-                      order: order,
-                      controller: controller,
-                    ),
-                  ),
-                  const SizedBox(width: BananSpacing.lg),
-                  _Column(
-                    title: 'Xong hôm nay',
-                    subtitle: 'Đã xuất khỏi bếp trong ngày',
-                    accent: BananColors.cocoaSoft,
-                    cards: completed,
-                    cardBuilder: (order) => _CompletedCard(order: order),
-                  ),
-                ],
-              ),
-            ),
+            child: _ResponsiveBoardColumns(columns: columns),
           ),
         ],
       ),
@@ -375,11 +398,15 @@ class _BoardToolbar extends StatelessWidget {
                   ),
                 ),
               const SizedBox(width: BananSpacing.xs),
-              FilterChip(
-                avatar: const Icon(Icons.priority_high, size: 16),
-                label: const Text('Cần ưu tiên'),
-                selected: urgentOnly,
-                onSelected: onUrgentChanged,
+              Tooltip(
+                message: 'Đơn chờ nhận quá 15 phút hoặc đơn hẹn đến hạn '
+                    'trong 2 giờ',
+                child: FilterChip(
+                  avatar: const Icon(Icons.priority_high, size: 16),
+                  label: const Text('Cần ưu tiên'),
+                  selected: urgentOnly,
+                  onSelected: onUrgentChanged,
+                ),
               ),
             ],
           ),
@@ -581,89 +608,131 @@ class _Column extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SizedBox(
-      width: 312,
-      child: Container(
-        padding: const EdgeInsets.all(BananSpacing.md),
-        decoration: BoxDecoration(
-          borderRadius: BananRadii.rlg,
-          color: BananColors.surfaceDim.withValues(alpha: 0.6),
-          border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: accent,
-                  ),
-                ),
-                const SizedBox(width: BananSpacing.sm),
-                Expanded(
-                  child: Text(title, style: theme.textTheme.titleSmall),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: BananSpacing.sm,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BananRadii.rPill,
-                    color: accent.withValues(alpha: 0.15),
-                  ),
-                  child: Text(
-                    '${cards.length}',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: accent,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: 16, top: 2),
-              child: Text(subtitle, style: theme.textTheme.bodySmall),
-            ),
-            const SizedBox(height: BananSpacing.md),
-            Expanded(
-              child: cards.isEmpty
-                  ? Padding(
-                      padding:
-                          const EdgeInsets.symmetric(vertical: BananSpacing.xl),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.inbox_outlined,
-                            size: 28,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.25),
-                          ),
-                          const SizedBox(height: BananSpacing.xs),
-                          Text(
-                            'Chưa có đơn',
-                            style: theme.textTheme.bodySmall,
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: EdgeInsets.zero,
-                      itemCount: cards.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: BananSpacing.sm),
-                      itemBuilder: (_, index) => cardBuilder(cards[index]),
-                    ),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(BananSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rlg,
+        color: BananColors.surfaceDim.withValues(alpha: 0.6),
+        border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accent,
+                ),
+              ),
+              const SizedBox(width: BananSpacing.sm),
+              Expanded(
+                child: Text(title, style: theme.textTheme.titleSmall),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: BananSpacing.sm,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BananRadii.rPill,
+                  color: accent.withValues(alpha: 0.15),
+                ),
+                child: Text(
+                  '${cards.length}',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 16, top: 2),
+            child: Text(subtitle, style: theme.textTheme.bodySmall),
+          ),
+          const SizedBox(height: BananSpacing.md),
+          Expanded(
+            child: cards.isEmpty
+                ? Padding(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: BananSpacing.xl),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.inbox_outlined,
+                          size: 28,
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.25),
+                        ),
+                        const SizedBox(height: BananSpacing.xs),
+                        Text(
+                          'Chưa có đơn',
+                          style: theme.textTheme.bodySmall,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: cards.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: BananSpacing.sm),
+                    itemBuilder: (_, index) => cardBuilder(cards[index]),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResponsiveBoardColumns extends StatelessWidget {
+  const _ResponsiveBoardColumns({required this.columns});
+
+  final List<Widget> columns;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 1000) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var index = 0; index < columns.length; index++) ...[
+                Expanded(child: columns[index]),
+                if (index < columns.length - 1)
+                  const SizedBox(width: BananSpacing.sm),
+              ],
+            ],
+          );
+        }
+
+        final columnWidth = constraints.maxWidth < 620
+            ? constraints.maxWidth
+            : (constraints.maxWidth - BananSpacing.sm) / 2;
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            scrollbars: false,
+          ),
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const PageScrollPhysics(),
+            itemCount: columns.length,
+            separatorBuilder: (_, __) => const SizedBox(width: BananSpacing.sm),
+            itemBuilder: (_, index) => SizedBox(
+              width: columnWidth,
+              child: columns[index],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -677,6 +746,7 @@ class _CardFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final priority = _prioritySignal(order);
     final summary = [
       ...order.items.map((i) => '${i.quantity}× ${i.productName}'),
       // Supply lines the branch ordered from the kitchen warehouse — the baker
@@ -712,6 +782,49 @@ class _CardFrame extends StatelessWidget {
               ),
             ],
           ),
+          if (priority != null) ...[
+            const SizedBox(height: BananSpacing.xs),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: BananSpacing.sm,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: (priority.overdue
+                          ? BananColors.danger
+                          : BananColors.warning)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BananRadii.rPill,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      priority.overdue
+                          ? Icons.error_outline
+                          : Icons.schedule_outlined,
+                      size: 13,
+                      color: priority.overdue
+                          ? BananColors.danger
+                          : BananColors.warning,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Ưu tiên · ${priority.reason}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: priority.overdue
+                            ? BananColors.danger
+                            : BananColors.warning,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           // Which branch sent this order + which CHANNEL it came from. The
           // source badge reads Order.source (backend truth, never inferred
           // from notes); internal transfers also show requesting → receiving

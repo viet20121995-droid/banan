@@ -38,7 +38,7 @@ class KitchenWorkspaceShell extends StatelessWidget {
       ),
     );
 
-    if (width < 1080) {
+    if (width < 1280) {
       return Theme(data: operationalTheme, child: child);
     }
 
