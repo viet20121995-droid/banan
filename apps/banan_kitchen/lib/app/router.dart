@@ -26,6 +26,7 @@ import '../features/production/schedule_screen.dart';
 import '../features/production/scrap_form_screen.dart';
 import '../features/production/shop_floor_screen.dart';
 import '../features/production/stock_screen.dart';
+import '../shared/layout/kitchen_workspace_shell.dart';
 
 const _login = '/login';
 const _wrongApp = '/wrong-app';
@@ -53,125 +54,133 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: _home, builder: (_, __) => const KanbanScreen()),
-      GoRoute(
-        path: '/analytics',
-        builder: (_, __) => const KitchenAnalyticsScreen(),
-      ),
-      GoRoute(
-        path: '/transfer-summary',
-        builder: (_, __) => const TransferSummaryScreen(),
-      ),
-      // ── "Sản xuất" (manufacturing / MES) — separate from the orders board. ──
-      GoRoute(
-        path: '/production',
-        builder: (_, __) => const ProductionDashboardScreen(),
-      ),
-      GoRoute(
-        path: '/production/orders',
-        builder: (_, state) =>
-            MoListScreen(state: state.uri.queryParameters['state']),
-      ),
-      GoRoute(
-        path: '/production/orders/:id',
-        builder: (_, state) =>
-            MoDetailScreen(moId: state.pathParameters['id']!),
-      ),
-      GoRoute(
-        path: '/production/stock',
-        builder: (_, __) => const StockScreen(),
-      ),
-      GoRoute(
-        path: '/production/shop-floor',
-        builder: (_, __) => const ShopFloorScreen(),
-      ),
-      GoRoute(
-        path: '/production/schedule',
-        builder: (_, __) => const ScheduleScreen(),
-      ),
-      GoRoute(
-        path: '/production/reports',
-        builder: (_, __) => const ReportsScreen(),
-      ),
-      GoRoute(
-        path: '/production/replenishment',
-        builder: (_, __) => const ReplenishmentScreen(),
-      ),
-      GoRoute(
-        path: '/production/scrap',
-        builder: (_, __) => const ScrapFormScreen(),
-      ),
-      GoRoute(
-        path: '/production/receipt',
-        builder: (_, __) => const ReceiptFormScreen(),
-      ),
-      GoRoute(
-        path: '/production/alerts',
-        builder: (_, __) => const QualityAlertsScreen(),
-      ),
-      GoRoute(
-        path: '/production/products',
-        builder: (_, __) => const ProductsScreen(),
-      ),
-      GoRoute(
-        path: '/production/products/new',
-        builder: (_, __) => const ProductFormScreen(),
-      ),
-      GoRoute(
-        path: '/production/products/:id/edit',
-        builder: (_, state) =>
-            ProductFormScreen(productId: state.pathParameters['id']),
-      ),
-      GoRoute(
-        path: '/production/products/:id/history',
-        builder: (_, state) =>
-            PurchaseHistoryScreen(productId: state.pathParameters['id']!),
-      ),
-      GoRoute(
-        path: '/production/suppliers',
-        builder: (_, __) => const SuppliersScreen(),
-      ),
-      GoRoute(
-        path: '/production/purchase-orders',
-        builder: (_, __) => const PurchaseOrdersScreen(),
-      ),
-      GoRoute(
-        path: '/production/purchase-orders/new',
-        builder: (_, __) => const PoFormScreen(),
-      ),
-      GoRoute(
-        path: '/production/purchase-orders/:id',
-        builder: (_, state) =>
-            PoDetailScreen(id: state.pathParameters['id']!),
-      ),
-      GoRoute(
-        path: '/production/boms',
-        builder: (_, __) => const BomListScreen(),
-      ),
-      GoRoute(
-        path: '/production/boms/new',
-        builder: (_, __) => const BomEditorScreen(),
-      ),
-      GoRoute(
-        path: '/production/boms/:id/edit',
-        builder: (_, state) =>
-            BomEditorScreen(bomId: state.pathParameters['id']),
-      ),
-      GoRoute(
-        path: '/production/maintenance',
-        builder: (_, __) => const MaintenanceScreen(),
-      ),
-      GoRoute(
-        path: '/production/oee',
-        builder: (_, __) => const OeeScreen(),
-      ),
-      GoRoute(
-        path: '/notifications',
-        builder: (_, __) => const NotificationsScreen(),
-      ),
-      GoRoute(
-        path: '/change-password',
-        builder: (_, __) => const ChangePasswordScreen(),
+      ShellRoute(
+        builder: (context, state, child) => KitchenWorkspaceShell(
+          location: state.uri.path,
+          child: child,
+        ),
+        routes: [
+          GoRoute(path: _home, builder: (_, __) => const KanbanScreen()),
+          GoRoute(
+            path: '/analytics',
+            builder: (_, __) => const KitchenAnalyticsScreen(),
+          ),
+          GoRoute(
+            path: '/transfer-summary',
+            builder: (_, __) => const TransferSummaryScreen(),
+          ),
+          // ── "Sản xuất" (manufacturing / MES) — separate from the orders board. ──
+          GoRoute(
+            path: '/production',
+            builder: (_, __) => const ProductionDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/production/orders',
+            builder: (_, state) =>
+                MoListScreen(state: state.uri.queryParameters['state']),
+          ),
+          GoRoute(
+            path: '/production/orders/:id',
+            builder: (_, state) =>
+                MoDetailScreen(moId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: '/production/stock',
+            builder: (_, __) => const StockScreen(),
+          ),
+          GoRoute(
+            path: '/production/shop-floor',
+            builder: (_, __) => const ShopFloorScreen(),
+          ),
+          GoRoute(
+            path: '/production/schedule',
+            builder: (_, __) => const ScheduleScreen(),
+          ),
+          GoRoute(
+            path: '/production/reports',
+            builder: (_, __) => const ReportsScreen(),
+          ),
+          GoRoute(
+            path: '/production/replenishment',
+            builder: (_, __) => const ReplenishmentScreen(),
+          ),
+          GoRoute(
+            path: '/production/scrap',
+            builder: (_, __) => const ScrapFormScreen(),
+          ),
+          GoRoute(
+            path: '/production/receipt',
+            builder: (_, __) => const ReceiptFormScreen(),
+          ),
+          GoRoute(
+            path: '/production/alerts',
+            builder: (_, __) => const QualityAlertsScreen(),
+          ),
+          GoRoute(
+            path: '/production/products',
+            builder: (_, __) => const ProductsScreen(),
+          ),
+          GoRoute(
+            path: '/production/products/new',
+            builder: (_, __) => const ProductFormScreen(),
+          ),
+          GoRoute(
+            path: '/production/products/:id/edit',
+            builder: (_, state) =>
+                ProductFormScreen(productId: state.pathParameters['id']),
+          ),
+          GoRoute(
+            path: '/production/products/:id/history',
+            builder: (_, state) =>
+                PurchaseHistoryScreen(productId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: '/production/suppliers',
+            builder: (_, __) => const SuppliersScreen(),
+          ),
+          GoRoute(
+            path: '/production/purchase-orders',
+            builder: (_, __) => const PurchaseOrdersScreen(),
+          ),
+          GoRoute(
+            path: '/production/purchase-orders/new',
+            builder: (_, __) => const PoFormScreen(),
+          ),
+          GoRoute(
+            path: '/production/purchase-orders/:id',
+            builder: (_, state) =>
+                PoDetailScreen(id: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: '/production/boms',
+            builder: (_, __) => const BomListScreen(),
+          ),
+          GoRoute(
+            path: '/production/boms/new',
+            builder: (_, __) => const BomEditorScreen(),
+          ),
+          GoRoute(
+            path: '/production/boms/:id/edit',
+            builder: (_, state) =>
+                BomEditorScreen(bomId: state.pathParameters['id']),
+          ),
+          GoRoute(
+            path: '/production/maintenance',
+            builder: (_, __) => const MaintenanceScreen(),
+          ),
+          GoRoute(
+            path: '/production/oee',
+            builder: (_, __) => const OeeScreen(),
+          ),
+          GoRoute(
+            path: '/notifications',
+            builder: (_, __) => const NotificationsScreen(),
+          ),
+          GoRoute(
+            path: '/change-password',
+            builder: (_, __) => const ChangePasswordScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: _login,

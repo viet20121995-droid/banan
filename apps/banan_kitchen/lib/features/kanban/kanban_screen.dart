@@ -14,14 +14,56 @@ import 'kanban_controller.dart';
 /// The first three are the live kitchen workflow; "Completed" is a virtual
 /// column populated from today's dispatched orders so staff can see the
 /// running tally without leaving the board.
-class KanbanScreen extends ConsumerWidget {
+class KanbanScreen extends ConsumerStatefulWidget {
   const KanbanScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<KanbanScreen> createState() => _KanbanScreenState();
+}
+
+class _KanbanScreenState extends ConsumerState<KanbanScreen> {
+  final _searchController = TextEditingController();
+  String _source = 'ALL';
+  bool _urgentOnly = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool _matches(Order order) {
+    if (_source != 'ALL' && order.source != _source) return false;
+    if (_urgentOnly) {
+      final now = DateTime.now();
+      final dueSoon = order.scheduledFor != null &&
+          order.scheduledFor!.isBefore(now.add(const Duration(hours: 2)));
+      final waitingTooLong = order.kitchenStatus == KitchenStatus.pendingAck &&
+          order.createdAt.isBefore(now.subtract(const Duration(minutes: 30)));
+      if (!dueSoon && !waitingTooLong) return false;
+    }
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return true;
+    final searchable = [
+      order.code,
+      order.storeName,
+      order.wholesaleCompanyName,
+      order.requestingStoreName,
+      order.destinationStoreName,
+      ...order.items.map((item) => item.productName),
+      ...order.mfgItems.map((item) => item.name),
+    ].whereType<String>().join(' ').toLowerCase();
+    return searchable.contains(query);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(kanbanControllerProvider);
     final controller = ref.read(kanbanControllerProvider.notifier);
     final s = ref.watch(stringsProvider);
+    final filteredState = state.copyWith(
+      orders: state.orders.where(_matches).toList(),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -101,7 +143,17 @@ class KanbanScreen extends ConsumerWidget {
                   message: authFailureMessage(state.failure!),
                   onRetry: controller.refresh,
                 )
-              : _Board(state: state, controller: controller),
+              : _Board(
+                  state: filteredState,
+                  controller: controller,
+                  searchController: _searchController,
+                  source: _source,
+                  urgentOnly: _urgentOnly,
+                  onSearchChanged: (_) => setState(() {}),
+                  onSourceChanged: (value) => setState(() => _source = value),
+                  onUrgentChanged: (value) =>
+                      setState(() => _urgentOnly = value),
+                ),
     );
   }
 }
@@ -158,10 +210,25 @@ class _BoardSkeleton extends StatelessWidget {
 }
 
 class _Board extends StatelessWidget {
-  const _Board({required this.state, required this.controller});
+  const _Board({
+    required this.state,
+    required this.controller,
+    required this.searchController,
+    required this.source,
+    required this.urgentOnly,
+    required this.onSearchChanged,
+    required this.onSourceChanged,
+    required this.onUrgentChanged,
+  });
 
   final KanbanState state;
   final KanbanController controller;
+  final TextEditingController searchController;
+  final String source;
+  final bool urgentOnly;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onSourceChanged;
+  final ValueChanged<bool> onUrgentChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +241,16 @@ class _Board extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _StatsBar(state: state),
-          const SizedBox(height: BananSpacing.lg),
+          const SizedBox(height: BananSpacing.md),
+          _BoardToolbar(
+            searchController: searchController,
+            source: source,
+            urgentOnly: urgentOnly,
+            onSearchChanged: onSearchChanged,
+            onSourceChanged: onSourceChanged,
+            onUrgentChanged: onUrgentChanged,
+          ),
+          const SizedBox(height: BananSpacing.md),
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -231,6 +307,106 @@ class _Board extends StatelessWidget {
   }
 }
 
+class _BoardToolbar extends StatelessWidget {
+  const _BoardToolbar({
+    required this.searchController,
+    required this.source,
+    required this.urgentOnly,
+    required this.onSearchChanged,
+    required this.onSourceChanged,
+    required this.onUrgentChanged,
+  });
+
+  final TextEditingController searchController;
+  final String source;
+  final bool urgentOnly;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onSourceChanged;
+  final ValueChanged<bool> onUrgentChanged;
+
+  static const _sources = <String, String>{
+    'ALL': 'Tất cả',
+    'WEB': 'Website',
+    'STAFF_COUNTER': 'Tại quầy',
+    'WHOLESALE': 'Wholesale',
+    'INTERNAL_TRANSFER': 'Nội bộ',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final search = SizedBox(
+          width: constraints.maxWidth < 720 ? constraints.maxWidth : 300,
+          child: TextField(
+            controller: searchController,
+            onChanged: onSearchChanged,
+            decoration: InputDecoration(
+              hintText: 'Tìm mã đơn, sản phẩm, chi nhánh',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Xóa tìm kiếm',
+                      onPressed: () {
+                        searchController.clear();
+                        onSearchChanged('');
+                      },
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+              isDense: true,
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surface,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        );
+        final filters = SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final entry in _sources.entries)
+                Padding(
+                  padding: const EdgeInsets.only(right: BananSpacing.xs),
+                  child: ChoiceChip(
+                    label: Text(entry.value),
+                    selected: source == entry.key,
+                    onSelected: (_) => onSourceChanged(entry.key),
+                  ),
+                ),
+              const SizedBox(width: BananSpacing.xs),
+              FilterChip(
+                avatar: const Icon(Icons.priority_high, size: 16),
+                label: const Text('Cần ưu tiên'),
+                selected: urgentOnly,
+                onSelected: onUrgentChanged,
+              ),
+            ],
+          ),
+        );
+
+        if (constraints.maxWidth < 720) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              search,
+              const SizedBox(height: BananSpacing.sm),
+              filters,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            search,
+            const SizedBox(width: BananSpacing.md),
+            Expanded(child: filters),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _StatsBar extends StatelessWidget {
   const _StatsBar({required this.state});
   final KanbanState state;
@@ -244,6 +420,29 @@ class _StatsBar extends StatelessWidget {
     final completed = state.completedToday.length;
 
     final theme = Theme.of(context);
+    final stats = [
+      _StatData(
+        'Chờ nhận',
+        pending,
+        Icons.notifications_active_outlined,
+        BananColors.warning,
+        emphasize: pending > 0,
+      ),
+      _StatData('Đang làm', preparing, Icons.cake_outlined, BananColors.gold),
+      _StatData(
+        'Sẵn sàng',
+        ready,
+        Icons.local_shipping_outlined,
+        BananColors.success,
+        emphasize: ready > 0,
+      ),
+      _StatData(
+        'Xong hôm nay',
+        completed,
+        Icons.task_alt,
+        BananColors.cocoaSoft,
+      ),
+    ];
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
       decoration: BoxDecoration(
@@ -251,41 +450,48 @@ class _StatsBar extends StatelessWidget {
         color: theme.colorScheme.surface,
         border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
       ),
-      child: Row(
-        children: [
-          _Stat(
-            label: 'Chờ nhận',
-            value: pending.toString(),
-            icon: Icons.notifications_active_outlined,
-            color: BananColors.warning,
-            emphasize: pending > 0,
-          ),
-          _StatDivider(),
-          _Stat(
-            label: 'Đang làm',
-            value: preparing.toString(),
-            icon: Icons.cake_outlined,
-            color: BananColors.gold,
-          ),
-          _StatDivider(),
-          _Stat(
-            label: 'Sẵn sàng',
-            value: ready.toString(),
-            icon: Icons.local_shipping_outlined,
-            color: BananColors.success,
-            emphasize: ready > 0,
-          ),
-          _StatDivider(),
-          _Stat(
-            label: 'Xong hôm nay',
-            value: completed.toString(),
-            icon: Icons.task_alt,
-            color: BananColors.cocoaSoft,
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 680) {
+            return Wrap(
+              runSpacing: BananSpacing.md,
+              children: [
+                for (final stat in stats)
+                  SizedBox(
+                    width: constraints.maxWidth / 2,
+                    child: _Stat.fromData(stat),
+                  ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              for (var i = 0; i < stats.length; i++) ...[
+                _Stat.fromData(stats[i]),
+                if (i < stats.length - 1) _StatDivider(),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
+}
+
+class _StatData {
+  const _StatData(
+    this.label,
+    this.value,
+    this.icon,
+    this.color, {
+    this.emphasize = false,
+  });
+
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+  final bool emphasize;
 }
 
 class _Stat extends StatelessWidget {
@@ -296,6 +502,14 @@ class _Stat extends StatelessWidget {
     required this.color,
     this.emphasize = false,
   });
+
+  factory _Stat.fromData(_StatData data) => _Stat(
+        label: data.label,
+        value: data.value.toString(),
+        icon: data.icon,
+        color: data.color,
+        emphasize: data.emphasize,
+      );
 
   final String label;
   final String value;
@@ -367,81 +581,88 @@ class _Column extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      width: 300,
-      padding: const EdgeInsets.all(BananSpacing.md),
-      decoration: BoxDecoration(
-        borderRadius: BananRadii.rlg,
-        color: BananColors.surfaceDim.withValues(alpha: 0.6),
-        border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: accent,
-                ),
-              ),
-              const SizedBox(width: BananSpacing.sm),
-              Expanded(
-                child: Text(title, style: theme.textTheme.titleSmall),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: BananSpacing.sm,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  borderRadius: BananRadii.rPill,
-                  color: accent.withValues(alpha: 0.15),
-                ),
-                child: Text(
-                  '${cards.length}',
-                  style: theme.textTheme.labelSmall?.copyWith(
+    return SizedBox(
+      width: 312,
+      child: Container(
+        padding: const EdgeInsets.all(BananSpacing.md),
+        decoration: BoxDecoration(
+          borderRadius: BananRadii.rlg,
+          color: BananColors.surfaceDim.withValues(alpha: 0.6),
+          border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
                     color: accent,
-                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 16, top: 2),
-            child: Text(subtitle, style: theme.textTheme.bodySmall),
-          ),
-          const SizedBox(height: BananSpacing.md),
-          if (cards.isEmpty)
+                const SizedBox(width: BananSpacing.sm),
+                Expanded(
+                  child: Text(title, style: theme.textTheme.titleSmall),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: BananSpacing.sm,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BananRadii.rPill,
+                    color: accent.withValues(alpha: 0.15),
+                  ),
+                  child: Text(
+                    '${cards.length}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: accent,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: BananSpacing.xl),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.inbox_outlined,
-                    size: 28,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
-                  ),
-                  const SizedBox(height: BananSpacing.xs),
-                  Text(
-                    'Chưa có đơn',
-                    style: theme.textTheme.bodySmall,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            )
-          else
-            for (final order in cards)
-              Padding(
-                padding: const EdgeInsets.only(bottom: BananSpacing.sm),
-                child: cardBuilder(order),
-              ),
-        ],
+              padding: const EdgeInsets.only(left: 16, top: 2),
+              child: Text(subtitle, style: theme.textTheme.bodySmall),
+            ),
+            const SizedBox(height: BananSpacing.md),
+            Expanded(
+              child: cards.isEmpty
+                  ? Padding(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: BananSpacing.xl),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.inbox_outlined,
+                            size: 28,
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.25),
+                          ),
+                          const SizedBox(height: BananSpacing.xs),
+                          Text(
+                            'Chưa có đơn',
+                            style: theme.textTheme.bodySmall,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.zero,
+                      itemCount: cards.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: BananSpacing.sm),
+                      itemBuilder: (_, index) => cardBuilder(cards[index]),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -935,7 +1156,12 @@ class _CompletedCard extends StatelessWidget {
         return 'Đang giao';
       case OrderStatus.completed:
         return 'Hoàn tất';
-      default:
+      case OrderStatus.pending:
+      case OrderStatus.accepted:
+      case OrderStatus.inPreparation:
+      case OrderStatus.sentToKitchen:
+      case OrderStatus.cancelled:
+      case OrderStatus.refunded:
         return s.label;
     }
   }

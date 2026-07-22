@@ -142,7 +142,7 @@ class ProductionDashboardScreen extends ConsumerWidget {
 
             // ── Thao tác nhanh (theo luồng làm việc) ──
             const SizedBox(height: BananSpacing.xl),
-            const _SectionHeader(title: 'Thao tác nhanh'),
+            const _SectionHeader(title: 'Khu vực làm việc'),
             const SizedBox(height: BananSpacing.sm),
             _QuickActionsGrid(canProduce: canProduce),
 
@@ -362,85 +362,181 @@ class _QuickAction {
   final bool writeOnly;
 }
 
+class _QuickActionGroup {
+  const _QuickActionGroup(this.title, this.description, this.actions);
+
+  final String title;
+  final String description;
+  final List<_QuickAction> actions;
+}
+
 class _QuickActionsGrid extends StatelessWidget {
   const _QuickActionsGrid({required this.canProduce});
   final bool canProduce;
 
-  // Workflow order: master data → recipe → inbound → order → boards → analysis.
-  static const _actions = [
-    _QuickAction(
-      'Sản phẩm & NVL',
-      Icons.category_outlined,
-      '/production/products',
+  static const _groups = [
+    _QuickActionGroup(
+      'Vận hành ca',
+      'Theo dõi và thực hiện kế hoạch sản xuất trong ngày.',
+      [
+        _QuickAction(
+          'Xưởng sản xuất',
+          Icons.precision_manufacturing_outlined,
+          '/production/shop-floor',
+        ),
+        _QuickAction(
+          'Lịch sản xuất',
+          Icons.calendar_month_outlined,
+          '/production/schedule',
+        ),
+        _QuickAction('Lệnh sản xuất', Icons.list_alt, '/production/orders'),
+      ],
     ),
-    _QuickAction(
-      'Công thức (BoM)',
-      Icons.menu_book_outlined,
-      '/production/boms',
+    _QuickActionGroup(
+      'Kho & mua hàng',
+      'Kiểm soát nguyên liệu, nhu cầu bổ sung và nhập hàng.',
+      [
+        _QuickAction(
+          'Tồn kho & lô',
+          Icons.inventory_2_outlined,
+          '/production/stock',
+        ),
+        _QuickAction(
+          'Cần mua / cần làm',
+          Icons.playlist_add_check_outlined,
+          '/production/replenishment',
+        ),
+        _QuickAction(
+          'Đơn mua hàng',
+          Icons.receipt_long_outlined,
+          '/production/purchase-orders',
+        ),
+        _QuickAction(
+          'Nhập kho NVL',
+          Icons.add_box_outlined,
+          '/production/receipt',
+          writeOnly: true,
+        ),
+      ],
     ),
-    _QuickAction(
-      'Nhập kho NVL',
-      Icons.add_box_outlined,
-      '/production/receipt',
-      writeOnly: true,
+    _QuickActionGroup(
+      'Chất lượng',
+      'Xử lý ngoại lệ trước khi chúng ảnh hưởng đơn hàng.',
+      [
+        _QuickAction(
+          'Cảnh báo QC',
+          Icons.fact_check_outlined,
+          '/production/alerts',
+        ),
+        _QuickAction(
+          'Ghi hao hụt',
+          Icons.delete_outline,
+          '/production/scrap',
+          writeOnly: true,
+        ),
+      ],
     ),
-    _QuickAction('Lệnh sản xuất', Icons.list_alt, '/production/orders'),
-    _QuickAction(
-      'Lịch sản xuất',
-      Icons.calendar_month_outlined,
-      '/production/schedule',
+    _QuickActionGroup(
+      'Thiết lập & phân tích',
+      'Dữ liệu nền, hiệu suất và bảo trì thiết bị.',
+      [
+        _QuickAction(
+          'Sản phẩm & NVL',
+          Icons.category_outlined,
+          '/production/products',
+        ),
+        _QuickAction(
+          'Công thức (BoM)',
+          Icons.menu_book_outlined,
+          '/production/boms',
+        ),
+        _QuickAction(
+          'Nhà cung cấp',
+          Icons.storefront_outlined,
+          '/production/suppliers',
+        ),
+        _QuickAction(
+          'Báo cáo',
+          Icons.bar_chart_outlined,
+          '/production/reports',
+        ),
+        _QuickAction('OEE thiết bị', Icons.speed_outlined, '/production/oee'),
+        _QuickAction(
+          'Bảo trì',
+          Icons.build_outlined,
+          '/production/maintenance',
+        ),
+      ],
     ),
-    _QuickAction(
-      'Xưởng (WO + QC)',
-      Icons.precision_manufacturing_outlined,
-      '/production/shop-floor',
-    ),
-    _QuickAction(
-      'Tồn kho & lô',
-      Icons.inventory_2_outlined,
-      '/production/stock',
-    ),
-    _QuickAction(
-      'Ghi hao hụt',
-      Icons.delete_outline,
-      '/production/scrap',
-      writeOnly: true,
-    ),
-    _QuickAction('Báo cáo', Icons.bar_chart_outlined, '/production/reports'),
-    _QuickAction(
-      'Đơn mua hàng',
-      Icons.receipt_long_outlined,
-      '/production/purchase-orders',
-    ),
-    _QuickAction(
-      'Nhà cung cấp',
-      Icons.storefront_outlined,
-      '/production/suppliers',
-    ),
-    _QuickAction(
-      'Gợi ý mua hàng',
-      Icons.shopping_cart_outlined,
-      '/production/replenishment',
-    ),
-    _QuickAction('OEE thiết bị', Icons.speed_outlined, '/production/oee'),
-    _QuickAction('Bảo trì', Icons.build_outlined, '/production/maintenance'),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final visible = _actions.where((a) => canProduce || !a.writeOnly).toList();
+    return Column(
+      children: [
+        for (var index = 0; index < _groups.length; index++) ...[
+          _ActionGroupSection(
+            group: _groups[index],
+            canProduce: canProduce,
+          ),
+          if (index < _groups.length - 1)
+            const SizedBox(height: BananSpacing.lg),
+        ],
+      ],
+    );
+  }
+}
+
+class _ActionGroupSection extends StatelessWidget {
+  const _ActionGroupSection({
+    required this.group,
+    required this.canProduce,
+  });
+
+  final _QuickActionGroup group;
+  final bool canProduce;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible =
+        group.actions.where((a) => canProduce || !a.writeOnly).toList();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cols = (constraints.maxWidth / 180).floor().clamp(2, 6);
-        return GridView.count(
-          crossAxisCount: cols,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: BananSpacing.sm,
-          crossAxisSpacing: BananSpacing.sm,
-          childAspectRatio: 2.6,
+        final columns = constraints.maxWidth >= 1100
+            ? 4
+            : constraints.maxWidth >= 720
+                ? 3
+                : constraints.maxWidth >= 440
+                    ? 2
+                    : 1;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final a in visible) _QuickActionCard(action: a),
+            Text(
+              group.title,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              group.description,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            GridView.count(
+              crossAxisCount: columns,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: BananSpacing.sm,
+              crossAxisSpacing: BananSpacing.sm,
+              childAspectRatio: columns == 1 ? 5.2 : 3.2,
+              children: [
+                for (final action in visible) _QuickActionCard(action: action),
+              ],
+            ),
           ],
         );
       },
