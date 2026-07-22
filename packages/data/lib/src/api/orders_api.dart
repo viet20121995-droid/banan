@@ -107,8 +107,11 @@ class OrdersApi {
       });
 
   /// A branch requests goods from the kitchen for itself (internal transfer).
+  /// [mfgItems]: kitchen-warehouse supplies {mfgProductId, qty} delivered to
+  /// the branch alongside (or instead of) menu items.
   Future<Result<OrderDto, AppFailure>> createInternalTransfer({
     required List<Map<String, dynamic>> items,
+    List<Map<String, dynamic>>? mfgItems,
     DateTime? scheduledFor,
     String? notes,
     String? requestingStoreId,
@@ -117,6 +120,7 @@ class OrdersApi {
   }) =>
       _postOrder('/merchant/orders/internal-transfer', {
         'items': items,
+        if (mfgItems != null && mfgItems.isNotEmpty) 'mfgItems': mfgItems,
         if (scheduledFor != null)
           'scheduledFor': scheduledFor.toUtc().toIso8601String(),
         if (notes != null && notes.isNotEmpty) 'notes': notes,
@@ -130,16 +134,20 @@ class OrdersApi {
       _postOrder('/merchant/orders/$id/counter-paid', const {});
 
   /// Destination branch signs for an internal transfer (→ COMPLETED).
-  /// [receivedItems] reports shortages: {orderItemId, receivedQty} per line.
+  /// [receivedItems] reports shortages: {orderItemId, receivedQty} per line;
+  /// [receivedMfgItems] the same for supply lines: {itemId, receivedQty}.
   Future<Result<OrderDto, AppFailure>> receiveTransfer(
     String id, {
     String? note,
     List<Map<String, dynamic>>? receivedItems,
+    List<Map<String, dynamic>>? receivedMfgItems,
   }) =>
       _postOrder('/merchant/orders/$id/receive-transfer', {
         if (note != null && note.isNotEmpty) 'note': note,
         if (receivedItems != null && receivedItems.isNotEmpty)
           'items': receivedItems,
+        if (receivedMfgItems != null && receivedMfgItems.isNotEmpty)
+          'mfgItems': receivedMfgItems,
       });
 
   Future<Result<OrderDto, AppFailure>> get(String id) async {

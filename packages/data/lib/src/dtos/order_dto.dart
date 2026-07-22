@@ -114,6 +114,51 @@ class OrderStatusEventDto {
       );
 }
 
+/// MES supply line on an internal transfer (see [TransferMfgItem]).
+class TransferMfgItemDto {
+  const TransferMfgItemDto({
+    required this.id,
+    required this.mfgProductId,
+    required this.code,
+    required this.name,
+    required this.uomCode,
+    required this.qty,
+    this.receivedQty,
+  });
+
+  factory TransferMfgItemDto.fromJson(Map<String, dynamic> json) {
+    final product = json['mfgProduct'] as Map<String, dynamic>?;
+    return TransferMfgItemDto(
+      id: json['id'] as String,
+      mfgProductId: json['mfgProductId'] as String,
+      code: product?['code'] as String? ?? '',
+      name: product?['nameVi'] as String? ?? '',
+      uomCode: (product?['uom'] as Map?)?['code'] as String? ?? '',
+      qty: _toDouble(json['qty']),
+      receivedQty:
+          json['receivedQty'] == null ? null : _toDouble(json['receivedQty']),
+    );
+  }
+
+  final String id;
+  final String mfgProductId;
+  final String code;
+  final String name;
+  final String uomCode;
+  final double qty;
+  final double? receivedQty;
+
+  TransferMfgItem toDomain() => TransferMfgItem(
+        id: id,
+        mfgProductId: mfgProductId,
+        code: code,
+        name: name,
+        uomCode: uomCode,
+        qty: qty,
+        receivedQty: receivedQty,
+      );
+}
+
 class OrderDto {
   const OrderDto({
     required this.id,
@@ -127,6 +172,7 @@ class OrderDto {
     required this.total,
     required this.items,
     required this.statusEvents,
+    this.mfgItems = const [],
     required this.payments,
     required this.refunds,
     required this.createdAt,
@@ -185,6 +231,9 @@ class OrderDto {
       total: _toDouble(json['total']),
       items: ((json['items'] as List?) ?? const [])
           .map((e) => OrderItemDto.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      mfgItems: ((json['mfgItems'] as List?) ?? const [])
+          .map((e) => TransferMfgItemDto.fromJson(e as Map<String, dynamic>))
           .toList(),
       statusEvents: ((json['statusEvents'] as List?) ?? const [])
           .map((e) => OrderStatusEventDto.fromJson(e as Map<String, dynamic>))
@@ -252,6 +301,7 @@ class OrderDto {
   final double deliveryFee;
   final double total;
   final List<OrderItemDto> items;
+  final List<TransferMfgItemDto> mfgItems;
   final List<OrderStatusEventDto> statusEvents;
   final List<PaymentDto> payments;
   final List<RefundDto> refunds;
@@ -307,6 +357,7 @@ class OrderDto {
         deliveryFee: deliveryFee,
         total: total,
         items: items.map((i) => i.toDomain()).toList(),
+        mfgItems: mfgItems.map((i) => i.toDomain()).toList(),
         statusEvents: statusEvents.map((e) => e.toDomain()).toList(),
         payments: payments.map((p) => p.toDomain()).toList(),
         refunds: refunds.map((r) => r.toDomain()).toList(),

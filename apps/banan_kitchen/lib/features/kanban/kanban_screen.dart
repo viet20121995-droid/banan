@@ -449,8 +449,12 @@ class _CardFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final summary =
-        order.items.map((i) => '${i.quantity}× ${i.productName}').join('\n');
+    final summary = [
+      ...order.items.map((i) => '${i.quantity}× ${i.productName}'),
+      // Supply lines the branch ordered from the kitchen warehouse — the baker
+      // packs these with the delivery.
+      ...order.mfgItems.map((m) => '${m.qty} ${m.uomCode} ${m.name} (vật tư)'),
+    ].join('\n');
 
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),

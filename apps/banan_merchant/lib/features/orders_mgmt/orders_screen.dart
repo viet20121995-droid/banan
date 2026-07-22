@@ -243,6 +243,11 @@ class _CreateOrderButtons extends StatelessWidget {
             icon: const Icon(Icons.local_shipping_outlined, size: 18),
             label: const Text('Đặt hàng nội bộ'),
           ),
+        OutlinedButton.icon(
+          onPressed: () => context.push('/kitchen-stock'),
+          icon: const Icon(Icons.inventory_2_outlined, size: 18),
+          label: const Text('Tồn kho bếp'),
+        ),
       ],
     );
   }

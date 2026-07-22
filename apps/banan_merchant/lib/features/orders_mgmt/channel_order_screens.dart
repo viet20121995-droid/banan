@@ -471,9 +471,18 @@ class InternalTransferScreen extends ConsumerStatefulWidget {
       _InternalTransferScreenState();
 }
 
+/// One kitchen-warehouse supply line in the transfer form.
+class _SupplyLine {
+  _SupplyLine(this.product) : qty = TextEditingController(text: '1');
+  final MfgProduct product;
+  final TextEditingController qty;
+}
+
 class _InternalTransferScreenState
     extends ConsumerState<InternalTransferScreen> {
   final cart = <_CartLine>[];
+  final supplies = <_SupplyLine>[];
+  List<MfgProduct> _mfgCatalog = const [];
   final _notes = TextEditingController();
   DateTime? _scheduledFor;
   String? _requestingStoreId; // admin only
@@ -501,11 +510,27 @@ class _InternalTransferScreenState
         failure: (_) {},
       );
     });
+    // Kitchen-warehouse catalogue: what a branch can order besides cakes.
+    Future.microtask(() async {
+      final api = ref.read(manufacturingApiProvider);
+      final raw = await api.listProducts(type: 'RAW');
+      final pkg = await api.listProducts(type: 'PACKAGING');
+      if (!mounted) return;
+      setState(() {
+        _mfgCatalog = [
+          ...raw.when(success: (v) => v, failure: (_) => const <MfgProduct>[]),
+          ...pkg.when(success: (v) => v, failure: (_) => const <MfgProduct>[]),
+        ];
+      });
+    });
   }
 
   @override
   void dispose() {
     _notes.dispose();
+    for (final s in supplies) {
+      s.qty.dispose();
+    }
     super.dispose();
   }
 
@@ -522,9 +547,18 @@ class _InternalTransferScreenState
   }
 
   Future<void> _submit() async {
-    if (cart.isEmpty) {
-      _snack('Thêm ít nhất một món.');
+    if (cart.isEmpty && supplies.isEmpty) {
+      _snack('Thêm ít nhất một món hoặc một vật tư.');
       return;
+    }
+    final mfgItems = <Map<String, dynamic>>[];
+    for (final s in supplies) {
+      final qty = double.tryParse(s.qty.text.trim());
+      if (qty == null || qty <= 0) {
+        _snack('Nhập số lượng > 0 cho "${s.product.nameVi}".');
+        return;
+      }
+      mfgItems.add({'mfgProductId': s.product.id, 'qty': qty});
     }
     if (_isAdmin && _requestingStoreId == null) {
       _snack('Admin cần chọn cửa hàng yêu cầu.');
@@ -540,6 +574,7 @@ class _InternalTransferScreenState
             'quantity': l.qty,
           },
       ],
+      mfgItems: mfgItems,
       scheduledFor: _scheduledFor,
       notes: _notes.text.trim(),
       requestingStoreId: _requestingStoreId,
@@ -580,6 +615,71 @@ class _InternalTransferScreenState
           const SizedBox(height: BananSpacing.md),
           Text('Danh sách cần làm', style: theme.textTheme.titleMedium),
           _CartSection(cart: cart, onChanged: () => setState(() {})),
+          const SizedBox(height: BananSpacing.lg),
+          Text(
+            'Vật tư từ kho bếp',
+            style: theme.textTheme.titleMedium,
+          ),
+          Text(
+            'Sữa, trái cây, ly, bao bì… bếp xuất kho và giao kèm.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.outline),
+          ),
+          const SizedBox(height: BananSpacing.sm),
+          DropdownButtonFormField<String>(
+            // Reset to null after each pick so the same item can be re-picked.
+            key: ValueKey('supply-picker-${supplies.length}'),
+            initialValue: null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Thêm vật tư',
+              prefixIcon: Icon(Icons.add_shopping_cart_outlined),
+              isDense: true,
+            ),
+            items: [
+              for (final p in _mfgCatalog)
+                DropdownMenuItem(
+                  value: p.id,
+                  child: Text('${p.nameVi} (${p.code})'),
+                ),
+            ],
+            onChanged: (v) {
+              final matches = _mfgCatalog.where((p) => p.id == v);
+              if (matches.isEmpty) return;
+              if (supplies.any((s) => s.product.id == v)) return;
+              setState(() => supplies.add(_SupplyLine(matches.first)));
+            },
+          ),
+          for (final s in supplies)
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    s.product.nameVi,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                SizedBox(
+                  width: 110,
+                  child: TextField(
+                    controller: s.qty,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      suffixText: s.product.uomCode,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  onPressed: () => setState(() {
+                    supplies.remove(s);
+                    s.qty.dispose();
+                  }),
+                ),
+              ],
+            ),
           const SizedBox(height: BananSpacing.lg),
           if (isAdmin) ...[
             DropdownButtonFormField<String>(

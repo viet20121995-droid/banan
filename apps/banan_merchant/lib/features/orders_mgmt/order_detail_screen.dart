@@ -99,6 +99,14 @@ class _Body extends ConsumerWidget {
       for (final i in order.items)
         i.id: TextEditingController(text: '${i.quantity}'),
     };
+    final mfgQtyCtls = {
+      for (final m in order.mfgItems)
+        m.id: TextEditingController(
+          text: m.qty == m.qty.roundToDouble()
+              ? '${m.qty.round()}'
+              : '${m.qty}',
+        ),
+    };
     final noteCtl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
@@ -136,6 +144,34 @@ class _Body extends ConsumerWidget {
                       ],
                     ),
                   ),
+                for (final m in order.mfgItems)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: BananSpacing.sm),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${m.name} (vật tư)',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 96,
+                          child: TextField(
+                            controller: mfgQtyCtls[m.id],
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              suffixText: '/${m.qty} ${m.uomCode}',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 TextField(
                   controller: noteCtl,
                   decoration: const InputDecoration(
@@ -167,10 +203,18 @@ class _Body extends ConsumerWidget {
         received.add({'orderItemId': i.id, 'receivedQty': qty});
       }
     }
+    final receivedMfg = <Map<String, dynamic>>[];
+    for (final m in order.mfgItems) {
+      final qty = double.tryParse(mfgQtyCtls[m.id]!.text.trim()) ?? m.qty;
+      if (qty != m.qty) {
+        receivedMfg.add({'itemId': m.id, 'receivedQty': qty});
+      }
+    }
     final res = await ref.read(ordersApiProvider).receiveTransfer(
           order.id,
           note: noteCtl.text.trim(),
           receivedItems: received,
+          receivedMfgItems: receivedMfg,
         );
     if (!context.mounted) return;
     res.when(
@@ -346,6 +390,31 @@ class _Body extends ConsumerWidget {
                       ],
                     ),
                   ),
+                if (order.mfgItems.isNotEmpty) ...[
+                  const SizedBox(height: BananSpacing.md),
+                  Text('Vật tư từ kho bếp', style: theme.textTheme.titleMedium),
+                  for (final m in order.mfgItems)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: BananSpacing.xs,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${m.name} (${m.code})',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            m.receivedQty == null
+                                ? '${m.qty} ${m.uomCode}'
+                                : 'nhận ${m.receivedQty}/${m.qty} ${m.uomCode}',
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
                 const Divider(height: BananSpacing.xl),
                 _Line(label: 'Tạm tính', value: fmt.format(order.subtotal)),
                 if (order.bundleDiscount > 0)

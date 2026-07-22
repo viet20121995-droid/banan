@@ -96,8 +96,10 @@ class ReplenishmentScreen extends ConsumerWidget {
                   ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(
-                      Icons.shopping_cart_outlined,
+                    leading: Icon(
+                      row.kind == 'MAKE'
+                          ? Icons.cake_outlined
+                          : Icons.shopping_cart_outlined,
                       color: BananColors.warning,
                     ),
                     title: Text('${row.productNameVi} (${row.productCode})'),
@@ -109,7 +111,9 @@ class ReplenishmentScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          'Mua ${_qty(row.shortfall, row.uomCode)}',
+                          row.kind == 'MAKE'
+                              ? 'Làm thêm ${_qty(row.shortfall, row.uomCode)}'
+                              : 'Mua ${_qty(row.shortfall, row.uomCode)}',
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         Text(

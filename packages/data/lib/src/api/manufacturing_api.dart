@@ -27,6 +27,7 @@ class MfgProduct {
     this.useExpiration = false,
     this.expirationDays = 0,
     this.standardCost = 0,
+    this.reorderPoint = 0,
     this.active = true,
   });
 
@@ -47,6 +48,7 @@ class MfgProduct {
         useExpiration: j['useExpiration'] as bool? ?? false,
         expirationDays: (j['expirationDays'] as num?)?.toInt() ?? 0,
         standardCost: _num(j['standardCost']),
+        reorderPoint: _num(j['reorderPoint']),
         active: j['active'] as bool? ?? true,
       );
 
@@ -64,6 +66,9 @@ class MfgProduct {
   final bool useExpiration;
   final int expirationDays;
   final double standardCost;
+
+  /// Reorder point in the base UoM; 0 = no minimum watched.
+  final double reorderPoint;
   final bool active;
 }
 
@@ -961,6 +966,7 @@ class MfgReplenishRow {
     required this.shortfall,
     required this.avgCost,
     required this.estCost,
+    this.kind = 'BUY',
   });
 
   factory MfgReplenishRow.fromJson(Map<String, dynamic> j) => MfgReplenishRow(
@@ -973,6 +979,7 @@ class MfgReplenishRow {
         shortfall: _num(j['shortfall']),
         avgCost: _num(j['avgCost']),
         estCost: _num(j['estCost']),
+        kind: j['kind'] as String? ?? 'BUY',
       );
 
   final String productId;
@@ -984,6 +991,9 @@ class MfgReplenishRow {
   final double shortfall;
   final double avgCost;
   final double estCost;
+
+  /// BUY = purchased from a supplier; MAKE = produced in the kitchen.
+  final String kind;
 }
 
 class MfgReplenishment {
@@ -1160,6 +1170,7 @@ class ManufacturingApi {
     bool useExpiration = false,
     int expirationDays = 0,
     double standardCost = 0,
+    double reorderPoint = 0,
   }) =>
       _postVoid(
         '$_base/products',
@@ -1174,6 +1185,7 @@ class ManufacturingApi {
           'useExpiration': useExpiration,
           'expirationDays': expirationDays,
           'standardCost': standardCost,
+          'reorderPoint': reorderPoint,
         },
       );
 
@@ -1190,6 +1202,7 @@ class ManufacturingApi {
     bool? useExpiration,
     int? expirationDays,
     double? standardCost,
+    double? reorderPoint,
     bool? active,
   }) =>
       _patchVoid(
@@ -1205,6 +1218,7 @@ class ManufacturingApi {
           if (useExpiration != null) 'useExpiration': useExpiration,
           if (expirationDays != null) 'expirationDays': expirationDays,
           if (standardCost != null) 'standardCost': standardCost,
+          if (reorderPoint != null) 'reorderPoint': reorderPoint,
           if (active != null) 'active': active,
         },
       );

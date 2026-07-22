@@ -71,6 +71,34 @@ class OrderStatusEvent extends Equatable {
       [id, fromStatus, toStatus, actorId, note, createdAt];
 }
 
+/// A kitchen-warehouse (MES) supply line on an internal transfer — goods the
+/// branch ordered that are not menu products (milk, fruit, cups…).
+class TransferMfgItem extends Equatable {
+  const TransferMfgItem({
+    required this.id,
+    required this.mfgProductId,
+    required this.code,
+    required this.name,
+    required this.uomCode,
+    required this.qty,
+    this.receivedQty,
+  });
+
+  final String id;
+  final String mfgProductId;
+  final String code;
+  final String name;
+  final String uomCode;
+  final double qty;
+
+  /// Set once the branch signs for the goods.
+  final double? receivedQty;
+
+  @override
+  List<Object?> get props =>
+      [id, mfgProductId, code, name, uomCode, qty, receivedQty];
+}
+
 class Order extends Equatable {
   const Order({
     required this.id,
@@ -122,6 +150,7 @@ class Order extends Equatable {
     this.destinationStoreId,
     this.wholesaleCompanyName,
     this.wholesaleDeliveryAddress,
+    this.mfgItems = const [],
   });
 
   final String id;
@@ -164,6 +193,9 @@ class Order extends Equatable {
   /// 0 when no points were redeemed. Drives the "Đổi điểm −{amount}₫" line.
   final int pointsDiscount;
   final List<OrderItem> items;
+
+  /// INTERNAL_TRANSFER only — MES supply lines; empty for every other source.
+  final List<TransferMfgItem> mfgItems;
   final List<OrderStatusEvent> statusEvents;
   final List<PaymentSummary> payments;
   final List<Refund> refunds;
@@ -239,6 +271,7 @@ class Order extends Equatable {
         deliveryFee,
         total,
         items,
+        mfgItems,
         statusEvents,
         payments,
         refunds,

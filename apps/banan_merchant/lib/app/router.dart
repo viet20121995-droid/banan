@@ -27,6 +27,7 @@ import '../features/gift_cards_mgmt/gift_cards_screen.dart';
 import '../features/kitchens_mgmt/kitchen_editor_screen.dart';
 import '../features/kitchens_mgmt/kitchens_list_screen.dart';
 import '../features/marketing_mgmt/marketing_screen.dart';
+import '../features/kitchen_stock/kitchen_stock_screen.dart';
 import '../features/menu_mgmt/menu_list_screen.dart';
 import '../features/menu_mgmt/product_editor_screen.dart';
 import '../features/newsletter_mgmt/newsletter_screen.dart';
@@ -96,6 +97,10 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/menu',
         builder: (_, __) => const MerchantMenuListScreen(),
+      ),
+      GoRoute(
+        path: '/kitchen-stock',
+        builder: (_, __) => const KitchenStockScreen(),
       ),
       // P4 — bulk ops (CSV import + bulk price) and campaign broadcast.
       GoRoute(

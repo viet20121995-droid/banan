@@ -27,6 +27,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   final _nameEn = TextEditingController();
   final _expDays = TextEditingController(text: '0');
   final _stdCost = TextEditingController(text: '0');
+  final _reorderPoint = TextEditingController(text: '0');
 
   String? _categoryId;
   String? _uomId;
@@ -47,6 +48,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     _nameEn.dispose();
     _expDays.dispose();
     _stdCost.dispose();
+    _reorderPoint.dispose();
     super.dispose();
   }
 
@@ -58,6 +60,9 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     _nameEn.text = p.nameEn;
     _expDays.text = '${p.expirationDays}';
     _stdCost.text = p.standardCost.toStringAsFixed(0);
+    _reorderPoint.text = p.reorderPoint == p.reorderPoint.roundToDouble()
+        ? '${p.reorderPoint.round()}'
+        : '${p.reorderPoint}';
     _categoryId = p.categoryId.isEmpty ? null : p.categoryId;
     _uomId = p.uomId.isEmpty ? null : p.uomId;
     _type = p.type;
@@ -73,6 +78,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     // Digits-only field (VND has no decimals) — '.' would silently parse
     // '15.000' as 15, so the formatter below never lets it in.
     final stdCost = (int.tryParse(_stdCost.text.trim()) ?? 0).toDouble();
+    final reorderPoint = double.tryParse(_reorderPoint.text.trim()) ?? 0;
     if (code.isEmpty ||
         nameVi.isEmpty ||
         _categoryId == null ||
@@ -104,6 +110,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             useExpiration: _lotTracked && _useExpiration,
             expirationDays: expDays,
             standardCost: stdCost,
+            reorderPoint: reorderPoint,
             active: _active,
           )
         : await api.createProduct(
@@ -117,6 +124,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             useExpiration: _lotTracked && _useExpiration,
             expirationDays: expDays,
             standardCost: stdCost,
+            reorderPoint: reorderPoint,
           );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -273,6 +281,20 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             ),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+          const SizedBox(height: BananSpacing.md),
+          TextField(
+            controller: _reorderPoint,
+            decoration: const InputDecoration(
+              labelText: 'Mức tồn tối thiểu (đơn vị gốc)',
+              helperText:
+                  'Tốc độ bán × thời gian làm/mua (+ dự phòng). Tồn dưới mức '
+                  'này sẽ hiện ở Gợi ý mua hàng. 0 = không theo dõi.',
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp('[0-9.]')),
+            ],
           ),
           const SizedBox(height: BananSpacing.sm),
           SwitchListTile(
