@@ -16,6 +16,7 @@ import '../features/production/oee_screen.dart';
 import '../features/production/product_form_screen.dart';
 import '../features/production/production_dashboard_screen.dart';
 import '../features/production/products_screen.dart';
+import '../features/production/purchasing_screens.dart';
 import '../features/production/quality_alerts_screen.dart';
 import '../features/production/receipt_form_screen.dart';
 import '../features/production/replenishment_screen.dart';
@@ -115,6 +116,28 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
         path: '/production/products/:id/edit',
         builder: (_, state) =>
             ProductFormScreen(productId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '/production/products/:id/history',
+        builder: (_, state) =>
+            PurchaseHistoryScreen(productId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/production/suppliers',
+        builder: (_, __) => const SuppliersScreen(),
+      ),
+      GoRoute(
+        path: '/production/purchase-orders',
+        builder: (_, __) => const PurchaseOrdersScreen(),
+      ),
+      GoRoute(
+        path: '/production/purchase-orders/new',
+        builder: (_, __) => const PoFormScreen(),
+      ),
+      GoRoute(
+        path: '/production/purchase-orders/:id',
+        builder: (_, state) =>
+            PoDetailScreen(id: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/production/boms',

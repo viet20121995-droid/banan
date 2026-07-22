@@ -10,8 +10,8 @@ String _money(num v) => '${_fmt.format(v)} đ';
 String _qty(num v, String uom) => '${_fmt.format(v)} $uom';
 
 /// Replenishment suggestion: raw materials whose open-MO demand outruns free
-/// stock. Advisory only — it says what to buy and roughly what it costs; you
-/// place the actual purchase orders in Odoo.
+/// stock. Advisory only — it says what to buy and roughly what it costs; the
+/// actual order goes through "Đơn mua hàng" (purchase orders).
 class ReplenishmentScreen extends ConsumerWidget {
   const ReplenishmentScreen({super.key});
 
@@ -58,7 +58,7 @@ class ReplenishmentScreen extends ConsumerWidget {
               return [
                 Text(
                   'Cần mua để đủ cho các lệnh đang mở (nháp/đã xác nhận/đang làm). '
-                  'Ước tính theo giá vốn bình quân — đặt PO thực tế trên Odoo.',
+                  'Ước tính theo giá vốn bình quân — đặt hàng thật ở mục Đơn mua hàng.',
                   style:
                       TextStyle(color: Theme.of(context).colorScheme.outline),
                 ),

@@ -408,6 +408,16 @@ class _QuickActionsGrid extends StatelessWidget {
     ),
     _QuickAction('Báo cáo', Icons.bar_chart_outlined, '/production/reports'),
     _QuickAction(
+      'Đơn mua hàng',
+      Icons.receipt_long_outlined,
+      '/production/purchase-orders',
+    ),
+    _QuickAction(
+      'Nhà cung cấp',
+      Icons.storefront_outlined,
+      '/production/suppliers',
+    ),
+    _QuickAction(
       'Gợi ý mua hàng',
       Icons.shopping_cart_outlined,
       '/production/replenishment',

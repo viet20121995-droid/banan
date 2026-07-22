@@ -213,7 +213,18 @@ class _ProductTile extends StatelessWidget {
             if (cost > 0) '${_money.format(cost)} đ/${product.uomCode}',
           ].join(' · '),
         ),
-        trailing: canEdit ? const Icon(Icons.chevron_right, size: 18) : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.history_outlined, size: 20),
+              tooltip: 'Lịch sử mua',
+              onPressed: () =>
+                  context.push('/production/products/${product.id}/history'),
+            ),
+            if (canEdit) const Icon(Icons.chevron_right, size: 18),
+          ],
+        ),
       ),
     );
   }

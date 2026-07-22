@@ -178,6 +178,46 @@ final maintenanceProvider = FutureProvider.autoDispose
   );
 });
 
+// ── purchasing (P2: suppliers + POs + history) ──
+final suppliersProvider =
+    FutureProvider.autoDispose<List<MfgSupplier>>((ref) async {
+  return _orThrow(
+    await ref.watch(manufacturingApiProvider).listSuppliers(),
+  );
+});
+
+/// Includes inactive suppliers — the management list can re-activate them.
+final allSuppliersProvider =
+    FutureProvider.autoDispose<List<MfgSupplier>>((ref) async {
+  return _orThrow(
+    await ref
+        .watch(manufacturingApiProvider)
+        .listSuppliers(includeInactive: true),
+  );
+});
+
+/// `state` filters DRAFT/CONFIRMED/PARTIAL/RECEIVED/CANCELLED; null = all.
+final poListProvider = FutureProvider.autoDispose
+    .family<List<MfgPurchaseOrder>, String?>((ref, state) async {
+  return _orThrow(
+    await ref.watch(manufacturingApiProvider).listPurchaseOrders(state: state),
+  );
+});
+
+final poDetailProvider = FutureProvider.autoDispose
+    .family<MfgPurchaseOrder, String>((ref, id) async {
+  return _orThrow(
+    await ref.watch(manufacturingApiProvider).getPurchaseOrder(id),
+  );
+});
+
+final purchaseHistoryProvider = FutureProvider.autoDispose
+    .family<List<MfgPurchaseEntry>, String>((ref, productId) async {
+  return _orThrow(
+    await ref.watch(manufacturingApiProvider).purchaseHistory(productId),
+  );
+});
+
 // ── BoM editor (increment 7) ──
 final workCentersProvider =
     FutureProvider.autoDispose<List<MfgWorkCenter>>((ref) async {

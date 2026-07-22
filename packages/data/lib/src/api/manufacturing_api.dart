@@ -116,6 +116,152 @@ class MfgWorkCenter {
   final String nameVi;
 }
 
+class MfgSupplier {
+  const MfgSupplier({
+    required this.id,
+    required this.name,
+    this.phone = '',
+    this.email = '',
+    this.address = '',
+    this.note = '',
+    this.active = true,
+  });
+
+  factory MfgSupplier.fromJson(Map<String, dynamic> j) => MfgSupplier(
+        id: j['id'] as String,
+        name: j['name'] as String? ?? '',
+        phone: j['phone'] as String? ?? '',
+        email: j['email'] as String? ?? '',
+        address: j['address'] as String? ?? '',
+        note: j['note'] as String? ?? '',
+        active: j['active'] as bool? ?? true,
+      );
+
+  final String id;
+  final String name;
+  final String phone;
+  final String email;
+  final String address;
+  final String note;
+  final bool active;
+}
+
+class MfgPoLine {
+  const MfgPoLine({
+    required this.id,
+    required this.productId,
+    required this.productCode,
+    required this.productName,
+    required this.uomCode,
+    required this.qty,
+    required this.qtyReceived,
+    required this.unitPrice,
+  });
+
+  factory MfgPoLine.fromJson(Map<String, dynamic> j) {
+    final product = (j['product'] as Map?)?.cast<String, dynamic>();
+    return MfgPoLine(
+      id: j['id'] as String,
+      productId: j['productId'] as String,
+      productCode: product?['code'] as String? ?? '',
+      productName: product?['nameVi'] as String? ?? '',
+      uomCode: ((product?['uom'] as Map?)?['code'] as String?) ?? '',
+      qty: _num(j['qty']),
+      qtyReceived: _num(j['qtyReceived']),
+      unitPrice: _num(j['unitPrice']),
+    );
+  }
+
+  final String id;
+  final String productId;
+  final String productCode;
+  final String productName;
+  final String uomCode;
+  final double qty;
+  final double qtyReceived;
+  final double unitPrice;
+
+  double get remaining => qty - qtyReceived;
+}
+
+class MfgPurchaseOrder {
+  const MfgPurchaseOrder({
+    required this.id,
+    required this.code,
+    required this.state,
+    required this.supplierId,
+    required this.supplierName,
+    required this.lines,
+    this.expectedDate,
+    this.note = '',
+    this.createdAt,
+  });
+
+  factory MfgPurchaseOrder.fromJson(Map<String, dynamic> j) =>
+      MfgPurchaseOrder(
+        id: j['id'] as String,
+        code: j['code'] as String? ?? '',
+        state: j['state'] as String? ?? 'DRAFT',
+        supplierId: j['supplierId'] as String? ?? '',
+        supplierName: (j['supplier'] as Map?)?['name'] as String? ?? '',
+        lines: ((j['lines'] as List?) ?? const [])
+            .map((e) => MfgPoLine.fromJson((e as Map).cast<String, dynamic>()))
+            .toList(),
+        expectedDate: j['expectedDate'] == null
+            ? null
+            : DateTime.tryParse(j['expectedDate'] as String),
+        note: j['note'] as String? ?? '',
+        createdAt: j['createdAt'] == null
+            ? null
+            : DateTime.tryParse(j['createdAt'] as String),
+      );
+
+  final String id;
+  final String code;
+  final String state; // DRAFT | CONFIRMED | PARTIAL | RECEIVED | CANCELLED
+  final String supplierId;
+  final String supplierName;
+  final List<MfgPoLine> lines;
+  final DateTime? expectedDate;
+  final String note;
+  final DateTime? createdAt;
+
+  double get total =>
+      lines.fold(0, (s, l) => s + l.qty * l.unitPrice);
+}
+
+/// One goods receipt for a product — the purchase-history row.
+class MfgPurchaseEntry {
+  const MfgPurchaseEntry({
+    required this.date,
+    required this.qty,
+    required this.uomCode,
+    required this.unitCost,
+    this.lotName,
+    this.poCode,
+    this.supplierName,
+  });
+
+  factory MfgPurchaseEntry.fromJson(Map<String, dynamic> j) =>
+      MfgPurchaseEntry(
+        date: DateTime.tryParse(j['date'] as String? ?? '') ?? DateTime(2000),
+        qty: _num(j['qty']),
+        uomCode: j['uomCode'] as String? ?? '',
+        unitCost: _num(j['unitCost']),
+        lotName: j['lotName'] as String?,
+        poCode: j['poCode'] as String?,
+        supplierName: j['supplierName'] as String?,
+      );
+
+  final DateTime date;
+  final double qty;
+  final String uomCode;
+  final double unitCost;
+  final String? lotName;
+  final String? poCode;
+  final String? supplierName;
+}
+
 class MfgBomLineDetail {
   const MfgBomLineDetail({
     required this.componentId,
@@ -1328,12 +1474,14 @@ class ManufacturingApi {
 
   /// Receive raw material into stock (rolls AVCO). [uomId] defaults to the
   /// product's base UoM; [lotName] names the lot for lot-tracked products.
+  /// [poLineId] books the receipt against a purchase-order line.
   Future<Result<void, AppFailure>> receive({
     required String productId,
     required double qty,
     required double unitCost,
     String? uomId,
     String? lotName,
+    String? poLineId,
   }) =>
       _postVoid(
         '$_base/receipts',
@@ -1343,7 +1491,117 @@ class ManufacturingApi {
           'unitCost': unitCost,
           if (uomId != null) 'uomId': uomId,
           if (lotName != null) 'lotName': lotName,
+          if (poLineId != null) 'poLineId': poLineId,
         },
+      );
+
+  // ── purchasing (suppliers + POs + history) ──
+  Future<Result<List<MfgSupplier>, AppFailure>> listSuppliers({
+    bool includeInactive = false,
+  }) =>
+      _get(
+        '$_base/suppliers',
+        query: {if (includeInactive) 'all': '1'},
+        parse: (res) => _list(res, MfgSupplier.fromJson),
+      );
+
+  Future<Result<void, AppFailure>> createSupplier({
+    required String name,
+    String? phone,
+    String? email,
+    String? address,
+    String? note,
+  }) =>
+      _postVoid(
+        '$_base/suppliers',
+        body: {
+          'name': name,
+          if (phone != null && phone.isNotEmpty) 'phone': phone,
+          if (email != null && email.isNotEmpty) 'email': email,
+          if (address != null && address.isNotEmpty) 'address': address,
+          if (note != null && note.isNotEmpty) 'note': note,
+        },
+      );
+
+  Future<Result<void, AppFailure>> updateSupplier(
+    String id, {
+    String? name,
+    String? phone,
+    String? email,
+    String? address,
+    String? note,
+    bool? active,
+  }) =>
+      _patchVoid(
+        '$_base/suppliers/$id',
+        body: {
+          if (name != null) 'name': name,
+          if (phone != null) 'phone': phone,
+          if (email != null) 'email': email,
+          if (address != null) 'address': address,
+          if (note != null) 'note': note,
+          if (active != null) 'active': active,
+        },
+      );
+
+  Future<Result<List<MfgPurchaseOrder>, AppFailure>> listPurchaseOrders({
+    String? state,
+  }) =>
+      _get(
+        '$_base/purchase-orders',
+        query: {if (state != null) 'state': state},
+        parse: (res) => _list(res, MfgPurchaseOrder.fromJson),
+      );
+
+  Future<Result<MfgPurchaseOrder, AppFailure>> getPurchaseOrder(String id) =>
+      _get(
+        '$_base/purchase-orders/$id',
+        parse: (res) => MfgPurchaseOrder.fromJson(
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  /// [lines]: (productId, qty in the product's base UoM, unitPrice).
+  Future<Result<MfgPurchaseOrder, AppFailure>> createPurchaseOrder({
+    required String supplierId,
+    required List<({String productId, double qty, double unitPrice})> lines,
+    DateTime? expectedDate,
+    String? note,
+  }) =>
+      _post(
+        '$_base/purchase-orders',
+        body: {
+          'supplierId': supplierId,
+          if (expectedDate != null)
+            'expectedDate': expectedDate.toUtc().toIso8601String(),
+          if (note != null && note.isNotEmpty) 'note': note,
+          'lines': [
+            for (final l in lines)
+              {
+                'productId': l.productId,
+                'qty': l.qty,
+                'unitPrice': l.unitPrice,
+              },
+          ],
+        },
+        parse: (res) => MfgPurchaseOrder.fromJson(
+          (res.data?['data'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Future<Result<void, AppFailure>> confirmPurchaseOrder(String id) =>
+      _postVoid('$_base/purchase-orders/$id/confirm');
+
+  Future<Result<void, AppFailure>> cancelPurchaseOrder(String id) =>
+      _postVoid('$_base/purchase-orders/$id/cancel');
+
+  /// Per-receipt purchase history of one MES product, newest first.
+  Future<Result<List<MfgPurchaseEntry>, AppFailure>> purchaseHistory(
+    String productId,
+  ) =>
+      _get(
+        '$_base/products/$productId/purchase-history',
+        parse: (res) => _list(res, MfgPurchaseEntry.fromJson),
       );
 
   // ── shop floor + QC ──
