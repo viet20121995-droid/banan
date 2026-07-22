@@ -114,6 +114,64 @@ class OrderStatusEventDto {
       );
 }
 
+/// Aggregated picking sheet for the kitchen: one row per item across every
+/// live internal transfer, one column per receiving branch, plus a total.
+class TransferSummaryDto {
+  const TransferSummaryDto({
+    required this.stores,
+    required this.rows,
+    required this.orderCount,
+  });
+
+  factory TransferSummaryDto.fromJson(Map<String, dynamic> json) =>
+      TransferSummaryDto(
+        stores: ((json['stores'] as List?) ?? const [])
+            .map((e) => (
+                  id: (e as Map)['id'] as String,
+                  name: e['name'] as String? ?? '',
+                ))
+            .toList(),
+        rows: ((json['rows'] as List?) ?? const [])
+            .map(
+              (e) => TransferSummaryRow.fromJson(
+                (e as Map).cast<String, dynamic>(),
+              ),
+            )
+            .toList(),
+        orderCount: (json['orderCount'] as num?)?.toInt() ?? 0,
+      );
+
+  final List<({String id, String name})> stores;
+  final List<TransferSummaryRow> rows;
+  final int orderCount;
+}
+
+class TransferSummaryRow {
+  const TransferSummaryRow({
+    required this.label,
+    required this.unit,
+    required this.isSupply,
+    required this.byStore,
+    required this.total,
+  });
+
+  factory TransferSummaryRow.fromJson(Map<String, dynamic> json) =>
+      TransferSummaryRow(
+        label: json['label'] as String? ?? '',
+        unit: json['unit'] as String? ?? '',
+        isSupply: json['isSupply'] as bool? ?? false,
+        byStore: ((json['byStore'] as Map?) ?? const {})
+            .map((k, v) => MapEntry('$k', _toDouble(v))),
+        total: _toDouble(json['total']),
+      );
+
+  final String label;
+  final String unit;
+  final bool isSupply;
+  final Map<String, double> byStore;
+  final double total;
+}
+
 /// MES supply line on an internal transfer (see [TransferMfgItem]).
 class TransferMfgItemDto {
   const TransferMfgItemDto({

@@ -6,6 +6,10 @@ import '../dtos/order_dto.dart';
 import '../dtos/payment_dto.dart';
 import 'errors.dart';
 
+// The kitchen picking-sheet screen renders these without going through a
+// domain entity — a read-only report shape, not order state.
+export '../dtos/order_dto.dart' show TransferSummaryDto, TransferSummaryRow;
+
 /// Result of POST /orders — server returns the order plus provider-specific
 /// payment instructions (CASH `payAtPickup`, Stripe `redirectUrl`, ...).
 /// `guestSession` is present only when the backend auto-created a guest user
@@ -259,6 +263,37 @@ class OrdersApi {
 
   Future<Result<OrderDto, AppFailure>> dispatchFromKitchen(String id) =>
       _postOrder('/kitchen/orders/$id/dispatch', const {});
+
+  /// Kitchen adjusts shipped quantities on an internal transfer
+  /// (shortage/breakage). [items]: {orderItemId, quantity};
+  /// [mfgItems]: {itemId, qty}.
+  Future<Result<OrderDto, AppFailure>> adjustTransfer(
+    String id, {
+    List<Map<String, dynamic>>? items,
+    List<Map<String, dynamic>>? mfgItems,
+    String? note,
+  }) =>
+      _postOrder('/kitchen/orders/$id/adjust-transfer', {
+        if (items != null && items.isNotEmpty) 'items': items,
+        if (mfgItems != null && mfgItems.isNotEmpty) 'mfgItems': mfgItems,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
+
+  /// Aggregated picking sheet: rows = items across live internal transfers,
+  /// columns = receiving branches + total.
+  Future<Result<TransferSummaryDto, AppFailure>> transferSummary() async {
+    try {
+      final res = await _dio
+          .get<Map<String, dynamic>>('/kitchen/orders/internal-transfer/summary');
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
+      final data = res.data?['data'] as Map<String, dynamic>? ?? const {};
+      return Result.success(TransferSummaryDto.fromJson(data));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
 
   Future<Result<OrderDto, AppFailure>> _postOrder(
     String path,

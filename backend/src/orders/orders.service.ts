@@ -2362,6 +2362,192 @@ export class OrdersService {
    * audit event only; when branch inventory lands, this is where the stock
    * receipt/move for the destination store gets created.
    */
+  /**
+   * Kitchen adjusts the quantities that will actually ship on an internal
+   * transfer (not enough ingredients, breakage…). Allowed while the order is
+   * live at the kitchen or dispatched but not yet signed for — the branch's
+   * receipt then validates against the adjusted numbers. Quantities may go to
+   * 0 (line not shipped) but never up past nothing-ordered sanity (>= 0).
+   */
+  async adjustInternalTransfer(
+    id: string,
+    actor: { sub: string; role: Role; kitchenId?: string | null },
+    dto: {
+      items?: Array<{ orderItemId: string; quantity: number }>;
+      mfgItems?: Array<{ itemId: string; qty: number }>;
+      note?: string;
+    },
+  ): Promise<OrderWithIncludes> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: ORDER_INCLUDE,
+    });
+    if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
+    if (order.source !== 'INTERNAL_TRANSFER') {
+      throw new BadRequestException({ code: 'NOT_INTERNAL_TRANSFER' });
+    }
+    this.assertKitchenScope(order, actor);
+    if (
+      order.status !== 'SENT_TO_KITCHEN' &&
+      order.status !== 'READY_FOR_PICKUP' &&
+      order.status !== 'DELIVERING'
+    ) {
+      throw new BadRequestException({
+        code: 'ORDER_INVALID_TRANSITION',
+        message: 'Đơn đã hoàn tất hoặc đã huỷ — không chỉnh được số lượng.',
+      });
+    }
+
+    const changes: string[] = [];
+    const itemById = new Map(order.items.map((i) => [i.id, i]));
+    const itemUpdates: Array<{ id: string; quantity: number; lineTotal: Prisma.Decimal }> = [];
+    for (const u of dto.items ?? []) {
+      const line = itemById.get(u.orderItemId);
+      if (!line) throw new BadRequestException({ code: 'ORDER_ITEM_NOT_FOUND' });
+      if (!Number.isInteger(u.quantity) || u.quantity < 0) {
+        throw new BadRequestException({
+          code: 'QTY_INVALID',
+          message: `Số lượng "${line.productName}" không hợp lệ.`,
+        });
+      }
+      if (u.quantity === line.quantity) continue;
+      itemUpdates.push({
+        id: line.id,
+        quantity: u.quantity,
+        lineTotal: new Prisma.Decimal(Number(line.unitPrice) * u.quantity),
+      });
+      changes.push(`${line.productName} ${line.quantity}→${u.quantity}`);
+    }
+
+    const mfgById = new Map((order.mfgItems ?? []).map((m) => [m.id, m]));
+    const mfgUpdates: Array<{ id: string; qty: number }> = [];
+    for (const u of dto.mfgItems ?? []) {
+      const line = mfgById.get(u.itemId);
+      if (!line) throw new BadRequestException({ code: 'ORDER_ITEM_NOT_FOUND' });
+      if (!(u.qty >= 0)) {
+        throw new BadRequestException({
+          code: 'QTY_INVALID',
+          message: `Số lượng "${line.mfgProduct.nameVi}" không hợp lệ.`,
+        });
+      }
+      if (u.qty === Number(line.qty)) continue;
+      mfgUpdates.push({ id: line.id, qty: u.qty });
+      changes.push(`${line.mfgProduct.nameVi} ${Number(line.qty)}→${u.qty}`);
+    }
+
+    if (itemUpdates.length === 0 && mfgUpdates.length === 0) return order;
+
+    let note = `Bếp điều chỉnh số lượng xuất: ${changes.join('; ')}.`;
+    if (dto.note?.trim()) note = `${note} Lý do: ${dto.note.trim()}`;
+
+    return this.prisma.$transaction(async (tx) => {
+      for (const u of itemUpdates) {
+        await tx.orderItem.update({
+          where: { id: u.id },
+          data: { quantity: u.quantity, lineTotal: u.lineTotal },
+        });
+      }
+      for (const u of mfgUpdates) {
+        await tx.internalTransferMfgItem.update({
+          where: { id: u.id },
+          data: { qty: new Prisma.Decimal(u.qty) },
+        });
+      }
+      // Internal-ledger money follows the shipped quantities.
+      const lines = await tx.orderItem.findMany({
+        where: { orderId: id },
+        select: { lineTotal: true },
+      });
+      const subtotal = lines.reduce((s, l) => s.add(l.lineTotal), new Prisma.Decimal(0));
+      await tx.order.update({
+        where: { id },
+        data: { subtotal, total: subtotal },
+      });
+      await tx.orderStatusEvent.create({
+        data: {
+          orderId: id,
+          fromStatus: order.status,
+          toStatus: order.status,
+          actorId: actor.sub,
+          note,
+        },
+      });
+      return tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
+    });
+  }
+
+  /**
+   * Aggregated picking sheet for the kanban: every internal transfer still
+   * live at this kitchen, one row per item, one column per receiving branch,
+   * plus a total — what the bakers batch-produce and pack against.
+   */
+  async internalTransferSummary(kitchenId: string) {
+    const orders = await this.prisma.order.findMany({
+      where: { kitchenId, source: 'INTERNAL_TRANSFER', status: 'SENT_TO_KITCHEN' },
+      include: {
+        items: true,
+        mfgItems: {
+          include: {
+            mfgProduct: {
+              select: { code: true, nameVi: true, uom: { select: { code: true } } },
+            },
+          },
+        },
+        destinationStore: { select: { id: true, name: true } },
+        requestingStore: { select: { id: true, name: true } },
+      },
+    });
+
+    const stores = new Map<string, string>();
+    const rows = new Map<
+      string,
+      { label: string; unit: string; isSupply: boolean; byStore: Map<string, number>; total: number }
+    >();
+    for (const order of orders) {
+      const store = order.destinationStore ?? order.requestingStore;
+      const storeId = store?.id ?? order.storeId;
+      stores.set(storeId, store?.name ?? 'Cửa hàng');
+      const add = (key: string, label: string, unit: string, isSupply: boolean, qty: number) => {
+        if (qty <= 0) return;
+        const row = rows.get(key) ?? { label, unit, isSupply, byStore: new Map(), total: 0 };
+        row.byStore.set(storeId, (row.byStore.get(storeId) ?? 0) + qty);
+        row.total += qty;
+        rows.set(key, row);
+      };
+      for (const i of order.items) {
+        const label = i.variantLabel ? `${i.productName} (${i.variantLabel})` : i.productName;
+        add(`i:${label}`, label, 'cái', false, i.quantity);
+      }
+      for (const m of order.mfgItems) {
+        add(
+          `m:${m.mfgProduct.code}`,
+          `${m.mfgProduct.nameVi} (${m.mfgProduct.code})`,
+          m.mfgProduct.uom.code,
+          true,
+          Number(m.qty),
+        );
+      }
+    }
+
+    const storeList = [...stores.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    const rowList = [...rows.values()]
+      .sort((a, b) =>
+        a.isSupply === b.isSupply
+          ? a.label.localeCompare(b.label, 'vi')
+          : (a.isSupply ? 1 : -1),
+      )
+      .map((r) => ({
+        label: r.label,
+        unit: r.unit,
+        isSupply: r.isSupply,
+        byStore: Object.fromEntries(r.byStore),
+        total: r.total,
+      }));
+    return { stores: storeList, rows: rowList, orderCount: orders.length };
+  }
+
   async receiveInternalTransfer(
     id: string,
     actor: { sub: string; role: Role; storeId?: string | null },

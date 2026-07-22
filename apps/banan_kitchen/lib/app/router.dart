@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../features/account/change_password_screen.dart';
 import '../features/analytics/analytics_screen.dart';
 import '../features/kanban/kanban_screen.dart';
+import '../features/kanban/transfer_summary_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/production/bom_editor_screen.dart';
 import '../features/production/bom_list_screen.dart';
@@ -56,6 +57,10 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/analytics',
         builder: (_, __) => const KitchenAnalyticsScreen(),
+      ),
+      GoRoute(
+        path: '/transfer-summary',
+        builder: (_, __) => const TransferSummaryScreen(),
       ),
       // ── "Sản xuất" (manufacturing / MES) — separate from the orders board. ──
       GoRoute(

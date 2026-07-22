@@ -10,7 +10,20 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { KitchenStatus, Role } from '@prisma/client';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -21,6 +34,46 @@ import { OrdersService } from '../orders/orders.service';
 class KitchenTransitionDto {
   @IsEnum(KitchenStatus)
   toKitchenStatus!: KitchenStatus;
+}
+
+class AdjustItemDto {
+  @IsUUID()
+  orderItemId!: string;
+
+  @IsInt()
+  @Min(0)
+  quantity!: number;
+}
+
+class AdjustMfgItemDto {
+  @IsUUID()
+  itemId!: string;
+
+  @IsNumber()
+  @Min(0)
+  qty!: number;
+}
+
+/** Kitchen edits the quantities that will actually ship on a transfer. */
+class AdjustTransferDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => AdjustItemDto)
+  items?: AdjustItemDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => AdjustMfgItemDto)
+  mfgItems?: AdjustMfgItemDto[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(280)
+  note?: string;
 }
 
 @ApiBearerAuth()
@@ -58,9 +111,37 @@ export class KitchenController {
     });
   }
 
+  /**
+   * Aggregated picking sheet: one row per item across every live internal
+   * transfer, one column per receiving branch + a total. Declared before
+   * ':id' routes out of caution, though the path depth already differs.
+   */
+  @Get('internal-transfer/summary')
+  transferSummary(
+    @CurrentUser() user: AuthPrincipal,
+    @Query('kitchenId') kitchenIdParam?: string,
+  ) {
+    const kitchenId = user.kitchenId ?? (user.role === Role.ADMIN ? kitchenIdParam : undefined);
+    if (!kitchenId) {
+      throw new BadRequestException({ code: 'NO_KITCHEN_ASSIGNED' });
+    }
+    return this.orders.internalTransferSummary(kitchenId);
+  }
+
   @Get(':id')
   findOne(@CurrentUser() user: AuthPrincipal, @Param('id') id: string) {
     return this.orders.findOne(id, user);
+  }
+
+  /** Adjust shipped quantities on an internal transfer (shortage/breakage). */
+  @Post(':id/adjust-transfer')
+  @HttpCode(HttpStatus.OK)
+  adjustTransfer(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id') id: string,
+    @Body() dto: AdjustTransferDto,
+  ) {
+    return this.orders.adjustInternalTransfer(id, user, dto);
   }
 
   /** Walk forward through the kanban states. */
