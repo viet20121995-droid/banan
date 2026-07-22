@@ -1886,6 +1886,9 @@ export class OrdersService {
     targetAt: Date,
     opts: { decrementLimitedStock?: boolean } = {},
   ): Promise<void> {
+    // A transfer can carry ONLY kitchen-warehouse (MES) supplies — nothing to
+    // cap or lock here, and Prisma.join([]) below would throw on empty input.
+    if (lineCreates.length === 0) return;
     const qtyByProduct = new Map<string, number>();
     for (const l of lineCreates) {
       qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.quantity);
@@ -2132,6 +2135,15 @@ export class OrdersService {
       clientRequestId?: string;
     },
   ): Promise<OrderWithIncludes> {
+    const requestingStoreId = this.resolveActorStore(principal, dto.requestingStoreId);
+    // Replay lookup BEFORE any data-dependent validation: a retry of an
+    // already-created transfer must return the original order even if a
+    // product was archived in the meantime — validation only applies to NEW
+    // orders. The lookup is scoped to principal.sub, so another user's
+    // clientRequestId can never surface someone else's order.
+    const replay = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
+    if (replay) return replay;
+
     const mfgItems = dto.mfgItems ?? [];
     if (dto.items.length === 0 && mfgItems.length === 0) {
       throw new BadRequestException({
@@ -2153,9 +2165,6 @@ export class OrdersService {
         });
       }
     }
-    const requestingStoreId = this.resolveActorStore(principal, dto.requestingStoreId);
-    const replay = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
-    if (replay) return replay;
 
     // Owner/staff order FOR THEIR OWN branch — only an admin may route the
     // goods to a different store (otherwise a store could ship product to an
@@ -2378,69 +2387,86 @@ export class OrdersService {
       note?: string;
     },
   ): Promise<OrderWithIncludes> {
+    // Routing fields (source, kitchenId) never change after create, so the
+    // scope check may use a plain read. Everything mutable — status and the
+    // line quantities — is re-read UNDER the row lock inside the transaction,
+    // so this can't race the branch's receive (which locks the same row).
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: ORDER_INCLUDE,
+      select: { id: true, source: true, kitchenId: true },
     });
     if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
     if (order.source !== 'INTERNAL_TRANSFER') {
       throw new BadRequestException({ code: 'NOT_INTERNAL_TRANSFER' });
     }
     this.assertKitchenScope(order, actor);
-    if (
-      order.status !== 'SENT_TO_KITCHEN' &&
-      order.status !== 'READY_FOR_PICKUP' &&
-      order.status !== 'DELIVERING'
-    ) {
-      throw new BadRequestException({
-        code: 'ORDER_INVALID_TRANSITION',
-        message: 'Đơn đã hoàn tất hoặc đã huỷ — không chỉnh được số lượng.',
-      });
-    }
-
-    const changes: string[] = [];
-    const itemById = new Map(order.items.map((i) => [i.id, i]));
-    const itemUpdates: Array<{ id: string; quantity: number; lineTotal: Prisma.Decimal }> = [];
-    for (const u of dto.items ?? []) {
-      const line = itemById.get(u.orderItemId);
-      if (!line) throw new BadRequestException({ code: 'ORDER_ITEM_NOT_FOUND' });
-      if (!Number.isInteger(u.quantity) || u.quantity < 0) {
-        throw new BadRequestException({
-          code: 'QTY_INVALID',
-          message: `Số lượng "${line.productName}" không hợp lệ.`,
-        });
-      }
-      if (u.quantity === line.quantity) continue;
-      itemUpdates.push({
-        id: line.id,
-        quantity: u.quantity,
-        lineTotal: new Prisma.Decimal(Number(line.unitPrice) * u.quantity),
-      });
-      changes.push(`${line.productName} ${line.quantity}→${u.quantity}`);
-    }
-
-    const mfgById = new Map((order.mfgItems ?? []).map((m) => [m.id, m]));
-    const mfgUpdates: Array<{ id: string; qty: number }> = [];
-    for (const u of dto.mfgItems ?? []) {
-      const line = mfgById.get(u.itemId);
-      if (!line) throw new BadRequestException({ code: 'ORDER_ITEM_NOT_FOUND' });
-      if (!(u.qty >= 0)) {
-        throw new BadRequestException({
-          code: 'QTY_INVALID',
-          message: `Số lượng "${line.mfgProduct.nameVi}" không hợp lệ.`,
-        });
-      }
-      if (u.qty === Number(line.qty)) continue;
-      mfgUpdates.push({ id: line.id, qty: u.qty });
-      changes.push(`${line.mfgProduct.nameVi} ${Number(line.qty)}→${u.qty}`);
-    }
-
-    if (itemUpdates.length === 0 && mfgUpdates.length === 0) return order;
-
-    let note = `Bếp điều chỉnh số lượng xuất: ${changes.join('; ')}.`;
-    if (dto.note?.trim()) note = `${note} Lý do: ${dto.note.trim()}`;
 
     return this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ status: OrderStatus }>>`
+        SELECT "status" FROM "Order" WHERE "id" = ${id} FOR UPDATE`;
+      const status = locked[0]?.status;
+      if (!status) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
+      if (
+        status !== 'SENT_TO_KITCHEN' &&
+        status !== 'READY_FOR_PICKUP' &&
+        status !== 'DELIVERING'
+      ) {
+        throw new BadRequestException({
+          code: 'ORDER_INVALID_TRANSITION',
+          message: 'Đơn đã hoàn tất hoặc đã huỷ — không chỉnh được số lượng.',
+        });
+      }
+
+      const items = await tx.orderItem.findMany({ where: { orderId: id } });
+      const mfgLines = await tx.internalTransferMfgItem.findMany({
+        where: { orderId: id },
+        include: { mfgProduct: { select: { nameVi: true } } },
+      });
+
+      const changes: string[] = [];
+      const itemById = new Map(items.map((i) => [i.id, i]));
+      const itemUpdates: Array<{ id: string; quantity: number; lineTotal: Prisma.Decimal }> = [];
+      for (const u of dto.items ?? []) {
+        const line = itemById.get(u.orderItemId);
+        if (!line) throw new BadRequestException({ code: 'ORDER_ITEM_NOT_FOUND' });
+        if (!Number.isInteger(u.quantity) || u.quantity < 0) {
+          throw new BadRequestException({
+            code: 'QTY_INVALID',
+            message: `Số lượng "${line.productName}" không hợp lệ.`,
+          });
+        }
+        if (u.quantity === line.quantity) continue;
+        itemUpdates.push({
+          id: line.id,
+          quantity: u.quantity,
+          lineTotal: new Prisma.Decimal(Number(line.unitPrice) * u.quantity),
+        });
+        changes.push(`${line.productName} ${line.quantity}→${u.quantity}`);
+      }
+
+      const mfgById = new Map(mfgLines.map((m) => [m.id, m]));
+      const mfgUpdates: Array<{ id: string; qty: number }> = [];
+      for (const u of dto.mfgItems ?? []) {
+        const line = mfgById.get(u.itemId);
+        if (!line) throw new BadRequestException({ code: 'ORDER_ITEM_NOT_FOUND' });
+        if (!(u.qty >= 0)) {
+          throw new BadRequestException({
+            code: 'QTY_INVALID',
+            message: `Số lượng "${line.mfgProduct.nameVi}" không hợp lệ.`,
+          });
+        }
+        if (u.qty === Number(line.qty)) continue;
+        mfgUpdates.push({ id: line.id, qty: u.qty });
+        changes.push(`${line.mfgProduct.nameVi} ${Number(line.qty)}→${u.qty}`);
+      }
+
+      if (itemUpdates.length === 0 && mfgUpdates.length === 0) {
+        return tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
+      }
+
+      let note = `Bếp điều chỉnh số lượng xuất: ${changes.join('; ')}.`;
+      if (dto.note?.trim()) note = `${note} Lý do: ${dto.note.trim()}`;
+
       for (const u of itemUpdates) {
         await tx.orderItem.update({
           where: { id: u.id },
@@ -2466,8 +2492,8 @@ export class OrdersService {
       await tx.orderStatusEvent.create({
         data: {
           orderId: id,
-          fromStatus: order.status,
-          toStatus: order.status,
+          fromStatus: status,
+          toStatus: status,
           actorId: actor.sub,
           note,
         },
@@ -2501,7 +2527,13 @@ export class OrdersService {
     const stores = new Map<string, string>();
     const rows = new Map<
       string,
-      { label: string; unit: string; isSupply: boolean; byStore: Map<string, number>; total: number }
+      {
+        label: string;
+        unit: string;
+        isSupply: boolean;
+        byStore: Map<string, number>;
+        total: number;
+      }
     >();
     for (const order of orders) {
       const store = order.destinationStore ?? order.requestingStore;
@@ -2534,9 +2566,7 @@ export class OrdersService {
       .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
     const rowList = [...rows.values()]
       .sort((a, b) =>
-        a.isSupply === b.isSupply
-          ? a.label.localeCompare(b.label, 'vi')
-          : (a.isSupply ? 1 : -1),
+        a.isSupply === b.isSupply ? a.label.localeCompare(b.label, 'vi') : a.isSupply ? 1 : -1,
       )
       .map((r) => ({
         label: r.label,
@@ -2583,14 +2613,41 @@ export class OrdersService {
       });
     }
 
-    // Human-readable receipt line for the audit trail: full receipt, or the
-    // per-item received/ordered breakdown when the branch reports shortages.
-    let receiptNote = 'Đã nhận đủ hàng.';
-    if (dto.items && dto.items.length > 0) {
-      const byId = new Map(order.items.map((i) => [i.id, i]));
+    // Everything below runs on an in-transaction snapshot taken AFTER the
+    // order row lock: the kitchen may adjust quantities right up to the
+    // moment the branch signs, so validation, the receipt, the MES issue and
+    // the audit note must all read the same committed line quantities. The
+    // FOR UPDATE also serialises two concurrent receives — the loser sees
+    // COMPLETED after the lock and gets the same 400 the old guarded
+    // updateMany produced (one receipt, one MES issue, ever).
+    let fromStatus: OrderStatus = order.status;
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ status: OrderStatus }>>`
+        SELECT "status" FROM "Order" WHERE "id" = ${id} FOR UPDATE`;
+      const status = locked[0]?.status;
+      if (status !== 'READY_FOR_PICKUP' && status !== 'DELIVERING') {
+        throw new BadRequestException({
+          code: 'ORDER_INVALID_TRANSITION',
+          message: `Order is no longer receivable (status ${status ?? 'missing'}).`,
+        });
+      }
+      fromStatus = status;
+      await tx.order.update({ where: { id }, data: { status: 'COMPLETED' } });
+
+      const items = await tx.orderItem.findMany({ where: { orderId: id } });
+      const mfgLines = await tx.internalTransferMfgItem.findMany({
+        where: { orderId: id },
+        include: { mfgProduct: { select: { nameVi: true } } },
+      });
+
+      // Human-readable receipt line for the audit trail: full receipt, or the
+      // per-item received/ordered breakdown when the branch reports shortages.
+      let receiptNote = 'Đã nhận đủ hàng.';
       const parts: string[] = [];
-      for (const r of dto.items) {
-        const line = byId.get(r.orderItemId);
+      const reportedById = new Map((dto.items ?? []).map((r) => [r.orderItemId, r.receivedQty]));
+      const itemById = new Map(items.map((i) => [i.id, i]));
+      for (const r of dto.items ?? []) {
+        const line = itemById.get(r.orderItemId);
         if (!line) throw new BadRequestException({ code: 'ORDER_ITEM_NOT_FOUND' });
         if (r.receivedQty < 0 || r.receivedQty > line.quantity) {
           throw new BadRequestException({
@@ -2602,51 +2659,31 @@ export class OrdersService {
           parts.push(`${line.productName}: nhận ${r.receivedQty}/${line.quantity}`);
         }
       }
+
+      // MES supply lines: received = ordered unless the branch reports otherwise.
+      const mfgReported = new Map((dto.mfgItems ?? []).map((r) => [r.itemId, r.receivedQty]));
+      const mfgById = new Map(mfgLines.map((m) => [m.id, m]));
+      for (const [itemId, reported] of mfgReported) {
+        const line = mfgById.get(itemId);
+        if (!line) throw new BadRequestException({ code: 'ORDER_ITEM_NOT_FOUND' });
+        const ordered = Number(line.qty);
+        if (reported < 0 || reported > ordered) {
+          throw new BadRequestException({
+            code: 'RECEIVED_QTY_INVALID',
+            message: `"${line.mfgProduct.nameVi}" nhận ${reported}/${ordered} không hợp lệ.`,
+          });
+        }
+        if (reported !== ordered) {
+          parts.push(`${line.mfgProduct.nameVi}: nhận ${reported}/${ordered}`);
+        }
+      }
       if (parts.length > 0) receiptNote = `Thiếu/hỏng — ${parts.join('; ')}`;
-    }
+      if (dto.note?.trim()) receiptNote = `${receiptNote} ${dto.note.trim()}`.trim();
 
-    // MES supply lines: received = ordered unless the branch reports otherwise.
-    const mfgReported = new Map((dto.mfgItems ?? []).map((r) => [r.itemId, r.receivedQty]));
-    const mfgLines = order.mfgItems ?? [];
-    const mfgShort: string[] = [];
-    for (const line of mfgLines) {
-      const reported = mfgReported.get(line.id);
-      if (reported === undefined) continue;
-      const ordered = Number(line.qty);
-      if (reported < 0 || reported > ordered) {
-        throw new BadRequestException({
-          code: 'RECEIVED_QTY_INVALID',
-          message: `"${line.mfgProduct.nameVi}" nhận ${reported}/${ordered} không hợp lệ.`,
-        });
-      }
-      if (reported !== ordered) {
-        mfgShort.push(`${line.mfgProduct.nameVi}: nhận ${reported}/${ordered}`);
-      }
-    }
-    if (mfgShort.length > 0) {
-      const prefix = receiptNote === 'Đã nhận đủ hàng.' ? 'Thiếu/hỏng — ' : '; ';
-      receiptNote = receiptNote === 'Đã nhận đủ hàng.'
-        ? `${prefix}${mfgShort.join('; ')}`
-        : `${receiptNote}${prefix}${mfgShort.join('; ')}`;
-    }
-    if (dto.note?.trim()) receiptNote = `${receiptNote} ${dto.note.trim()}`.trim();
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const res = await tx.order.updateMany({
-        where: { id, status: order.status },
-        data: { status: 'COMPLETED' },
-      });
-      if (res.count === 0) {
-        throw new BadRequestException({
-          code: 'ORDER_INVALID_TRANSITION',
-          message: `Order is no longer in ${order.status}.`,
-        });
-      }
       // Structured receipt: one line per order item (received = ordered unless
       // the branch reported otherwise). This is what shortage/damage reports —
       // and, later, the destination-branch stock booking — read from; the
       // status-event note below is only the human-readable trail.
-      const reportedById = new Map((dto.items ?? []).map((r) => [r.orderItemId, r.receivedQty]));
       await tx.internalTransferReceipt.create({
         data: {
           orderId: id,
@@ -2654,7 +2691,7 @@ export class OrdersService {
           note: dto.note?.trim() || null,
           lines: {
             createMany: {
-              data: order.items.map((i) => ({
+              data: items.map((i) => ({
                 orderItemId: i.id,
                 orderedQty: i.quantity,
                 receivedQty: reportedById.get(i.id) ?? i.quantity,
@@ -2681,7 +2718,7 @@ export class OrdersService {
       await tx.orderStatusEvent.create({
         data: {
           orderId: id,
-          fromStatus: order.status,
+          fromStatus: status,
           toStatus: 'COMPLETED',
           actorId: actor.sub,
           note: receiptNote,
@@ -2698,7 +2735,7 @@ export class OrdersService {
     this.realtime.emit(rooms, 'order.status_changed', {
       orderId: id,
       code: order.code,
-      fromStatus: order.status,
+      fromStatus,
       toStatus: 'COMPLETED',
       at: new Date().toISOString(),
     });

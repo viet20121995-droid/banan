@@ -1388,14 +1388,24 @@ d('Manufacturing golden path (integration)', () => {
     // Receiving against a draft PO must refuse.
     const flourLine = po.lines.find((l) => l.productId === ids.flour)!;
     await expect(
-      mfg.receive({ productId: ids.flour, qty: 1000, uomId: gUom, unitCost: 28, poLineId: flourLine.id }),
+      mfg.receive({
+        productId: ids.flour,
+        qty: 1000,
+        uomId: gUom,
+        unitCost: 28,
+        poLineId: flourLine.id,
+      }),
     ).rejects.toMatchObject({ status: 400 });
 
     await mfg.confirmPurchaseOrder(po.id);
 
     // Receive the flour line in full → PO goes PARTIAL, line filled.
     await mfg.receive({
-      productId: ids.flour, qty: 1000, uomId: gUom, unitCost: 28, poLineId: flourLine.id,
+      productId: ids.flour,
+      qty: 1000,
+      uomId: gUom,
+      unitCost: 28,
+      poLineId: flourLine.id,
     });
     let fresh = await mfg.getPurchaseOrder(po.id);
     expect(fresh.state).toBe('PARTIAL');
@@ -1404,14 +1414,32 @@ d('Manufacturing golden path (integration)', () => {
     // Wrong product against the sugar line must refuse.
     const sugarLine = fresh.lines.find((l) => l.productId === ids.sugar)!;
     await expect(
-      mfg.receive({ productId: ids.flour, qty: 100, uomId: gUom, unitCost: 24, poLineId: sugarLine.id }),
+      mfg.receive({
+        productId: ids.flour,
+        qty: 100,
+        uomId: gUom,
+        unitCost: 24,
+        poLineId: sugarLine.id,
+      }),
     ).rejects.toMatchObject({ status: 400 });
 
     // Receive sugar in two parts → PARTIAL until complete, then RECEIVED.
-    await mfg.receive({ productId: ids.sugar, qty: 200, uomId: gUom, unitCost: 24, poLineId: sugarLine.id });
+    await mfg.receive({
+      productId: ids.sugar,
+      qty: 200,
+      uomId: gUom,
+      unitCost: 24,
+      poLineId: sugarLine.id,
+    });
     fresh = await mfg.getPurchaseOrder(po.id);
     expect(fresh.state).toBe('PARTIAL');
-    await mfg.receive({ productId: ids.sugar, qty: 300, uomId: gUom, unitCost: 24, poLineId: sugarLine.id });
+    await mfg.receive({
+      productId: ids.sugar,
+      qty: 300,
+      uomId: gUom,
+      unitCost: 24,
+      poLineId: sugarLine.id,
+    });
     fresh = await mfg.getPurchaseOrder(po.id);
     expect(fresh.state).toBe('RECEIVED');
 
@@ -1423,8 +1451,243 @@ d('Manufacturing golden path (integration)', () => {
     expect(history.some((h) => h.supplierName === null)).toBe(true); // earlier ad-hoc receives
 
     // Draft-only edit guard: the received PO can no longer be edited.
+    await expect(mfg.updatePurchaseOrder(po.id, { note: 'sửa muộn' })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  // ── PO concurrency (review round: locks + sequence) ──
+  it('blocks over-receiving a PO line and books nothing', async () => {
+    const supplier = await mfg.createSupplier({ name: 'NCC Nhận Vượt' });
+    const po = await mfg.createPurchaseOrder({
+      supplierId: supplier.id,
+      lines: [{ productId: ids.egg, qty: 100, unitPrice: 35 }],
+    });
+    await mfg.confirmPurchaseOrder(po.id);
+    const before = await onHand(ids.egg);
+    const avgBefore = Number(
+      (await prisma.mfgProduct.findUniqueOrThrow({ where: { id: ids.egg } })).avgCost,
+    );
     await expect(
-      mfg.updatePurchaseOrder(po.id, { note: 'sửa muộn' }),
+      mfg.receive({
+        productId: ids.egg,
+        qty: 150,
+        uomId: gUom,
+        unitCost: 40,
+        poLineId: po.lines[0].id,
+      }),
     ).rejects.toMatchObject({ status: 400 });
+    // Rejected receipt must leave stock, AVCO, line and state untouched.
+    expect(await onHand(ids.egg)).toBe(before);
+    const avgAfter = Number(
+      (await prisma.mfgProduct.findUniqueOrThrow({ where: { id: ids.egg } })).avgCost,
+    );
+    expect(avgAfter).toBe(avgBefore);
+    const fresh = await mfg.getPurchaseOrder(po.id);
+    expect(fresh.state).toBe('CONFIRMED');
+    expect(Number(fresh.lines[0].qtyReceived)).toBe(0);
+  });
+
+  it('two lines received concurrently end RECEIVED with correct qtyReceived (no stuck PARTIAL)', async () => {
+    const supplier = await mfg.createSupplier({ name: 'NCC Song Song' });
+    const po = await mfg.createPurchaseOrder({
+      supplierId: supplier.id,
+      lines: [
+        { productId: ids.flour, qty: 500, unitPrice: 30 },
+        { productId: ids.sugar, qty: 300, unitPrice: 25 },
+      ],
+    });
+    await mfg.confirmPurchaseOrder(po.id);
+    const flourLine = po.lines.find((l) => l.productId === ids.flour)!;
+    const sugarLine = po.lines.find((l) => l.productId === ids.sugar)!;
+
+    const results = await Promise.allSettled([
+      mfg.receive({
+        productId: ids.flour,
+        qty: 500,
+        uomId: gUom,
+        unitCost: 30,
+        poLineId: flourLine.id,
+      }),
+      mfg.receive({
+        productId: ids.sugar,
+        qty: 300,
+        uomId: gUom,
+        unitCost: 25,
+        poLineId: sugarLine.id,
+      }),
+    ]);
+    expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+
+    const fresh = await mfg.getPurchaseOrder(po.id);
+    expect(fresh.state).toBe('RECEIVED');
+    expect(Number(fresh.lines.find((l) => l.productId === ids.flour)!.qtyReceived)).toBe(500);
+    expect(Number(fresh.lines.find((l) => l.productId === ids.sugar)!.qtyReceived)).toBe(300);
+    // Exactly one stock move per line — no double booking, no lost update.
+    const moves = await prisma.mfgStockMove.findMany({
+      where: { refType: 'RECEIPT', refId: po.id },
+    });
+    expect(moves).toHaveLength(2);
+  });
+
+  it('update-vs-confirm race: a confirmed PO can never end up with lines it did not confirm', async () => {
+    const supplier = await mfg.createSupplier({ name: 'NCC Đua Sửa' });
+    const po = await mfg.createPurchaseOrder({
+      supplierId: supplier.id,
+      lines: [{ productId: ids.flour, qty: 100, unitPrice: 30 }],
+    });
+    const [updRes] = await Promise.allSettled([
+      mfg.updatePurchaseOrder(po.id, {
+        lines: [{ productId: ids.sugar, qty: 999, unitPrice: 1 }],
+      }),
+      mfg.confirmPurchaseOrder(po.id),
+    ]);
+    const fresh = await mfg.getPurchaseOrder(po.id);
+    expect(fresh.state).toBe('CONFIRMED');
+    if (updRes.status === 'fulfilled') {
+      // Update held the lock first (still DRAFT); confirm sealed the NEW lines.
+      expect(fresh.lines[0].productId).toBe(ids.sugar);
+    } else {
+      // Confirm won — the edit was refused, original lines sealed.
+      expect((updRes.reason as { status?: number }).status).toBe(400);
+      expect(fresh.lines[0].productId).toBe(ids.flour);
+    }
+    // Deterministic tail: once CONFIRMED, edits are always refused.
+    await expect(mfg.updatePurchaseOrder(po.id, { note: 'x' })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it('cancel-vs-receive race: stock is booked iff the receive won', async () => {
+    const supplier = await mfg.createSupplier({ name: 'NCC Đua Huỷ' });
+    const po = await mfg.createPurchaseOrder({
+      supplierId: supplier.id,
+      lines: [{ productId: ids.flour, qty: 200, unitPrice: 30 }],
+    });
+    await mfg.confirmPurchaseOrder(po.id);
+    const before = await onHand(ids.flour);
+
+    const [recvRes] = await Promise.allSettled([
+      mfg.receive({
+        productId: ids.flour,
+        qty: 200,
+        uomId: gUom,
+        unitCost: 30,
+        poLineId: po.lines[0].id,
+      }),
+      mfg.cancelPurchaseOrder(po.id),
+    ]);
+
+    const fresh = await mfg.getPurchaseOrder(po.id);
+    if (recvRes.status === 'fulfilled') {
+      // Receive held the lock first: full line in, RECEIVED; the concurrent
+      // cancel then saw a closed PO and was refused.
+      expect(Number(fresh.lines[0].qtyReceived)).toBe(200);
+      expect(await onHand(ids.flour)).toBe(before + 200);
+      expect(fresh.state).toBe('RECEIVED');
+    } else {
+      // Cancel won: the receipt was refused and NOTHING was booked.
+      expect((recvRes.reason as { status?: number }).status).toBe(400);
+      expect(Number(fresh.lines[0].qtyReceived)).toBe(0);
+      expect(await onHand(ids.flour)).toBe(before);
+      expect(fresh.state).toBe('CANCELLED');
+    }
+  });
+
+  it('two concurrent confirms: exactly one transition wins', async () => {
+    const supplier = await mfg.createSupplier({ name: 'NCC Đua Chốt' });
+    const po = await mfg.createPurchaseOrder({
+      supplierId: supplier.id,
+      lines: [{ productId: ids.flour, qty: 10, unitPrice: 30 }],
+    });
+    const results = await Promise.allSettled([
+      mfg.confirmPurchaseOrder(po.id),
+      mfg.confirmPurchaseOrder(po.id),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    expect(ok).toBe(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0].reason as { status?: number }).status).toBe(400);
+    expect((await mfg.getPurchaseOrder(po.id)).state).toBe('CONFIRMED');
+  });
+
+  it('concurrent PO creates all succeed with distinct codes (sequence, no 500)', async () => {
+    const supplier = await mfg.createSupplier({ name: 'NCC Đua Mã' });
+    const pos = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        mfg.createPurchaseOrder({
+          supplierId: supplier.id,
+          lines: [{ productId: ids.flour, qty: 1, unitPrice: 1 }],
+        }),
+      ),
+    );
+    const codes = new Set(pos.map((p) => p.code));
+    expect(codes.size).toBe(6);
+    for (const code of codes) expect(code).toMatch(/^PO-\d{5,}$/);
+  });
+
+  it('receipt against a PO line deleted mid-flight returns 404, not a Prisma 500', async () => {
+    const supplier = await mfg.createSupplier({ name: 'NCC Dòng Ma' });
+    const po = await mfg.createPurchaseOrder({
+      supplierId: supplier.id,
+      lines: [{ productId: ids.flour, qty: 50, unitPrice: 30 }],
+    });
+    await mfg.confirmPurchaseOrder(po.id);
+    const before = await onHand(ids.flour);
+    // Deterministic re-creation of the race window: the line row vanishes
+    // right after the PO lock is taken but before the in-tx re-read — the
+    // window a draft-edit-then-reconfirm hits when a receipt holds a stale
+    // line id.
+    const orig = (
+      mfg as unknown as { lockPurchaseOrder: (db: unknown, id: string) => Promise<string> }
+    ).lockPurchaseOrder.bind(mfg);
+    const spy = jest
+      .spyOn(mfg as unknown as { lockPurchaseOrder: typeof orig }, 'lockPurchaseOrder')
+      .mockImplementation(async (db: unknown, poId: string) => {
+        const state = await orig(db, poId);
+        await prisma.mfgPurchaseOrderLine.deleteMany({ where: { id: po.lines[0].id } });
+        return state;
+      });
+    try {
+      await expect(
+        mfg.receive({
+          productId: ids.flour,
+          qty: 50,
+          uomId: gUom,
+          unitCost: 30,
+          poLineId: po.lines[0].id,
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+    } finally {
+      spy.mockRestore();
+    }
+    // The refused receipt must book nothing.
+    expect(await onHand(ids.flour)).toBe(before);
+    expect((await mfg.getPurchaseOrder(po.id)).state).toBe('CONFIRMED');
+  });
+
+  it('draft PO supplier change is validated — no FK 500, no inactive supplier', async () => {
+    const supplier = await mfg.createSupplier({ name: 'NCC Gốc' });
+    const po = await mfg.createPurchaseOrder({
+      supplierId: supplier.id,
+      lines: [{ productId: ids.flour, qty: 5, unitPrice: 30 }],
+    });
+    // Nonexistent supplier: domain 400, not Prisma P2003 leaking as 500.
+    await expect(
+      mfg.updatePurchaseOrder(po.id, { supplierId: 'sup-khong-ton-tai' }),
+    ).rejects.toMatchObject({ status: 400 });
+    // Inactive supplier: refused, same rule as PO creation enforces.
+    const retired = await mfg.createSupplier({ name: 'NCC Nghỉ' });
+    await prisma.mfgSupplier.update({ where: { id: retired.id }, data: { active: false } });
+    await expect(mfg.updatePurchaseOrder(po.id, { supplierId: retired.id })).rejects.toMatchObject({
+      status: 400,
+    });
+    expect((await mfg.getPurchaseOrder(po.id)).supplierId).toBe(supplier.id);
+    // A live supplier still swaps in fine.
+    const fresh = await mfg.createSupplier({ name: 'NCC Mới' });
+    expect((await mfg.updatePurchaseOrder(po.id, { supplierId: fresh.id })).supplierId).toBe(
+      fresh.id,
+    );
   });
 });

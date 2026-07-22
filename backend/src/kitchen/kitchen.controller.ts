@@ -117,10 +117,7 @@ export class KitchenController {
    * ':id' routes out of caution, though the path depth already differs.
    */
   @Get('internal-transfer/summary')
-  transferSummary(
-    @CurrentUser() user: AuthPrincipal,
-    @Query('kitchenId') kitchenIdParam?: string,
-  ) {
+  transferSummary(@CurrentUser() user: AuthPrincipal, @Query('kitchenId') kitchenIdParam?: string) {
     const kitchenId = user.kitchenId ?? (user.role === Role.ADMIN ? kitchenIdParam : undefined);
     if (!kitchenId) {
       throw new BadRequestException({ code: 'NO_KITCHEN_ASSIGNED' });

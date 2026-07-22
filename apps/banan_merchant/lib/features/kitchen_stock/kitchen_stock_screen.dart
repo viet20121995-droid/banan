@@ -87,8 +87,7 @@ class _KitchenStockScreenState extends ConsumerState<KitchenStockScreen> {
             child: RefreshIndicator(
               onRefresh: () => ref.refresh(_kitchenOnHandProvider.future),
               child: onHand.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(BananSpacing.lg),
@@ -100,30 +99,11 @@ class _KitchenStockScreenState extends ConsumerState<KitchenStockScreen> {
                   ],
                 ),
                 data: (rows) {
-                  // Sum per product across lots/locations; keep uom + type.
-                  final byCode = <String, _StockRow>{};
-                  for (final r in rows) {
-                    if (_type != null && r.productType != _type) continue;
-                    final acc = byCode.putIfAbsent(
-                      r.productCode,
-                      () => _StockRow(
-                        code: r.productCode,
-                        name: r.productNameVi,
-                        uomCode: r.uomCode,
-                      ),
-                    );
-                    acc.qty += r.quantity;
-                    acc.free += r.freeQty;
-                  }
-                  final list = byCode.values
-                      .where(
-                        (r) =>
-                            _query.isEmpty ||
-                            r.name.toLowerCase().contains(_query) ||
-                            r.code.toLowerCase().contains(_query),
-                      )
-                      .toList()
-                    ..sort((a, b) => a.name.compareTo(b.name));
+                  final list = aggregateKitchenStock(
+                    rows,
+                    type: _type,
+                    query: _query,
+                  );
                   if (list.isEmpty) {
                     return ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -171,8 +151,49 @@ class _KitchenStockScreenState extends ConsumerState<KitchenStockScreen> {
   }
 }
 
-class _StockRow {
-  _StockRow({required this.code, required this.name, required this.uomCode});
+/// Pure aggregation behind the counter stock screen, kept top-level so it is
+/// unit-testable. Counts ONLY the kitchen's STOCK location: the other
+/// locations (SUPPLIER, PRODUCTION, STORE, SCRAP) are the negative side of
+/// stock moves — summing them with STOCK cancels real on-hand out to 0.
+/// Lots of one product inside STOCK are still summed; free = qty − reserved.
+List<KitchenStockRow> aggregateKitchenStock(
+  List<MfgOnHand> rows, {
+  String? type,
+  String query = '',
+}) {
+  final byCode = <String, KitchenStockRow>{};
+  for (final r in rows) {
+    if (r.locationCode != 'STOCK') continue;
+    if (type != null && r.productType != type) continue;
+    final acc = byCode.putIfAbsent(
+      r.productCode,
+      () => KitchenStockRow(
+        code: r.productCode,
+        name: r.productNameVi,
+        uomCode: r.uomCode,
+      ),
+    );
+    acc.qty += r.quantity;
+    acc.free += r.freeQty;
+  }
+  final q = query.trim().toLowerCase();
+  return byCode.values
+      .where(
+        (r) =>
+            q.isEmpty ||
+            r.name.toLowerCase().contains(q) ||
+            r.code.toLowerCase().contains(q),
+      )
+      .toList()
+    ..sort((a, b) => a.name.compareTo(b.name));
+}
+
+class KitchenStockRow {
+  KitchenStockRow({
+    required this.code,
+    required this.name,
+    required this.uomCode,
+  });
   final String code;
   final String name;
   final String uomCode;

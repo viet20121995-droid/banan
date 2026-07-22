@@ -21,13 +21,22 @@ const PRODUCT_INCLUDE = {
   category: true,
 } satisfies Prisma.ProductInclude;
 
-/** Trims + uppercases; empty becomes null so the unique index ignores it. */
-function normalizeSku(sku: string | null | undefined): string | null {
+/** Trims + uppercases; empty/whitespace becomes null so the unique index ignores it. */
+export function normalizeSku(sku: string | null): string | null {
   return sku?.trim().toUpperCase() || null;
 }
 
+/**
+ * Prisma update value for a variant's SKU. An OMITTED field (old clients that
+ * don't know about SKU) must keep the stored value — only an explicit
+ * null/empty clears it. Returning `undefined` makes Prisma skip the column.
+ */
+export function skuUpdateValue(sku: string | null | undefined): string | null | undefined {
+  return sku === undefined ? undefined : normalizeSku(sku);
+}
+
 /** Maps the unique-index violation on ProductVariant.sku to a friendly 409. */
-function rethrowSkuConflict(e: unknown): never {
+export function rethrowSkuConflict(e: unknown): never {
   if (
     e instanceof Prisma.PrismaClientKnownRequestError &&
     e.code === 'P2002' &&
@@ -328,40 +337,42 @@ export class ProductsService {
         message: `Đã có sản phẩm tên "${name}". Hãy sửa sản phẩm hiện có thay vì tạo bản trùng.`,
       });
     }
-    return this.prisma.product.create({
-      data: {
-        storeId,
-        categoryId: dto.categoryId,
-        name: dto.name,
-        slug: dto.slug,
-        description: dto.description,
-        basePrice: new Prisma.Decimal(dto.basePrice),
-        images: dto.images,
-        tags: dto.tags ?? [],
-        preparationMinutes: dto.preparationMinutes ?? 60,
-        isAvailable: dto.isAvailable ?? true,
-        isSeasonal: dto.isSeasonal ?? false,
-        seasonStart: dto.seasonStart ? new Date(dto.seasonStart) : null,
-        seasonEnd: dto.seasonEnd ? new Date(dto.seasonEnd) : null,
-        leadTimeHours: dto.leadTimeHours ?? null,
-        availableDaysOfWeek: dto.availableDaysOfWeek ?? [],
-        dailyMaxQuantity: dto.dailyMaxQuantity ?? null,
-        flavorPickCount: dto.flavorPickCount ?? null,
-        flavorOptions: dto.flavorOptions ?? [],
-        variants: {
-          create: dto.variants.map((v) => ({
-            size: v.size,
-            flavor: v.flavor,
-            sku: normalizeSku(v.sku),
-            priceDelta: new Prisma.Decimal(v.priceDelta ?? 0),
-            stockMode: v.stockQty == null ? 'UNLIMITED' : 'LIMITED',
-            stockQty: v.stockQty,
-            isAvailable: v.isAvailable ?? true,
-          })),
+    return this.prisma.product
+      .create({
+        data: {
+          storeId,
+          categoryId: dto.categoryId,
+          name: dto.name,
+          slug: dto.slug,
+          description: dto.description,
+          basePrice: new Prisma.Decimal(dto.basePrice),
+          images: dto.images,
+          tags: dto.tags ?? [],
+          preparationMinutes: dto.preparationMinutes ?? 60,
+          isAvailable: dto.isAvailable ?? true,
+          isSeasonal: dto.isSeasonal ?? false,
+          seasonStart: dto.seasonStart ? new Date(dto.seasonStart) : null,
+          seasonEnd: dto.seasonEnd ? new Date(dto.seasonEnd) : null,
+          leadTimeHours: dto.leadTimeHours ?? null,
+          availableDaysOfWeek: dto.availableDaysOfWeek ?? [],
+          dailyMaxQuantity: dto.dailyMaxQuantity ?? null,
+          flavorPickCount: dto.flavorPickCount ?? null,
+          flavorOptions: dto.flavorOptions ?? [],
+          variants: {
+            create: dto.variants.map((v) => ({
+              size: v.size,
+              flavor: v.flavor,
+              sku: normalizeSku(v.sku ?? null),
+              priceDelta: new Prisma.Decimal(v.priceDelta ?? 0),
+              stockMode: v.stockQty == null ? 'UNLIMITED' : 'LIMITED',
+              stockQty: v.stockQty,
+              isAvailable: v.isAvailable ?? true,
+            })),
+          },
         },
-      },
-      include: PRODUCT_INCLUDE,
-    }).catch(rethrowSkuConflict);
+        include: PRODUCT_INCLUDE,
+      })
+      .catch(rethrowSkuConflict);
   }
 
   /**
@@ -378,69 +389,71 @@ export class ProductsService {
       });
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // Coarse lock: serialise this product edit against combo create/update
-      // and other product writes, so the post-edit combo re-validation below
-      // sees a stable membership and can't race a concurrent combo change.
-      await lockCatalogBundles(tx);
-      // Lock affected combos BEFORE touching product/variant rows. A checkout
-      // locks the combo (`bundle:<id>`) then the variant row; acquiring the
-      // combo locks first here matches that order so the two can't deadlock.
-      const lockedBundles = await this.bundles.lockActiveBundlesForProducts(tx, [id]);
-      const data: Prisma.ProductUpdateInput = {
-        ...(dto.categoryId && { category: { connect: { id: dto.categoryId } } }),
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.slug !== undefined && { slug: dto.slug }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.basePrice !== undefined && {
-          basePrice: new Prisma.Decimal(dto.basePrice),
-        }),
-        ...(dto.images && { images: dto.images }),
-        ...(dto.tags !== undefined && { tags: dto.tags }),
-        ...(dto.preparationMinutes !== undefined && {
-          preparationMinutes: dto.preparationMinutes,
-        }),
-        ...(dto.isAvailable !== undefined && { isAvailable: dto.isAvailable }),
-        ...(dto.isSeasonal !== undefined && { isSeasonal: dto.isSeasonal }),
-        ...(dto.seasonStart !== undefined && {
-          seasonStart: dto.seasonStart ? new Date(dto.seasonStart) : null,
-        }),
-        ...(dto.seasonEnd !== undefined && {
-          seasonEnd: dto.seasonEnd ? new Date(dto.seasonEnd) : null,
-        }),
-        ...(dto.leadTimeHours !== undefined && {
-          leadTimeHours: dto.leadTimeHours,
-        }),
-        ...(dto.availableDaysOfWeek !== undefined && {
-          availableDaysOfWeek: dto.availableDaysOfWeek,
-        }),
-        ...(dto.dailyMaxQuantity !== undefined && {
-          dailyMaxQuantity: dto.dailyMaxQuantity,
-        }),
-        ...(dto.flavorPickCount !== undefined && {
-          flavorPickCount: dto.flavorPickCount,
-        }),
-        ...(dto.flavorOptions !== undefined && {
-          flavorOptions: dto.flavorOptions,
-        }),
-      };
+    return this.prisma
+      .$transaction(async (tx) => {
+        // Coarse lock: serialise this product edit against combo create/update
+        // and other product writes, so the post-edit combo re-validation below
+        // sees a stable membership and can't race a concurrent combo change.
+        await lockCatalogBundles(tx);
+        // Lock affected combos BEFORE touching product/variant rows. A checkout
+        // locks the combo (`bundle:<id>`) then the variant row; acquiring the
+        // combo locks first here matches that order so the two can't deadlock.
+        const lockedBundles = await this.bundles.lockActiveBundlesForProducts(tx, [id]);
+        const data: Prisma.ProductUpdateInput = {
+          ...(dto.categoryId && { category: { connect: { id: dto.categoryId } } }),
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.slug !== undefined && { slug: dto.slug }),
+          ...(dto.description !== undefined && { description: dto.description }),
+          ...(dto.basePrice !== undefined && {
+            basePrice: new Prisma.Decimal(dto.basePrice),
+          }),
+          ...(dto.images && { images: dto.images }),
+          ...(dto.tags !== undefined && { tags: dto.tags }),
+          ...(dto.preparationMinutes !== undefined && {
+            preparationMinutes: dto.preparationMinutes,
+          }),
+          ...(dto.isAvailable !== undefined && { isAvailable: dto.isAvailable }),
+          ...(dto.isSeasonal !== undefined && { isSeasonal: dto.isSeasonal }),
+          ...(dto.seasonStart !== undefined && {
+            seasonStart: dto.seasonStart ? new Date(dto.seasonStart) : null,
+          }),
+          ...(dto.seasonEnd !== undefined && {
+            seasonEnd: dto.seasonEnd ? new Date(dto.seasonEnd) : null,
+          }),
+          ...(dto.leadTimeHours !== undefined && {
+            leadTimeHours: dto.leadTimeHours,
+          }),
+          ...(dto.availableDaysOfWeek !== undefined && {
+            availableDaysOfWeek: dto.availableDaysOfWeek,
+          }),
+          ...(dto.dailyMaxQuantity !== undefined && {
+            dailyMaxQuantity: dto.dailyMaxQuantity,
+          }),
+          ...(dto.flavorPickCount !== undefined && {
+            flavorPickCount: dto.flavorPickCount,
+          }),
+          ...(dto.flavorOptions !== undefined && {
+            flavorOptions: dto.flavorOptions,
+          }),
+        };
 
-      await tx.product.update({ where: { id }, data });
+        await tx.product.update({ where: { id }, data });
 
-      if (dto.variants) {
-        await this.reconcileVariants(tx, id, dto.variants);
-      }
+        if (dto.variants) {
+          await this.reconcileVariants(tx, id, dto.variants);
+        }
 
-      // A price / flavour-pick / selling-day / availability / variant change can
-      // make a combo containing this product unfulfillable — deactivate any of
-      // the (already-locked) combos that no longer validate.
-      await this.bundles.deactivateInvalidBundles(tx, lockedBundles);
+        // A price / flavour-pick / selling-day / availability / variant change can
+        // make a combo containing this product unfulfillable — deactivate any of
+        // the (already-locked) combos that no longer validate.
+        await this.bundles.deactivateInvalidBundles(tx, lockedBundles);
 
-      return tx.product.findUniqueOrThrow({
-        where: { id },
-        include: PRODUCT_INCLUDE,
-      });
-    }).catch(rethrowSkuConflict);
+        return tx.product.findUniqueOrThrow({
+          where: { id },
+          include: PRODUCT_INCLUDE,
+        });
+      })
+      .catch(rethrowSkuConflict);
   }
 
   /// Deactivates every combo that contains the given product (it can no longer
@@ -519,7 +532,8 @@ export class ProductsService {
       const data = {
         size: v.size,
         flavor: v.flavor,
-        sku: normalizeSku(v.sku),
+        // undefined = field omitted (old client) -> keep the stored SKU.
+        sku: skuUpdateValue(v.sku),
         priceDelta: new Prisma.Decimal(v.priceDelta ?? 0),
         stockMode: (v.stockQty == null ? 'UNLIMITED' : 'LIMITED') as 'UNLIMITED' | 'LIMITED',
         stockQty: v.stockQty ?? null,
@@ -528,7 +542,9 @@ export class ProductsService {
       if (v.id) {
         await tx.productVariant.update({ where: { id: v.id }, data });
       } else {
-        await tx.productVariant.create({ data: { ...data, productId } });
+        await tx.productVariant.create({
+          data: { ...data, sku: normalizeSku(v.sku ?? null), productId },
+        });
       }
     }
   }

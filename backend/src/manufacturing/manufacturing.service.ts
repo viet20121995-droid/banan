@@ -220,23 +220,46 @@ export class ManufacturingService {
 
       // Optional PO link: the receipt books against a confirmed PO line for the
       // same product, driving qtyReceived and the PO's PARTIAL/RECEIVED state.
+      // The PO row is LOCKED (lock order: MfgProduct first — taken above —
+      // then MfgPurchaseOrder) and the line re-read under that lock, so a
+      // concurrent cancel can't slip between the state check and the updates,
+      // and two receipts on different lines of one PO compute the final state
+      // sequentially from committed data instead of both seeing PARTIAL.
       let poLine: { id: string; poId: string } | null = null;
       if (dto.poLineId) {
+        const ref = await db.mfgPurchaseOrderLine.findUnique({
+          where: { id: dto.poLineId },
+          select: { poId: true },
+        });
+        if (!ref) throw new NotFoundException({ code: 'MFG_PO_LINE_NOT_FOUND' });
+        const poState = await this.lockPurchaseOrder(db, ref.poId);
+        if (poState !== 'CONFIRMED' && poState !== 'PARTIAL') {
+          throw new BadRequestException({
+            code: 'MFG_PO_NOT_OPEN',
+            message: 'Đơn mua chưa xác nhận hoặc đã đóng.',
+          });
+        }
         const line = await db.mfgPurchaseOrderLine.findUnique({
           where: { id: dto.poLineId },
-          include: { po: true },
         });
-        if (!line) throw new NotFoundException({ code: 'MFG_PO_LINE_NOT_FOUND' });
+        if (!line) {
+          // The draft's lines were replaced and re-confirmed while this
+          // receipt was in flight — its line id no longer exists.
+          throw new NotFoundException({ code: 'MFG_PO_LINE_NOT_FOUND' });
+        }
         if (line.productId !== dto.productId) {
           throw new BadRequestException({
             code: 'MFG_PO_LINE_PRODUCT_MISMATCH',
             message: 'Dòng đơn mua thuộc sản phẩm khác.',
           });
         }
-        if (line.po.state !== 'CONFIRMED' && line.po.state !== 'PARTIAL') {
+        // Over-receiving is blocked: a receipt may not push qtyReceived past
+        // the ordered qty (tiny epsilon absorbs Decimal(14,3) rounding).
+        const remaining = n(line.qty) - n(line.qtyReceived);
+        if (baseQty > remaining + 0.0005) {
           throw new BadRequestException({
-            code: 'MFG_PO_NOT_OPEN',
-            message: 'Đơn mua chưa xác nhận hoặc đã đóng.',
+            code: 'MFG_PO_OVER_RECEIVE',
+            message: `Nhận vượt số lượng đặt — dòng này chỉ còn thiếu ${round3(Math.max(0, remaining))}.`,
           });
         }
         poLine = { id: line.id, poId: line.poId };
@@ -1309,9 +1332,7 @@ export class ManufacturingService {
             ...(dto.standardCost !== undefined
               ? { standardCost: roundCost(dto.standardCost) }
               : {}),
-            ...(dto.reorderPoint !== undefined
-              ? { reorderPoint: round3(dto.reorderPoint) }
-              : {}),
+            ...(dto.reorderPoint !== undefined ? { reorderPoint: round3(dto.reorderPoint) } : {}),
             ...(dto.active !== undefined ? { active: dto.active } : {}),
           },
           include: { category: true, uom: true },
@@ -1807,10 +1828,7 @@ export class ManufacturingService {
     const products = await this.prisma.mfgProduct.findMany({
       where: {
         active: true,
-        OR: [
-          { type: { in: ['RAW', 'PACKAGING'] } },
-          { reorderPoint: { gt: 0 } },
-        ],
+        OR: [{ type: { in: ['RAW', 'PACKAGING'] } }, { reorderPoint: { gt: 0 } }],
       },
       include: { uom: true },
       orderBy: { code: 'asc' },
@@ -2386,6 +2404,27 @@ export class ManufacturingService {
     });
   }
 
+  /**
+   * Locks the PO row and returns its committed state. Every PO state-machine
+   * transition (update/confirm/cancel/receive-against-line) goes through this
+   * so two concurrent transitions serialize and exactly one wins. Lock order
+   * across the module: MfgProduct BEFORE MfgPurchaseOrder — receive() takes
+   * the product lock first; no path locks a product after a PO.
+   */
+  private async lockPurchaseOrder(db: Tx, id: string): Promise<string> {
+    const rows = await db.$queryRaw<Array<{ state: string }>>`
+      SELECT "state" FROM "MfgPurchaseOrder" WHERE "id" = ${id} FOR UPDATE`;
+    if (rows.length === 0) throw new NotFoundException({ code: 'MFG_PO_NOT_FOUND' });
+    return rows[0].state;
+  }
+
+  /** Atomic sequence → unique, readable codes even under concurrent creates. */
+  private async nextPoCode(): Promise<string> {
+    const rows = await this.prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT nextval('"MfgPurchaseOrder_code_seq"') AS n`;
+    return `PO-${String(rows[0].n).padStart(5, '0')}`;
+  }
+
   async getPurchaseOrder(id: string) {
     const po = await this.prisma.mfgPurchaseOrder.findUnique({
       where: { id },
@@ -2399,14 +2438,17 @@ export class ManufacturingService {
    * Line quantities are in the product's own base UoM — the same convention
    * receive() defaults to, so a PO line and its receipts always compare 1:1.
    */
-  private async validatePoLines(lines: { productId: string; qty: number; unitPrice: number }[]) {
+  private async validatePoLines(
+    lines: { productId: string; qty: number; unitPrice: number }[],
+    db: Tx | PrismaService = this.prisma,
+  ) {
     if (!Array.isArray(lines) || lines.length === 0) {
       throw new BadRequestException({
         code: 'MFG_PO_LINES_EMPTY',
         message: 'Đơn mua cần ít nhất một dòng hàng.',
       });
     }
-    const products = await this.prisma.mfgProduct.findMany({
+    const products = await db.mfgProduct.findMany({
       where: { id: { in: lines.map((l) => l.productId) } },
       select: { id: true, uomId: true, active: true },
     });
@@ -2434,9 +2476,11 @@ export class ManufacturingService {
     });
   }
 
-  async createPurchaseOrder(dto: CreatePoDto, userId?: string) {
-    const supplier = await this.prisma.mfgSupplier.findUnique({
-      where: { id: dto.supplierId },
+  /** A PO may only point at a supplier that exists and is still active. */
+  private async assertSupplierUsable(db: Tx | PrismaService, id: string) {
+    const supplier = await db.mfgSupplier.findUnique({
+      where: { id },
+      select: { active: true },
     });
     if (!supplier || !supplier.active) {
       throw new BadRequestException({
@@ -2444,78 +2488,105 @@ export class ManufacturingService {
         message: 'Nhà cung cấp không tồn tại hoặc đã ngừng hợp tác.',
       });
     }
+  }
+
+  async createPurchaseOrder(dto: CreatePoDto, userId?: string) {
+    await this.assertSupplierUsable(this.prisma, dto.supplierId);
     const lines = await this.validatePoLines(dto.lines);
-    const count = await this.prisma.mfgPurchaseOrder.count();
-    return this.prisma.mfgPurchaseOrder.create({
-      data: {
-        code: `PO-${String(count + 1).padStart(5, '0')}`,
-        supplierId: dto.supplierId,
-        expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : null,
-        note: dto.note,
-        createdById: userId ?? null,
-        lines: { create: lines },
-      },
-      include: ManufacturingService.PO_INCLUDE,
+    // The sequence makes collisions impossible among new codes; the bounded
+    // retry only covers legacy rows that pre-date the sequence.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const code = await this.nextPoCode();
+      try {
+        return await this.prisma.mfgPurchaseOrder.create({
+          data: {
+            code,
+            supplierId: dto.supplierId,
+            expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : null,
+            note: dto.note,
+            createdById: userId ?? null,
+            lines: { create: lines },
+          },
+          include: ManufacturingService.PO_INCLUDE,
+        });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new ConflictException({
+      code: 'MFG_PO_CODE_BUSY',
+      message: 'Không cấp được mã đơn mua — thử lại.',
     });
   }
 
   async updatePurchaseOrder(id: string, dto: UpdatePoDto) {
-    const po = await this.getPurchaseOrder(id);
-    if (po.state !== 'DRAFT') {
-      throw new BadRequestException({
-        code: 'MFG_PO_NOT_DRAFT',
-        message: 'Chỉ sửa được đơn mua ở trạng thái nháp.',
+    return this.prisma.$transaction(async (db) => {
+      const state = await this.lockPurchaseOrder(db, id);
+      if (state !== 'DRAFT') {
+        throw new BadRequestException({
+          code: 'MFG_PO_NOT_DRAFT',
+          message: 'Chỉ sửa được đơn mua ở trạng thái nháp.',
+        });
+      }
+      if (dto.supplierId) await this.assertSupplierUsable(db, dto.supplierId);
+      const lines = dto.lines ? await this.validatePoLines(dto.lines, db) : null;
+      return db.mfgPurchaseOrder.update({
+        where: { id },
+        data: {
+          ...(dto.supplierId && { supplierId: dto.supplierId }),
+          ...(dto.expectedDate !== undefined && {
+            expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : null,
+          }),
+          ...(dto.note !== undefined && { note: dto.note }),
+          ...(lines && { lines: { deleteMany: {}, create: lines } }),
+        },
+        include: ManufacturingService.PO_INCLUDE,
       });
-    }
-    const lines = dto.lines ? await this.validatePoLines(dto.lines) : null;
-    return this.prisma.mfgPurchaseOrder.update({
-      where: { id },
-      data: {
-        ...(dto.supplierId && { supplierId: dto.supplierId }),
-        ...(dto.expectedDate !== undefined && {
-          expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : null,
-        }),
-        ...(dto.note !== undefined && { note: dto.note }),
-        ...(lines && { lines: { deleteMany: {}, create: lines } }),
-      },
-      include: ManufacturingService.PO_INCLUDE,
     });
   }
 
   async confirmPurchaseOrder(id: string) {
-    const po = await this.getPurchaseOrder(id);
-    if (po.state !== 'DRAFT') {
-      throw new BadRequestException({
-        code: 'MFG_PO_NOT_DRAFT',
-        message: 'Đơn mua đã xác nhận hoặc đã đóng.',
+    return this.prisma.$transaction(async (db) => {
+      const state = await this.lockPurchaseOrder(db, id);
+      if (state !== 'DRAFT') {
+        throw new BadRequestException({
+          code: 'MFG_PO_NOT_DRAFT',
+          message: 'Đơn mua đã xác nhận hoặc đã đóng.',
+        });
+      }
+      const lineCount = await db.mfgPurchaseOrderLine.count({ where: { poId: id } });
+      if (lineCount === 0) {
+        throw new BadRequestException({
+          code: 'MFG_PO_LINES_EMPTY',
+          message: 'Đơn mua cần ít nhất một dòng hàng.',
+        });
+      }
+      return db.mfgPurchaseOrder.update({
+        where: { id },
+        data: { state: 'CONFIRMED' },
+        include: ManufacturingService.PO_INCLUDE,
       });
-    }
-    if (po.lines.length === 0) {
-      throw new BadRequestException({
-        code: 'MFG_PO_LINES_EMPTY',
-        message: 'Đơn mua cần ít nhất một dòng hàng.',
-      });
-    }
-    return this.prisma.mfgPurchaseOrder.update({
-      where: { id },
-      data: { state: 'CONFIRMED' },
-      include: ManufacturingService.PO_INCLUDE,
     });
   }
 
   /** Stock already received stays in stock — cancel only closes the remainder. */
   async cancelPurchaseOrder(id: string) {
-    const po = await this.getPurchaseOrder(id);
-    if (po.state === 'RECEIVED' || po.state === 'CANCELLED') {
-      throw new BadRequestException({
-        code: 'MFG_PO_CLOSED',
-        message: 'Đơn mua đã đóng.',
+    return this.prisma.$transaction(async (db) => {
+      const state = await this.lockPurchaseOrder(db, id);
+      if (state === 'RECEIVED' || state === 'CANCELLED') {
+        throw new BadRequestException({
+          code: 'MFG_PO_CLOSED',
+          message: 'Đơn mua đã đóng.',
+        });
+      }
+      return db.mfgPurchaseOrder.update({
+        where: { id },
+        data: { state: 'CANCELLED' },
+        include: ManufacturingService.PO_INCLUDE,
       });
-    }
-    return this.prisma.mfgPurchaseOrder.update({
-      where: { id },
-      data: { state: 'CANCELLED' },
-      include: ManufacturingService.PO_INCLUDE,
     });
   }
 

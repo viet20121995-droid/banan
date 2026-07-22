@@ -525,10 +525,20 @@ describe('internal transfer destination lock + receive', () => {
   it('destination store confirms receipt (with shortages) and the order completes', async () => {
     const statusEventCreate = jest.fn();
     const receiptCreate = jest.fn().mockResolvedValue({ id: 'rcpt1' });
+    // receive() now locks the row and re-reads the lines INSIDE the
+    // transaction (adjust-vs-receive race fix), so the tx stub serves the
+    // lock query and the fresh line reads too.
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ status: 'READY_FOR_PICKUP' }]),
       order: {
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockResolvedValue({ count: 1 }),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...dispatched, status: 'COMPLETED' }),
+      },
+      orderItem: {
+        findMany: jest.fn().mockResolvedValue(dispatched.items),
+      },
+      internalTransferMfgItem: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       orderStatusEvent: { create: statusEventCreate },
       internalTransferReceipt: { create: receiptCreate },
