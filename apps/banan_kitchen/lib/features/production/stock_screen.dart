@@ -94,10 +94,19 @@ class _StockScreenState extends ConsumerState<StockScreen> {
                     .where((code) => code.isNotEmpty)
                     .toSet()
                     .length;
-                final unavailable =
-                    stock.where((row) => row.freeQty <= 0).length;
-                final reserved =
-                    stock.where((row) => row.reservedQty > 0).length;
+                String productKey(MfgOnHand row) => row.productCode.isEmpty
+                    ? row.productNameVi
+                    : row.productCode;
+                final unavailable = stock
+                    .where((row) => row.freeQty <= 0)
+                    .map(productKey)
+                    .toSet()
+                    .length;
+                final reserved = stock
+                    .where((row) => row.reservedQty > 0)
+                    .map(productKey)
+                    .toSet()
+                    .length;
                 final expiringSoon = stock.where((row) {
                   final expiry = row.expiryDate;
                   return expiry != null &&
@@ -221,9 +230,19 @@ class _StockSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       ('Mặt hàng', productCount, Icons.category_outlined, BananColors.primary),
-      ('Hết khả dụng', unavailable, Icons.error_outline, BananColors.danger),
-      ('Đang giữ', reserved, Icons.lock_clock_outlined, BananColors.gold),
-      ('Sắp hết hạn', expiring, Icons.schedule, BananColors.warning),
+      (
+        'Không còn tồn trống',
+        unavailable,
+        Icons.error_outline,
+        BananColors.danger,
+      ),
+      (
+        'Đã phân bổ cho SX',
+        reserved,
+        Icons.assignment_turned_in_outlined,
+        BananColors.gold,
+      ),
+      ('Lô sắp hết hạn', expiring, Icons.schedule, BananColors.warning),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -235,7 +254,7 @@ class _StockSummary extends StatelessWidget {
               Container(
                 width: constraints.maxWidth < 620
                     ? (constraints.maxWidth - BananSpacing.sm) / 2
-                    : 150,
+                    : 190,
                 padding: const EdgeInsets.all(BananSpacing.md),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
@@ -261,7 +280,7 @@ class _StockSummary extends StatelessWidget {
                           ),
                           Text(
                             item.$1,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
@@ -378,13 +397,13 @@ class _StockFilters extends StatelessWidget {
                 onChanged: onFilterChanged,
               ),
               _FilterChoice(
-                label: 'Hết khả dụng',
+                label: 'Không còn tồn trống',
                 value: _StockFilter.attention,
                 selected: filter,
                 onChanged: onFilterChanged,
               ),
               _FilterChoice(
-                label: 'Đang giữ',
+                label: 'Đã phân bổ cho lệnh SX',
                 value: _StockFilter.reserved,
                 selected: filter,
                 onChanged: onFilterChanged,
@@ -436,7 +455,7 @@ class _StockTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final qty = row.quantity.toStringAsFixed(0);
-    final negative = row.quantity < 0;
+    final unavailable = row.freeQty <= 0;
     final reserved = row.reservedQty > 0;
     final expiry = row.expiryDate;
     final expirySoon = expiry != null &&
@@ -445,31 +464,39 @@ class _StockTile extends StatelessWidget {
     final parts = [
       if (row.lotName != null) 'Lô ${row.lotName}',
       if (expiry != null) 'HSD ${DateFormat('dd/MM').format(expiry)}',
-      if (reserved)
-        'Giữ ${row.reservedQty.toStringAsFixed(0)} · Trống ${row.freeQty.toStringAsFixed(0)}',
+      if (reserved) 'Phân bổ cho SX ${row.reservedQty.toStringAsFixed(0)}',
+      'Còn trống ${row.freeQty.toStringAsFixed(0)}',
     ];
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
       title: Text(row.productNameVi),
-      subtitle: parts.isEmpty
-          ? null
-          : Text(
-              parts.join(' · '),
-              style: TextStyle(
-                color: expirySoon ? BananColors.danger : null,
-              ),
-            ),
-      trailing: Text(
-        '$qty ${row.uomCode}'.trim(),
+      subtitle: Text(
+        parts.join(' · '),
         style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: negative
-              ? BananColors.danger
-              : reserved
-                  ? BananColors.gold
-                  : null,
+          color: expirySoon ? BananColors.danger : null,
         ),
+      ),
+      trailing: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            '$qty ${row.uomCode}'.trim(),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: unavailable
+                  ? BananColors.danger
+                  : reserved
+                      ? BananColors.gold
+                      : null,
+            ),
+          ),
+          Text(
+            'Tồn thực tế',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ],
       ),
     );
   }

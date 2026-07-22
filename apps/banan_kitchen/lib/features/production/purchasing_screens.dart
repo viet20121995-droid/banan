@@ -11,7 +11,8 @@ import 'production_providers.dart';
 
 final _fmt = NumberFormat.decimalPattern('vi_VN');
 String _money(num v) => '${_fmt.format(v)} đ';
-String _date(DateTime? d) => d == null ? '—' : DateFormat('dd/MM/yyyy').format(d.toLocal());
+String _date(DateTime? d) =>
+    d == null ? '—' : DateFormat('dd/MM/yyyy').format(d.toLocal());
 
 const _stateLabels = <String, String>{
   'DRAFT': 'Nháp',
@@ -142,8 +143,12 @@ class _SupplierSheet extends ConsumerStatefulWidget {
 
   final MfgSupplier? existing;
 
-  static void show(BuildContext context, WidgetRef ref, MfgSupplier? s) {
-    showModalBottomSheet<void>(
+  static Future<void> show(
+    BuildContext context,
+    WidgetRef ref,
+    MfgSupplier? s,
+  ) {
+    return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => _SupplierSheet(existing: s),
@@ -228,9 +233,7 @@ class _SupplierSheetState extends ConsumerState<_SupplierSheet> {
         shrinkWrap: true,
         children: [
           Text(
-            widget.existing == null
-                ? 'Thêm nhà cung cấp'
-                : 'Sửa nhà cung cấp',
+            widget.existing == null ? 'Thêm nhà cung cấp' : 'Sửa nhà cung cấp',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: BananSpacing.md),
@@ -304,8 +307,7 @@ class _PurchaseOrdersScreenState extends ConsumerState<PurchaseOrdersScreen> {
           : FloatingActionButton.extended(
               icon: const Icon(Icons.add),
               label: const Text('Tạo đơn mua'),
-              onPressed: () =>
-                  context.push('/production/purchase-orders/new'),
+              onPressed: () => context.push('/production/purchase-orders/new'),
             ),
       body: Column(
         children: [
@@ -336,8 +338,7 @@ class _PurchaseOrdersScreenState extends ConsumerState<PurchaseOrdersScreen> {
             child: RefreshIndicator(
               onRefresh: () => ref.refresh(poListProvider(_state).future),
               child: pos.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(BananSpacing.lg),
@@ -451,8 +452,7 @@ class _PoFormScreenState extends ConsumerState<PoFormScreen> {
       if (l.product == null || qty == null || qty <= 0 || price == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content:
-                Text('Mỗi dòng cần sản phẩm, số lượng > 0 và đơn giá.'),
+            content: Text('Mỗi dòng cần sản phẩm, số lượng > 0 và đơn giá.'),
           ),
         );
         return;
@@ -490,9 +490,109 @@ class _PoFormScreenState extends ConsumerState<PoFormScreen> {
     );
   }
 
+  Future<void> _addSupplier() async {
+    await _SupplierSheet.show(context, ref, null);
+    if (mounted) ref.invalidate(suppliersProvider);
+  }
+
+  Widget _supplierPicker(
+    AsyncValue<List<MfgSupplier>> suppliers,
+    bool canWrite,
+  ) {
+    return suppliers.when(
+      loading: () => const InputDecorator(
+        decoration: InputDecoration(labelText: 'Nhà cung cấp'),
+        child: LinearProgressIndicator(),
+      ),
+      error: (error, _) => Container(
+        padding: const EdgeInsets.all(BananSpacing.md),
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).colorScheme.error),
+          borderRadius: BananRadii.rsm,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.error_outline,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(width: BananSpacing.sm),
+            const Expanded(
+              child: Text('Không tải được danh sách nhà cung cấp.'),
+            ),
+            TextButton(
+              onPressed: () => ref.invalidate(suppliersProvider),
+              child: const Text('Thử lại'),
+            ),
+          ],
+        ),
+      ),
+      data: (list) {
+        if (list.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(BananSpacing.md),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              border: Border.all(color: Theme.of(context).dividerColor),
+              borderRadius: BananRadii.rsm,
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.storefront_outlined),
+                const SizedBox(width: BananSpacing.sm),
+                const Expanded(
+                  child: Text('Chưa có nhà cung cấp đang hoạt động.'),
+                ),
+                if (canWrite)
+                  TextButton.icon(
+                    onPressed: _addSupplier,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Thêm NCC'),
+                  ),
+              ],
+            ),
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _supplierId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Nhà cung cấp *',
+                  helperText: 'Chỉ hiển thị nhà cung cấp đang hợp tác',
+                ),
+                items: [
+                  for (final supplier in list)
+                    DropdownMenuItem(
+                      value: supplier.id,
+                      child: Text(supplier.name),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _supplierId = value),
+              ),
+            ),
+            if (canWrite) ...[
+              const SizedBox(width: BananSpacing.sm),
+              IconButton.filledTonal(
+                onPressed: _addSupplier,
+                tooltip: 'Thêm nhà cung cấp',
+                icon: const Icon(Icons.add_business_outlined),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final suppliers = ref.watch(suppliersProvider);
+    final canWrite = ref.watch(canProduceProvider);
     // Purchases cover the same catalogue as goods receipts: raw + packaging.
     final raw = ref.watch(productsProvider('RAW'));
     final pkg = ref.watch(productsProvider('PACKAGING'));
@@ -506,16 +606,7 @@ class _PoFormScreenState extends ConsumerState<PoFormScreen> {
       body: ListView(
         padding: const EdgeInsets.all(BananSpacing.lg),
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: _supplierId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Nhà cung cấp'),
-            items: [
-              for (final s in suppliers.valueOrNull ?? const <MfgSupplier>[])
-                DropdownMenuItem(value: s.id, child: Text(s.name)),
-            ],
-            onChanged: (v) => setState(() => _supplierId = v),
-          ),
+          _supplierPicker(suppliers, canWrite),
           const SizedBox(height: BananSpacing.md),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -810,8 +901,7 @@ class _ReceiveLineDialog extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<_ReceiveLineDialog> createState() =>
-      _ReceiveLineDialogState();
+  ConsumerState<_ReceiveLineDialog> createState() => _ReceiveLineDialogState();
 }
 
 class _ReceiveLineDialogState extends ConsumerState<_ReceiveLineDialog> {
@@ -886,8 +976,7 @@ class _ReceiveLineDialogState extends ConsumerState<_ReceiveLineDialog> {
             decoration: InputDecoration(
               labelText: 'Số lượng',
               suffixText: l.uomCode,
-              helperText:
-                  'Còn thiếu ${_fmt.format(l.remaining)} ${l.uomCode}',
+              helperText: 'Còn thiếu ${_fmt.format(l.remaining)} ${l.uomCode}',
             ),
           ),
           const SizedBox(height: BananSpacing.sm),
@@ -944,8 +1033,7 @@ class PurchaseHistoryScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Lịch sử mua')),
       body: RefreshIndicator(
-        onRefresh: () =>
-            ref.refresh(purchaseHistoryProvider(productId).future),
+        onRefresh: () => ref.refresh(purchaseHistoryProvider(productId).future),
         child: history.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(
