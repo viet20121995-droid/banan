@@ -279,7 +279,7 @@ class _Board extends StatelessWidget {
       _Column(
         title: 'Đang làm',
         subtitle: 'Đang trong bếp',
-        accent: BananColors.gold,
+        accent: BananColors.info,
         cards: byColumn[KitchenStatus.preparing] ?? const [],
         cardBuilder: (order) => _PreparingCard(
           order: order,
@@ -299,7 +299,7 @@ class _Board extends StatelessWidget {
       _Column(
         title: 'Xong hôm nay',
         subtitle: 'Đã xuất khỏi bếp trong ngày',
-        accent: BananColors.cocoaSoft,
+        accent: BananColors.outline,
         cards: completed,
         cardBuilder: (order) => _CompletedCard(order: order),
       ),
@@ -455,7 +455,7 @@ class _StatsBar extends StatelessWidget {
         BananColors.warning,
         emphasize: pending > 0,
       ),
-      _StatData('Đang làm', preparing, Icons.cake_outlined, BananColors.gold),
+      _StatData('Đang làm', preparing, Icons.cake_outlined, BananColors.info),
       _StatData(
         'Sẵn sàng',
         ready,
@@ -467,7 +467,7 @@ class _StatsBar extends StatelessWidget {
         'Xong hôm nay',
         completed,
         Icons.task_alt,
-        BananColors.cocoaSoft,
+        BananColors.outline,
       ),
     ];
     return Container(
@@ -612,7 +612,7 @@ class _Column extends StatelessWidget {
       padding: const EdgeInsets.all(BananSpacing.md),
       decoration: BoxDecoration(
         borderRadius: BananRadii.rlg,
-        color: BananColors.surfaceDim.withValues(alpha: 0.6),
+        color: theme.colorScheme.surfaceContainerLow,
         border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
       ),
       child: Column(
@@ -841,8 +841,8 @@ class _CardFrame extends StatelessWidget {
                   theme,
                   icon: Icons.storefront_outlined,
                   label: order.storeName!,
-                  bg: BananColors.gold.withValues(alpha: 0.15),
-                  fg: BananColors.cocoa,
+                  bg: BananColors.info.withValues(alpha: 0.12),
+                  fg: BananColors.info,
                 ),
               Text(
                 order.fulfillmentType == FulfillmentType.delivery
@@ -890,7 +890,7 @@ class _CardFrame extends StatelessWidget {
     final (label, color, icon) = switch (order.source) {
       'STAFF_COUNTER' => (
           'Tại quầy',
-          BananColors.accent,
+          BananColors.info,
           Icons.point_of_sale_outlined,
         ),
       'WHOLESALE' => (

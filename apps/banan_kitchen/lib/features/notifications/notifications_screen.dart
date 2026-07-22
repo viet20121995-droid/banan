@@ -124,8 +124,9 @@ class _Tile extends StatelessWidget {
                         child: Text(
                           notification.title,
                           style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight:
-                                notification.isRead ? FontWeight.w500 : FontWeight.w700,
+                            fontWeight: notification.isRead
+                                ? FontWeight.w500
+                                : FontWeight.w700,
                           ),
                         ),
                       ),
@@ -161,7 +162,7 @@ class _Tile extends StatelessWidget {
       case 'mfg.qc_alert':
         return (Icons.warning_amber_outlined, BananColors.danger);
       case 'mfg.daily_digest':
-        return (Icons.event_note_outlined, BananColors.gold);
+        return (Icons.event_note_outlined, BananColors.warning);
       default:
         return (Icons.notifications_outlined, BananColors.info);
     }

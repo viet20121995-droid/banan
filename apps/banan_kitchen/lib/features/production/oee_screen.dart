@@ -63,7 +63,7 @@ class _OeeCard extends StatelessWidget {
   Color _oeeColor(double v) => v >= 0.85
       ? BananColors.success
       : v >= 0.6
-          ? BananColors.gold
+          ? BananColors.warning
           : BananColors.danger;
 
   @override

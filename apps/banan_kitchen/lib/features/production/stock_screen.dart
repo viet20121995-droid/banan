@@ -193,7 +193,7 @@ class _StockScreenState extends ConsumerState<StockScreen> {
                             contentPadding: EdgeInsets.zero,
                             leading: const Icon(
                               Icons.schedule,
-                              color: BananColors.gold,
+                              color: BananColors.warning,
                             ),
                             title: Text('${lot.productNameVi} · ${lot.name}'),
                             trailing: Text(
@@ -240,7 +240,7 @@ class _StockSummary extends StatelessWidget {
         'Đã phân bổ cho SX',
         reserved,
         Icons.assignment_turned_in_outlined,
-        BananColors.gold,
+        BananColors.info,
       ),
       ('Lô sắp hết hạn', expiring, Icons.schedule, BananColors.warning),
     ];
@@ -488,7 +488,7 @@ class _StockTile extends StatelessWidget {
               color: unavailable
                   ? BananColors.danger
                   : reserved
-                      ? BananColors.gold
+                      ? BananColors.info
                       : null,
             ),
           ),

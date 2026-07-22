@@ -82,7 +82,7 @@ class _AlertCard extends ConsumerWidget {
 
   Color _color(String stage) => switch (stage) {
         'NEW' => BananColors.danger,
-        'CONFIRMED' => BananColors.gold,
+        'CONFIRMED' => BananColors.warning,
         _ => BananColors.success,
       };
 

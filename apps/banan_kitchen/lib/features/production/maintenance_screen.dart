@@ -73,7 +73,7 @@ class _MaintTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final color = m.isDone ? BananColors.success : BananColors.gold;
+    final color = m.isDone ? BananColors.success : BananColors.warning;
     final date = m.scheduledDate == null
         ? ''
         : DateFormat('dd/MM/yyyy').format(m.scheduledDate!.toLocal());

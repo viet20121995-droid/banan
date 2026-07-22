@@ -202,7 +202,7 @@ class _QcRow extends ConsumerWidget {
   Color _resultColor(String? r) => switch (r) {
         'PASS' => BananColors.success,
         'FAIL' => BananColors.danger,
-        _ => BananColors.cocoaSoft,
+        _ => BananColors.outline,
       };
 
   @override

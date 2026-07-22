@@ -1,9 +1,9 @@
-import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../shared/push_registration.dart';
+import '../shared/theme/kitchen_theme.dart';
 import 'router.dart';
 
 class BananKitchenApp extends ConsumerWidget {
@@ -15,8 +15,8 @@ class BananKitchenApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Banan Kitchen',
       debugShowCheckedModeBanner: false,
-      theme: BananTheme.light(),
-      darkTheme: BananTheme.dark(),
+      theme: KitchenTheme.light(),
+      darkTheme: KitchenTheme.dark(),
       themeMode: ThemeMode.system,
       // Staff app is Vietnamese.
       locale: const Locale('vi'),
@@ -26,8 +26,9 @@ class BananKitchenApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      builder: (context, child) => PushRegistrar(
-        child: BananPageBackground(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => ColoredBox(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: PushRegistrar(child: child ?? const SizedBox.shrink()),
       ),
       routerConfig: router,
     );

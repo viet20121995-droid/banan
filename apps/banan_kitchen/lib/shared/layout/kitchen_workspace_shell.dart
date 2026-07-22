@@ -18,40 +18,18 @@ class KitchenWorkspaceShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final base = Theme.of(context);
-    final operationalTheme = base.copyWith(
-      scaffoldBackgroundColor: const Color(0xFFF4F5F2),
-      colorScheme: base.colorScheme.copyWith(
-        surface: Colors.white,
-        surfaceContainerLowest: Colors.white,
-        surfaceContainerLow: const Color(0xFFF7F8F5),
-      ),
-      appBarTheme: base.appBarTheme.copyWith(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-      ),
-      cardTheme: base.cardTheme.copyWith(
-        color: Colors.white,
-        surfaceTintColor: Colors.transparent,
-      ),
-    );
 
     if (width < 1280) {
-      return Theme(data: operationalTheme, child: child);
+      return child;
     }
 
-    return Theme(
-      data: operationalTheme,
-      child: Scaffold(
-        body: Row(
-          children: [
-            _WorkspaceNavigation(location: location),
-            const VerticalDivider(width: 1),
-            Expanded(child: child),
-          ],
-        ),
+    return Scaffold(
+      body: Row(
+        children: [
+          _WorkspaceNavigation(location: location),
+          const VerticalDivider(width: 1),
+          Expanded(child: child),
+        ],
       ),
     );
   }

@@ -18,8 +18,8 @@ const mfgStateLabels = {
 
 Color mfgStateColor(String state) => switch (state) {
       'DONE' => BananColors.success,
-      'PROGRESS' => BananColors.gold,
-      'CANCEL' => BananColors.cocoaSoft,
+      'PROGRESS' => BananColors.info,
+      'CANCEL' => BananColors.outline,
       _ => BananColors.info,
     };
 

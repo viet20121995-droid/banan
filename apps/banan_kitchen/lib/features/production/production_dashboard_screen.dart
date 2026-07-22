@@ -117,7 +117,7 @@ class ProductionDashboardScreen extends ConsumerWidget {
                       color: expiringCount == null
                           ? BananColors.outline
                           : expiringCount > 0
-                              ? BananColors.gold
+                              ? BananColors.warning
                               : BananColors.success,
                       onTap: () => context.push('/production/stock'),
                     ),
@@ -600,7 +600,7 @@ class _ExpiringTile extends StatelessWidget {
       dense: true,
       leading: Icon(
         Icons.schedule,
-        color: soon ? BananColors.danger : BananColors.gold,
+        color: soon ? BananColors.danger : BananColors.warning,
       ),
       title: Text('${lot.productNameVi} · ${lot.name}'),
       trailing: Text(
