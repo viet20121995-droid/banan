@@ -14,13 +14,49 @@ class _LineDraft {
   final TextEditingController qtyCtrl;
 }
 
+class _QcDraft {
+  _QcDraft({
+    String titleVi = '',
+    String titleEn = '',
+    this.testType = 'PASS_FAIL',
+    String min = '',
+    String max = '',
+    String unit = '',
+  })  : titleViCtrl = TextEditingController(text: titleVi),
+        titleEnCtrl = TextEditingController(text: titleEn),
+        minCtrl = TextEditingController(text: min),
+        maxCtrl = TextEditingController(text: max),
+        unitCtrl = TextEditingController(text: unit);
+
+  final TextEditingController titleViCtrl;
+  final TextEditingController titleEnCtrl;
+  String testType;
+  final TextEditingController minCtrl;
+  final TextEditingController maxCtrl;
+  final TextEditingController unitCtrl;
+
+  void dispose() {
+    titleViCtrl.dispose();
+    titleEnCtrl.dispose();
+    minCtrl.dispose();
+    maxCtrl.dispose();
+    unitCtrl.dispose();
+  }
+}
+
 class _OpDraft {
-  _OpDraft({String name = '', this.workCenterId, String minutes = ''})
-      : nameCtrl = TextEditingController(text: name),
+  _OpDraft({
+    String name = '',
+    this.workCenterId,
+    String minutes = '',
+    List<_QcDraft>? qualityPoints,
+  })  : qualityPoints = qualityPoints ?? [],
+        nameCtrl = TextEditingController(text: name),
         minCtrl = TextEditingController(text: minutes);
   final TextEditingController nameCtrl;
   String? workCenterId;
   final TextEditingController minCtrl;
+  final List<_QcDraft> qualityPoints;
 }
 
 /// Create or edit a recipe (BoM). Editing saves a NEW active version server-side,
@@ -72,6 +108,17 @@ class _BomEditorScreenState extends ConsumerState<BomEditorScreen> {
                     name: o.nameVi,
                     workCenterId: o.workCenterId,
                     minutes: o.durationMinutes.toString(),
+                    qualityPoints: [
+                      for (final q in o.qualityPoints)
+                        _QcDraft(
+                          titleVi: q.titleVi,
+                          titleEn: q.titleEn,
+                          testType: q.testType,
+                          min: q.isMeasure ? q.normMin.toString() : '',
+                          max: q.isMeasure ? q.normMax.toString() : '',
+                          unit: q.unit ?? '',
+                        ),
+                    ],
                   ),
                 ),
               );
@@ -92,6 +139,9 @@ class _BomEditorScreenState extends ConsumerState<BomEditorScreen> {
     for (final o in _ops) {
       o.nameCtrl.dispose();
       o.minCtrl.dispose();
+      for (final q in o.qualityPoints) {
+        q.dispose();
+      }
     }
     super.dispose();
   }
@@ -130,6 +180,23 @@ class _BomEditorScreenState extends ConsumerState<BomEditorScreen> {
             nameVi: o.nameCtrl.text.trim(),
             workCenterId: o.workCenterId!,
             durationMinutes: int.tryParse(o.minCtrl.text.trim()) ?? 0,
+            qualityPoints: [
+              for (final q in o.qualityPoints)
+                if (q.titleViCtrl.text.trim().isNotEmpty)
+                  (
+                    titleVi: q.titleViCtrl.text.trim(),
+                    titleEn: q.titleEnCtrl.text.trim(),
+                    testType: q.testType,
+                    normMin: q.testType == 'MEASURE'
+                        ? double.tryParse(q.minCtrl.text.trim())
+                        : null,
+                    normMax: q.testType == 'MEASURE'
+                        ? double.tryParse(q.maxCtrl.text.trim())
+                        : null,
+                    unit:
+                        q.testType == 'MEASURE' ? q.unitCtrl.text.trim() : null,
+                  ),
+            ],
           ),
     ];
 
@@ -303,54 +370,186 @@ class _BomEditorScreenState extends ConsumerState<BomEditorScreen> {
 
   Widget _opRow(int i, List<MfgWorkCenter> workCenters) {
     final op = _ops[i];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: BananSpacing.sm),
-      child: Row(
+    return Container(
+      margin: const EdgeInsets.only(bottom: BananSpacing.md),
+      padding: const EdgeInsets.all(BananSpacing.md),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: Theme.of(context).dividerColor),
+        borderRadius: BananRadii.rmd,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 3,
+          Row(
+            children: [
+              SizedBox(
+                width: 36,
+                child: Text(
+                  '${i + 1}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  controller: op.nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Tên công đoạn',
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: BananSpacing.sm),
+              Expanded(
+                flex: 3,
+                child: DropdownButtonFormField<String>(
+                  initialValue: op.workCenterId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Tổ/máy',
+                    isDense: true,
+                  ),
+                  items: [
+                    for (final w in workCenters)
+                      DropdownMenuItem(value: w.id, child: Text(w.nameVi)),
+                  ],
+                  onChanged: (v) => setState(() => op.workCenterId = v),
+                ),
+              ),
+              const SizedBox(width: BananSpacing.sm),
+              SizedBox(
+                width: 110,
+                child: TextField(
+                  controller: op.minCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    labelText: 'Phút chuẩn',
+                    isDense: true,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Xoá công đoạn',
+                onPressed: () => setState(() {
+                  op.nameCtrl.dispose();
+                  op.minCtrl.dispose();
+                  for (final q in op.qualityPoints) {
+                    q.dispose();
+                  }
+                  _ops.removeAt(i);
+                }),
+              ),
+            ],
+          ),
+          const SizedBox(height: BananSpacing.sm),
+          Row(
+            children: [
+              Text(
+                'Điểm kiểm soát QC',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () =>
+                    setState(() => op.qualityPoints.add(_QcDraft())),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Thêm điểm QC'),
+              ),
+            ],
+          ),
+          if (op.qualityPoints.isEmpty)
+            Text(
+              'Chưa có điểm QC. Công đoạn vẫn chạy nhưng không có bước kiểm tra chất lượng.',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            for (var q = 0; q < op.qualityPoints.length; q++) _qcRow(op, q),
+        ],
+      ),
+    );
+  }
+
+  Widget _qcRow(_OpDraft op, int index) {
+    final q = op.qualityPoints[index];
+    final measure = q.testType == 'MEASURE';
+    return Padding(
+      padding: const EdgeInsets.only(top: BananSpacing.sm),
+      child: Wrap(
+        spacing: BananSpacing.sm,
+        runSpacing: BananSpacing.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: 250,
             child: TextField(
-              controller: op.nameCtrl,
+              controller: q.titleViCtrl,
               decoration: const InputDecoration(
-                labelText: 'Tên công đoạn',
+                labelText: 'Tên kiểm tra',
                 isDense: true,
               ),
             ),
           ),
-          const SizedBox(width: BananSpacing.sm),
-          Expanded(
-            flex: 3,
+          SizedBox(
+            width: 170,
             child: DropdownButtonFormField<String>(
-              initialValue: op.workCenterId,
-              isExpanded: true,
-              decoration:
-                  const InputDecoration(labelText: 'Tổ/máy', isDense: true),
-              items: [
-                for (final w in workCenters)
-                  DropdownMenuItem(value: w.id, child: Text(w.nameVi)),
+              initialValue: q.testType,
+              decoration: const InputDecoration(
+                labelText: 'Cách kiểm tra',
+                isDense: true,
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'PASS_FAIL',
+                  child: Text('Đạt / Không đạt'),
+                ),
+                DropdownMenuItem(value: 'MEASURE', child: Text('Nhập số đo')),
               ],
-              onChanged: (v) => setState(() => op.workCenterId = v),
+              onChanged: (v) => setState(() => q.testType = v ?? 'PASS_FAIL'),
             ),
           ),
-          const SizedBox(width: BananSpacing.sm),
-          Expanded(
-            flex: 2,
-            child: TextField(
-              controller: op.minCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration:
-                  const InputDecoration(labelText: 'Phút', isDense: true),
+          if (measure) ...[
+            SizedBox(
+              width: 105,
+              child: TextField(
+                controller: q.minCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Tối thiểu',
+                  isDense: true,
+                ),
+              ),
             ),
-          ),
+            SizedBox(
+              width: 105,
+              child: TextField(
+                controller: q.maxCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration:
+                    const InputDecoration(labelText: 'Tối đa', isDense: true),
+              ),
+            ),
+            SizedBox(
+              width: 90,
+              child: TextField(
+                controller: q.unitCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Đơn vị', isDense: true),
+              ),
+            ),
+          ],
           IconButton(
-            icon: const Icon(Icons.close),
-            tooltip: 'Xoá',
             onPressed: () => setState(() {
-              op.nameCtrl.dispose();
-              op.minCtrl.dispose();
-              _ops.removeAt(i);
+              q.dispose();
+              op.qualityPoints.removeAt(index);
             }),
+            icon: const Icon(Icons.close),
+            tooltip: 'Xoá điểm QC',
           ),
         ],
       ),

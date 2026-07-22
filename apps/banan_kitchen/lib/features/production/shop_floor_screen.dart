@@ -157,7 +157,11 @@ class _WoCardState extends ConsumerState<_WoCard> {
           if (c.qualityPoints.isNotEmpty) ...[
             const SizedBox(height: BananSpacing.sm),
             for (final qp in c.qualityPoints)
-              _QcRow(workOrderId: c.id, point: qp),
+              _QcRow(
+                workOrderId: c.id,
+                point: qp,
+                enabled: c.state == 'PROGRESS',
+              ),
           ],
 
           const SizedBox(height: BananSpacing.sm),
@@ -195,9 +199,14 @@ class _WoCardState extends ConsumerState<_WoCard> {
 }
 
 class _QcRow extends ConsumerWidget {
-  const _QcRow({required this.workOrderId, required this.point});
+  const _QcRow({
+    required this.workOrderId,
+    required this.point,
+    required this.enabled,
+  });
   final String workOrderId;
   final MfgQualityPointLite point;
+  final bool enabled;
 
   Color _resultColor(String? r) => switch (r) {
         'PASS' => BananColors.success,
@@ -231,7 +240,7 @@ class _QcRow extends ConsumerWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-          if (canRun)
+          if (canRun && enabled)
             TextButton(
               onPressed: () => _openCheck(context, ref),
               child: const Text('Kiểm tra'),

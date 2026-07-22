@@ -40,6 +40,10 @@ class MoDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: BananSpacing.sm),
               for (final c in mo.components) _ComponentTile(component: c),
+              if (mo.workOrders.isNotEmpty) ...[
+                const SizedBox(height: BananSpacing.lg),
+                _WorkOrdersCard(workOrders: mo.workOrders),
+              ],
               if (mo.state == 'DONE') ...[
                 const SizedBox(height: BananSpacing.lg),
                 _DoneCard(mo: mo),
@@ -116,7 +120,10 @@ class _ComponentTile extends StatelessWidget {
       dense: true,
       contentPadding: EdgeInsets.zero,
       title: Text(component.productNameVi),
-      subtitle: Text('Cần: ${component.qtyToConsume.toStringAsFixed(0)}'),
+      subtitle: Text(
+        'Cần ${component.qtyToConsume.toStringAsFixed(0)} · '
+        'Đã giữ ${component.reservedQty.toStringAsFixed(0)}',
+      ),
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
@@ -135,6 +142,48 @@ class _ComponentTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _WorkOrdersCard extends StatelessWidget {
+  const _WorkOrdersCard({required this.workOrders});
+  final List<MfgWorkOrderDetail> workOrders;
+
+  static const _labels = {
+    'PENDING': 'Chờ công đoạn trước',
+    'READY': 'Sẵn sàng',
+    'PROGRESS': 'Đang làm',
+    'DONE': 'Hoàn tất',
+    'BLOCKED': 'Đang chặn',
+    'CANCEL': 'Đã huỷ',
+  };
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tiến độ công đoạn',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: BananSpacing.sm),
+          for (final wo in workOrders)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                radius: 15,
+                child: Text('${wo.sequence}'),
+              ),
+              title: Text(wo.operationNameVi),
+              subtitle: wo.qualityPointCount == 0
+                  ? const Text('Không có điểm QC')
+                  : Text(
+                      'QC đạt ${wo.passedQualityPointCount}/${wo.qualityPointCount}',
+                    ),
+              trailing: Text(_labels[wo.state] ?? wo.state),
+            ),
+        ],
+      );
 }
 
 class _DoneCard extends StatelessWidget {
@@ -214,6 +263,22 @@ class _ActionsState extends ConsumerState<_Actions> {
     final api = ref.read(manufacturingApiProvider);
     final id = widget.mo.id;
     final state = widget.mo.state;
+    final allReserved = widget.mo.components.every(
+      (c) => c.reservedQty + 0.0005 >= c.qtyToConsume,
+    );
+    final operationsConfigured =
+        widget.mo.productType != 'FINISHED' || widget.mo.workOrders.isNotEmpty;
+    final allOperationsDone =
+        widget.mo.workOrders.every((wo) => wo.state == 'DONE');
+    final canFinalize =
+        allReserved && operationsConfigured && allOperationsDone;
+    final waitingReason = !allReserved
+        ? 'Chưa giữ đủ nguyên liệu.'
+        : !operationsConfigured
+            ? 'Công thức thành phẩm chưa có công đoạn.'
+            : !allOperationsDone
+                ? 'Hoàn tất các công đoạn tại Xưởng sản xuất trước.'
+                : null;
 
     final buttons = <Widget>[];
     if (state == 'DRAFT') {
@@ -243,14 +308,14 @@ class _ActionsState extends ConsumerState<_Actions> {
           label: const Text('Giữ hàng'),
         ),
         FilledButton.icon(
-          onPressed: _busy
+          onPressed: _busy || !canFinalize
               ? null
               : () => _run(
                     () => api.produce(id),
-                    'Đã sản xuất — sinh lô + nhập kho.',
+                    'Đã hoàn tất lệnh — sinh lô và nhập kho thành phẩm.',
                   ),
-          icon: const Icon(Icons.factory_outlined),
-          label: const Text('Sản xuất'),
+          icon: const Icon(Icons.inventory_2_outlined),
+          label: const Text('Hoàn tất lệnh & nhập kho'),
         ),
       ]);
     }
@@ -266,10 +331,23 @@ class _ActionsState extends ConsumerState<_Actions> {
     }
 
     if (buttons.isEmpty) return const SizedBox.shrink();
-    return Wrap(
-      spacing: BananSpacing.sm,
-      runSpacing: BananSpacing.sm,
-      children: buttons,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (waitingReason != null &&
+            (state == 'CONFIRMED' || state == 'PROGRESS')) ...[
+          Text(
+            waitingReason,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+          const SizedBox(height: BananSpacing.sm),
+        ],
+        Wrap(
+          spacing: BananSpacing.sm,
+          runSpacing: BananSpacing.sm,
+          children: buttons,
+        ),
+      ],
     );
   }
 }

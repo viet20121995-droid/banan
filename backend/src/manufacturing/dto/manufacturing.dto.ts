@@ -29,6 +29,16 @@ export interface BomOperationInput {
   nameEn?: string;
   workCenterId: string;
   durationMinutes: number;
+  qualityPoints?: BomQualityPointInput[];
+}
+
+export interface BomQualityPointInput {
+  titleVi: string;
+  titleEn?: string;
+  testType: 'MEASURE' | 'PASS_FAIL';
+  normMin?: number;
+  normMax?: number;
+  unit?: string;
 }
 
 export class CreateBomDto {

@@ -75,6 +75,34 @@ d('Manufacturing golden path (integration)', () => {
   const bomOf = (productId: string) =>
     prisma.mfgBom.findFirstOrThrow({ where: { productId, active: true } });
 
+  const completeWorkOrders = async (moId: string) => {
+    const workOrders = await prisma.mfgWorkOrder.findMany({
+      where: { moId },
+      orderBy: { sequence: 'asc' },
+      include: {
+        bomOperation: { include: { qualityPoints: { where: { active: true } } } },
+      },
+    });
+    for (const workOrder of workOrders) {
+      await mfg.startWO(workOrder.id);
+      for (const point of workOrder.bomOperation.qualityPoints) {
+        await mfg.recordCheck({
+          qualityPointId: point.id,
+          workOrderId: workOrder.id,
+          measuredValue:
+            point.testType === 'MEASURE' ? Number(point.normMin ?? point.normMax ?? 0) : undefined,
+          passFail: point.testType === 'PASS_FAIL' ? 'PASS' : undefined,
+        });
+      }
+      await mfg.doneWO(workOrder.id);
+    }
+  };
+
+  const prepareForProduce = async (moId: string) => {
+    await mfg.reserve(moId);
+    await completeWorkOrders(moId);
+  };
+
   it('receives raw materials and rolls AVCO', async () => {
     await mfg.receive({ productId: ids.flour, qty: 2000, uomId: gUom, unitCost: 30 });
     await mfg.receive({ productId: ids.sugar, qty: 2000, uomId: gUom, unitCost: 25 });
@@ -91,6 +119,7 @@ d('Manufacturing golden path (integration)', () => {
     const bom = await bomOf(ids.sponge);
     const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
     await mfg.confirmMO(mo.id);
+    await prepareForProduce(mo.id);
     const done = await mfg.produce(mo.id);
 
     // material = 500*30 + 350*25 + 400*35 = 37750
@@ -120,7 +149,7 @@ d('Manufacturing golden path (integration)', () => {
 
   it('produces the finished cake through a multi-level BoM; cost matches by hand', async () => {
     const moId = (globalThis as Record<string, unknown>).__cakeMo as string;
-    await mfg.reserve(moId);
+    await prepareForProduce(moId);
     const done = await mfg.produce(moId);
 
     // material = 600*180.25 + 300*120 + 100*200 = 164150
@@ -206,6 +235,78 @@ d('Manufacturing golden path (integration)', () => {
     expect(finished.dateFinished).not.toBeNull();
   });
 
+  it('enforces operation sequence, start-before-done, and QC ownership', async () => {
+    const bom = await bomOf(ids.sponge);
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 200 });
+    await mfg.confirmMO(mo.id);
+    const workOrders = await prisma.mfgWorkOrder.findMany({
+      where: { moId: mo.id },
+      orderBy: { sequence: 'asc' },
+      include: { bomOperation: { include: { qualityPoints: true } } },
+    });
+    expect(workOrders.length).toBeGreaterThan(1);
+    expect(workOrders[0].state).toBe('READY');
+    expect(workOrders[1].state).toBe('PENDING');
+    await expect(mfg.startWO(workOrders[1].id)).rejects.toThrow(/sẵn sàng/i);
+    await expect(mfg.doneWO(workOrders[0].id)).rejects.toThrow(/Bắt đầu/i);
+
+    const point = workOrders[0].bomOperation.qualityPoints[0];
+    expect(point).toBeDefined();
+    await expect(
+      mfg.recordCheck({
+        qualityPointId: point.id,
+        workOrderId: workOrders[1].id,
+        measuredValue: Number(point.normMin ?? 0),
+        passFail: point.testType === 'PASS_FAIL' ? 'PASS' : undefined,
+      }),
+    ).rejects.toThrow(/không thuộc/i);
+
+    await completeWorkOrders(mo.id);
+    const finished = await prisma.mfgWorkOrder.findMany({ where: { moId: mo.id } });
+    expect(finished.every((wo) => wo.state === 'DONE')).toBe(true);
+  });
+
+  it('creates QC points together with a versioned BoM operation', async () => {
+    const category = await prisma.mfgCategory.findFirstOrThrow();
+    const wc = await prisma.mfgWorkCenter.findFirstOrThrow();
+    const product = await mfg.createProduct({
+      code: `QC-DEMO-${Date.now()}`,
+      nameVi: 'Bánh demo QC',
+      categoryId: category.id,
+      uomId: gUom,
+      type: 'FINISHED',
+      tracking: 'LOT',
+    });
+    const bom = await mfg.createBom({
+      productId: product.id,
+      outputQty: 1,
+      uomId: gUom,
+      lines: [{ componentId: ids.flour, qty: 1, uomId: gUom }],
+      operations: [
+        {
+          nameVi: 'Nướng thử',
+          workCenterId: wc.id,
+          durationMinutes: 10,
+          qualityPoints: [
+            {
+              titleVi: 'Nhiệt độ tâm bánh',
+              testType: 'MEASURE',
+              normMin: 90,
+              normMax: 96,
+              unit: '°C',
+            },
+            { titleVi: 'Bề mặt đạt chuẩn', testType: 'PASS_FAIL' },
+          ],
+        },
+      ],
+    });
+    const operation = await prisma.mfgBomOperation.findFirstOrThrow({
+      where: { bomId: bom.id },
+      include: { qualityPoints: true },
+    });
+    expect(operation.qualityPoints).toHaveLength(2);
+  });
+
   // ── planning: schedule + employee assignment (increment 4) ──
   it('schedules an MO with an assignee, clears it back to the backlog, and refuses a finished MO', async () => {
     // A kitchen user to assign (idempotent by email so reruns don't collide).
@@ -277,11 +378,20 @@ d('Manufacturing golden path (integration)', () => {
       normMax: 180,
       unit: '°C',
     });
+    await mfg.reserve(mo.id);
 
-    // Direct produce must refuse while a QC point on the op is unchecked.
+    // Even a corrupted/stale client that marks WOs done directly cannot bypass QC.
+    await prisma.mfgWorkOrder.updateMany({
+      where: { moId: mo.id },
+      data: { state: 'DONE', dateFinished: new Date() },
+    });
     await expect(mfg.produce(mo.id)).rejects.toThrow(/kiểm tra|đạt/i);
 
-    // Record a passing check for every active point on this WO → produce runs.
+    // Restore the first operation, record every check, and close it correctly.
+    await prisma.mfgWorkOrder.update({
+      where: { id: wo.id },
+      data: { state: 'PROGRESS', dateStart: new Date() },
+    });
     const points = await prisma.mfgQualityPoint.findMany({
       where: { bomOperationId: wo.bomOperationId, active: true },
     });
@@ -293,6 +403,7 @@ d('Manufacturing golden path (integration)', () => {
         passFail: p.testType === 'PASS_FAIL' ? 'PASS' : undefined,
       });
     }
+    await mfg.doneWO(wo.id);
     const done = await mfg.produce(mo.id);
     expect(done.state).toBe('DONE');
   });
@@ -307,6 +418,7 @@ d('Manufacturing golden path (integration)', () => {
     const bom = await bomOf(ids.cake);
     const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
     await mfg.confirmMO(mo.id);
+    await prepareForProduce(mo.id);
 
     const before = await onHand(ids.cake);
     const results = await Promise.allSettled([mfg.produce(mo.id), mfg.produce(mo.id)]);
@@ -361,6 +473,24 @@ d('Manufacturing golden path (integration)', () => {
     expect(still.state).toBe('DRAFT'); // untouched, nothing booked
   });
 
+  it('two concurrent MO confirms create one ordered set of work orders', async () => {
+    const bom = await bomOf(ids.cake);
+    const operationCount = await prisma.mfgBomOperation.count({ where: { bomId: bom.id } });
+    const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 100 });
+
+    const results = await Promise.allSettled([mfg.confirmMO(mo.id), mfg.confirmMO(mo.id)]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+
+    const workOrders = await prisma.mfgWorkOrder.findMany({
+      where: { moId: mo.id },
+      orderBy: { sequence: 'asc' },
+    });
+    expect(workOrders).toHaveLength(operationCount);
+    expect(workOrders[0]?.state).toBe('READY');
+    expect(workOrders.slice(1).every((wo) => wo.state === 'PENDING')).toBe(true);
+  });
+
   it('produce vs cancel race: exactly one wins and the state stays consistent', async () => {
     // Cake ops carry no QC points; stock its components so produce can run.
     await mfg.receive({ productId: ids.sponge, qty: 5000, uomId: gUom, unitCost: 180.25 });
@@ -369,6 +499,7 @@ d('Manufacturing golden path (integration)', () => {
     const bom = await bomOf(ids.cake);
     const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
     await mfg.confirmMO(mo.id);
+    await prepareForProduce(mo.id);
     const before = await onHand(ids.cake);
 
     const [pr, cr] = await Promise.allSettled([mfg.produce(mo.id), mfg.cancelMO(mo.id)]);
@@ -829,6 +960,7 @@ d('Manufacturing golden path (integration)', () => {
     }
     await mfg.reserve(mo.id);
     expect(await prisma.mfgReservation.count({ where: { moId: mo.id } })).toBeGreaterThan(0);
+    await completeWorkOrders(mo.id);
 
     await mfg.produce(mo.id);
 
@@ -874,13 +1006,15 @@ d('Manufacturing golden path (integration)', () => {
     });
     await mfg.reserve(moA.id);
 
-    // A second sponge MO produces — it must NOT touch A's reserved flour.
+    // A second sponge MO may reserve other ingredients, but cannot close while
+    // A owns the only flour allocation.
     const moB = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
     await mfg.confirmMO(moB.id);
-    await mfg.produce(moB.id);
+    await mfg.reserve(moB.id);
+    await completeWorkOrders(moB.id);
+    await expect(mfg.produce(moB.id)).rejects.toThrow(/giữ đủ/i);
 
-    // B saw 0 free on A's lot-quant → its shortfall backflushed to a separate
-    // (negative) quant; A's reserved lot-quant is physically untouched.
+    // No backflush: A's reserved lot-quant remains physically untouched.
     const aQuant = await prisma.mfgStockQuant.findFirstOrThrow({
       where: { productId: ids.flour, lotId: lot.id, locationId: stockLoc.id },
     });
@@ -916,18 +1050,34 @@ d('Manufacturing golden path (integration)', () => {
     for (const c of reserved.components) expect(c.status).toBe('AVAILABLE');
   });
 
-  it('direct produce banks standard time on its work orders (OEE runtime nonzero)', async () => {
+  it('produce cannot bypass work-order execution', async () => {
     await prisma.mfgReservation.deleteMany();
     const bom = await bomOf(ids.sponge);
     const mo = await mfg.createMO({ bomId: bom.id, qtyToProduce: 1000 });
     await mfg.confirmMO(mo.id);
-    await mfg.produce(mo.id); // WOs closed via produce, never run on the shop floor
+    const detail = await mfg.getMO(mo.id);
+    const stockLoc = await prisma.mfgLocation.findUniqueOrThrow({ where: { code: 'STOCK' } });
+    for (const c of detail!.components) {
+      await prisma.mfgStockQuant.deleteMany({
+        where: { productId: c.productId, locationId: stockLoc.id },
+      });
+      await prisma.mfgStockQuant.create({
+        data: {
+          productId: c.productId,
+          lotId: null,
+          locationId: stockLoc.id,
+          quantity: Number(c.qtyToConsume),
+          reservedQty: 0,
+        },
+      });
+    }
+    await mfg.reserve(mo.id);
+    await expect(mfg.produce(mo.id)).rejects.toThrow(/công đoạn/i);
 
     const wos = await prisma.mfgWorkOrder.findMany({ where: { moId: mo.id } });
     expect(wos.length).toBeGreaterThan(0);
     for (const wo of wos) {
-      expect(wo.state).toBe('DONE');
-      expect(wo.durationReal).toBe(wo.durationExpected); // standard time banked, not 0
+      expect(wo.state).not.toBe('DONE');
     }
   });
 
@@ -961,8 +1111,7 @@ d('Manufacturing golden path (integration)', () => {
         },
       });
     }
-    // Flour: free for exactly ONE MO, on a lot-quant so a shortfall backflushes
-    // to a SEPARATE null-lot quant — leaving this quant a clean witness.
+    // Flour: free for exactly ONE MO. Concurrent reserve must allocate it once.
     const lot = await prisma.mfgLot.create({
       data: { productId: ids.flour, name: 'HR-P1-RACE', mfgDate: new Date() },
     });
@@ -976,16 +1125,18 @@ d('Manufacturing golden path (integration)', () => {
       },
     });
 
-    // Both produce at once; neither holds a reservation, so both race for the
-    // one free flour lot-quant. The guarded consume lets exactly one drain it;
-    // the loser re-reads free=0 and backflushes. Without the guard both would
-    // draw flourNeed and push this lot-quant to −flourNeed (overdraw).
+    await Promise.all([mfg.reserve(moA.id), mfg.reserve(moB.id)]);
+    await Promise.all([completeWorkOrders(moA.id), completeWorkOrders(moB.id)]);
+
+    // Exactly one order owns a complete material set and may close. The loser is
+    // blocked instead of creating negative stock.
     const res = await Promise.allSettled([mfg.produce(moA.id), mfg.produce(moB.id)]);
-    expect(res.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+    expect(res.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(res.filter((r) => r.status === 'rejected')).toHaveLength(1);
 
     const after = await prisma.mfgStockQuant.findUniqueOrThrow({ where: { id: flourQuant.id } });
     expect(Number(after.quantity)).toBe(0); // drained exactly once, never overdrawn
-    // Exactly one real consume move drew from the lot; the loser backflushed null-lot.
+    // Exactly one real consume move drew from the lot; there is no backflush.
     const lotConsumes = await prisma.mfgStockMove.count({
       where: { productId: ids.flour, lotId: lot.id, refType: 'MO' },
     });

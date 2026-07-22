@@ -107,8 +107,11 @@ class MfgCategoryOption {
 }
 
 class MfgWorkCenter {
-  const MfgWorkCenter(
-      {required this.id, required this.code, required this.nameVi,});
+  const MfgWorkCenter({
+    required this.id,
+    required this.code,
+    required this.nameVi,
+  });
 
   factory MfgWorkCenter.fromJson(Map<String, dynamic> j) => MfgWorkCenter(
         id: j['id'] as String,
@@ -202,8 +205,7 @@ class MfgPurchaseOrder {
     this.createdAt,
   });
 
-  factory MfgPurchaseOrder.fromJson(Map<String, dynamic> j) =>
-      MfgPurchaseOrder(
+  factory MfgPurchaseOrder.fromJson(Map<String, dynamic> j) => MfgPurchaseOrder(
         id: j['id'] as String,
         code: j['code'] as String? ?? '',
         state: j['state'] as String? ?? 'DRAFT',
@@ -231,8 +233,7 @@ class MfgPurchaseOrder {
   final String note;
   final DateTime? createdAt;
 
-  double get total =>
-      lines.fold(0, (s, l) => s + l.qty * l.unitPrice);
+  double get total => lines.fold(0, (s, l) => s + l.qty * l.unitPrice);
 }
 
 /// One goods receipt for a product — the purchase-history row.
@@ -247,8 +248,7 @@ class MfgPurchaseEntry {
     this.supplierName,
   });
 
-  factory MfgPurchaseEntry.fromJson(Map<String, dynamic> j) =>
-      MfgPurchaseEntry(
+  factory MfgPurchaseEntry.fromJson(Map<String, dynamic> j) => MfgPurchaseEntry(
         date: DateTime.tryParse(j['date'] as String? ?? '') ?? DateTime(2000),
         qty: _num(j['qty']),
         uomCode: j['uomCode'] as String? ?? '',
@@ -297,27 +297,39 @@ class MfgBomLineDetail {
 
 class MfgBomOperationDetail {
   const MfgBomOperationDetail({
+    required this.id,
     required this.sequence,
     required this.nameVi,
     required this.workCenterId,
     required this.workCenterName,
     required this.durationMinutes,
+    required this.qualityPoints,
   });
 
   factory MfgBomOperationDetail.fromJson(Map<String, dynamic> j) =>
       MfgBomOperationDetail(
+        id: j['id'] as String? ?? '',
         sequence: (j['sequence'] as num?)?.toInt() ?? 0,
         nameVi: j['nameVi'] as String? ?? '',
         workCenterId: j['workCenterId'] as String? ?? '',
         workCenterName: (j['workCenter'] as Map?)?['nameVi'] as String? ?? '',
         durationMinutes: (j['durationMinutes'] as num?)?.toInt() ?? 0,
+        qualityPoints: ((j['qualityPoints'] as List?) ?? const [])
+            .map(
+              (e) => MfgQualityPointLite.fromJson(
+                (e as Map).cast<String, dynamic>(),
+              ),
+            )
+            .toList(),
       );
 
+  final String id;
   final int sequence;
   final String nameVi;
   final String workCenterId;
   final String workCenterName;
   final int durationMinutes;
+  final List<MfgQualityPointLite> qualityPoints;
 }
 
 class MfgBomDetail {
@@ -343,12 +355,17 @@ class MfgBomDetail {
           j['uomId'] as String? ?? (j['uom'] as Map?)?['id'] as String? ?? '',
       uomCode: (j['uom'] as Map?)?['code'] as String? ?? '',
       lines: ((j['lines'] as List?) ?? const [])
-          .map((e) =>
-              MfgBomLineDetail.fromJson((e as Map).cast<String, dynamic>()),)
+          .map(
+            (e) =>
+                MfgBomLineDetail.fromJson((e as Map).cast<String, dynamic>()),
+          )
           .toList(),
       operations: ((j['operations'] as List?) ?? const [])
-          .map((e) => MfgBomOperationDetail.fromJson(
-              (e as Map).cast<String, dynamic>(),),)
+          .map(
+            (e) => MfgBomOperationDetail.fromJson(
+              (e as Map).cast<String, dynamic>(),
+            ),
+          )
           .toList(),
     );
   }
@@ -422,6 +439,7 @@ class MfgComponent {
     required this.productCode,
     required this.qtyToConsume,
     required this.qtyConsumed,
+    required this.reservedQty,
     required this.availability,
   });
 
@@ -433,6 +451,7 @@ class MfgComponent {
       productCode: p['code'] as String? ?? '',
       qtyToConsume: _num(j['qtyToConsume']),
       qtyConsumed: _num(j['qtyConsumed']),
+      reservedQty: _num(j['reservedQty']),
       availability: j['availability'] as String? ?? 'NOT_AVAILABLE',
     );
   }
@@ -442,6 +461,7 @@ class MfgComponent {
   final String productCode;
   final double qtyToConsume;
   final double qtyConsumed;
+  final double reservedQty;
   final String availability; // AVAILABLE | NOT_AVAILABLE
   bool get isAvailable => availability == 'AVAILABLE';
 }
@@ -451,6 +471,7 @@ class MfgOrderSummary {
     required this.id,
     required this.code,
     required this.productNameVi,
+    required this.productType,
     required this.qtyToProduce,
     required this.state,
     required this.componentCount,
@@ -460,6 +481,7 @@ class MfgOrderSummary {
         id: j['id'] as String,
         code: j['code'] as String,
         productNameVi: (j['product'] as Map?)?['nameVi'] as String? ?? '',
+        productType: (j['product'] as Map?)?['type'] as String? ?? '',
         qtyToProduce: _num(j['qtyToProduce']),
         state: j['state'] as String,
         componentCount: (j['components'] as List?)?.length ?? 0,
@@ -468,6 +490,7 @@ class MfgOrderSummary {
   final String id;
   final String code;
   final String productNameVi;
+  final String productType;
   final double qtyToProduce;
   final String state; // DRAFT | CONFIRMED | PROGRESS | DONE | CANCEL
   final int componentCount;
@@ -478,6 +501,7 @@ class MfgOrderDetail {
     required this.id,
     required this.code,
     required this.productNameVi,
+    required this.productType,
     required this.uomCode,
     required this.qtyToProduce,
     required this.qtyProduced,
@@ -485,26 +509,40 @@ class MfgOrderDetail {
     required this.totalCost,
     required this.components,
     required this.lotName,
+    required this.workOrders,
   });
 
-  factory MfgOrderDetail.fromJson(Map<String, dynamic> j) => MfgOrderDetail(
-        id: j['id'] as String,
-        code: j['code'] as String,
-        productNameVi: (j['product'] as Map?)?['nameVi'] as String? ?? '',
-        uomCode: (j['product'] as Map?)?['uom']?['code'] as String? ?? '',
-        qtyToProduce: _num(j['qtyToProduce']),
-        qtyProduced: _num(j['qtyProduced']),
-        state: j['state'] as String,
-        totalCost: _num(j['totalCost']),
-        lotName: (j['lot'] as Map?)?['name'] as String?,
-        components: ((j['components'] as List?) ?? const [])
-            .map((e) => MfgComponent.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+  factory MfgOrderDetail.fromJson(Map<String, dynamic> j) {
+    final product = (j['product'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final uom = (product['uom'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return MfgOrderDetail(
+      id: j['id'] as String,
+      code: j['code'] as String,
+      productNameVi: product['nameVi'] as String? ?? '',
+      productType: product['type'] as String? ?? '',
+      uomCode: uom['code'] as String? ?? '',
+      qtyToProduce: _num(j['qtyToProduce']),
+      qtyProduced: _num(j['qtyProduced']),
+      state: j['state'] as String,
+      totalCost: _num(j['totalCost']),
+      lotName: (j['lot'] as Map?)?['name'] as String?,
+      components: ((j['components'] as List?) ?? const [])
+          .map((e) => MfgComponent.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      workOrders: ((j['workOrders'] as List?) ?? const [])
+          .map(
+            (e) => MfgWorkOrderDetail.fromJson(
+              (e as Map).cast<String, dynamic>(),
+            ),
+          )
+          .toList(),
+    );
+  }
 
   final String id;
   final String code;
   final String productNameVi;
+  final String productType;
   final String uomCode;
   final double qtyToProduce;
   final double qtyProduced;
@@ -512,6 +550,46 @@ class MfgOrderDetail {
   final double totalCost;
   final String? lotName;
   final List<MfgComponent> components;
+  final List<MfgWorkOrderDetail> workOrders;
+}
+
+class MfgWorkOrderDetail {
+  const MfgWorkOrderDetail({
+    required this.id,
+    required this.sequence,
+    required this.state,
+    required this.operationNameVi,
+    required this.qualityPointCount,
+    required this.passedQualityPointCount,
+  });
+
+  factory MfgWorkOrderDetail.fromJson(Map<String, dynamic> j) {
+    final op = (j['bomOperation'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final points = (op['qualityPoints'] as List?) ?? const [];
+    final checks = ((j['qualityChecks'] as List?) ?? const [])
+        .cast<Map<String, dynamic>>();
+    var passed = 0;
+    for (final point in points.cast<Map<String, dynamic>>()) {
+      final pointId = point['id'];
+      final latest = checks.where((c) => c['qualityPointId'] == pointId);
+      if (latest.isNotEmpty && latest.first['result'] == 'PASS') passed++;
+    }
+    return MfgWorkOrderDetail(
+      id: j['id'] as String,
+      sequence: (j['sequence'] as num?)?.toInt() ?? 0,
+      state: j['state'] as String? ?? 'PENDING',
+      operationNameVi: op['nameVi'] as String? ?? '',
+      qualityPointCount: points.length,
+      passedQualityPointCount: passed,
+    );
+  }
+
+  final String id;
+  final int sequence;
+  final String state;
+  final String operationNameVi;
+  final int qualityPointCount;
+  final int passedQualityPointCount;
 }
 
 class MfgOnHand {
@@ -530,7 +608,8 @@ class MfgOnHand {
   factory MfgOnHand.fromJson(Map<String, dynamic> j) => MfgOnHand(
         productNameVi: (j['product'] as Map?)?['nameVi'] as String? ?? '',
         productCode: (j['product'] as Map?)?['code'] as String? ?? '',
-        uomCode: ((j['product'] as Map?)?['uom'] as Map?)?['code'] as String? ?? '',
+        uomCode:
+            ((j['product'] as Map?)?['uom'] as Map?)?['code'] as String? ?? '',
         lotName: (j['lot'] as Map?)?['name'] as String?,
         locationCode: (j['location'] as Map?)?['code'] as String? ?? '',
         quantity: _num(j['quantity']),
@@ -587,6 +666,7 @@ class MfgQualityPointLite {
   const MfgQualityPointLite({
     required this.id,
     required this.titleVi,
+    required this.titleEn,
     required this.testType,
     required this.normMin,
     required this.normMax,
@@ -601,6 +681,7 @@ class MfgQualityPointLite {
       MfgQualityPointLite(
         id: j['id'] as String,
         titleVi: j['titleVi'] as String,
+        titleEn: j['titleEn'] as String? ?? j['titleVi'] as String,
         testType: j['testType'] as String,
         normMin: _num(j['normMin']),
         normMax: _num(j['normMax']),
@@ -610,6 +691,7 @@ class MfgQualityPointLite {
 
   final String id;
   final String titleVi;
+  final String titleEn;
   final String testType; // MEASURE | PASS_FAIL
   final double normMin;
   final double normMax;
@@ -1242,7 +1324,21 @@ class ManufacturingApi {
     required double outputQty,
     required String uomId,
     required List<({String componentId, double qty, String uomId})> lines,
-    required List<({String nameVi, String workCenterId, int durationMinutes})>
+    required List<
+            ({
+              String nameVi,
+              String workCenterId,
+              int durationMinutes,
+              List<
+                  ({
+                    String titleVi,
+                    String titleEn,
+                    String testType,
+                    double? normMin,
+                    double? normMax,
+                    String? unit,
+                  })> qualityPoints,
+            })>
         operations,
   }) =>
       _postVoid(
@@ -1261,6 +1357,17 @@ class ManufacturingApi {
                 'nameVi': o.nameVi,
                 'workCenterId': o.workCenterId,
                 'durationMinutes': o.durationMinutes,
+                'qualityPoints': [
+                  for (final q in o.qualityPoints)
+                    {
+                      'titleVi': q.titleVi,
+                      'titleEn': q.titleEn,
+                      'testType': q.testType,
+                      if (q.normMin != null) 'normMin': q.normMin,
+                      if (q.normMax != null) 'normMax': q.normMax,
+                      if (q.unit != null && q.unit!.isNotEmpty) 'unit': q.unit,
+                    },
+                ],
               },
           ],
         },
@@ -1367,13 +1474,15 @@ class ManufacturingApi {
               (res.data?['data'] as Map?)?.cast<String, dynamic>() ?? const {};
           return ((data['rows'] as List?) ?? const [])
               .map(
-                  (e) => MfgOeeRow.fromJson((e as Map).cast<String, dynamic>()),)
+                (e) => MfgOeeRow.fromJson((e as Map).cast<String, dynamic>()),
+              )
               .toList();
         },
       );
 
-  Future<Result<List<MfgMaintenance>, AppFailure>> listMaintenance(
-          {String? state,}) =>
+  Future<Result<List<MfgMaintenance>, AppFailure>> listMaintenance({
+    String? state,
+  }) =>
       _get(
         '$_base/maintenance',
         query: {if (state != null) 'state': state},
@@ -1391,15 +1500,19 @@ class ManufacturingApi {
         body: {
           'workCenterId': workCenterId,
           'scheduledDate': DateTime.utc(
-                  scheduledDate.year, scheduledDate.month, scheduledDate.day,)
-              .toIso8601String(),
+            scheduledDate.year,
+            scheduledDate.month,
+            scheduledDate.day,
+          ).toIso8601String(),
           if (type != null) 'type': type,
           if (note != null && note.isNotEmpty) 'note': note,
         },
       );
 
-  Future<Result<void, AppFailure>> completeMaintenance(String id,
-          {int? downtimeMin,}) =>
+  Future<Result<void, AppFailure>> completeMaintenance(
+    String id, {
+    int? downtimeMin,
+  }) =>
       _postVoid(
         '$_base/maintenance/$id/complete',
         body: {if (downtimeMin != null) 'downtimeMin': downtimeMin},

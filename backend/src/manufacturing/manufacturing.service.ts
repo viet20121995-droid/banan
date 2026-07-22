@@ -503,26 +503,45 @@ export class ManufacturingService {
    * a cake with no ingredients is a data error, not a plan.
    */
   async confirmMO(id: string) {
-    const mo = await this.prisma.mfgOrder.findUnique({
-      where: { id },
-      include: { bom: { include: { operations: true, lines: true } } },
-    });
-    if (!mo) throw new NotFoundException({ code: 'MFG_MO_NOT_FOUND' });
-    if (mo.state !== 'DRAFT') {
-      throw new ConflictException({
-        code: 'MFG_MO_STATE',
-        message: `Chỉ xác nhận được MO ở trạng thái Nháp (đang: ${mo.state}).`,
-      });
-    }
-    if (mo.bom.lines.length === 0) {
-      throw new BadRequestException({
-        code: 'MFG_BOM_INVALID',
-        message: 'Công thức không có thành phần — không thể sản xuất.',
-      });
-    }
-
     await this.prisma.$transaction(async (db) => {
-      for (const op of mo.bom.operations) {
+      const locked = await db.$queryRaw<{ id: string }[]>`
+        SELECT "id" FROM "MfgOrder" WHERE "id" = ${id} FOR UPDATE`;
+      if (locked.length === 0) {
+        throw new NotFoundException({ code: 'MFG_MO_NOT_FOUND' });
+      }
+      const mo = await db.mfgOrder.findUniqueOrThrow({
+        where: { id },
+        include: {
+          product: true,
+          bom: {
+            include: {
+              operations: { orderBy: { sequence: 'asc' } },
+              lines: true,
+            },
+          },
+        },
+      });
+      if (mo.state !== 'DRAFT') {
+        throw new ConflictException({
+          code: 'MFG_MO_STATE',
+          message: `Chỉ xác nhận được MO ở trạng thái Nháp (đang: ${mo.state}).`,
+        });
+      }
+      if (mo.bom.lines.length === 0) {
+        throw new BadRequestException({
+          code: 'MFG_BOM_INVALID',
+          message: 'Công thức không có thành phần — không thể sản xuất.',
+        });
+      }
+      if (mo.product.type === 'FINISHED' && mo.bom.operations.length === 0) {
+        throw new BadRequestException({
+          code: 'MFG_OPERATIONS_REQUIRED',
+          message: 'Thành phẩm phải có ít nhất một công đoạn trước khi xác nhận lệnh.',
+        });
+      }
+
+      for (let i = 0; i < mo.bom.operations.length; i++) {
+        const op = mo.bom.operations[i];
         await db.mfgWorkOrder.create({
           data: {
             moId: mo.id,
@@ -530,7 +549,7 @@ export class ManufacturingService {
             workCenterId: op.workCenterId,
             sequence: op.sequence,
             durationExpected: op.durationMinutes,
-            state: 'READY',
+            state: i === 0 ? 'READY' : 'PENDING',
           },
         });
       }
@@ -686,9 +705,9 @@ export class ManufacturingService {
    * finished lot with its mfg/expiry dates, book it into stock, roll the
    * finished product's AVCO forward, and snapshot the cost. The MO lands DONE.
    *
-   * Short stock does not stop it — consumption is booked at the planned
-   * quantity (backflush), letting the quant go negative rather than silently
-   * under-costing the order, which matches "warn but continue".
+   * The batch may close only after every component is fully reserved and every
+   * work order (including its QC points) is complete. This button is the final
+   * stock-booking step, not a shortcut around the shop floor.
    */
   async produce(id: string) {
     const stock = await this.locationId(this.prisma, 'STOCK');
@@ -722,10 +741,7 @@ export class ManufacturingService {
             : `MO đã ${mo.state === 'DONE' ? 'hoàn tất' : 'huỷ'}.`,
       });
     }
-    // The direct "Sản xuất" path enforces the same QC gate as shop-floor doneWO,
-    // so a batch can't reach finished stock with a quality point unchecked or
-    // failed. An MO with no QC points passes vacuously.
-    for (const wo of mo.workOrders) this.assertQcPassed(wo);
+    this.assertProductionReady(mo);
 
     const outQty = n(mo.qtyToProduce);
     if (outQty <= 0) throw new BadRequestException({ code: 'MFG_QTY_INVALID' });
@@ -747,14 +763,35 @@ export class ManufacturingService {
         });
       }
 
+      // Re-read after claiming the MO row. Reserve, work-order and QC state must
+      // be current at the exact point before stock starts moving.
+      const lockedMo = await db.mfgOrder.findUnique({
+        where: { id },
+        include: {
+          product: { include: { uom: true } },
+          components: { include: { product: true, uom: true } },
+          workOrders: {
+            include: {
+              workCenter: true,
+              bomOperation: {
+                include: { qualityPoints: { where: { active: true } } },
+              },
+              qualityChecks: { orderBy: { date: 'desc' } },
+            },
+          },
+        },
+      });
+      if (!lockedMo) throw new NotFoundException({ code: 'MFG_MO_NOT_FOUND' });
+      this.assertProductionReady(lockedMo);
+
       // Release this MO's own hard reservations first (frees exactly its held
       // share on each quant), so the FIFO consume below works against real
       // on-hand without touching any other order's hold.
-      await this.releaseReservations(db, mo.id);
+      await this.releaseReservations(db, lockedMo.id);
 
       // ── consume components, FIFO by lot, at their current AVCO ──
       let materialCost = 0;
-      for (const c of mo.components) {
+      for (const c of lockedMo.components) {
         const baseNeed = toBase(n(c.qtyToConsume), uomLike(c.uom));
         materialCost += baseNeed * n(c.product.avgCost);
 
@@ -796,7 +833,7 @@ export class ManufacturingService {
                   srcLocationId: stock,
                   destLocationId: production,
                   refType: 'MO',
-                  refId: mo.id,
+                  refId: lockedMo.id,
                   unitCost: roundCost(n(c.product.avgCost)),
                 },
               });
@@ -815,24 +852,10 @@ export class ManufacturingService {
             free = fresh ? n(fresh.quantity) - n(fresh.reservedQty) : 0;
           }
         }
-        // Backflush the shortfall so cost/qty stay whole (quant goes negative).
-        // ponytail: the backflush hits the null-lot quant. If a component is NOT
-        // lot-tracked, another MO's reservation could sit on that same null-lot
-        // quant and this negative would draw it below its reservedQty. Lot-tracked
-        // stock (every expiry-tracked ingredient — the norm here) is unaffected:
-        // its reservation sits on a lot-quant while the shortfall lands on the
-        // separate null-lot quant. Per-quant backflush routing if this ever bites.
-        if (remaining > 0) {
-          await this.move(db, {
-            productId: c.productId,
-            lotId: null,
-            qty: remaining,
-            uomId: c.product.uomId,
-            srcLocationId: stock,
-            destLocationId: production,
-            refType: 'MO',
-            refId: mo.id,
-            unitCost: n(c.product.avgCost),
+        if (remaining > 0.0005) {
+          throw new ConflictException({
+            code: 'MFG_STOCK_CHANGED',
+            message: `Tồn kho "${c.product.nameVi}" vừa thay đổi — kiểm tra và giữ hàng lại.`,
           });
         }
         await db.mfgOrderComponent.update({
@@ -843,65 +866,59 @@ export class ManufacturingService {
 
       // ── operations cost (expected time in increment 1) ──
       let operationCost = 0;
-      for (const wo of mo.workOrders) {
+      for (const wo of lockedMo.workOrders) {
         const mins = wo.durationReal || wo.durationExpected;
         operationCost += (mins / 60) * n(wo.workCenter.costPerHour);
-        await db.mfgWorkOrder.update({
-          where: { id: wo.id },
-          data: {
-            state: 'DONE',
-            // Closing straight from produce (never run on the shop floor) banks the
-            // standard time, so OEE runtime reflects it instead of reading 0.
-            durationReal: wo.durationReal || wo.durationExpected,
-            dateFinished: wo.dateFinished ?? new Date(),
-          },
-        });
       }
 
       const totalCost = roundMoney(materialCost + operationCost);
 
       // ── finished lot + book into stock ──
-      const outBase = toBase(outQty, uomLike(mo.product.uom));
+      const outBase = toBase(outQty, uomLike(lockedMo.product.uom));
       const unitCost = outBase > 0 ? totalCost / outBase : 0;
       let lotId: string | null = null;
-      if (mo.product.tracking === 'LOT') {
+      if (lockedMo.product.tracking === 'LOT') {
         const lot = await db.mfgLot.create({
           data: {
-            productId: mo.productId,
-            name: mo.code,
+            productId: lockedMo.productId,
+            name: lockedMo.code,
             mfgDate: new Date(),
-            expiryDate: expiryDate(new Date(), mo.product.useExpiration, mo.product.expirationDays),
+            expiryDate: expiryDate(
+              new Date(),
+              lockedMo.product.useExpiration,
+              lockedMo.product.expirationDays,
+            ),
           },
         });
         lotId = lot.id;
       }
       await this.move(db, {
-        productId: mo.productId,
+        productId: lockedMo.productId,
         lotId,
         qty: outBase,
-        uomId: mo.product.uomId,
+        uomId: lockedMo.product.uomId,
         srcLocationId: production,
         destLocationId: stock,
         refType: 'MO',
-        refId: mo.id,
+        refId: lockedMo.id,
         unitCost,
       });
 
       // ── roll finished AVCO forward ──
-      const onHand = await this.availableAtStock(db, mo.productId, stock);
+      const onHand = await this.availableAtStock(db, lockedMo.productId, stock);
       const newAvg = avcoAfterReceipt(
         onHand - outBase, // on-hand already includes what we just booked
-        n(mo.product.avgCost),
+        n(lockedMo.product.avgCost),
         outBase,
         unitCost,
       );
       await db.mfgProduct.update({
-        where: { id: mo.productId },
+        where: { id: lockedMo.productId },
         data: { avgCost: newAvg },
       });
 
       const updated = await db.mfgOrder.update({
-        where: { id: mo.id },
+        where: { id: lockedMo.id },
         data: {
           state: 'DONE',
           qtyProduced: round3(outQty),
@@ -1119,7 +1136,16 @@ export class ManufacturingService {
         bom: true,
         lot: true,
         components: { include: { product: true } },
-        workOrders: { include: { workCenter: true, bomOperation: true } },
+        workOrders: {
+          include: {
+            workCenter: true,
+            bomOperation: {
+              include: { qualityPoints: { where: { active: true } } },
+            },
+            qualityChecks: { orderBy: { date: 'desc' } },
+          },
+          orderBy: { sequence: 'asc' },
+        },
       },
     });
   }
@@ -1378,7 +1404,13 @@ export class ManufacturingService {
         product: { include: { uom: true } },
         uom: true,
         lines: { include: { component: true, uom: true } },
-        operations: { include: { workCenter: true }, orderBy: { sequence: 'asc' } },
+        operations: {
+          include: {
+            workCenter: true,
+            qualityPoints: { where: { active: true }, orderBy: { createdAt: 'asc' } },
+          },
+          orderBy: { sequence: 'asc' },
+        },
       },
     });
   }
@@ -1470,12 +1502,49 @@ export class ManufacturingService {
           message: 'Công đoạn dùng tổ máy không tồn tại.',
         });
       }
+      if (!o.nameVi?.trim()) {
+        throw new BadRequestException({
+          code: 'MFG_OPERATION_NAME_REQUIRED',
+          message: 'Công đoạn phải có tên.',
+        });
+      }
+      const qualityPoints = (o.qualityPoints ?? []).map((qp) => {
+        if (!qp.titleVi?.trim()) {
+          throw new BadRequestException({
+            code: 'MFG_QC_TITLE_REQUIRED',
+            message: 'Điểm QC phải có tên.',
+          });
+        }
+        if (qp.testType !== 'MEASURE' && qp.testType !== 'PASS_FAIL') {
+          throw new BadRequestException({ code: 'MFG_QC_TYPE_INVALID' });
+        }
+        if (
+          qp.testType === 'MEASURE' &&
+          qp.normMin != null &&
+          qp.normMax != null &&
+          qp.normMin > qp.normMax
+        ) {
+          throw new BadRequestException({
+            code: 'MFG_QC_RANGE_INVALID',
+            message: 'Ngưỡng QC tối thiểu không được lớn hơn tối đa.',
+          });
+        }
+        return {
+          titleVi: qp.titleVi.trim(),
+          titleEn: qp.titleEn?.trim() || qp.titleVi.trim(),
+          testType: qp.testType,
+          normMin: qp.testType === 'MEASURE' ? qp.normMin : null,
+          normMax: qp.testType === 'MEASURE' ? qp.normMax : null,
+          unit: qp.testType === 'MEASURE' ? qp.unit?.trim() || null : null,
+        };
+      });
       return {
         sequence: i + 1,
-        nameVi: o.nameVi,
-        nameEn: o.nameEn && o.nameEn.length > 0 ? o.nameEn : o.nameVi,
+        nameVi: o.nameVi.trim(),
+        nameEn: o.nameEn?.trim() || o.nameVi.trim(),
         workCenterId: o.workCenterId,
         durationMinutes: Math.max(0, Math.round(o.durationMinutes ?? 0)),
+        qualityPoints: { create: qualityPoints },
       };
     });
 
@@ -1527,6 +1596,12 @@ export class ManufacturingService {
       if (!uom) throw new BadRequestException({ code: 'MFG_UOM_NOT_FOUND' });
 
       const { lines, operations } = await this.buildBomData(db, dto);
+      if (product.type === 'FINISHED' && operations.length === 0) {
+        throw new BadRequestException({
+          code: 'MFG_OPERATIONS_REQUIRED',
+          message: 'Công thức thành phẩm phải có ít nhất một công đoạn.',
+        });
+      }
       const prev = await db.mfgBom.aggregate({
         where: { productId: dto.productId },
         _max: { version: true },
@@ -2188,17 +2263,59 @@ export class ManufacturingService {
     }
   }
 
+  private assertProductionReady(mo: {
+    product: { type: string };
+    components: {
+      qtyToConsume: Prisma.Decimal | number;
+      reservedQty: Prisma.Decimal | number;
+      product: { nameVi: string };
+    }[];
+    workOrders: {
+      state: string;
+      bomOperation: {
+        nameVi: string;
+        qualityPoints: { id: string; titleVi: string }[];
+      };
+      qualityChecks: { qualityPointId: string; result: string }[];
+    }[];
+  }): void {
+    const short = mo.components.find((c) => n(c.reservedQty) + 0.0005 < n(c.qtyToConsume));
+    if (short) {
+      throw new BadRequestException({
+        code: 'MFG_COMPONENTS_NOT_RESERVED',
+        message: `Chưa giữ đủ "${short.product.nameVi}" — kiểm tra tồn và giữ hàng trước.`,
+      });
+    }
+    if (mo.product.type === 'FINISHED' && mo.workOrders.length === 0) {
+      throw new BadRequestException({
+        code: 'MFG_OPERATIONS_REQUIRED',
+        message: 'Thành phẩm chưa có công đoạn sản xuất.',
+      });
+    }
+    const open = mo.workOrders.find((wo) => wo.state !== 'DONE');
+    if (open) {
+      throw new BadRequestException({
+        code: 'MFG_WORK_ORDERS_INCOMPLETE',
+        message: `Công đoạn "${open.bomOperation.nameVi}" chưa hoàn tất. Hãy thao tác tại Xưởng sản xuất.`,
+      });
+    }
+    for (const wo of mo.workOrders) this.assertQcPassed(wo);
+  }
+
   /** Start (or resume) a work order — marks the current run's start. */
   async startWO(id: string) {
     const wo = await this.wo(id); // existence + moId
     // Guarded claim: row-locks and re-checks state, so a concurrent doneWO/cancel
     // can't be reverted to PROGRESS by a racing start.
     const claim = await this.prisma.mfgWorkOrder.updateMany({
-      where: { id, state: { notIn: ['DONE', 'CANCEL'] } },
+      where: { id, state: 'READY' },
       data: { state: 'PROGRESS', dateStart: new Date() },
     });
     if (claim.count === 0) {
-      throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn đã kết thúc.' });
+      throw new ConflictException({
+        code: 'MFG_WO_STATE',
+        message: 'Công đoạn chưa sẵn sàng, đang chạy hoặc đã kết thúc.',
+      });
     }
     // Only revive the MO to PROGRESS if it's still open — never resurrect a terminal MO.
     await this.prisma.mfgOrder.updateMany({
@@ -2245,22 +2362,42 @@ export class ManufacturingService {
       },
     });
     if (!wo) throw new NotFoundException({ code: 'MFG_WO_NOT_FOUND' });
-    if (wo.state === 'DONE' || wo.state === 'CANCEL') {
-      throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn đã kết thúc.' });
+    if (wo.state !== 'PROGRESS') {
+      throw new ConflictException({
+        code: 'MFG_WO_STATE',
+        message: 'Phải bấm Bắt đầu trước khi hoàn tất công đoạn.',
+      });
     }
 
     this.assertQcPassed(wo);
 
-    const affected = await this.prisma.$executeRaw`
-      UPDATE "MfgWorkOrder"
-      SET "state" = 'DONE',
-          "durationReal" = "durationReal" + GREATEST(0, ROUND((EXTRACT(EPOCH FROM (now() - "dateStart")) / 60)::numeric))::int,
-          "dateFinished" = now()
-      WHERE "id" = ${id} AND "state" NOT IN ('DONE', 'CANCEL')`;
-    if (affected === 0) {
-      throw new ConflictException({ code: 'MFG_WO_STATE', message: 'Công đoạn đã kết thúc.' });
-    }
-    return this.wo(id);
+    return this.prisma.$transaction(async (db) => {
+      const affected = await db.$executeRaw`
+        UPDATE "MfgWorkOrder"
+        SET "state" = 'DONE',
+            "durationReal" = "durationReal" + GREATEST(0, ROUND((EXTRACT(EPOCH FROM (now() - "dateStart")) / 60)::numeric))::int,
+            "dateFinished" = now(),
+            "dateStart" = NULL
+        WHERE "id" = ${id} AND "state" = 'PROGRESS'`;
+      if (affected === 0) {
+        throw new ConflictException({
+          code: 'MFG_WO_STATE',
+          message: 'Công đoạn không còn ở trạng thái đang chạy.',
+        });
+      }
+
+      const next = await db.mfgWorkOrder.findFirst({
+        where: { moId: wo.moId, sequence: { gt: wo.sequence }, state: 'PENDING' },
+        orderBy: { sequence: 'asc' },
+      });
+      if (next) {
+        await db.mfgWorkOrder.updateMany({
+          where: { id: next.id, state: 'PENDING' },
+          data: { state: 'READY' },
+        });
+      }
+      return db.mfgWorkOrder.findUniqueOrThrow({ where: { id } });
+    });
   }
 
   // ── quality control ───────────────────────────────────────────────────────
@@ -2303,10 +2440,28 @@ export class ManufacturingService {
       where: { id: dto.qualityPointId },
     });
     if (!qp) throw new NotFoundException({ code: 'MFG_QP_NOT_FOUND' });
+    if (!qp.active) {
+      throw new BadRequestException({
+        code: 'MFG_QP_INACTIVE',
+        message: 'Điểm QC đã ngưng sử dụng.',
+      });
+    }
     const wo = await this.prisma.mfgWorkOrder.findUnique({
       where: { id: dto.workOrderId },
     });
     if (!wo) throw new NotFoundException({ code: 'MFG_WO_NOT_FOUND' });
+    if (qp.bomOperationId !== wo.bomOperationId) {
+      throw new BadRequestException({
+        code: 'MFG_QC_WORK_ORDER_MISMATCH',
+        message: 'Điểm QC không thuộc công đoạn này.',
+      });
+    }
+    if (wo.state !== 'PROGRESS') {
+      throw new ConflictException({
+        code: 'MFG_WO_STATE',
+        message: 'Chỉ kiểm tra QC khi công đoạn đang chạy.',
+      });
+    }
 
     let result: 'PASS' | 'FAIL';
     if (qp.testType === 'MEASURE') {
