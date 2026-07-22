@@ -819,3 +819,28 @@ describe('OrdersService.trackByCapability (public tracking)', () => {
     await expect(svc.trackByCapability('missing')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('OrdersService.mapOrderCreateError', () => {
+  // Counter/internal creates can race a delete of a referenced row between
+  // validation and the insert — those two Prisma codes must become 4xx, and
+  // everything else must pass through untouched (a real bug stays a 500).
+  const { svc } = makeService({});
+  const map = (e: unknown) =>
+    (svc as unknown as { mapOrderCreateError(e: unknown): never }).mapOrderCreateError(e);
+  const prismaErr = (code: string) =>
+    new Prisma.PrismaClientKnownRequestError('boom', { code, clientVersion: 'test' } as never);
+
+  it('maps FK violations (P2003) to a 400', () => {
+    expect(() => map(prismaErr('P2003'))).toThrow(BadRequestException);
+  });
+
+  it('maps vanished rows (P2025) to a 404', () => {
+    expect(() => map(prismaErr('P2025'))).toThrow(NotFoundException);
+  });
+
+  it('rethrows every other error untouched', () => {
+    const plain = new Error('boom');
+    expect(() => map(plain)).toThrow(plain);
+    expect(() => map(prismaErr('P2002'))).toThrow(Prisma.PrismaClientKnownRequestError);
+  });
+});

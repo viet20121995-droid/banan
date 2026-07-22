@@ -1720,6 +1720,29 @@ export class OrdersService {
     return principal.storeId;
   }
 
+  /**
+   * A create can still hit a raw Prisma error when a referenced row is deleted
+   * between validation and the insert (archived product, removed store…). Map
+   * the two survivable codes to 4xx; anything else is a real bug and stays 500.
+   */
+  private mapOrderCreateError(e: unknown): never {
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === 'P2003') {
+        throw new BadRequestException({
+          code: 'ORDER_REF_INVALID',
+          message: 'Dữ liệu tham chiếu không còn tồn tại — tải lại trang rồi thử lại.',
+        });
+      }
+      if (e.code === 'P2025') {
+        throw new NotFoundException({
+          code: 'ORDER_REF_NOT_FOUND',
+          message: 'Dữ liệu tham chiếu không còn tồn tại — tải lại trang rồi thử lại.',
+        });
+      }
+    }
+    throw e;
+  }
+
   /** Idempotency read: the first order created with this (creator, key), if any. */
   private findByClientRequestId(createdById: string, clientRequestId?: string) {
     if (!clientRequestId) return Promise.resolve(null);
@@ -2095,7 +2118,7 @@ export class OrdersService {
         const winner = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
         if (winner) return winner;
       }
-      throw e;
+      this.mapOrderCreateError(e);
     }
 
     const rooms = [`store:${storeId}`];
@@ -2277,7 +2300,7 @@ export class OrdersService {
         const winner = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
         if (winner) return winner;
       }
-      throw e;
+      this.mapOrderCreateError(e);
     }
 
     const rooms = [`store:${requestingStoreId}`];
@@ -2393,7 +2416,14 @@ export class OrdersService {
     // so this can't race the branch's receive (which locks the same row).
     const order = await this.prisma.order.findUnique({
       where: { id },
-      select: { id: true, source: true, kitchenId: true },
+      select: {
+        id: true,
+        source: true,
+        kitchenId: true,
+        code: true,
+        storeId: true,
+        destinationStoreId: true,
+      },
     });
     if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
     if (order.source !== 'INTERNAL_TRANSFER') {
@@ -2401,7 +2431,8 @@ export class OrdersService {
     }
     this.assertKitchenScope(order, actor);
 
-    return this.prisma.$transaction(async (tx) => {
+    let adjusted = false;
+    const updated = await this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ status: OrderStatus }>>`
         SELECT "status" FROM "Order" WHERE "id" = ${id} FOR UPDATE`;
       const status = locked[0]?.status;
@@ -2463,6 +2494,7 @@ export class OrdersService {
       if (itemUpdates.length === 0 && mfgUpdates.length === 0) {
         return tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
       }
+      adjusted = true;
 
       let note = `Bếp điều chỉnh số lượng xuất: ${changes.join('; ')}.`;
       if (dto.note?.trim()) note = `${note} Lý do: ${dto.note.trim()}`;
@@ -2500,6 +2532,24 @@ export class OrdersService {
       });
       return tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
     });
+
+    if (adjusted) {
+      // Same event every open screen already refreshes on; from == to marks an
+      // in-place quantity edit rather than a transition.
+      const rooms = [`order:${id}`, `store:${order.storeId}`];
+      if (order.destinationStoreId && order.destinationStoreId !== order.storeId) {
+        rooms.push(`store:${order.destinationStoreId}`);
+      }
+      if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
+      this.realtime.emit(rooms, 'order.status_changed', {
+        orderId: id,
+        code: order.code,
+        fromStatus: updated.status,
+        toStatus: updated.status,
+        at: new Date().toISOString(),
+      });
+    }
+    return updated;
   }
 
   /**

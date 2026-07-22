@@ -277,6 +277,28 @@ d('Internal transfer adjust/receive races (integration)', () => {
     expect(Number(fresh.total)).toBe(60000);
   });
 
+  it('adjust broadcasts a realtime event so open screens refresh (silent when nothing changed)', async () => {
+    const order = await makeTransfer();
+    realtime.emit.mockClear();
+    await svc.adjustInternalTransfer(order.id, kitchenActor(), {
+      items: [{ orderItemId: order.items[0].id, quantity: 4 }],
+    });
+    const call = realtime.emit.mock.calls.find(([, event]) => event === 'order.status_changed');
+    expect(call).toBeDefined();
+    const [rooms, , payload] = call as [string[], string, Record<string, unknown>];
+    expect(rooms).toEqual(
+      expect.arrayContaining([`order:${order.id}`, `store:${storeId}`, `kitchen:${kitchenId}`]),
+    );
+    expect(payload).toMatchObject({ orderId: order.id, code: order.code });
+
+    // Re-sending the same quantities changes nothing and must stay silent.
+    realtime.emit.mockClear();
+    await svc.adjustInternalTransfer(order.id, kitchenActor(), {
+      items: [{ orderItemId: order.items[0].id, quantity: 4 }],
+    });
+    expect(realtime.emit).not.toHaveBeenCalled();
+  });
+
   it('concurrent adjust + receive: receipt/stock always match the final committed order', async () => {
     const order = await makeTransfer();
     const [adjustRes] = await Promise.allSettled([

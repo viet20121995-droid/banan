@@ -961,8 +961,10 @@ export class ManufacturingService {
         data: { state: 'CANCEL' },
       });
       if (claim.count === 0) {
-        const now = await db.mfgOrder.findUniqueOrThrow({ where: { id } });
-        if (now.state === 'DONE') {
+        // DONE, already CANCEL, or deleted out from under us — none of these
+        // may surface as a raw P2025.
+        const now = await db.mfgOrder.findUnique({ where: { id }, select: { state: true } });
+        if (now?.state === 'DONE') {
           throw new ConflictException({
             code: 'MFG_MO_STATE',
             message: 'Không thể huỷ MO đã hoàn tất.',
@@ -2402,7 +2404,7 @@ export class ManufacturingService {
 
   // ── quality control ───────────────────────────────────────────────────────
 
-  createQualityPoint(dto: {
+  async createQualityPoint(dto: {
     titleVi: string;
     titleEn: string;
     testType: 'MEASURE' | 'PASS_FAIL';
@@ -2412,6 +2414,32 @@ export class ManufacturingService {
     normMax?: number;
     unit?: string;
   }) {
+    // Both refs are optional and come straight from the client picker — a
+    // stale id must be a 400, not a Prisma P2003 leaking as 500.
+    if (dto.bomOperationId) {
+      const op = await this.prisma.mfgBomOperation.findUnique({
+        where: { id: dto.bomOperationId },
+        select: { id: true },
+      });
+      if (!op) {
+        throw new BadRequestException({
+          code: 'MFG_QC_REF_INVALID',
+          message: 'Công đoạn không tồn tại.',
+        });
+      }
+    }
+    if (dto.productId) {
+      const product = await this.prisma.mfgProduct.findUnique({
+        where: { id: dto.productId },
+        select: { id: true },
+      });
+      if (!product) {
+        throw new BadRequestException({
+          code: 'MFG_QC_REF_INVALID',
+          message: 'Sản phẩm không tồn tại.',
+        });
+      }
+    }
     return this.prisma.mfgQualityPoint.create({ data: dto });
   }
 

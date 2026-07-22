@@ -1841,4 +1841,45 @@ d('Manufacturing golden path (integration)', () => {
       fresh.id,
     );
   });
+
+  it('quality point creation validates its refs — bogus IDs are a 400, not a FK 500', async () => {
+    await expect(
+      mfg.createQualityPoint({
+        titleVi: 'Đo nhiệt',
+        titleEn: 'Temp check',
+        testType: 'MEASURE',
+        bomOperationId: 'op-khong-ton-tai',
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      mfg.createQualityPoint({
+        titleVi: 'Đo nhiệt',
+        titleEn: 'Temp check',
+        testType: 'MEASURE',
+        productId: 'sp-khong-ton-tai',
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    // Valid refs still create.
+    const qp = await mfg.createQualityPoint({
+      titleVi: 'Đo nhiệt',
+      titleEn: 'Temp check',
+      testType: 'MEASURE',
+      productId: ids.flour,
+    });
+    expect(qp.productId).toBe(ids.flour);
+  });
+
+  it('cancelMO whose row vanished mid-flight stays idempotent, not a P2025 500', async () => {
+    // The outer pre-read sees the MO, then the row is gone by the time the
+    // transaction claims it (claim.count === 0, in-tx re-read finds nothing).
+    const ghost = 'mo-da-bien-mat';
+    const spy = jest
+      .spyOn(prisma.mfgOrder, 'findUnique')
+      .mockResolvedValueOnce({ id: ghost, state: 'CONFIRMED' } as never);
+    try {
+      await expect(mfg.cancelMO(ghost)).resolves.toMatchObject({ state: 'CANCEL' });
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
