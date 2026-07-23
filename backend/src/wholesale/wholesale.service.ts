@@ -610,6 +610,12 @@ export class WholesaleService {
     const today = vnDay(now);
     const deliveryDay = dto.scheduledFor ? vnDay(targetAt) : null;
     const weekday = dto.scheduledFor ? vnWeekday(targetAt) : null;
+    if (deliveryDay != null && deliveryDay < today) {
+      throw new BadRequestException({
+        code: 'WHOLESALE_DELIVERY_DATE_PAST',
+        message: 'Ngày giao không được ở quá khứ.',
+      });
+    }
     if (deliveryDay != null && contract.nextDayCutoffMinutes != null) {
       const earliest = today + (vnMinuteOfDay(now) < contract.nextDayCutoffMinutes ? 1 : 2);
       if (deliveryDay < earliest) {

@@ -172,6 +172,7 @@ export class CreateContractDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(100_000_000)
   shipFeeVnd?: number;
 }
 
@@ -228,6 +229,7 @@ export class UpdateContractDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(100_000_000)
   shipFeeVnd?: number;
 }
 
@@ -264,6 +266,7 @@ export class ContractLineDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(10_000)
   multipleQty?: number;
 
   /** ISO weekdays (1=Thứ 2 … 7=CN) this item ships. Empty = any day. */
@@ -312,6 +315,7 @@ export class UpdateContractLineDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(10_000)
   multipleQty?: number;
 
   @IsOptional()

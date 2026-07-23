@@ -277,6 +277,14 @@ describe('WholesaleService.createOrder — delivery rules', () => {
     ).resolves.toBeDefined();
   });
 
+  it('refuses a delivery date in the past', async () => {
+    const { svc } = makeService();
+    jest.useFakeTimers({ now: new Date('2026-07-23T01:00:00Z') });
+    await expect(
+      svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-20T03:00:00Z' }),
+    ).rejects.toMatchObject({ response: { code: 'WHOLESALE_DELIVERY_DATE_PAST' } });
+  });
+
   it('refuses delivery on a contract-wide no-delivery weekday', async () => {
     const { svc } = makeService({ contract: ruleContract({ noDeliveryDays: [7] }) });
     // 26/07/2026 (10:00 VN) is a Sunday — weekday 7.

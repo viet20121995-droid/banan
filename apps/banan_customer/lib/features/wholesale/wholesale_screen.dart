@@ -262,10 +262,12 @@ class _ContractOrderForm extends StatelessWidget {
             final now = DateTime.now();
             var earliest = DateTime(now.year, now.month, now.day);
             // Next-day cutoff: order before HH:mm → tomorrow, after → +2 days.
+            // Compared in VN time (UTC+7) like the backend, not device time.
             final cutoff = contract.nextDayCutoffMinutes;
             if (cutoff != null) {
+              final vn = now.toUtc().add(const Duration(hours: 7));
               earliest = earliest.add(
-                Duration(days: now.hour * 60 + now.minute < cutoff ? 1 : 2),
+                Duration(days: vn.hour * 60 + vn.minute < cutoff ? 1 : 2),
               );
             }
             // Selected items with a lead-time in days push the earliest date.
@@ -281,7 +283,9 @@ class _ContractOrderForm extends StatelessWidget {
                 !contract.noDeliveryDays.contains(d.weekday);
             var initial = scheduledFor ?? earliest;
             if (initial.isBefore(earliest)) initial = earliest;
-            while (!selectable(initial)) {
+            // The API caps noDeliveryDays at 6, so a selectable day always
+            // exists within a week — the bound is belt-and-braces.
+            for (var i = 0; i < 7 && !selectable(initial); i++) {
               initial = initial.add(const Duration(days: 1));
             }
             final date = await showDatePicker(
