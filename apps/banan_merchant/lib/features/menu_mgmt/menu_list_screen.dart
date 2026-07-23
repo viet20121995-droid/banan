@@ -51,6 +51,9 @@ class MerchantMenuController extends StateNotifier<MerchantMenuState> {
     state = state.copyWith(loading: true, failure: null);
     final res = await _repo.merchantProducts(
       q: state.query.trim().isEmpty ? null : state.query.trim(),
+      // Server caps perPage at 500; the old default of 50 silently hid the
+      // rest of the menu.
+      perPage: 500,
     );
     res.when(
       success: (page) {

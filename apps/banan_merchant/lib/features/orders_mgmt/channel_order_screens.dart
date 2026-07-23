@@ -38,13 +38,18 @@ class _ProductPicker extends ConsumerStatefulWidget {
 
 class _ProductPickerState extends ConsumerState<_ProductPicker> {
   final _searchCtl = TextEditingController();
-  List<Product> _results = const [];
+  // The whole catalog loads once (server caps perPage at 500 — plenty), then
+  // search + category filters run locally so typing filters instantly. The
+  // old per-keystroke server search only ever saw the first 50 products.
+  List<Product> _all = const [];
+  String _query = '';
+  String? _categoryId;
   bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _search('');
+    _load();
   }
 
   @override
@@ -53,20 +58,38 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
     super.dispose();
   }
 
-  Future<void> _search(String q) async {
+  Future<void> _load() async {
     setState(() => _loading = true);
-    final res = await ref
-        .read(catalogRepositoryProvider)
-        .merchantProducts(q: q.trim().isEmpty ? null : q.trim());
+    final res =
+        await ref.read(catalogRepositoryProvider).merchantProducts(perPage: 500);
     if (!mounted) return;
     setState(() {
       _loading = false;
       res.when(
         success: (page) =>
-            _results = page.items.where((p) => p.isAvailable).toList(),
+            _all = page.items.where((p) => p.isAvailable).toList(),
         failure: (_) {},
       );
     });
+  }
+
+  List<Product> get _results {
+    final q = _query.trim().toLowerCase();
+    return [
+      for (final p in _all)
+        if ((_categoryId == null || p.categoryId == _categoryId) &&
+            (q.isEmpty || p.name.toLowerCase().contains(q)))
+          p,
+    ];
+  }
+
+  /// Unique categories present in the catalog, in first-seen order.
+  List<Category> get _categories {
+    final seen = <String>{};
+    return [
+      for (final p in _all)
+        if (p.category != null && seen.add(p.category!.id)) p.category!,
+    ];
   }
 
   Future<void> _pick(Product p) async {
@@ -109,12 +132,41 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
             hintText: 'Tìm sản phẩm…',
             isDense: true,
           ),
-          onSubmitted: _search,
-          onChanged: (v) {
-            if (v.isEmpty) _search('');
-          },
+          onChanged: (v) => setState(() => _query = v),
         ),
         const SizedBox(height: BananSpacing.sm),
+        if (_categories.isNotEmpty) ...[
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: FilterChip(
+                    label: const Text('Tất cả'),
+                    selected: _categoryId == null,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) => setState(() => _categoryId = null),
+                  ),
+                ),
+                for (final c in _categories)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: FilterChip(
+                      label: Text(c.name),
+                      selected: _categoryId == c.id,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (_) => setState(
+                        () => _categoryId = _categoryId == c.id ? null : c.id,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: BananSpacing.sm),
+        ],
         if (_loading)
           const LinearProgressIndicator()
         else
@@ -129,7 +181,10 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
                       return ListTile(
                         dense: true,
                         title: Text(p.name, overflow: TextOverflow.ellipsis),
-                        subtitle: Text('${_money.format(p.basePrice)} đ'),
+                        subtitle: Text(
+                          '${p.category?.name ?? "—"} · ${_money.format(p.basePrice)} đ',
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         trailing: const Icon(Icons.add_circle_outline),
                         onTap: () => _pick(p),
                       );
@@ -626,29 +681,35 @@ class _InternalTransferScreenState
                 ?.copyWith(color: theme.colorScheme.outline),
           ),
           const SizedBox(height: BananSpacing.sm),
-          DropdownButtonFormField<String>(
-            // Reset to null after each pick so the same item can be re-picked.
+          Autocomplete<MfgProduct>(
+            // Rebuild after each pick so the field clears and the same list
+            // can be searched again.
             key: ValueKey('supply-picker-${supplies.length}'),
-            initialValue: null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Thêm vật tư',
-              prefixIcon: Icon(Icons.add_shopping_cart_outlined),
-              isDense: true,
-            ),
-            items: [
-              for (final p in _mfgCatalog)
-                DropdownMenuItem(
-                  value: p.id,
-                  child: Text('${p.nameVi} (${p.code})'),
-                ),
-            ],
-            onChanged: (v) {
-              final matches = _mfgCatalog.where((p) => p.id == v);
-              if (matches.isEmpty) return;
-              if (supplies.any((s) => s.product.id == v)) return;
-              setState(() => supplies.add(_SupplyLine(matches.first)));
+            displayStringForOption: (p) => '${p.nameVi} (${p.code})',
+            optionsBuilder: (t) {
+              final q = t.text.trim().toLowerCase();
+              final picked = supplies.map((s) => s.product.id).toSet();
+              return _mfgCatalog.where(
+                (p) =>
+                    !picked.contains(p.id) &&
+                    (q.isEmpty ||
+                        p.nameVi.toLowerCase().contains(q) ||
+                        p.code.toLowerCase().contains(q)),
+              );
             },
+            onSelected: (p) {
+              if (supplies.any((s) => s.product.id == p.id)) return;
+              setState(() => supplies.add(_SupplyLine(p)));
+            },
+            fieldViewBuilder: (context, ctl, focus, onSubmit) => TextField(
+              controller: ctl,
+              focusNode: focus,
+              decoration: const InputDecoration(
+                labelText: 'Thêm vật tư — gõ tên hoặc mã để tìm',
+                prefixIcon: Icon(Icons.add_shopping_cart_outlined),
+                isDense: true,
+              ),
+            ),
           ),
           for (final s in supplies)
             Row(

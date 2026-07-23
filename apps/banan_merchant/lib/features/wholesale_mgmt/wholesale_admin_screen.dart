@@ -1219,11 +1219,17 @@ class _ContractLineDialogState extends ConsumerState<_ContractLineDialog> {
   void initState() {
     super.initState();
     Future.microtask(() async {
-      final result =
-          await ref.read(catalogRepositoryProvider).merchantProducts();
+      // perPage 500 (the server cap) — the bare default of 50 hid most of the
+      // menu from the contract-line picker. Hidden products stay out: the
+      // customer catalog would never show them anyway.
+      final result = await ref
+          .read(catalogRepositoryProvider)
+          .merchantProducts(perPage: 500);
       if (!mounted) return;
       result.when(
-        success: (page) => setState(() => products = page.items),
+        success: (page) => setState(
+          () => products = page.items.where((p) => p.isAvailable).toList(),
+        ),
         failure: (_) {},
       );
     });
@@ -1276,18 +1282,31 @@ class _ContractLineDialogState extends ConsumerState<_ContractLineDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                DropdownButtonFormField<Product>(
-                  initialValue: product,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Sản phẩm'),
-                  items: [
-                    for (final value in products)
-                      DropdownMenuItem(value: value, child: Text(value.name)),
-                  ],
-                  onChanged: (value) => setState(() {
-                    product = value;
+                // Autocomplete instead of a 100+-item dropdown: type to filter.
+                Autocomplete<Product>(
+                  displayStringForOption: (p) => p.name,
+                  optionsBuilder: (t) {
+                    final q = t.text.trim().toLowerCase();
+                    if (q.isEmpty) return products;
+                    return products
+                        .where((p) => p.name.toLowerCase().contains(q));
+                  },
+                  onSelected: (p) => setState(() {
+                    product = p;
                     variant = null;
                   }),
+                  fieldViewBuilder: (context, ctl, focus, onSubmit) =>
+                      TextField(
+                    controller: ctl,
+                    focusNode: focus,
+                    decoration: InputDecoration(
+                      labelText: 'Sản phẩm',
+                      hintText: 'Gõ tên để tìm…',
+                      helperText: product == null
+                          ? 'Chưa chọn sản phẩm'
+                          : 'Đã chọn: ${product!.name}',
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<ProductVariant?>(

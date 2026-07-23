@@ -23,7 +23,7 @@ final _editorThreadProvider = FutureProvider.autoDispose
 final _pickerProductsProvider =
     FutureProvider.autoDispose<List<domain.Product>>((ref) async {
   final repo = ref.watch(catalogRepositoryProvider);
-  final res = await repo.merchantProducts(perPage: 100);
+  final res = await repo.merchantProducts(perPage: 500);
   return res.when(
     success: (page) => page.items,
     failure: (_) => const <domain.Product>[],

@@ -1329,7 +1329,7 @@ class _ProductMultiSelectSheetState
   Future<List<Product>> _load() async {
     final res = await ref
         .read(catalogRepositoryProvider)
-        .merchantProducts(perPage: 200);
+        .merchantProducts(perPage: 500);
     return res.when(
       success: (page) => page.items,
       failure: (f) => throw Exception(authFailureMessage(f)),
