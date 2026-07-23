@@ -734,6 +734,14 @@ model WholesaleContract {
   defaultDiscountPct Decimal?         @db.Decimal(5, 2)
   /// Overrides the account's paymentTermDays when set.
   paymentTermDays    Int?
+  /// Minutes from midnight VN time (UTC+7). Orders placed BEFORE this cutoff
+  /// may be delivered tomorrow; after it the earliest delivery is the day
+  /// after tomorrow. Null = no next-day rule.
+  nextDayCutoffMinutes Int?
+  /// ISO weekdays (1 = Thứ 2 … 7 = Chủ nhật) this account is never delivered on.
+  noDeliveryDays     Int[]            @default([])
+  /// Per-order delivery fee (₫). 0 = freeship.
+  shipFeeVnd         Int              @default(0)
 
   lines  WholesaleContractLine[]
   orders Order[]
@@ -759,6 +767,12 @@ model WholesaleContractLine {
   minQty        Int               @default(1)
   active        Boolean           @default(true)
   leadTimeHours Int?
+  /// Order quantity must be a multiple of this (cases/trays). 1 = any qty.
+  multipleQty   Int               @default(1)
+  /// ISO weekdays (1 = Thứ 2 … 7 = Chủ nhật) this item ships. Empty = any day.
+  deliveryDays  Int[]             @default([])
+  /// Item must be ordered at least this many VN calendar days before delivery.
+  leadTimeDays  Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -90,6 +90,10 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
       _message('Chọn ít nhất một sản phẩm.');
       return;
     }
+    if (contract.requiresDeliveryDate && scheduledFor == null) {
+      _message('Hợp đồng này yêu cầu chọn ngày giao hàng.');
+      return;
+    }
     setState(() => saving = true);
     final result = await ref.read(wholesaleApiProvider).createOrder(
           contractId: contract.id,
@@ -212,10 +216,12 @@ class _ContractOrderForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = contract.lines.fold<double>(
+    final goods = contract.lines.fold<double>(
       0,
       (sum, line) => sum + line.contractPrice * (quantities[line.id] ?? 0),
     );
+    // Ship fee is per order — only shown/charged once something is in the cart.
+    final total = goods + (goods > 0 ? contract.shipFeeVnd : 0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -232,6 +238,11 @@ class _ContractOrderForm extends StatelessWidget {
                 if (line.variantLabel != null) line.variantLabel!,
                 'Giá hợp đồng ${_money.format(line.contractPrice)}',
                 'Tối thiểu ${line.minQty}',
+                if (line.multipleQty > 1) 'Bội số ${line.multipleQty}',
+                if (line.deliveryDays.isNotEmpty)
+                  'Chỉ giao ${_dayNames(line.deliveryDays)}',
+                if (line.leadTimeDays != null && line.leadTimeDays! > 0)
+                  'Đặt trước ${line.leadTimeDays} ngày',
                 if (line.leadTimeHours != null)
                   'Đặt trước ${line.leadTimeHours} giờ',
               ].join(' · '),
@@ -239,6 +250,7 @@ class _ContractOrderForm extends StatelessWidget {
             trailing: _QuantityControl(
               value: quantities[line.id] ?? 0,
               minimum: line.minQty,
+              step: line.multipleQty,
               onChanged: (value) => onQuantity(line, value),
             ),
           ),
@@ -248,11 +260,36 @@ class _ContractOrderForm extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: () async {
             final now = DateTime.now();
+            var earliest = DateTime(now.year, now.month, now.day);
+            // Next-day cutoff: order before HH:mm → tomorrow, after → +2 days.
+            final cutoff = contract.nextDayCutoffMinutes;
+            if (cutoff != null) {
+              earliest = earliest.add(
+                Duration(days: now.hour * 60 + now.minute < cutoff ? 1 : 2),
+              );
+            }
+            // Selected items with a lead-time in days push the earliest date.
+            for (final line in contract.lines) {
+              final lead = line.leadTimeDays ?? 0;
+              if ((quantities[line.id] ?? 0) > 0 && lead > 0) {
+                final leadDay =
+                    DateTime(now.year, now.month, now.day).add(Duration(days: lead));
+                if (leadDay.isAfter(earliest)) earliest = leadDay;
+              }
+            }
+            bool selectable(DateTime d) =>
+                !contract.noDeliveryDays.contains(d.weekday);
+            var initial = scheduledFor ?? earliest;
+            if (initial.isBefore(earliest)) initial = earliest;
+            while (!selectable(initial)) {
+              initial = initial.add(const Duration(days: 1));
+            }
             final date = await showDatePicker(
               context: context,
-              initialDate: scheduledFor ?? now.add(const Duration(days: 1)),
-              firstDate: now,
+              initialDate: initial,
+              firstDate: earliest,
               lastDate: now.add(const Duration(days: 180)),
+              selectableDayPredicate: selectable,
             );
             if (date == null || !context.mounted) return;
             final time = await showTimePicker(
@@ -273,10 +310,27 @@ class _ContractOrderForm extends StatelessWidget {
           icon: const Icon(Icons.event_outlined),
           label: Text(
             scheduledFor == null
-                ? 'Chọn thời gian cần giao'
+                ? (contract.requiresDeliveryDate
+                    ? 'Chọn ngày giao (bắt buộc)'
+                    : 'Chọn thời gian cần giao')
                 : 'Giao ${DateFormat('dd/MM/yyyy HH:mm').format(scheduledFor!)}',
           ),
         ),
+        if (contract.nextDayCutoffMinutes != null ||
+            contract.noDeliveryDays.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              [
+                if (contract.nextDayCutoffMinutes != null)
+                  'Đặt trước ${_hhmm(contract.nextDayCutoffMinutes!)} để được '
+                      'giao vào ngày hôm sau.',
+                if (contract.noDeliveryDays.isNotEmpty)
+                  'Không giao vào ${_dayNames(contract.noDeliveryDays)}.',
+              ].join(' '),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
         const SizedBox(height: 12),
         TextField(
           controller: poCode,
@@ -292,6 +346,14 @@ class _ContractOrderForm extends StatelessWidget {
           decoration: const InputDecoration(labelText: 'Ghi chú đơn hàng'),
         ),
         const SizedBox(height: 16),
+        if (contract.shipFeeVnd > 0 && goods > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Phí giao hàng: ${_money.format(contract.shipFeeVnd)}',
+              textAlign: TextAlign.end,
+            ),
+          ),
         FilledButton.icon(
           onPressed: saving ? null : onSubmit,
           icon: saving
@@ -307,15 +369,28 @@ class _ContractOrderForm extends StatelessWidget {
   }
 }
 
+const _weekdayVi = ['', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
+String _dayNames(List<int> days) => days.map((d) => _weekdayVi[d]).join(', ');
+String _hhmm(int minutes) =>
+    '${(minutes ~/ 60).toString().padLeft(2, '0')}:'
+    '${(minutes % 60).toString().padLeft(2, '0')}';
+
 class _QuantityControl extends StatelessWidget {
   const _QuantityControl({
     required this.value,
     required this.minimum,
     required this.onChanged,
+    this.step = 1,
   });
   final int value;
   final int minimum;
+
+  /// Quantity moves in multiples of this (contract line multipleQty).
+  final int step;
   final ValueChanged<int> onChanged;
+
+  /// First orderable quantity: the minimum rounded UP to a multiple of step.
+  int get _first => ((minimum + step - 1) ~/ step) * step;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -325,7 +400,7 @@ class _QuantityControl extends StatelessWidget {
             tooltip: 'Giảm',
             onPressed: value == 0
                 ? null
-                : () => onChanged(value <= minimum ? 0 : value - 1),
+                : () => onChanged(value <= _first ? 0 : value - step),
             icon: const Icon(Icons.remove_circle_outline),
           ),
           SizedBox(
@@ -334,7 +409,7 @@ class _QuantityControl extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Tăng',
-            onPressed: () => onChanged(value == 0 ? minimum : value + 1),
+            onPressed: () => onChanged(value == 0 ? _first : value + step),
             icon: const Icon(Icons.add_circle_outline),
           ),
         ],

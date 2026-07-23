@@ -19,6 +19,9 @@ class WholesaleCatalogLine {
     this.variantId,
     this.variantLabel,
     this.leadTimeHours,
+    this.multipleQty = 1,
+    this.deliveryDays = const [],
+    this.leadTimeDays,
   });
 
   factory WholesaleCatalogLine.fromJson(Map<String, dynamic> j) =>
@@ -32,6 +35,11 @@ class WholesaleCatalogLine {
         contractPrice: _num(j['contractPrice']),
         minQty: (j['minQty'] as num?)?.toInt() ?? 1,
         leadTimeHours: (j['leadTimeHours'] as num?)?.toInt(),
+        multipleQty: (j['multipleQty'] as num?)?.toInt() ?? 1,
+        deliveryDays: ((j['deliveryDays'] as List?) ?? const [])
+            .map((e) => (e as num).toInt())
+            .toList(),
+        leadTimeDays: (j['leadTimeDays'] as num?)?.toInt(),
       );
 
   final String id;
@@ -43,6 +51,15 @@ class WholesaleCatalogLine {
   final double contractPrice;
   final int minQty;
   final int? leadTimeHours;
+
+  /// Order quantity must be a multiple of this. 1 = any quantity.
+  final int multipleQty;
+
+  /// ISO weekdays (1 = Thứ 2 … 7 = CN) this item ships. Empty = any day.
+  final List<int> deliveryDays;
+
+  /// Must be ordered at least this many days before the delivery date.
+  final int? leadTimeDays;
 }
 
 class WholesaleContractView {
@@ -52,6 +69,9 @@ class WholesaleContractView {
     required this.lines,
     this.minOrderVnd,
     this.endsAt,
+    this.nextDayCutoffMinutes,
+    this.noDeliveryDays = const [],
+    this.shipFeeVnd = 0,
   });
 
   factory WholesaleContractView.fromJson(Map<String, dynamic> j) =>
@@ -60,6 +80,11 @@ class WholesaleContractView {
         name: j['name'] as String? ?? '',
         minOrderVnd: (j['minOrderVnd'] as num?)?.toInt(),
         endsAt: DateTime.tryParse('${j['endsAt']}'),
+        nextDayCutoffMinutes: (j['nextDayCutoffMinutes'] as num?)?.toInt(),
+        noDeliveryDays: ((j['noDeliveryDays'] as List?) ?? const [])
+            .map((e) => (e as num).toInt())
+            .toList(),
+        shipFeeVnd: (j['shipFeeVnd'] as num?)?.toInt() ?? 0,
         lines: ((j['lines'] as List?) ?? const [])
             .map(
               (e) => WholesaleCatalogLine.fromJson(
@@ -73,7 +98,24 @@ class WholesaleContractView {
   final String name;
   final int? minOrderVnd;
   final DateTime? endsAt;
+
+  /// Order before this minute-of-day (VN time) → next-day delivery possible.
+  final int? nextDayCutoffMinutes;
+
+  /// ISO weekdays (1 = Thứ 2 … 7 = CN) with no delivery.
+  final List<int> noDeliveryDays;
+
+  /// Per-order ship fee (₫). 0 = freeship.
+  final int shipFeeVnd;
   final List<WholesaleCatalogLine> lines;
+
+  /// Any rule that makes picking a delivery date mandatory.
+  bool get requiresDeliveryDate =>
+      nextDayCutoffMinutes != null ||
+      noDeliveryDays.isNotEmpty ||
+      lines.any(
+        (l) => l.deliveryDays.isNotEmpty || (l.leadTimeDays ?? 0) > 0,
+      );
 }
 
 class WholesaleReceivableView {

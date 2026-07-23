@@ -151,6 +151,28 @@ export class CreateContractDto {
   @Min(1)
   @Max(365)
   paymentTermDays?: number;
+
+  /** Minutes from midnight VN time; order before this → next-day delivery. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1439)
+  nextDayCutoffMinutes?: number | null;
+
+  /** ISO weekdays (1=Thứ 2 … 7=CN) with no delivery. Max 6 — can't block all. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(6)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  noDeliveryDays?: number[];
+
+  /** Per-order ship fee (₫). 0 = freeship. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  shipFeeVnd?: number;
 }
 
 export class UpdateContractDto {
@@ -188,6 +210,25 @@ export class UpdateContractDto {
   @Min(1)
   @Max(365)
   paymentTermDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1439)
+  nextDayCutoffMinutes?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(6)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  noDeliveryDays?: number[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  shipFeeVnd?: number;
 }
 
 export class ContractLineDto {
@@ -218,6 +259,28 @@ export class ContractLineDto {
   @IsInt()
   @Min(0)
   leadTimeHours?: number;
+
+  /** Order quantity must be a multiple of this (cases/trays). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  multipleQty?: number;
+
+  /** ISO weekdays (1=Thứ 2 … 7=CN) this item ships. Empty = any day. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(7)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  deliveryDays?: number[];
+
+  /** Must be ordered at least this many VN calendar days before delivery. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  leadTimeDays?: number;
 }
 
 export class UpdateContractLineDto {
@@ -245,6 +308,25 @@ export class UpdateContractLineDto {
   @IsInt()
   @Min(0)
   leadTimeHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  multipleQty?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(7)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  deliveryDays?: number[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  leadTimeDays?: number;
 }
 
 export class WholesaleOrderItemDto {

@@ -755,7 +755,19 @@ class _AccountDetailState extends ConsumerState<_AccountDetail> {
                           ),
                           title: Text(contract['name'] as String? ?? ''),
                           subtitle: Text(
-                            '${lines.length} sản phẩm · từ ${_date(contract['startsAt'])}${contract['endsAt'] == null ? '' : ' đến ${_date(contract['endsAt'])}'}',
+                            [
+                              '${lines.length} sản phẩm · từ ${_date(contract['startsAt'])}${contract['endsAt'] == null ? '' : ' đến ${_date(contract['endsAt'])}'}',
+                              if (contract['nextDayCutoffMinutes'] != null)
+                                'Chốt đơn ${_hhmm(_asNumber(contract['nextDayCutoffMinutes']).toInt())}',
+                              if (((contract['noDeliveryDays'] as List?) ??
+                                      const [])
+                                  .isNotEmpty)
+                                'Nghỉ giao ${_dayNames(((contract['noDeliveryDays'] as List?) ?? const []).map((e) => _asNumber(e).toInt()).toList())}',
+                              if (_asNumber(contract['shipFeeVnd'] ?? 0) > 0)
+                                'Ship ${_currency.format(_asNumber(contract['shipFeeVnd']))}'
+                              else
+                                'Freeship',
+                            ].join(' · '),
                           ),
                           children: [
                             for (final line in lines)
@@ -790,6 +802,14 @@ class _AccountDetailState extends ConsumerState<_AccountDetail> {
                                     else
                                       'Chiết khấu ${line['discountPct'] ?? contract['defaultDiscountPct'] ?? 0}%',
                                     'Tối thiểu ${line['minQty'] ?? 1}',
+                                    if (_asNumber(line['multipleQty'] ?? 1) > 1)
+                                      'Bội số ${line['multipleQty']}',
+                                    if (((line['deliveryDays'] as List?) ??
+                                            const [])
+                                        .isNotEmpty)
+                                      'Giao ${_dayNames(((line['deliveryDays'] as List?) ?? const []).map((e) => _asNumber(e).toInt()).toList())}',
+                                    if (line['leadTimeDays'] != null)
+                                      'Trước ${line['leadTimeDays']} ngày',
                                   ].join(' · '),
                                 ),
                                 trailing: Switch(
@@ -822,6 +842,23 @@ class _AccountDetailState extends ConsumerState<_AccountDetail> {
                                     },
                                     icon: const Icon(Icons.add, size: 18),
                                     label: const Text('Thêm sản phẩm'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final saved = await showDialog<bool>(
+                                        context: context,
+                                        builder: (_) => _ContractRuleDialog(
+                                          contract: contract,
+                                        ),
+                                      );
+                                      if (saved ?? false) await reload();
+                                    },
+                                    icon: const Icon(
+                                      Icons.local_shipping_outlined,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Quy tắc giao hàng'),
                                   ),
                                   const SizedBox(width: 8),
                                   TextButton.icon(
@@ -872,7 +909,10 @@ class _ContractDialogState extends ConsumerState<_ContractDialog> {
   final discount = TextEditingController();
   final minOrder = TextEditingController();
   final term = TextEditingController();
+  final shipFee = TextEditingController();
   DateTime startsAt = DateTime.now();
+  TimeOfDay? cutoff;
+  final noDays = <int>{};
 
   @override
   void dispose() {
@@ -880,6 +920,7 @@ class _ContractDialogState extends ConsumerState<_ContractDialog> {
     discount.dispose();
     minOrder.dispose();
     term.dispose();
+    shipFee.dispose();
     super.dispose();
   }
 
@@ -894,6 +935,11 @@ class _ContractDialogState extends ConsumerState<_ContractDialog> {
         'minOrderVnd':
             int.tryParse(minOrder.text.replaceAll(RegExp(r'\D'), '')),
       if (term.text.isNotEmpty) 'paymentTermDays': int.tryParse(term.text),
+      if (cutoff != null)
+        'nextDayCutoffMinutes': cutoff!.hour * 60 + cutoff!.minute,
+      if (noDays.isNotEmpty) 'noDeliveryDays': (noDays.toList()..sort()),
+      if (shipFee.text.isNotEmpty)
+        'shipFeeVnd': int.tryParse(shipFee.text.replaceAll(RegExp(r'\D'), '')),
     });
     if (!mounted) return;
     result.when(
@@ -909,38 +955,60 @@ class _ContractDialogState extends ConsumerState<_ContractDialog> {
         title: const Text('Hợp đồng mới'),
         content: SizedBox(
           width: 460,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                decoration: const InputDecoration(labelText: 'Tên hợp đồng'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: discount,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Chiết khấu mặc định (%)',
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'Tên hợp đồng'),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: minOrder,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Giá trị đơn tối thiểu (đ)',
+                const SizedBox(height: 12),
+                TextField(
+                  controller: discount,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Chiết khấu mặc định (%)',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: term,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Kỳ hạn riêng (ngày, tùy chọn)',
+                const SizedBox(height: 12),
+                TextField(
+                  controller: minOrder,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Giá trị đơn tối thiểu (đ)',
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: term,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Kỳ hạn riêng (ngày, tùy chọn)',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _CutoffField(
+                  value: cutoff,
+                  onChanged: (v) => setState(() => cutoff = v),
+                ),
+                const SizedBox(height: 12),
+                _WeekdayChips(
+                  label: 'Ngày KHÔNG giao trong tuần',
+                  selected: noDays,
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: shipFee,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Phí giao mỗi đơn (đ)',
+                    helperText: 'Bỏ trống hoặc 0 = freeship.',
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -949,6 +1017,180 @@ class _ContractDialogState extends ConsumerState<_ContractDialog> {
             child: const Text('Hủy'),
           ),
           FilledButton(onPressed: save, child: const Text('Tạo hợp đồng')),
+        ],
+      );
+}
+
+/// Edit the delivery rules of an EXISTING contract: next-day cutoff,
+/// no-delivery weekdays, ship fee. PATCHes via adminUpdateContract.
+class _ContractRuleDialog extends ConsumerStatefulWidget {
+  const _ContractRuleDialog({required this.contract});
+  final Map<String, dynamic> contract;
+  @override
+  ConsumerState<_ContractRuleDialog> createState() =>
+      _ContractRuleDialogState();
+}
+
+class _ContractRuleDialogState extends ConsumerState<_ContractRuleDialog> {
+  late TimeOfDay? cutoff = widget.contract['nextDayCutoffMinutes'] == null
+      ? null
+      : TimeOfDay(
+          hour: _asNumber(widget.contract['nextDayCutoffMinutes']).toInt() ~/ 60,
+          minute:
+              _asNumber(widget.contract['nextDayCutoffMinutes']).toInt() % 60,
+        );
+  late final noDays = <int>{
+    for (final d in (widget.contract['noDeliveryDays'] as List?) ?? const [])
+      _asNumber(d).toInt(),
+  };
+  late final shipFee = TextEditingController(
+    text: _asNumber(widget.contract['shipFeeVnd'] ?? 0) > 0
+        ? '${_asNumber(widget.contract['shipFeeVnd']).toInt()}'
+        : '',
+  );
+
+  @override
+  void dispose() {
+    shipFee.dispose();
+    super.dispose();
+  }
+
+  Future<void> save() async {
+    final result = await ref.read(wholesaleApiProvider).adminUpdateContract(
+      widget.contract['id'] as String,
+      {
+        'nextDayCutoffMinutes':
+            cutoff == null ? null : cutoff!.hour * 60 + cutoff!.minute,
+        'noDeliveryDays': (noDays.toList()..sort()),
+        'shipFeeVnd': shipFee.text.trim().isEmpty
+            ? 0
+            : int.tryParse(shipFee.text.replaceAll(RegExp(r'\D'), '')) ?? 0,
+      },
+    );
+    if (!mounted) return;
+    result.when(
+      success: (_) => Navigator.pop(context, true),
+      failure: (failure) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure.message ?? failure.code)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text('Quy tắc giao · ${widget.contract['name'] ?? ''}'),
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _CutoffField(
+                  value: cutoff,
+                  onChanged: (v) => setState(() => cutoff = v),
+                ),
+                const SizedBox(height: 12),
+                _WeekdayChips(
+                  label: 'Ngày KHÔNG giao trong tuần',
+                  selected: noDays,
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: shipFee,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Phí giao mỗi đơn (đ)',
+                    helperText: 'Bỏ trống hoặc 0 = freeship.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(onPressed: save, child: const Text('Lưu')),
+        ],
+      );
+}
+
+/// "Đặt trước HH:mm để giao hôm sau" — time picker with a clear button.
+class _CutoffField extends StatelessWidget {
+  const _CutoffField({required this.value, required this.onChanged});
+  final TimeOfDay? value;
+  final ValueChanged<TimeOfDay?> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: value ?? const TimeOfDay(hour: 14, minute: 0),
+                );
+                if (picked != null) onChanged(picked);
+              },
+              icon: const Icon(Icons.schedule_outlined, size: 18),
+              label: Text(
+                value == null
+                    ? 'Giờ chốt đơn cho giao hôm sau (không bắt buộc)'
+                    : 'Đặt trước ${_hhmm(value!.hour * 60 + value!.minute)} → giao hôm sau',
+              ),
+            ),
+          ),
+          if (value != null)
+            IconButton(
+              tooltip: 'Bỏ giờ chốt',
+              onPressed: () => onChanged(null),
+              icon: const Icon(Icons.clear),
+            ),
+        ],
+      );
+}
+
+/// FilterChips Thứ 2 → CN backed by a Set of ISO weekdays (1–7).
+class _WeekdayChips extends StatelessWidget {
+  const _WeekdayChips({
+    required this.label,
+    required this.selected,
+    required this.onChanged,
+  });
+  final String label;
+  final Set<int> selected;
+  final ValueChanged<Set<int>> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (var d = 1; d <= 7; d++)
+                FilterChip(
+                  label: Text(_weekdayVi[d]),
+                  selected: selected.contains(d),
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (on) {
+                    if (on) {
+                      selected.add(d);
+                    } else {
+                      selected.remove(d);
+                    }
+                    onChanged(selected);
+                  },
+                ),
+            ],
+          ),
         ],
       );
 }
@@ -969,6 +1211,9 @@ class _ContractLineDialogState extends ConsumerState<_ContractLineDialog> {
   final discount = TextEditingController();
   final minQty = TextEditingController(text: '1');
   final leadTime = TextEditingController();
+  final multiple = TextEditingController();
+  final leadDays = TextEditingController();
+  final days = <int>{};
 
   @override
   void initState() {
@@ -990,6 +1235,8 @@ class _ContractLineDialogState extends ConsumerState<_ContractLineDialog> {
     discount.dispose();
     minQty.dispose();
     leadTime.dispose();
+    multiple.dispose();
+    leadDays.dispose();
     super.dispose();
   }
 
@@ -1007,6 +1254,9 @@ class _ContractLineDialogState extends ConsumerState<_ContractLineDialog> {
       'minQty': int.tryParse(minQty.text) ?? 1,
       if (leadTime.text.isNotEmpty)
         'leadTimeHours': int.tryParse(leadTime.text),
+      if (multiple.text.isNotEmpty) 'multipleQty': int.tryParse(multiple.text),
+      if (days.isNotEmpty) 'deliveryDays': (days.toList()..sort()),
+      if (leadDays.text.isNotEmpty) 'leadTimeDays': int.tryParse(leadDays.text),
     });
     if (!mounted) return;
     result.when(
@@ -1088,6 +1338,29 @@ class _ContractLineDialogState extends ConsumerState<_ContractLineDialog> {
                     labelText: 'Đặt trước tối thiểu (giờ)',
                   ),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: multiple,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Bội số đặt hàng (tùy chọn)',
+                    helperText: 'VD 6 = chỉ đặt 6, 12, 18… Bỏ trống = tự do.',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: leadDays,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Đặt trước tối thiểu (ngày, tùy chọn)',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _WeekdayChips(
+                  label: 'Chỉ giao vào các ngày (bỏ trống = mọi ngày)',
+                  selected: days,
+                  onChanged: (_) => setState(() {}),
+                ),
               ],
             ),
           ),
@@ -1133,6 +1406,20 @@ class _ContractLineEditDialogState
         ? ''
         : '${widget.line['leadTimeHours']}',
   );
+  late final multiple = TextEditingController(
+    text: _asNumber(widget.line['multipleQty'] ?? 1) > 1
+        ? '${widget.line['multipleQty']}'
+        : '',
+  );
+  late final leadDays = TextEditingController(
+    text: widget.line['leadTimeDays'] == null
+        ? ''
+        : '${widget.line['leadTimeDays']}',
+  );
+  late final days = <int>{
+    for (final d in (widget.line['deliveryDays'] as List?) ?? const [])
+      _asNumber(d).toInt(),
+  };
 
   @override
   void dispose() {
@@ -1140,6 +1427,8 @@ class _ContractLineEditDialogState
     discount.dispose();
     minQty.dispose();
     leadTime.dispose();
+    multiple.dispose();
+    leadDays.dispose();
     super.dispose();
   }
 
@@ -1162,6 +1451,14 @@ class _ContractLineEditDialogState
           'leadTimeHours': int.tryParse(leadTime.text)
         else
           'leadTimeHours': null,
+        'multipleQty': multiple.text.trim().isEmpty
+            ? 1
+            : int.tryParse(multiple.text) ?? 1,
+        'deliveryDays': (days.toList()..sort()),
+        if (leadDays.text.trim().isNotEmpty)
+          'leadTimeDays': int.tryParse(leadDays.text)
+        else
+          'leadTimeDays': null,
       },
     );
     if (!mounted) return;
@@ -1216,6 +1513,29 @@ class _ContractLineEditDialogState
                 labelText: 'Đặt trước tối thiểu (giờ)',
               ),
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: multiple,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Bội số đặt hàng',
+                helperText: 'VD 6 = chỉ đặt 6, 12, 18… Bỏ trống = tự do.',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: leadDays,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Đặt trước tối thiểu (ngày)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            _WeekdayChips(
+              label: 'Chỉ giao vào các ngày (bỏ trống = mọi ngày)',
+              selected: days,
+              onChanged: (_) => setState(() {}),
+            ),
           ],
         ),
       ),
@@ -1233,6 +1553,13 @@ class _ContractLineEditDialogState
 String _date(dynamic value) => value == null
     ? ''
     : DateFormat('dd/MM/yyyy').format(DateTime.parse('$value').toLocal());
+
+const _weekdayVi = ['', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
+String _dayNames(List<int> days) =>
+    (days.toList()..sort()).map((d) => _weekdayVi[d]).join(', ');
+String _hhmm(int minutes) =>
+    '${(minutes ~/ 60).toString().padLeft(2, '0')}:'
+    '${(minutes % 60).toString().padLeft(2, '0')}';
 
 num _asNumber(dynamic value) =>
     value is num ? value : num.tryParse('$value') ?? 0;

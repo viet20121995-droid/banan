@@ -34,6 +34,9 @@ const CONTRACT = {
   minOrderVnd: null,
   defaultDiscountPct: null,
   paymentTermDays: null,
+  nextDayCutoffMinutes: null,
+  noDeliveryDays: [] as number[],
+  shipFeeVnd: 0,
   lines: [
     {
       id: 'l1',
@@ -44,6 +47,9 @@ const CONTRACT = {
       minQty: 5,
       active: true,
       leadTimeHours: null,
+      multipleQty: 1,
+      deliveryDays: [] as number[],
+      leadTimeDays: null,
     },
     {
       id: 'l2',
@@ -54,6 +60,9 @@ const CONTRACT = {
       minQty: 1,
       active: true,
       leadTimeHours: null,
+      multipleQty: 1,
+      deliveryDays: [] as number[],
+      leadTimeDays: null,
     },
   ],
 };
@@ -228,6 +237,97 @@ describe('WholesaleService.createOrder', () => {
     // The tx only creates the order + receivable — no payment/gateway calls
     // exist anywhere in this service (nothing to assert a call on).
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('WholesaleService.createOrder — delivery rules', () => {
+  afterEach(() => jest.useRealTimers());
+
+  /** CONTRACT with contract-level and/or first-line overrides. */
+  const ruleContract = (
+    over: Record<string, unknown> = {},
+    lineOver: Record<string, unknown> = {},
+  ) => ({
+    ...CONTRACT,
+    ...over,
+    lines: [{ ...CONTRACT.lines[0], ...lineOver }, CONTRACT.lines[1]],
+  });
+
+  it('requires a delivery date when the contract carries schedule rules', async () => {
+    const { svc } = makeService({ contract: ruleContract({ nextDayCutoffMinutes: 840 }) });
+    await expect(svc.createOrder('u1', dto)).rejects.toMatchObject({
+      response: { code: 'WHOLESALE_DELIVERY_DATE_REQUIRED' },
+    });
+  });
+
+  it('before the 14:00 cutoff tomorrow is deliverable; after it, refused', async () => {
+    const { svc } = makeService({ contract: ruleContract({ nextDayCutoffMinutes: 840 }) });
+    // 08:00 VN on Thu 23/07 (= 01:00Z) — before the cutoff.
+    jest.useFakeTimers({ now: new Date('2026-07-23T01:00:00Z') });
+    await expect(
+      svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-24T03:00:00Z' }),
+    ).resolves.toBeDefined();
+    // 16:00 VN (= 09:00Z) — past the cutoff: tomorrow refused, day after OK.
+    jest.setSystemTime(new Date('2026-07-23T09:00:00Z'));
+    await expect(
+      svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-24T03:00:00Z' }),
+    ).rejects.toMatchObject({ response: { code: 'WHOLESALE_CUTOFF' } });
+    await expect(
+      svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-25T03:00:00Z' }),
+    ).resolves.toBeDefined();
+  });
+
+  it('refuses delivery on a contract-wide no-delivery weekday', async () => {
+    const { svc } = makeService({ contract: ruleContract({ noDeliveryDays: [7] }) });
+    // 26/07/2026 (10:00 VN) is a Sunday — weekday 7.
+    await expect(
+      svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-26T03:00:00Z' }),
+    ).rejects.toMatchObject({ response: { code: 'WHOLESALE_NO_DELIVERY_DAY' } });
+  });
+
+  it('quantity must be a multiple of the line multiple', async () => {
+    const { svc } = makeService({ contract: ruleContract({}, { multipleQty: 6 }) });
+    await expect(
+      svc.createOrder('u1', { contractId: 'wc1', items: [{ productId: 'p1', quantity: 8 }] }),
+    ).rejects.toMatchObject({ response: { code: 'WHOLESALE_QTY_MULTIPLE' } });
+    await expect(
+      svc.createOrder('u1', { contractId: 'wc1', items: [{ productId: 'p1', quantity: 12 }] }),
+    ).resolves.toBeDefined();
+  });
+
+  it('an item with fixed delivery weekdays refuses other days', async () => {
+    const { svc } = makeService({ contract: ruleContract({}, { deliveryDays: [2] }) });
+    // 29/07/2026 is a Wednesday; the line only ships Tuesdays (weekday 2).
+    await expect(
+      svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-29T03:00:00Z' }),
+    ).rejects.toMatchObject({ response: { code: 'WHOLESALE_ITEM_DELIVERY_DAY' } });
+    // 28/07/2026 is a Tuesday — fine.
+    await expect(
+      svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-28T03:00:00Z' }),
+    ).resolves.toBeDefined();
+  });
+
+  it('an item lead-time in days refuses too-near delivery dates', async () => {
+    const { svc } = makeService({ contract: ruleContract({}, { leadTimeDays: 3 }) });
+    jest.useFakeTimers({ now: new Date('2026-07-23T01:00:00Z') });
+    await expect(
+      svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-24T03:00:00Z' }),
+    ).rejects.toMatchObject({ response: { code: 'WHOLESALE_LEAD_TIME' } });
+    await expect(
+      svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-26T03:00:00Z' }),
+    ).resolves.toBeDefined();
+  });
+
+  it('adds the contract ship fee to the total and the receivable (0 = freeship)', async () => {
+    const { svc, orderCreate, receivableCreate } = makeService({
+      contract: ruleContract({ shipFeeVnd: 30_000 }),
+    });
+    await svc.createOrder('u1', dto); // 5 × 120k = 600k goods
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(Number(data.deliveryFee.toString())).toBe(30_000);
+    expect(Number(data.total.toString())).toBe(630_000);
+    const rec = receivableCreate.mock.calls[0][0].data;
+    expect(Number(rec.amountVnd.toString())).toBe(630_000);
   });
 });
 

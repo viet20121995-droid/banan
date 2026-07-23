@@ -29,6 +29,19 @@ const ORDER_LIST_INCLUDE = {
   store: { select: { id: true, name: true } },
 } satisfies Prisma.OrderInclude;
 
+// Delivery-schedule rules run on VN local time (UTC+7, no DST) — same
+// convention as reports and store opening hours.
+const VN_OFFSET_MS = 7 * 3_600_000;
+const DAY_MS = 86_400_000;
+/** Calendar day count (days since epoch) in VN local time. */
+const vnDay = (d: Date) => Math.floor((d.getTime() + VN_OFFSET_MS) / DAY_MS);
+const vnMinuteOfDay = (d: Date) => Math.floor(((d.getTime() + VN_OFFSET_MS) % DAY_MS) / 60_000);
+/** ISO weekday in VN time: 1 = Thứ 2 … 7 = Chủ nhật (epoch day 0 = Thursday). */
+const vnWeekday = (d: Date) => ((vnDay(d) + 3) % 7) + 1;
+const WEEKDAY_VI = ['', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
+const fmtCutoff = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
 /**
  * Admin-managed B2B: accounts + contracts define WHO may buy WHAT at WHICH
  * price; orders settle on account (receivables) instead of a gateway; admin
@@ -154,6 +167,9 @@ export class WholesaleService {
         minOrderVnd: dto.minOrderVnd,
         defaultDiscountPct: dto.defaultDiscountPct,
         paymentTermDays: dto.paymentTermDays,
+        nextDayCutoffMinutes: dto.nextDayCutoffMinutes,
+        noDeliveryDays: dto.noDeliveryDays ?? [],
+        shipFeeVnd: dto.shipFeeVnd ?? 0,
       },
     });
   }
@@ -173,6 +189,11 @@ export class WholesaleService {
           ? { defaultDiscountPct: dto.defaultDiscountPct }
           : {}),
         ...(dto.paymentTermDays !== undefined ? { paymentTermDays: dto.paymentTermDays } : {}),
+        ...(dto.nextDayCutoffMinutes !== undefined
+          ? { nextDayCutoffMinutes: dto.nextDayCutoffMinutes }
+          : {}),
+        ...(dto.noDeliveryDays !== undefined ? { noDeliveryDays: dto.noDeliveryDays } : {}),
+        ...(dto.shipFeeVnd !== undefined ? { shipFeeVnd: dto.shipFeeVnd } : {}),
       },
     });
   }
@@ -221,6 +242,9 @@ export class WholesaleService {
         discountPct: dto.discountPct,
         minQty: dto.minQty ?? 1,
         leadTimeHours: dto.leadTimeHours,
+        multipleQty: dto.multipleQty ?? 1,
+        deliveryDays: dto.deliveryDays ?? [],
+        leadTimeDays: dto.leadTimeDays,
       },
     });
   }
@@ -238,6 +262,9 @@ export class WholesaleService {
         ...(dto.minQty !== undefined ? { minQty: dto.minQty } : {}),
         ...(dto.active !== undefined ? { active: dto.active } : {}),
         ...(dto.leadTimeHours !== undefined ? { leadTimeHours: dto.leadTimeHours } : {}),
+        ...(dto.multipleQty !== undefined ? { multipleQty: dto.multipleQty } : {}),
+        ...(dto.deliveryDays !== undefined ? { deliveryDays: dto.deliveryDays } : {}),
+        ...(dto.leadTimeDays !== undefined ? { leadTimeDays: dto.leadTimeDays } : {}),
       },
     });
   }
@@ -493,6 +520,9 @@ export class WholesaleService {
       startsAt: c.startsAt,
       endsAt: c.endsAt,
       minOrderVnd: c.minOrderVnd,
+      nextDayCutoffMinutes: c.nextDayCutoffMinutes,
+      noDeliveryDays: c.noDeliveryDays,
+      shipFeeVnd: c.shipFeeVnd,
       lines: c.lines
         .filter((l) => l.product.isAvailable)
         .flatMap((l) => {
@@ -514,6 +544,9 @@ export class WholesaleService {
               contractPrice: this.contractUnitPrice(l, c, retail),
               minQty: l.minQty,
               leadTimeHours: l.leadTimeHours,
+              multipleQty: l.multipleQty,
+              deliveryDays: l.deliveryDays,
+              leadTimeDays: l.leadTimeDays,
             };
           });
         }),
@@ -560,6 +593,38 @@ export class WholesaleService {
       throw new BadRequestException({
         code: 'WHOLESALE_CONTRACT_INVALID',
         message: 'Hợp đồng không tồn tại hoặc đã hết hiệu lực.',
+      });
+    }
+
+    // ── delivery-schedule rules (all dates in VN local time) ──
+    const hasScheduleRules =
+      contract.nextDayCutoffMinutes != null ||
+      contract.noDeliveryDays.length > 0 ||
+      contract.lines.some((l) => l.deliveryDays.length > 0 || (l.leadTimeDays ?? 0) > 0);
+    if (!dto.scheduledFor && hasScheduleRules) {
+      throw new BadRequestException({
+        code: 'WHOLESALE_DELIVERY_DATE_REQUIRED',
+        message: 'Hợp đồng này yêu cầu chọn ngày giao hàng.',
+      });
+    }
+    const today = vnDay(now);
+    const deliveryDay = dto.scheduledFor ? vnDay(targetAt) : null;
+    const weekday = dto.scheduledFor ? vnWeekday(targetAt) : null;
+    if (deliveryDay != null && contract.nextDayCutoffMinutes != null) {
+      const earliest = today + (vnMinuteOfDay(now) < contract.nextDayCutoffMinutes ? 1 : 2);
+      if (deliveryDay < earliest) {
+        throw new BadRequestException({
+          code: 'WHOLESALE_CUTOFF',
+          message:
+            `Đặt trước ${fmtCutoff(contract.nextDayCutoffMinutes)} để giao vào ngày hôm sau — ` +
+            `đơn này sớm nhất giao sau ${earliest - today} ngày.`,
+        });
+      }
+    }
+    if (weekday != null && contract.noDeliveryDays.includes(weekday)) {
+      throw new BadRequestException({
+        code: 'WHOLESALE_NO_DELIVERY_DAY',
+        message: `Không giao hàng vào ${WEEKDAY_VI[weekday]}.`,
       });
     }
 
@@ -612,6 +677,26 @@ export class WholesaleService {
           message: `"${product.name}" đặt tối thiểu ${line.minQty}.`,
         });
       }
+      if (line.multipleQty > 1 && item.quantity % line.multipleQty !== 0) {
+        throw new BadRequestException({
+          code: 'WHOLESALE_QTY_MULTIPLE',
+          message: `"${product.name}" đặt theo bội số ${line.multipleQty}.`,
+        });
+      }
+      if (weekday != null && line.deliveryDays.length > 0 && !line.deliveryDays.includes(weekday)) {
+        throw new BadRequestException({
+          code: 'WHOLESALE_ITEM_DELIVERY_DAY',
+          message: `"${product.name}" chỉ giao vào ${line.deliveryDays
+            .map((d) => WEEKDAY_VI[d])
+            .join(', ')}.`,
+        });
+      }
+      if (line.leadTimeDays && deliveryDay != null && deliveryDay - today < line.leadTimeDays) {
+        throw new BadRequestException({
+          code: 'WHOLESALE_LEAD_TIME',
+          message: `"${product.name}" cần đặt trước ${line.leadTimeDays} ngày.`,
+        });
+      }
       if (line.leadTimeHours && line.leadTimeHours > 0) {
         const targetAt = dto.scheduledFor ? new Date(dto.scheduledFor) : now;
         if (targetAt.getTime() - now.getTime() < line.leadTimeHours * 3600 * 1000) {
@@ -636,14 +721,19 @@ export class WholesaleService {
       });
     }
 
-    const totalVnd = Number(subtotal.toString());
-    if (contract.minOrderVnd && totalVnd < contract.minOrderVnd) {
+    const subtotalVnd = Number(subtotal.toString());
+    if (contract.minOrderVnd && subtotalVnd < contract.minOrderVnd) {
       const fmt = new Intl.NumberFormat('vi-VN').format(contract.minOrderVnd);
       throw new BadRequestException({
         code: 'WHOLESALE_MIN_ORDER',
         message: `Đơn hợp đồng tối thiểu ${fmt} ₫.`,
       });
     }
+    // Ship fee rides on top of the goods — the minimum-order rule above applies
+    // to goods only, but credit and the receivable cover the full amount owed.
+    const shipFee = new Prisma.Decimal(contract.shipFeeVnd ?? 0);
+    const grandTotal = subtotal.plus(shipFee);
+    const totalVnd = Number(grandTotal.toString());
     const orderCode = generateOrderCode();
     const created = await this.prisma
       .$transaction(async (tx) => {
@@ -729,7 +819,8 @@ export class WholesaleService {
               poCode: dto.poCode?.trim() || null,
             },
             subtotal,
-            total: subtotal,
+            deliveryFee: shipFee,
+            total: grandTotal,
             notes: dto.notes,
             items: { createMany: { data: lineCreates } },
             statusEvents: {
@@ -747,7 +838,7 @@ export class WholesaleService {
           data: {
             wholesaleAccountId: account.id,
             orderId: order.id,
-            amountVnd: subtotal,
+            amountVnd: grandTotal,
             dueDate: null,
             status: 'PENDING',
           },
