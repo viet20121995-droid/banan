@@ -349,13 +349,32 @@ class _Row extends StatelessWidget {
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
+                      // Same chain-wide numbers the customer badges use —
+                      // staff answering "còn không?" must not know less than
+                      // the customer. Shown regardless of the customer-facing
+                      // display toggle (this is internal ops info).
+                      if (product.isSoldOut)
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(left: BananSpacing.sm),
+                          child: Chip(
+                            label: const Text('Hết hàng'),
+                            visualDensity: VisualDensity.compact,
+                            labelStyle: TextStyle(
+                              color: theme.colorScheme.onErrorContainer,
+                            ),
+                            backgroundColor:
+                                theme.colorScheme.errorContainer,
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: BananSpacing.xs),
                   Text(
                     '${product.category?.name ?? "—"}  ·  '
                     '${product.variants.length} biến thể  ·  '
-                    'từ ${fmt.format(product.minPrice)}',
+                    'từ ${fmt.format(product.minPrice)}'
+                    '${product.totalLimitedStock != null ? "  ·  tồn ${product.totalLimitedStock}" : ""}',
                     style: theme.textTheme.bodySmall,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

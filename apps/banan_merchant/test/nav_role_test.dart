@@ -106,5 +106,20 @@ void main() {
       await _expandAll(tester);
       expect(find.text('Chương trình ưu đãi'), findsOneWidget);
     });
+
+    testWidgets('owner is offered Thẻ quà tặng — merchant/gift-cards allows it',
+        (tester) async {
+      // @Roles(ADMIN, MERCHANT_OWNER) on MerchantGiftCardsController; the
+      // route existed but had no nav entry, so owners could never find it.
+      await _pumpSidebar(tester, Role.merchantOwner);
+      await _expandAll(tester);
+      expect(find.text('Thẻ quà tặng'), findsOneWidget);
+    });
+
+    testWidgets('staff is not offered Thẻ quà tặng', (tester) async {
+      await _pumpSidebar(tester, Role.merchantStaff);
+      await _expandAll(tester);
+      expect(find.text('Thẻ quà tặng'), findsNothing);
+    });
   });
 }

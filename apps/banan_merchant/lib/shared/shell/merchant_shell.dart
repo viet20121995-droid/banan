@@ -323,6 +323,15 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
               iconSelected: Icons.ad_units,
               route: '/admin/promo-popup',
             ),
+          // `merchant/gift-cards` is @Roles(ADMIN, MERCHANT_OWNER); the route
+          // existed but only as a deep link — owners could never find it.
+          if (isAdmin || isOwner)
+            const _NavItem(
+              label: 'Thẻ quà tặng',
+              icon: Icons.card_giftcard_outlined,
+              iconSelected: Icons.card_giftcard,
+              route: '/gift-cards',
+            ),
           const _NavItem(
             label: 'Banner',
             icon: Icons.photo_library_outlined,
