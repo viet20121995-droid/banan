@@ -268,7 +268,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           } else {
             _giftCode = null;
             _giftBalance = null;
-            _giftMsg = 'Mã không hợp lệ, đã hết hạn hoặc hết số dư.';
+            _giftMsg = ref.read(stringsProvider).giftInvalid;
           }
         },
         failure: (f) {
@@ -285,8 +285,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // Surface a visible hint instead of silently doing nothing — the
       // invalid field(s) above are highlighted but may be scrolled off.
       setState(
-        () =>
-            _error = 'Vui lòng điền đầy đủ các thông tin còn thiếu phía trên.',
+        () => _error = ref.read(stringsProvider).fillMissing,
       );
       return;
     }
@@ -437,10 +436,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           // confirm here and return home instead of bouncing to the login
           // screen. The order IS placed — staff will process it.
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Đặt hàng thành công! Chúng tôi sẽ liên hệ xác nhận đơn của bạn.',
-              ),
+            SnackBar(
+              content: Text(ref.read(stringsProvider).orderSuccess),
             ),
           );
           context.go('/');
@@ -462,16 +459,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   /// Builds the combined "needs prep time" + "sold only on certain days" note
   /// shown above the schedule picker, or null when the cart has no constraint.
   String? _scheduleNote(CartState cart) {
+    final s = ref.read(stringsProvider);
     final notes = [
-      prepLeadNote(leadHours: cart.maxLeadHours, names: cart.leadProductNames),
+      prepLeadNote(
+        s: s,
+        leadHours: cart.maxLeadHours,
+        names: cart.leadProductNames,
+      ),
       // Conflicting day constraints (no single day works for the whole cart):
       // warn up front instead of letting the picker show every day and only
       // failing at checkout. Otherwise show the normal allowed-days note.
       if (cart.hasDayConflict)
-        'Các món trong giỏ không bán cùng một ngày. Vui lòng bỏ bớt món để '
-            'đặt được, hoặc tách thành nhiều đơn.'
+        s.mixedDaysError
       else
         dayConstraintNote(
+          s: s,
           allowedDays: cart.allowedDaysOfWeek,
           names: cart.dayConstrainedNames,
         ),
@@ -710,7 +712,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         controller: _line1,
                         decoration: InputDecoration(
                           labelText: s.addressLine,
-                          helperText: 'VD: 15B8 Lê Thánh Tôn',
+                          helperText: s.addressHelperEx,
                         ),
                         onChanged: (_) => _clearSavedSelection(),
                         validator: (v) =>
@@ -726,7 +728,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                           labelText: s.city,
                           prefixIcon: const Icon(Icons.location_city_outlined),
                           enabled: false,
-                          helperText: 'Hiện Banan chỉ giao trong TP.HCM',
+                          helperText: s.cityHelper,
                         ),
                         child: Text(
                           'Thành phố Hồ Chí Minh',
@@ -825,16 +827,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                           child: TextField(
                             controller: _giftCtrl,
                             textCapitalization: TextCapitalization.characters,
-                            decoration: const InputDecoration(
-                              labelText: 'Mã thẻ quà tặng',
-                              prefixIcon: Icon(Icons.card_giftcard_outlined),
+                            decoration: InputDecoration(
+                              labelText: s.giftCardCode,
+                              prefixIcon:
+                                  const Icon(Icons.card_giftcard_outlined),
                             ),
                           ),
                         ),
                         const SizedBox(width: BananSpacing.sm),
                         FilledButton(
                           onPressed: _giftBusy ? null : _applyGiftCard,
-                          child: Text(_giftBusy ? '…' : 'Áp dụng'),
+                          child: Text(_giftBusy ? '…' : s.apply),
                         ),
                       ],
                     ),
@@ -842,8 +845,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       Padding(
                         padding: const EdgeInsets.only(top: BananSpacing.xs),
                         child: Text(
-                          'Thẻ $_giftCode · số dư ${fmt.format(_giftBalance)} '
-                          '· trừ ${fmt.format(giftPreview)} vào đơn này.',
+                          s.giftApplied(
+                            _giftCode!,
+                            fmt.format(_giftBalance),
+                            fmt.format(giftPreview),
+                          ),
                           style: theme.textTheme.bodySmall
                               ?.copyWith(color: BananColors.success),
                         ),
@@ -929,7 +935,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
 /// Collapsible "Xuất hoá đơn VAT" block. Hidden by default; expanding it
 /// reveals the 4 required company-invoice fields (tên, MST, địa chỉ, email).
-class _VatInvoiceSection extends StatelessWidget {
+class _VatInvoiceSection extends ConsumerWidget {
   const _VatInvoiceSection({
     required this.enabled,
     required this.onToggle,
@@ -947,8 +953,9 @@ class _VatInvoiceSection extends StatelessWidget {
   final TextEditingController email;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
@@ -966,11 +973,9 @@ class _VatInvoiceSection extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             value: enabled,
             onChanged: onToggle,
-            title: const Text('Xuất hoá đơn VAT (hoá đơn đỏ)'),
+            title: Text(s.vatTitle),
             subtitle: Text(
-              enabled
-                  ? 'Hoá đơn sẽ được gửi qua email sau khi đơn hoàn tất.'
-                  : 'Bật khi cần hoá đơn cho công ty.',
+              enabled ? s.vatOnSub : s.vatOffSub,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.outline,
               ),
@@ -980,33 +985,33 @@ class _VatInvoiceSection extends StatelessWidget {
             const SizedBox(height: BananSpacing.xs),
             TextFormField(
               controller: company,
-              decoration: const InputDecoration(
-                labelText: 'Tên công ty',
+              decoration: InputDecoration(
+                labelText: s.companyName,
               ),
             ),
             const SizedBox(height: BananSpacing.sm),
             TextFormField(
               controller: taxId,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Mã số thuế',
-                helperText: '8–13 chữ số.',
+              decoration: InputDecoration(
+                labelText: s.taxCode,
+                helperText: s.taxCodeHelper,
               ),
             ),
             const SizedBox(height: BananSpacing.sm),
             TextFormField(
               controller: address,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Địa chỉ công ty',
+              decoration: InputDecoration(
+                labelText: s.companyAddress,
               ),
             ),
             const SizedBox(height: BananSpacing.sm),
             TextFormField(
               controller: email,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email nhận hoá đơn',
+              decoration: InputDecoration(
+                labelText: s.invoiceEmail,
               ),
             ),
             const SizedBox(height: BananSpacing.sm),
@@ -1021,7 +1026,7 @@ class _VatInvoiceSection extends StatelessWidget {
 /// switch on reveals the greeting message, recipient name + phone, and the
 /// "Gói quà" / "Ẩn giá trên phiếu giao" checkboxes. Mirrors the VAT section
 /// styling so the two opt-in cards look consistent.
-class _GiftSection extends StatelessWidget {
+class _GiftSection extends ConsumerWidget {
   const _GiftSection({
     required this.enabled,
     required this.onToggle,
@@ -1045,8 +1050,9 @@ class _GiftSection extends StatelessWidget {
   final ValueChanged<bool> onHidePrice;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
@@ -1064,11 +1070,9 @@ class _GiftSection extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             value: enabled,
             onChanged: onToggle,
-            title: const Text('🎁 Gửi tặng / Đây là quà tặng'),
+            title: Text(s.giftTitle),
             subtitle: Text(
-              enabled
-                  ? 'Kèm thiệp chúc, người nhận và tuỳ chọn gói quà.'
-                  : 'Bật khi bạn muốn gửi đơn này làm quà tặng.',
+              enabled ? s.giftOnSub : s.giftOffSub,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.outline,
               ),
@@ -1080,27 +1084,27 @@ class _GiftSection extends StatelessWidget {
               controller: message,
               maxLines: 3,
               maxLength: 280,
-              decoration: const InputDecoration(
-                labelText: 'Lời chúc',
-                hintText: 'Lời chúc gửi kèm thiệp…',
+              decoration: InputDecoration(
+                labelText: s.giftMessage,
+                hintText: s.giftMessageHint,
               ),
             ),
             const SizedBox(height: BananSpacing.sm),
             TextField(
               controller: recipientName,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Tên người nhận',
-                helperText: 'Người sẽ nhận món quà này (không bắt buộc).',
+              decoration: InputDecoration(
+                labelText: s.giftRecipientName,
+                helperText: s.giftRecipientHelper,
               ),
             ),
             const SizedBox(height: BananSpacing.sm),
             TextField(
               controller: recipientPhone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'SĐT người nhận',
-                helperText: 'Để shipper liên hệ người nhận (không bắt buộc).',
+              decoration: InputDecoration(
+                labelText: s.giftRecipientPhone,
+                helperText: s.giftPhoneHelper,
               ),
             ),
             const SizedBox(height: BananSpacing.xs),
@@ -1109,16 +1113,16 @@ class _GiftSection extends StatelessWidget {
               controlAffinity: ListTileControlAffinity.leading,
               value: giftWrap,
               onChanged: (v) => onGiftWrap(v ?? false),
-              title: const Text('Gói quà / hộp quà'),
+              title: Text(s.giftWrap),
             ),
             CheckboxListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
               value: hidePrice,
               onChanged: (v) => onHidePrice(v ?? false),
-              title: const Text('Ẩn giá trên phiếu giao'),
+              title: Text(s.hidePrices),
               subtitle: Text(
-                'Người nhận sẽ không thấy giá tiền.',
+                s.hidePricesSub,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.outline,
                 ),
@@ -1243,7 +1247,7 @@ class _CouponField extends ConsumerWidget {
 /// balance, a slider to pick how many points to burn (0..max, where max is
 /// capped by both the balance and the order value), and the resulting
 /// discount preview. Rendered only for a logged-in customer with points.
-class _PointsRedeemer extends StatelessWidget {
+class _PointsRedeemer extends ConsumerWidget {
   const _PointsRedeemer({
     required this.balance,
     required this.max,
@@ -1261,8 +1265,9 @@ class _PointsRedeemer extends StatelessWidget {
   final NumberFormat fmt;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final maxClamped = max.clamp(0, balance);
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -1284,7 +1289,7 @@ class _PointsRedeemer extends StatelessWidget {
               const SizedBox(width: BananSpacing.sm),
               Expanded(
                 child: Text(
-                  'Dùng điểm Micho',
+                  s.useMicho,
                   style: theme.textTheme.titleSmall,
                 ),
               ),
@@ -1300,7 +1305,10 @@ class _PointsRedeemer extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            'Bạn có $balance điểm (≈ ${fmt.format(balance * vndPerPoint)})',
+            s.michoBalanceApprox(
+              '$balance',
+              fmt.format(balance * vndPerPoint),
+            ),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.outline,
             ),
@@ -1309,7 +1317,7 @@ class _PointsRedeemer extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: BananSpacing.xs),
               child: Text(
-                'Giá trị đơn hàng chưa đủ để đổi điểm.',
+                s.orderTooSmallPoints,
                 style: theme.textTheme.bodySmall,
               ),
             )
@@ -1319,14 +1327,14 @@ class _PointsRedeemer extends StatelessWidget {
               max: maxClamped.toDouble(),
               divisions: maxClamped,
               value: value.toDouble().clamp(0, maxClamped.toDouble()),
-              label: '$value điểm',
+              label: s.pointsChip(value),
               onChanged: (v) => onChanged(v.round()),
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Đổi $value/$maxClamped điểm',
+                  s.redeemPoints(value, maxClamped),
                   style: theme.textTheme.bodySmall,
                 ),
                 if (value > 0)
@@ -1339,7 +1347,7 @@ class _PointsRedeemer extends StatelessWidget {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     onPressed: () => onChanged(0),
-                    child: const Text('Bỏ chọn'),
+                    child: Text(s.clearSelection),
                   ),
               ],
             ),
@@ -1371,7 +1379,11 @@ class _PaymentSelector extends ConsumerWidget {
     // the safe default.
     // COD disabled — 9Pay only. (Re-add the cash tuple here to bring it back.)
     final options = <(PaymentMethod, IconData, String)>[
-      (PaymentMethod.ninepay, Icons.qr_code_2_outlined, 'Quét QR / Thẻ / Chuyển khoản (9Pay)'),
+      (
+        PaymentMethod.ninepay,
+        Icons.qr_code_2_outlined,
+        ref.watch(stringsProvider).ninepayLabel,
+      ),
     ];
     return Column(
       children: [
@@ -1503,7 +1515,7 @@ class _Summary extends ConsumerWidget {
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    tooltip: 'Giảm',
+                    tooltip: s.decrease,
                     icon: const Icon(Icons.remove_circle_outline, size: 20),
                     onPressed: () => ref
                         .read(cartControllerProvider.notifier)
@@ -1512,7 +1524,7 @@ class _Summary extends ConsumerWidget {
                   Text('${item.quantity}', style: theme.textTheme.titleMedium),
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    tooltip: 'Tăng',
+                    tooltip: s.increase,
                     icon: const Icon(Icons.add_circle_outline, size: 20),
                     onPressed: () => ref
                         .read(cartControllerProvider.notifier)
@@ -1693,14 +1705,15 @@ class _CheckoutWardPicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(hcmWardsProvider);
+    final s = ref.watch(stringsProvider);
     return async.when(
       loading: () => const LinearProgressIndicator(minHeight: 2),
-      error: (_, __) => const InputDecorator(
+      error: (_, __) => InputDecorator(
         decoration: InputDecoration(
-          labelText: 'Phường (TP.HCM)',
-          errorText: 'Không tải được danh sách phường',
+          labelText: s.wardLabel,
+          errorText: s.wardLoadError,
         ),
-        child: Text('—'),
+        child: const Text('—'),
       ),
       data: (wards) {
         final selected = wards.cast<HcmWard?>().firstWhere(
@@ -1719,14 +1732,13 @@ class _CheckoutWardPicker extends ConsumerWidget {
           },
           borderRadius: BananRadii.rmd,
           child: InputDecorator(
-            decoration: const InputDecoration(
-              labelText: 'Phường (TP.HCM)',
-              helperText:
-                  'Sau cải cách 7/2025, chọn phường để tính phí giao hàng',
-              suffixIcon: Icon(Icons.arrow_drop_down),
+            decoration: InputDecoration(
+              labelText: s.wardLabel,
+              helperText: s.wardHelper,
+              suffixIcon: const Icon(Icons.arrow_drop_down),
             ),
             child: Text(
-              selected?.name ?? 'Chọn phường…',
+              selected?.name ?? s.chooseWard,
               style: selected == null
                   ? Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.outline,
@@ -1740,15 +1752,15 @@ class _CheckoutWardPicker extends ConsumerWidget {
   }
 }
 
-class _WardPickerSheet extends StatefulWidget {
+class _WardPickerSheet extends ConsumerStatefulWidget {
   const _WardPickerSheet({required this.wards});
   final List<HcmWard> wards;
 
   @override
-  State<_WardPickerSheet> createState() => _WardPickerSheetState();
+  ConsumerState<_WardPickerSheet> createState() => _WardPickerSheetState();
 }
 
-class _WardPickerSheetState extends State<_WardPickerSheet> {
+class _WardPickerSheetState extends ConsumerState<_WardPickerSheet> {
   final _query = TextEditingController();
   String _q = '';
 
@@ -1778,16 +1790,16 @@ class _WardPickerSheetState extends State<_WardPickerSheet> {
         child: Column(
           children: [
             Text(
-              'Chọn phường (TP.HCM)',
+              ref.watch(stringsProvider).chooseWardTitle,
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: BananSpacing.sm),
             TextField(
               controller: _query,
               autofocus: true,
-              decoration: const InputDecoration(
-                hintText: 'Tìm theo tên phường hoặc quận cũ',
-                prefixIcon: Icon(Icons.search),
+              decoration: InputDecoration(
+                hintText: ref.watch(stringsProvider).wardSearchHint,
+                prefixIcon: const Icon(Icons.search),
               ),
               onChanged: (v) => setState(() => _q = v),
             ),
@@ -1796,7 +1808,7 @@ class _WardPickerSheetState extends State<_WardPickerSheet> {
               child: filtered.isEmpty
                   ? Center(
                       child: Text(
-                        'Không tìm thấy phường khớp.',
+                        ref.watch(stringsProvider).noWardMatch,
                         style: theme.textTheme.bodyMedium,
                       ),
                     )
@@ -1810,7 +1822,11 @@ class _WardPickerSheetState extends State<_WardPickerSheet> {
                           title: Text(w.name),
                           subtitle: w.oldArea == null
                               ? null
-                              : Text('Quận/khu vực cũ: ${w.oldArea}'),
+                              : Text(
+                                  ref
+                                      .watch(stringsProvider)
+                                      .oldAreaLabel(w.oldArea!),
+                                ),
                           onTap: () => Navigator.pop(context, w),
                         );
                       },
@@ -1838,6 +1854,7 @@ class _DeliveryQuoteBox extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final fmt = NumberFormat.currency(
       locale: 'vi_VN',
       symbol: '₫',
@@ -1855,7 +1872,7 @@ class _DeliveryQuoteBox extends ConsumerWidget {
         child: LinearProgressIndicator(minHeight: 2),
       ),
       error: (e, _) => Text(
-        'Không tính được phí: $e',
+        s.feeError('$e'),
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.error,
         ),
@@ -1867,9 +1884,9 @@ class _DeliveryQuoteBox extends ConsumerWidget {
                 ? theme.colorScheme.tertiaryContainer.withValues(alpha: 0.5)
                 : theme.colorScheme.surface;
         final tierLabel = q.tier == DeliveryFeeTier.birthdayCake
-            ? 'Bánh sinh nhật'
-            : 'Sản phẩm thường';
-        final bandLabel = q.isOtherWard ? 'phường khác' : 'cùng phường';
+            ? s.birthdayTier
+            : s.regularTier;
+        final bandLabel = q.isOtherWard ? s.otherWard : s.sameWard;
         return Container(
           padding: const EdgeInsets.all(BananSpacing.md),
           decoration: BoxDecoration(
@@ -1896,7 +1913,7 @@ class _DeliveryQuoteBox extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Giao từ: ${q.store!.name}',
+                            s.deliverFrom(q.store!.name),
                             style: theme.textTheme.titleSmall,
                           ),
                           Text(
@@ -1922,7 +1939,7 @@ class _DeliveryQuoteBox extends ConsumerWidget {
                     const SizedBox(width: BananSpacing.sm),
                     Expanded(
                       child: Text(
-                        'Hiện không có cửa hàng nào nhận giao hàng tới phường này.',
+                        s.noStoreForWard,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onErrorContainer,
                         ),
@@ -1946,9 +1963,7 @@ class _DeliveryQuoteBox extends ConsumerWidget {
                   const SizedBox(width: BananSpacing.sm),
                   Expanded(
                     child: Text(
-                      q.totalVnd == 0
-                          ? 'Miễn phí giao hàng'
-                          : 'Phí giao hàng dự kiến',
+                      q.totalVnd == 0 ? s.freeDelivery : s.estimatedFee,
                       style: theme.textTheme.titleSmall,
                     ),
                   ),
@@ -1967,12 +1982,12 @@ class _DeliveryQuoteBox extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '• Phân loại: $tierLabel · $bandLabel',
+                      s.feeBreakTier(tierLabel, bandLabel),
                       style: theme.textTheme.bodySmall,
                     ),
                     if (q.tier == DeliveryFeeTier.birthdayCake)
                       Text(
-                        '• Đơn có bánh sinh nhật, áp dụng biểu phí riêng',
+                        s.feeBirthdaySchedule,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.w600,
@@ -1980,15 +1995,16 @@ class _DeliveryQuoteBox extends ConsumerWidget {
                       ),
                     if (q.distanceKm != null)
                       Text(
-                        '• Khoảng cách từ cửa hàng đến phường: '
-                        '${q.distanceKm!.toStringAsFixed(1)} km',
+                        s.feeDistanceKm(
+                          '${q.distanceKm!.toStringAsFixed(1)} km',
+                        ),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.outline,
                         ),
                       ),
                     if (!q.wardKnown)
                       Text(
-                        '• Chọn phường ở trên để tính chính xác',
+                        s.feePickWard,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.outline,
                           fontStyle: FontStyle.italic,
@@ -2032,7 +2048,7 @@ final _deliveryQuoteProvider = FutureProvider.autoDispose
 /// Red panel that names every cake which doesn't fit the chosen fulfilment
 /// time, with one-tap fixes. Shown in place of the generic error banner when
 /// the backend returns a structured `ORDER_ITEMS_TIMELINE` rejection.
-class _TimelineErrorPanel extends StatelessWidget {
+class _TimelineErrorPanel extends ConsumerWidget {
   const _TimelineErrorPanel({
     required this.failure,
     required this.onPickEarliest,
@@ -2043,31 +2059,22 @@ class _TimelineErrorPanel extends StatelessWidget {
   final VoidCallback onPickEarliest;
   final VoidCallback onRemove;
 
-  static const _wd = {
-    0: 'CN',
-    1: 'T2',
-    2: 'T3',
-    3: 'T4',
-    4: 'T5',
-    5: 'T6',
-    6: 'T7',
-  };
-
-  String _reasonText(TimelineViolation v) {
+  String _reasonText(AppStrings s, TimelineViolation v) {
     switch (v.reason) {
       case TimelineReason.leadTime:
-        return 'cần đặt trước ${v.leadTimeHours ?? 0} giờ';
+        return s.needLeadHours(v.leadTimeHours ?? 0);
       case TimelineReason.dayUnavailable:
         final days = (v.availableDaysOfWeek.toList()..sort())
-            .map((d) => _wd[d] ?? '?$d')
+            .map(s.weekdayShort)
             .join(', ');
-        return 'chỉ bán $days';
+        return s.onlySoldOnDays(days);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
       decoration: BoxDecoration(
@@ -2085,7 +2092,7 @@ class _TimelineErrorPanel extends StatelessWidget {
               const SizedBox(width: BananSpacing.sm),
               Expanded(
                 child: Text(
-                  'Một số món không kịp thời gian bạn chọn',
+                  s.itemsDontFit,
                   style: theme.textTheme.titleSmall,
                 ),
               ),
@@ -2104,7 +2111,7 @@ class _TimelineErrorPanel extends StatelessWidget {
                       text: v.name,
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    TextSpan(text: ': ${_reasonText(v)}'),
+                    TextSpan(text: ': ${_reasonText(s, v)}'),
                   ],
                 ),
               ),
@@ -2117,12 +2124,12 @@ class _TimelineErrorPanel extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onPickEarliest,
                 icon: const Icon(Icons.schedule, size: 18),
-                label: const Text('Chọn giờ sớm nhất phù hợp'),
+                label: Text(s.pickEarliest),
               ),
               OutlinedButton.icon(
                 onPressed: onRemove,
                 icon: const Icon(Icons.remove_shopping_cart_outlined, size: 18),
-                label: const Text('Xoá các món này'),
+                label: Text(s.removeThese),
               ),
             ],
           ),

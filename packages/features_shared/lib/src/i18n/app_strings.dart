@@ -223,6 +223,203 @@ abstract class AppStrings {
   String get analytics;
   String get kanban;
   String get kitchenAnalytics;
+
+  // Product cards / badges (shared with design_system via parameters)
+  String get fromLabel;
+  String get soldOutBadge;
+  String get pausedBadge;
+  String get seasonalBadge;
+  String stockLeft(int n);
+
+  /// Product tags are stored in the DB in Vietnamese (the merchant editor's
+  /// curated chips). Map the known ones for EN; unknown tags pass through.
+  String localizeTag(String tag) => tag;
+
+  // Menu / home extras
+  String get menuOverline;
+  String get menuSub;
+  String get storyOverline;
+  String get categoriesOverline;
+  String get quickOverline;
+  String get reorderTitle;
+  String get reorderSub;
+  String get reorderBtn;
+  String orderCode(String code);
+  String plusOtherItems(int n);
+  String get chooseVariant;
+  String get quantity;
+  String get viewProductDetail;
+  String get offlineMenuFresh;
+  String offlineMenuAged(String age);
+  String get justNow;
+  String minutesAgo(int n);
+  String hoursAgo(int n);
+  String daysAgo(int n);
+  String get pausedAll;
+  String get pausedSome;
+  String get pausedOrdersAll;
+  String get pausePickup;
+  String get pauseDelivery;
+  String pausedKinds(String parts);
+  String get bannerPrev;
+  String get bannerNext;
+  String get wholesaleTitle;
+  String get genericError;
+
+  // Newsletter
+  String get newsletterTitle;
+  String get newsletterSub;
+  String get newsletterAlready;
+  String get newsletterSent;
+  String get subscribe;
+  String get emailPlaceholder;
+
+  // Footer
+  String get footAbout;
+  String get footLocations;
+  String get footFaq;
+  String get footContact;
+  String get footPrivacy;
+  String get footTerms;
+  String get footShipping;
+  String get footPayment;
+  String get footRefund;
+  String get footReferral;
+  String get footGiftCards;
+  String get footSubscription;
+  String get footCatering;
+  String get footRewards;
+  String bizReg(String no);
+  String bizAddress(String a);
+
+  // Cookie consent
+  String get cookieText;
+  String get privacyPolicy;
+  String get cookieEssential;
+  String get cookieAcceptAll;
+
+  // Cart extras
+  String get viewMenu;
+  String itemsCount(int n);
+  String get feesAtCheckout;
+  String get continueLabel;
+  String get addressAtCheckout;
+  String get itemsInCart;
+  String get addToOrderTitle;
+  String get youMayLike;
+  String get add;
+  String leadTimeChipH(int h);
+  String onlyOnDays(String days);
+  String get notPersonalized;
+  String get personalize;
+  String addedToOrder(String name);
+
+  // Checkout extras
+  String get giftInvalid;
+  String get fillMissing;
+  String get orderSuccess;
+  String get mixedDaysError;
+  String get addressHelperEx;
+  String get cityHelper;
+  String get giftCardCode;
+  String giftApplied(String code, String balance, String deduct);
+  String get vatTitle;
+  String get vatOnSub;
+  String get vatOffSub;
+  String get companyName;
+  String get taxCode;
+  String get taxCodeHelper;
+  String get companyAddress;
+  String get invoiceEmail;
+  String get giftTitle;
+  String get giftOnSub;
+  String get giftOffSub;
+  String get giftMessage;
+  String get giftMessageHint;
+  String get giftRecipientName;
+  String get giftRecipientHelper;
+  String get giftRecipientPhone;
+  String get giftPhoneHelper;
+  String get giftWrap;
+  String get hidePrices;
+  String get hidePricesSub;
+  String get useMicho;
+  String michoBalanceApprox(String balance, String value);
+  String get orderTooSmallPoints;
+  String pointsChip(int v);
+  String redeemPoints(int v, int max);
+  String get clearSelection;
+  String get ninepayLabel;
+  String get decrease;
+  String get increase;
+  String get wardLabel;
+  String get wardLoadError;
+  String get wardHelper;
+  String get chooseWard;
+  String get chooseWardTitle;
+  String get wardSearchHint;
+  String get noWardMatch;
+  String oldAreaLabel(String a);
+  String feeError(String e);
+  String get birthdayTier;
+  String get regularTier;
+  String get otherWard;
+  String get sameWard;
+  String deliverFrom(String store);
+  String get noStoreForWard;
+  String get estimatedFee;
+  String feeBreakTier(String tier, String band);
+  String get feeBirthdaySchedule;
+  String feeDistanceKm(String km);
+  String get feePickWard;
+  String needLeadHours(int h);
+  String onlySoldOnDays(String days);
+  String get itemsDontFit;
+  String get pickEarliest;
+  String get removeThese;
+
+  // Fulfillment widgets
+  String get onBreak;
+  String get useSavedAddress;
+  String get someCakes;
+  String andOthers(String list, int n);
+  String onlySoldDaysNote(String who, String days);
+  String leadDaysSpan(int n);
+  String leadHoursSpan(int n);
+  String leadNote(String who, String span);
+  String readyAt(String t);
+  String get choosePickupTime;
+  String earliestAt(String t);
+  String get pickupTimeLabel;
+  String get noSlotsToday;
+  String confirmTime(String t);
+  String get today;
+  String get change;
+
+  // Product detail extras
+  String variantStock(String label, int n);
+  String variantSoldOut(String label);
+  String almostGone(int n);
+  String chooseNFlavors(int n);
+  String get reviewsTitle;
+  String reviewsLoadError(String e);
+  String get noReviewsYet;
+  String reviewsCount(int n);
+  String get anonymousCustomer;
+  String get alsoBought;
+  String get personalizedCake;
+  String get personalizeCake;
+  String get personalizeSub;
+
+  /// Short weekday label, 0=Sunday..6=Saturday ("CN"/"T2" — "Sun"/"Mon").
+  String weekdayShort(int d);
+
+  // Wishlist
+  String get wishlistTitle;
+  String get wishlistLoginTitle;
+  String get wishlistLoginMsg;
+  String get wishlistEmptyTitle;
+  String get wishlistEmptyMsg;
 }
 
 class _Vi extends AppStrings {
@@ -590,6 +787,388 @@ class _Vi extends AppStrings {
   String get kanban => 'Kanban';
   @override
   String get kitchenAnalytics => 'Thống kê bếp';
+
+  @override
+  String get fromLabel => 'Từ';
+  @override
+  String get soldOutBadge => 'Hết hàng';
+  @override
+  String get pausedBadge => 'Tạm ngưng';
+  @override
+  String get seasonalBadge => 'Theo mùa';
+  @override
+  String stockLeft(int n) => 'Còn $n';
+
+  @override
+  String get menuOverline => 'Thực đơn';
+  @override
+  String get menuSub =>
+      'Mỗi mẻ bánh ra lò tươi mỗi ngày trong các cửa hàng Banan.';
+  @override
+  String get storyOverline => 'Câu chuyện';
+  @override
+  String get categoriesOverline => 'Danh mục';
+  @override
+  String get quickOverline => 'Nhanh gọn';
+  @override
+  String get reorderTitle => '🔁 Đặt lại';
+  @override
+  String get reorderSub => 'Thêm lại nhanh những món bạn đã đặt gần đây.';
+  @override
+  String get reorderBtn => 'Đặt lại';
+  @override
+  String orderCode(String code) => 'Đơn $code';
+  @override
+  String plusOtherItems(int n) => '+$n món khác';
+  @override
+  String get chooseVariant => 'Chọn phiên bản';
+  @override
+  String get quantity => 'Số lượng';
+  @override
+  String get viewProductDetail => 'Xem chi tiết sản phẩm';
+  @override
+  String get offlineMenuFresh =>
+      'Bạn đang offline. Đang hiển thị thực đơn đã tải gần nhất.';
+  @override
+  String offlineMenuAged(String age) =>
+      'Bạn đang offline. Thực đơn đã cũ $age.';
+  @override
+  String get justNow => 'vừa xong';
+  @override
+  String minutesAgo(int n) => '$n phút trước';
+  @override
+  String hoursAgo(int n) => '$n giờ trước';
+  @override
+  String daysAgo(int n) => '$n ngày trước';
+  @override
+  String get pausedAll => 'Toàn hệ thống đang tạm ngừng nhận đơn';
+  @override
+  String get pausedSome => 'Một số chi nhánh đang tạm dừng';
+  @override
+  String get pausedOrdersAll => 'tạm dừng nhận đơn';
+  @override
+  String get pausePickup => 'tự lấy';
+  @override
+  String get pauseDelivery => 'giao hàng';
+  @override
+  String pausedKinds(String parts) => 'tạm dừng $parts';
+  @override
+  String get bannerPrev => 'Banner trước';
+  @override
+  String get bannerNext => 'Banner kế tiếp';
+  @override
+  String get wholesaleTitle => 'Đặt sỉ';
+  @override
+  String get genericError => 'Có lỗi xảy ra, vui lòng thử lại.';
+
+  @override
+  String get newsletterTitle => 'Nhận khuyến mãi từ Banan';
+  @override
+  String get newsletterSub =>
+      'Đăng ký email để nhận thông tin bánh mới + ưu đãi mùa lễ. '
+      'Tối đa 2 email mỗi tháng, không spam.';
+  @override
+  String get newsletterAlready => 'Bạn đã đăng ký rồi, cảm ơn!';
+  @override
+  String get newsletterSent => 'Đã gửi email xác nhận, mời kiểm tra hộp thư.';
+  @override
+  String get subscribe => 'Đăng ký';
+  @override
+  String get emailPlaceholder => 'ban@email.com';
+
+  @override
+  String get footAbout => 'Về Banan';
+  @override
+  String get footLocations => 'Chi nhánh';
+  @override
+  String get footFaq => 'Câu hỏi thường gặp';
+  @override
+  String get footContact => 'Liên hệ';
+  @override
+  String get footPrivacy => 'Chính sách bảo mật';
+  @override
+  String get footTerms => 'Điều khoản';
+  @override
+  String get footShipping => 'Vận chuyển & giao nhận';
+  @override
+  String get footPayment => 'Thanh toán';
+  @override
+  String get footRefund => 'Đổi trả & hoàn tiền';
+  @override
+  String get footReferral => 'Giới thiệu bạn';
+  @override
+  String get footGiftCards => 'Thẻ quà tặng';
+  @override
+  String get footSubscription => 'Gói định kỳ';
+  @override
+  String get footCatering => 'Đặt tiệc';
+  @override
+  String get footRewards => 'Đổi điểm';
+  @override
+  String bizReg(String no) => 'ĐKKD: $no';
+  @override
+  String bizAddress(String a) => 'Địa chỉ: $a';
+
+  @override
+  String get cookieText =>
+      'Chúng tôi dùng cookie cần thiết để website hoạt động. '
+      'Bạn có thể chọn bật thêm cookie phân tích. Xem ';
+  @override
+  String get privacyPolicy => 'Chính sách bảo mật';
+  @override
+  String get cookieEssential => 'Chỉ cần thiết';
+  @override
+  String get cookieAcceptAll => 'Chấp nhận tất cả';
+
+  @override
+  String get viewMenu => 'Xem thực đơn';
+  @override
+  String itemsCount(int n) => '$n món';
+  @override
+  String get feesAtCheckout => 'Phí giao & khuyến mãi tính ở bước thanh toán';
+  @override
+  String get continueLabel => 'Tiếp tục';
+  @override
+  String get addressAtCheckout => 'Bạn sẽ nhập địa chỉ ở bước thanh toán.';
+  @override
+  String get itemsInCart => 'Món trong giỏ';
+  @override
+  String get addToOrderTitle => 'Thêm vào đơn 🧁';
+  @override
+  String get youMayLike => 'Có thể bạn cũng thích';
+  @override
+  String get add => 'Thêm';
+  @override
+  String leadTimeChipH(int h) => 'Đặt trước ${h}h';
+  @override
+  String onlyOnDays(String days) => 'Chỉ bán $days';
+  @override
+  String get notPersonalized => 'Chưa cá nhân hoá';
+  @override
+  String get personalize => 'Cá nhân hoá';
+  @override
+  String addedToOrder(String name) => 'Đã thêm $name vào đơn.';
+
+  @override
+  String get giftInvalid => 'Mã không hợp lệ, đã hết hạn hoặc hết số dư.';
+  @override
+  String get fillMissing =>
+      'Vui lòng điền đầy đủ các thông tin còn thiếu phía trên.';
+  @override
+  String get orderSuccess =>
+      'Đặt hàng thành công! Chúng tôi sẽ liên hệ xác nhận đơn của bạn.';
+  @override
+  String get mixedDaysError =>
+      'Các món trong giỏ không bán cùng một ngày. Vui lòng bỏ bớt món để '
+      'đặt được, hoặc tách thành nhiều đơn.';
+  @override
+  String get addressHelperEx => 'VD: 15B8 Lê Thánh Tôn';
+  @override
+  String get cityHelper => 'Hiện Banan chỉ giao trong TP.HCM';
+  @override
+  String get giftCardCode => 'Mã thẻ quà tặng';
+  @override
+  String giftApplied(String code, String balance, String deduct) =>
+      'Thẻ $code · số dư $balance · trừ $deduct vào đơn này.';
+  @override
+  String get vatTitle => 'Xuất hoá đơn VAT (hoá đơn đỏ)';
+  @override
+  String get vatOnSub => 'Hoá đơn sẽ được gửi qua email sau khi đơn hoàn tất.';
+  @override
+  String get vatOffSub => 'Bật khi cần hoá đơn cho công ty.';
+  @override
+  String get companyName => 'Tên công ty';
+  @override
+  String get taxCode => 'Mã số thuế';
+  @override
+  String get taxCodeHelper => '8–13 chữ số.';
+  @override
+  String get companyAddress => 'Địa chỉ công ty';
+  @override
+  String get invoiceEmail => 'Email nhận hoá đơn';
+  @override
+  String get giftTitle => '🎁 Gửi tặng / Đây là quà tặng';
+  @override
+  String get giftOnSub => 'Kèm thiệp chúc, người nhận và tuỳ chọn gói quà.';
+  @override
+  String get giftOffSub => 'Bật khi bạn muốn gửi đơn này làm quà tặng.';
+  @override
+  String get giftMessage => 'Lời chúc';
+  @override
+  String get giftMessageHint => 'Lời chúc gửi kèm thiệp…';
+  @override
+  String get giftRecipientName => 'Tên người nhận';
+  @override
+  String get giftRecipientHelper =>
+      'Người sẽ nhận món quà này (không bắt buộc).';
+  @override
+  String get giftRecipientPhone => 'SĐT người nhận';
+  @override
+  String get giftPhoneHelper =>
+      'Để shipper liên hệ người nhận (không bắt buộc).';
+  @override
+  String get giftWrap => 'Gói quà / hộp quà';
+  @override
+  String get hidePrices => 'Ẩn giá trên phiếu giao';
+  @override
+  String get hidePricesSub => 'Người nhận sẽ không thấy giá tiền.';
+  @override
+  String get useMicho => 'Dùng điểm Micho';
+  @override
+  String michoBalanceApprox(String balance, String value) =>
+      'Bạn có $balance điểm (≈ $value)';
+  @override
+  String get orderTooSmallPoints => 'Giá trị đơn hàng chưa đủ để đổi điểm.';
+  @override
+  String pointsChip(int v) => '$v điểm';
+  @override
+  String redeemPoints(int v, int max) => 'Đổi $v/$max điểm';
+  @override
+  String get clearSelection => 'Bỏ chọn';
+  @override
+  String get ninepayLabel => 'Quét QR / Thẻ / Chuyển khoản (9Pay)';
+  @override
+  String get decrease => 'Giảm';
+  @override
+  String get increase => 'Tăng';
+  @override
+  String get wardLabel => 'Phường (TP.HCM)';
+  @override
+  String get wardLoadError => 'Không tải được danh sách phường';
+  @override
+  String get wardHelper =>
+      'Sau cải cách 7/2025, chọn phường để tính phí giao hàng';
+  @override
+  String get chooseWard => 'Chọn phường…';
+  @override
+  String get chooseWardTitle => 'Chọn phường (TP.HCM)';
+  @override
+  String get wardSearchHint => 'Tìm theo tên phường hoặc quận cũ';
+  @override
+  String get noWardMatch => 'Không tìm thấy phường khớp.';
+  @override
+  String oldAreaLabel(String a) => 'Quận/khu vực cũ: $a';
+  @override
+  String feeError(String e) => 'Không tính được phí: $e';
+  @override
+  String get birthdayTier => 'Bánh sinh nhật';
+  @override
+  String get regularTier => 'Sản phẩm thường';
+  @override
+  String get otherWard => 'phường khác';
+  @override
+  String get sameWard => 'cùng phường';
+  @override
+  String deliverFrom(String store) => 'Giao từ: $store';
+  @override
+  String get noStoreForWard =>
+      'Hiện không có cửa hàng nào nhận giao hàng tới phường này.';
+  @override
+  String get estimatedFee => 'Phí giao hàng dự kiến';
+  @override
+  String feeBreakTier(String tier, String band) =>
+      '• Phân loại: $tier · $band';
+  @override
+  String get feeBirthdaySchedule =>
+      '• Đơn có bánh sinh nhật, áp dụng biểu phí riêng';
+  @override
+  String feeDistanceKm(String km) =>
+      '• Khoảng cách từ cửa hàng đến phường: $km';
+  @override
+  String get feePickWard => '• Chọn phường ở trên để tính chính xác';
+  @override
+  String needLeadHours(int h) => 'cần đặt trước $h giờ';
+  @override
+  String onlySoldOnDays(String days) => 'chỉ bán $days';
+  @override
+  String get itemsDontFit => 'Một số món không kịp thời gian bạn chọn';
+  @override
+  String get pickEarliest => 'Chọn giờ sớm nhất phù hợp';
+  @override
+  String get removeThese => 'Xoá các món này';
+
+  @override
+  String get onBreak => 'Đang tạm nghỉ';
+  @override
+  String get useSavedAddress => 'Dùng địa chỉ đã lưu';
+  @override
+  String get someCakes => 'Một số bánh';
+  @override
+  String andOthers(String list, int n) => '$list và $n món khác';
+  @override
+  String onlySoldDaysNote(String who, String days) =>
+      '$who chỉ bán vào $days, lịch nhận chỉ hiện các ngày này.';
+  @override
+  String leadDaysSpan(int n) => '$n ngày';
+  @override
+  String leadHoursSpan(int n) => '$n giờ';
+  @override
+  String leadNote(String who, String span) =>
+      '$who cần đặt trước $span để chuẩn bị. Chúng tôi đã chọn sẵn '
+      'thời gian nhận sớm nhất. Bạn có thể đổi sang giờ muộn hơn.';
+  @override
+  String readyAt(String t) => 'Dự kiến sẵn sàng lúc $t';
+  @override
+  String get choosePickupTime => 'Chọn giờ nhận';
+  @override
+  String earliestAt(String t) => 'Sớm nhất: $t';
+  @override
+  String get pickupTimeLabel => 'Giờ nhận';
+  @override
+  String get noSlotsToday =>
+      'Hết khung giờ nhận trong ngày này. Vui lòng chọn ngày khác.';
+  @override
+  String confirmTime(String t) => 'Xác nhận $t';
+  @override
+  String get today => 'Hôm nay';
+  @override
+  String get change => 'Đổi';
+
+  @override
+  String variantStock(String label, int n) => '$label · còn $n';
+  @override
+  String variantSoldOut(String label) => '$label · hết hàng';
+  @override
+  String almostGone(int n) => 'Sắp hết, còn $n cái';
+  @override
+  String chooseNFlavors(int n) => 'Chọn đủ $n vị';
+  @override
+  String get reviewsTitle => 'Đánh giá';
+  @override
+  String reviewsLoadError(String e) => 'Không tải được đánh giá: $e';
+  @override
+  String get noReviewsYet =>
+      'Chưa có đánh giá nào. Hãy là người đầu tiên đánh giá '
+      'sản phẩm sau khi nhận hàng nhé.';
+  @override
+  String reviewsCount(int n) => '· $n đánh giá';
+  @override
+  String get anonymousCustomer => 'Khách hàng';
+  @override
+  String get alsoBought => 'Khách cũng mua';
+  @override
+  String get personalizedCake => 'Đã cá nhân hoá bánh';
+  @override
+  String get personalizeCake => 'Cá nhân hoá bánh';
+  @override
+  String get personalizeSub => 'Chữ trên bánh, số nến, ảnh tham khảo, ghi chú …';
+
+  @override
+  String weekdayShort(int d) =>
+      const {0: 'CN', 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7'}[d] ??
+      '?$d';
+
+  @override
+  String get wishlistTitle => 'Yêu thích';
+  @override
+  String get wishlistLoginTitle => 'Đăng nhập để lưu yêu thích';
+  @override
+  String get wishlistLoginMsg =>
+      'Đăng nhập để giữ danh sách bánh yêu thích đồng bộ giữa các thiết bị.';
+  @override
+  String get wishlistEmptyTitle => 'Chưa có sản phẩm yêu thích';
+  @override
+  String get wishlistEmptyMsg => 'Bấm trái tim trên bánh bạn thích để lưu lại.';
 }
 
 class _En extends AppStrings {
@@ -956,4 +1535,412 @@ class _En extends AppStrings {
   String get kanban => 'Kanban';
   @override
   String get kitchenAnalytics => 'Kitchen Analytics';
+
+  static const _tagEn = <String, String>{
+    'Không gluten': 'Gluten-free',
+    'Thuần chay': 'Vegan',
+    'Không sữa': 'Dairy-free',
+    'Không trứng': 'Egg-free',
+    'Không hạt': 'Nut-free',
+    'Không đường': 'Sugar-free',
+    'Ít ngọt': 'Less sweet',
+    'Halal': 'Halal',
+    'Hữu cơ': 'Organic',
+    'Bán chạy': 'Best seller',
+    'Mới': 'New',
+    'Đầu bếp gợi ý': "Chef's pick",
+    'Giới hạn': 'Limited',
+  };
+
+  @override
+  String localizeTag(String tag) => _tagEn[tag] ?? tag;
+
+  @override
+  String get fromLabel => 'From';
+  @override
+  String get soldOutBadge => 'Sold out';
+  @override
+  String get pausedBadge => 'Unavailable';
+  @override
+  String get seasonalBadge => 'Seasonal';
+  @override
+  String stockLeft(int n) => '$n left';
+
+  @override
+  String get menuOverline => 'Menu';
+  @override
+  String get menuSub => 'Every batch baked fresh daily in Banan stores.';
+  @override
+  String get storyOverline => 'Our story';
+  @override
+  String get categoriesOverline => 'Categories';
+  @override
+  String get quickOverline => 'Quick';
+  @override
+  String get reorderTitle => '🔁 Reorder';
+  @override
+  String get reorderSub => 'Quickly re-add items from your recent orders.';
+  @override
+  String get reorderBtn => 'Reorder';
+  @override
+  String orderCode(String code) => 'Order $code';
+  @override
+  String plusOtherItems(int n) => '+$n more';
+  @override
+  String get chooseVariant => 'Choose a variant';
+  @override
+  String get quantity => 'Quantity';
+  @override
+  String get viewProductDetail => 'View product details';
+  @override
+  String get offlineMenuFresh =>
+      'You are offline. Showing the last loaded menu.';
+  @override
+  String offlineMenuAged(String age) => 'You are offline. Menu is $age old.';
+  @override
+  String get justNow => 'just now';
+  @override
+  String minutesAgo(int n) => '$n min ago';
+  @override
+  String hoursAgo(int n) => '$n h ago';
+  @override
+  String daysAgo(int n) => '$n d ago';
+  @override
+  String get pausedAll => 'Ordering is temporarily paused system-wide';
+  @override
+  String get pausedSome => 'Some branches are temporarily paused';
+  @override
+  String get pausedOrdersAll => 'orders paused';
+  @override
+  String get pausePickup => 'pickup';
+  @override
+  String get pauseDelivery => 'delivery';
+  @override
+  String pausedKinds(String parts) => '$parts paused';
+  @override
+  String get bannerPrev => 'Previous banner';
+  @override
+  String get bannerNext => 'Next banner';
+  @override
+  String get wholesaleTitle => 'Wholesale';
+  @override
+  String get genericError => 'Something went wrong, please try again.';
+
+  @override
+  String get newsletterTitle => 'Get Banan offers';
+  @override
+  String get newsletterSub =>
+      'Sign up for new cakes + seasonal offers. '
+      'At most 2 emails a month, no spam.';
+  @override
+  String get newsletterAlready => 'You are already subscribed — thank you!';
+  @override
+  String get newsletterSent =>
+      'Confirmation email sent — please check your inbox.';
+  @override
+  String get subscribe => 'Subscribe';
+  @override
+  String get emailPlaceholder => 'you@email.com';
+
+  @override
+  String get footAbout => 'About Banan';
+  @override
+  String get footLocations => 'Locations';
+  @override
+  String get footFaq => 'FAQ';
+  @override
+  String get footContact => 'Contact';
+  @override
+  String get footPrivacy => 'Privacy policy';
+  @override
+  String get footTerms => 'Terms';
+  @override
+  String get footShipping => 'Shipping & delivery';
+  @override
+  String get footPayment => 'Payment';
+  @override
+  String get footRefund => 'Returns & refunds';
+  @override
+  String get footReferral => 'Refer a friend';
+  @override
+  String get footGiftCards => 'Gift cards';
+  @override
+  String get footSubscription => 'Subscriptions';
+  @override
+  String get footCatering => 'Catering';
+  @override
+  String get footRewards => 'Rewards';
+  @override
+  String bizReg(String no) => 'Business reg. no.: $no';
+  @override
+  String bizAddress(String a) => 'Address: $a';
+
+  @override
+  String get cookieText =>
+      'We use essential cookies to run this website. '
+      'You can opt in to analytics cookies. See our ';
+  @override
+  String get privacyPolicy => 'Privacy policy';
+  @override
+  String get cookieEssential => 'Essential only';
+  @override
+  String get cookieAcceptAll => 'Accept all';
+
+  @override
+  String get viewMenu => 'Browse the menu';
+  @override
+  String itemsCount(int n) => '$n items';
+  @override
+  String get feesAtCheckout =>
+      'Delivery fees & promotions are calculated at checkout';
+  @override
+  String get continueLabel => 'Continue';
+  @override
+  String get addressAtCheckout => 'You will enter the address at checkout.';
+  @override
+  String get itemsInCart => 'Items in your cart';
+  @override
+  String get addToOrderTitle => 'Add to your order 🧁';
+  @override
+  String get youMayLike => 'You might also like';
+  @override
+  String get add => 'Add';
+  @override
+  String leadTimeChipH(int h) => '${h}h notice';
+  @override
+  String onlyOnDays(String days) => 'Only on $days';
+  @override
+  String get notPersonalized => 'Not personalized';
+  @override
+  String get personalize => 'Personalize';
+  @override
+  String addedToOrder(String name) => 'Added $name to your order.';
+
+  @override
+  String get giftInvalid => 'Code invalid, expired, or out of balance.';
+  @override
+  String get fillMissing => 'Please fill in the missing details above.';
+  @override
+  String get orderSuccess =>
+      'Order placed! We will contact you to confirm it.';
+  @override
+  String get mixedDaysError =>
+      'Items in your cart are not sold on the same day. Remove some items '
+      'or split them into separate orders.';
+  @override
+  String get addressHelperEx => 'e.g. 15B8 Le Thanh Ton';
+  @override
+  String get cityHelper => 'Banan currently delivers within HCMC only';
+  @override
+  String get giftCardCode => 'Gift card code';
+  @override
+  String giftApplied(String code, String balance, String deduct) =>
+      'Card $code · balance $balance · $deduct applied to this order.';
+  @override
+  String get vatTitle => 'VAT invoice (red invoice)';
+  @override
+  String get vatOnSub =>
+      'The invoice will be emailed once the order completes.';
+  @override
+  String get vatOffSub => 'Turn on if you need a company invoice.';
+  @override
+  String get companyName => 'Company name';
+  @override
+  String get taxCode => 'Tax code';
+  @override
+  String get taxCodeHelper => '8–13 digits.';
+  @override
+  String get companyAddress => 'Company address';
+  @override
+  String get invoiceEmail => 'Invoice email';
+  @override
+  String get giftTitle => '🎁 This is a gift';
+  @override
+  String get giftOnSub =>
+      'Add a card message, a recipient, and optional gift wrap.';
+  @override
+  String get giftOffSub => 'Turn on to send this order as a gift.';
+  @override
+  String get giftMessage => 'Card message';
+  @override
+  String get giftMessageHint => 'Message to include on the card…';
+  @override
+  String get giftRecipientName => 'Recipient name';
+  @override
+  String get giftRecipientHelper => 'Who receives this gift (optional).';
+  @override
+  String get giftRecipientPhone => 'Recipient phone';
+  @override
+  String get giftPhoneHelper =>
+      'So the courier can reach the recipient (optional).';
+  @override
+  String get giftWrap => 'Gift wrap / gift box';
+  @override
+  String get hidePrices => 'Hide prices on the delivery slip';
+  @override
+  String get hidePricesSub => 'The recipient will not see any prices.';
+  @override
+  String get useMicho => 'Use Micho points';
+  @override
+  String michoBalanceApprox(String balance, String value) =>
+      'You have $balance points (≈ $value)';
+  @override
+  String get orderTooSmallPoints =>
+      'Order value is too small to redeem points.';
+  @override
+  String pointsChip(int v) => '$v pts';
+  @override
+  String redeemPoints(int v, int max) => 'Redeem $v/$max points';
+  @override
+  String get clearSelection => 'Clear';
+  @override
+  String get ninepayLabel => 'QR / Card / Bank transfer (9Pay)';
+  @override
+  String get decrease => 'Decrease';
+  @override
+  String get increase => 'Increase';
+  @override
+  String get wardLabel => 'Ward (HCMC)';
+  @override
+  String get wardLoadError => 'Could not load the ward list';
+  @override
+  String get wardHelper => 'Pick a ward to calculate the delivery fee';
+  @override
+  String get chooseWard => 'Choose a ward…';
+  @override
+  String get chooseWardTitle => 'Choose a ward (HCMC)';
+  @override
+  String get wardSearchHint => 'Search by ward or former district';
+  @override
+  String get noWardMatch => 'No matching ward.';
+  @override
+  String oldAreaLabel(String a) => 'Former district: $a';
+  @override
+  String feeError(String e) => 'Could not calculate the fee: $e';
+  @override
+  String get birthdayTier => 'Birthday cake';
+  @override
+  String get regularTier => 'Regular items';
+  @override
+  String get otherWard => 'different ward';
+  @override
+  String get sameWard => 'same ward';
+  @override
+  String deliverFrom(String store) => 'Ships from: $store';
+  @override
+  String get noStoreForWard => 'No store currently delivers to this ward.';
+  @override
+  String get estimatedFee => 'Estimated delivery fee';
+  @override
+  String feeBreakTier(String tier, String band) => '• Type: $tier · $band';
+  @override
+  String get feeBirthdaySchedule =>
+      '• Contains a birthday cake — a separate fee table applies';
+  @override
+  String feeDistanceKm(String km) => '• Distance from store to ward: $km';
+  @override
+  String get feePickWard => '• Pick a ward above for an exact fee';
+  @override
+  String needLeadHours(int h) => 'needs $h hours notice';
+  @override
+  String onlySoldOnDays(String days) => 'only sold on $days';
+  @override
+  String get itemsDontFit => 'Some items do not fit the time you chose';
+  @override
+  String get pickEarliest => 'Pick the earliest suitable time';
+  @override
+  String get removeThese => 'Remove these items';
+
+  @override
+  String get onBreak => 'On a break right now';
+  @override
+  String get useSavedAddress => 'Use a saved address';
+  @override
+  String get someCakes => 'Some cakes';
+  @override
+  String andOthers(String list, int n) => '$list and $n more';
+  @override
+  String onlySoldDaysNote(String who, String days) =>
+      '$who only sold on $days — the schedule shows those days only.';
+  @override
+  String leadDaysSpan(int n) => '$n days';
+  @override
+  String leadHoursSpan(int n) => '$n hours';
+  @override
+  String leadNote(String who, String span) =>
+      '$who needs $span notice to prepare. We picked the earliest slot — '
+      'you can switch to a later one.';
+  @override
+  String readyAt(String t) => 'Estimated ready at $t';
+  @override
+  String get choosePickupTime => 'Choose a time';
+  @override
+  String earliestAt(String t) => 'Earliest: $t';
+  @override
+  String get pickupTimeLabel => 'Time';
+  @override
+  String get noSlotsToday =>
+      'No slots left on this day. Please pick another day.';
+  @override
+  String confirmTime(String t) => 'Confirm $t';
+  @override
+  String get today => 'Today';
+  @override
+  String get change => 'Change';
+
+  @override
+  String variantStock(String label, int n) => '$label · $n left';
+  @override
+  String variantSoldOut(String label) => '$label · sold out';
+  @override
+  String almostGone(int n) => 'Almost gone — $n left';
+  @override
+  String chooseNFlavors(int n) => 'Pick $n flavors';
+  @override
+  String get reviewsTitle => 'Reviews';
+  @override
+  String reviewsLoadError(String e) => 'Could not load reviews: $e';
+  @override
+  String get noReviewsYet =>
+      'No reviews yet. Be the first to review this product '
+      'after your order arrives.';
+  @override
+  String reviewsCount(int n) => '· $n reviews';
+  @override
+  String get anonymousCustomer => 'Customer';
+  @override
+  String get alsoBought => 'Customers also bought';
+  @override
+  String get personalizedCake => 'Cake personalized';
+  @override
+  String get personalizeCake => 'Personalize this cake';
+  @override
+  String get personalizeSub =>
+      'Message on the cake, candles, reference photo, notes…';
+
+  @override
+  String weekdayShort(int d) =>
+      const {
+        0: 'Sun',
+        1: 'Mon',
+        2: 'Tue',
+        3: 'Wed',
+        4: 'Thu',
+        5: 'Fri',
+        6: 'Sat',
+      }[d] ??
+      '?$d';
+
+  @override
+  String get wishlistTitle => 'Wishlist';
+  @override
+  String get wishlistLoginTitle => 'Sign in to save favorites';
+  @override
+  String get wishlistLoginMsg =>
+      'Sign in to keep your favorite cakes synced across devices.';
+  @override
+  String get wishlistEmptyTitle => 'No favorites yet';
+  @override
+  String get wishlistEmptyMsg =>
+      'Tap the heart on a cake you love to save it here.';
 }

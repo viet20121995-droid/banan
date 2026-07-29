@@ -1,5 +1,11 @@
 import 'package:banan_customer/features/checkout/fulfillment_widgets.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Vietnamese string table — the notes' wording asserted below is VI.
+final AppStrings _vi =
+    ProviderContainer().read(stringsProvider);
 
 /// The schedule helpers pick the time the order is submitted with. Get them
 /// wrong and the backend rejects the order at the last step, after the customer
@@ -61,18 +67,31 @@ void main() {
 
   group('prepLeadNote', () {
     test('says nothing when nothing needs notice', () {
-      expect(prepLeadNote(leadHours: 0, names: []), isNull);
+      expect(prepLeadNote(s: _vi, leadHours: 0, names: []), isNull);
     });
 
     test('renders whole days as days and the rest as hours', () {
-      expect(prepLeadNote(leadHours: 48, names: ['Cake']), contains('2 ngày'));
-      expect(prepLeadNote(leadHours: 5, names: ['Cake']), contains('5 giờ'));
-      expect(prepLeadNote(leadHours: 36, names: ['Cake']), contains('36 giờ'));
+      expect(
+        prepLeadNote(s: _vi, leadHours: 48, names: ['Cake']),
+        contains('2 ngày'),
+      );
+      expect(
+        prepLeadNote(s: _vi, leadHours: 5, names: ['Cake']),
+        contains('5 giờ'),
+      );
+      expect(
+        prepLeadNote(s: _vi, leadHours: 36, names: ['Cake']),
+        contains('36 giờ'),
+      );
     });
 
     test('names the cakes, and summarises past two', () {
-      expect(prepLeadNote(leadHours: 24, names: ['A', 'B']), contains('A, B'));
-      final many = prepLeadNote(leadHours: 24, names: ['A', 'B', 'C', 'D']);
+      expect(
+        prepLeadNote(s: _vi, leadHours: 24, names: ['A', 'B']),
+        contains('A, B'),
+      );
+      final many =
+          prepLeadNote(s: _vi, leadHours: 24, names: ['A', 'B', 'C', 'D']);
       expect(many, contains('A, B'));
       expect(many, contains('2 món khác'));
     });
@@ -80,15 +99,20 @@ void main() {
 
   group('dayConstraintNote', () {
     test('says nothing when every day works', () {
-      expect(dayConstraintNote(allowedDays: [], names: []), isNull);
+      expect(dayConstraintNote(s: _vi, allowedDays: [], names: []), isNull);
       expect(
-        dayConstraintNote(allowedDays: [0, 1, 2, 3, 4, 5, 6], names: ['A']),
+        dayConstraintNote(
+          s: _vi,
+          allowedDays: [0, 1, 2, 3, 4, 5, 6],
+          names: ['A'],
+        ),
         isNull,
       );
     });
 
     test('lists the allowed days in Vietnamese weekday order', () {
-      final note = dayConstraintNote(allowedDays: [6, 0], names: ['Cake']);
+      final note =
+          dayConstraintNote(s: _vi, allowedDays: [6, 0], names: ['Cake']);
       expect(note, contains('CN'));
       expect(note, contains('T7'));
       expect(note, contains('Cake'));

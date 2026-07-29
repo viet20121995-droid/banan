@@ -317,9 +317,9 @@ class _Details extends StatelessWidget {
                       v.stockMode == StockMode.limited &&
                       (v.stockQty ?? 0) > 0 &&
                       (v.stockQty ?? 0) <= 5
-                  ? '${v.label} · còn ${v.stockQty}'
+                  ? s.variantStock(v.label, v.stockQty!)
                   : isLimitedOut
-                      ? '${v.label} · hết hàng'
+                      ? s.variantSoldOut(v.label)
                       : v.label;
               return ChoiceChip(
                 label: Text(label),
@@ -362,7 +362,7 @@ class _Details extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Sắp hết, còn ${product.totalLimitedStock} cái',
+                  s.almostGone(product.totalLimitedStock ?? 0),
                   style: const TextStyle(
                     color: BananColors.accent,
                     fontSize: 12,
@@ -399,9 +399,9 @@ class _Details extends StatelessWidget {
         const SizedBox(height: BananSpacing.xl),
         PrimaryButton(
           label: (showStock && product.isSoldOut)
-              ? 'Hết hàng'
+              ? s.soldOutBadge
               : (!composerComplete
-                  ? 'Chọn đủ ${product.flavorPickCount} vị'
+                  ? s.chooseNFlavors(product.flavorPickCount ?? 0)
                   : s.addToCart),
           icon: (showStock && product.isSoldOut)
               ? Icons.do_not_disturb_alt
@@ -438,10 +438,11 @@ class _ReviewsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final async = ref.watch(_productReviewsProvider(productId));
+    final s = ref.watch(stringsProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Đánh giá', style: theme.textTheme.titleLarge),
+        Text(s.reviewsTitle, style: theme.textTheme.titleLarge),
         const SizedBox(height: BananSpacing.md),
         async.when(
           loading: () => const Padding(
@@ -450,7 +451,7 @@ class _ReviewsSection extends ConsumerWidget {
           ),
           error: (e, _) => Padding(
             padding: const EdgeInsets.symmetric(vertical: BananSpacing.lg),
-            child: Text('Không tải được đánh giá: $e'),
+            child: Text(s.reviewsLoadError('$e')),
           ),
           data: (page) {
             if (page.items.isEmpty) {
@@ -459,8 +460,7 @@ class _ReviewsSection extends ConsumerWidget {
                   vertical: BananSpacing.lg,
                 ),
                 child: Text(
-                  'Chưa có đánh giá nào. Hãy là người đầu tiên đánh giá '
-                  'sản phẩm sau khi nhận hàng nhé.',
+                  s.noReviewsYet,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.outline,
                   ),
@@ -485,7 +485,7 @@ class _ReviewsSection extends ConsumerWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '· ${page.summary!.totalReviews} đánh giá',
+                        s.reviewsCount(page.summary!.totalReviews),
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.outline,
                         ),
@@ -503,12 +503,12 @@ class _ReviewsSection extends ConsumerWidget {
   }
 }
 
-class _ReviewTile extends StatelessWidget {
+class _ReviewTile extends ConsumerWidget {
   const _ReviewTile({required this.review});
   final Review review;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: BananSpacing.md),
@@ -541,7 +541,8 @@ class _ReviewTile extends StatelessWidget {
               const SizedBox(width: BananSpacing.sm),
               Expanded(
                 child: Text(
-                  review.userFullName ?? 'Khách hàng',
+                  review.userFullName ??
+                      ref.watch(stringsProvider).anonymousCustomer,
                   style: theme.textTheme.titleSmall,
                 ),
               ),
@@ -654,6 +655,7 @@ class _RecommendationsSectionState
         });
         final session = ref.watch(authSessionProvider).valueOrNull;
         final wishlistAsync = ref.watch(wishlistIdsProvider);
+        final s = ref.watch(stringsProvider);
         final showStock = ref
                 .watch(displayConfigProvider)
                 .valueOrNull
@@ -671,8 +673,7 @@ class _RecommendationsSectionState
             Row(
               children: [
                 Expanded(
-                  child: Text('Khách cũng mua',
-                      style: theme.textTheme.titleLarge,),
+                  child: Text(s.alsoBought, style: theme.textTheme.titleLarge),
                 ),
                 if (showArrows) ...[
                   _NavBtn(
@@ -705,10 +706,15 @@ class _RecommendationsSectionState
                     child: ProductCard(
                       name: p.name,
                       imageUrl: p.coverImage,
-                      tags: p.tags,
+                      tags: [for (final t in p.tags) s.localizeTag(t)],
                       minPrice: p.minPrice,
                       hasPriceRange: p.hasPriceRange,
                       seasonal: p.isSeasonal,
+                      fromLabel: s.fromLabel,
+                      soldOutLabel: s.soldOutBadge,
+                      pausedLabel: s.pausedBadge,
+                      seasonalLabel: s.seasonalBadge,
+                      stockLeftLabel: s.stockLeft,
                       averageRating: p.averageRating,
                       reviewCount: p.reviewCount,
                       stockRemaining: showStock ? p.totalLimitedStock : null,
@@ -762,7 +768,7 @@ class _NavBtn extends StatelessWidget {
 /// Tappable pill that opens the cake wizard. Shows "Cá nhân hoá bánh"
 /// in idle state, switches to a green-tick chip with the wizard summary
 /// once the customer has filled it in.
-class _PersonalizationPanel extends StatelessWidget {
+class _PersonalizationPanel extends ConsumerWidget {
   const _PersonalizationPanel({
     required this.personalization,
     required this.onOpen,
@@ -771,8 +777,9 @@ class _PersonalizationPanel extends StatelessWidget {
   final VoidCallback onOpen;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final hasValue =
         personalization != null && !personalization!.isEmpty;
     return InkWell(
@@ -807,9 +814,7 @@ class _PersonalizationPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    hasValue
-                        ? 'Đã cá nhân hoá bánh'
-                        : 'Cá nhân hoá bánh',
+                    hasValue ? s.personalizedCake : s.personalizeCake,
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: hasValue
                           ? BananColors.success
@@ -819,7 +824,7 @@ class _PersonalizationPanel extends StatelessWidget {
                   Text(
                     hasValue
                         ? personalization!.summarize() ?? ''
-                        : 'Chữ trên bánh, số nến, ảnh tham khảo, ghi chú …',
+                        : s.personalizeSub,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,
                     ),

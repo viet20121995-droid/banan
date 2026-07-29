@@ -1,5 +1,6 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,35 +13,36 @@ import '../../shared/legal_info.dart';
 class AppFooter extends ConsumerWidget {
   const AppFooter({super.key});
 
-  static const _baseLinks = <MapEntry<String, String>>[
-    MapEntry('Về Banan', '/about'),
-    MapEntry('Chi nhánh', '/locations'),
-    MapEntry('Câu hỏi thường gặp', '/faq'),
-    MapEntry('Liên hệ', '/contact'),
-    MapEntry('Chính sách bảo mật', '/privacy'),
-    MapEntry('Điều khoản', '/terms'),
-    MapEntry('Vận chuyển & giao nhận', '/shipping'),
-    MapEntry('Thanh toán', '/payment-policy'),
-    MapEntry('Đổi trả & hoàn tiền', '/refund-policy'),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final mkt = ref.watch(marketingConfigProvider).valueOrNull;
+    final s = ref.watch(stringsProvider);
+
+    final baseLinks = <MapEntry<String, String>>[
+      MapEntry(s.footAbout, '/about'),
+      MapEntry(s.footLocations, '/locations'),
+      MapEntry(s.footFaq, '/faq'),
+      MapEntry(s.footContact, '/contact'),
+      MapEntry(s.footPrivacy, '/privacy'),
+      MapEntry(s.footTerms, '/terms'),
+      MapEntry(s.footShipping, '/shipping'),
+      MapEntry(s.footPayment, '/payment-policy'),
+      MapEntry(s.footRefund, '/refund-policy'),
+    ];
 
     // Marketing links appear only when the admin enabled that program.
     final marketingLinks = <MapEntry<String, String>>[
       if (mkt?.referral.enabled ?? false)
-        const MapEntry('Giới thiệu bạn', '/referral'),
+        MapEntry(s.footReferral, '/referral'),
       if (mkt?.giftCard.enabled ?? false)
-        const MapEntry('Thẻ quà tặng', '/gift-cards'),
+        MapEntry(s.footGiftCards, '/gift-cards'),
       if (mkt?.subscription.enabled ?? false)
-        const MapEntry('Gói định kỳ', '/subscription'),
+        MapEntry(s.footSubscription, '/subscription'),
       if (mkt?.catering.enabled ?? false)
-        const MapEntry('Đặt tiệc', '/catering'),
+        MapEntry(s.footCatering, '/catering'),
       if (mkt?.rewards.enabled ?? false)
-        const MapEntry('Đổi điểm', '/rewards'),
+        MapEntry(s.footRewards, '/rewards'),
     ];
 
     return Padding(
@@ -57,7 +59,7 @@ class AppFooter extends ConsumerWidget {
             spacing: BananSpacing.lg,
             runSpacing: BananSpacing.sm,
             children: [
-              for (final link in [..._baseLinks, ...marketingLinks])
+              for (final link in [...baseLinks, ...marketingLinks])
                 InkWell(
                   onTap: () => context.push(link.value),
                   child: Text(
@@ -78,13 +80,13 @@ class AppFooter extends ConsumerWidget {
                   color: theme.colorScheme.outline,
                 ) ??
                 const TextStyle(),
-            child: const Column(
+            child: Column(
               children: [
-                Text(LegalInfo.businessName),
-                Text('MST: ${LegalInfo.taxCode}'),
-                Text('ĐKKD: ${LegalInfo.bizRegNo}'),
-                Text('Địa chỉ: ${LegalInfo.address}'),
-                Text(
+                const Text(LegalInfo.businessName),
+                const Text('MST: ${LegalInfo.taxCode}'),
+                Text(s.bizReg(LegalInfo.bizRegNo)),
+                Text(s.bizAddress(LegalInfo.address)),
+                const Text(
                   'Hotline: ${LegalInfo.hotline} · Email: ${LegalInfo.email}',
                 ),
               ],

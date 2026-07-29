@@ -360,11 +360,11 @@ class MenuScreen extends ConsumerWidget {
               ),
             ),
           if (wholesaleEnabled)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'wholesale',
               child: ListTile(
-                leading: Icon(Icons.handshake_outlined),
-                title: Text('Đặt sỉ'),
+                leading: const Icon(Icons.handshake_outlined),
+                title: Text(s.wholesaleTitle),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
@@ -929,14 +929,15 @@ class _PausedStatusBanner extends ConsumerWidget {
   }
 }
 
-class _PausedBannerBody extends StatelessWidget {
+class _PausedBannerBody extends ConsumerWidget {
   const _PausedBannerBody({required this.paused, required this.total});
   final List<Store> paused;
   final int total;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final str = ref.watch(stringsProvider);
     final allDown =
         paused.length >= total && total > 0 && paused.every((s) => s.isPaused);
     final bg = (allDown
@@ -947,11 +948,11 @@ class _PausedBannerBody extends StatelessWidget {
         : theme.colorScheme.onTertiaryContainer);
 
     String channelLabel(Store s) {
-      if (s.isPaused) return 'tạm dừng nhận đơn';
+      if (s.isPaused) return str.pausedOrdersAll;
       final parts = <String>[];
-      if (s.isPickupPaused) parts.add('tự lấy');
-      if (s.isDeliveryPaused) parts.add('giao hàng');
-      return 'tạm dừng ${parts.join(' + ')}';
+      if (s.isPickupPaused) parts.add(str.pausePickup);
+      if (s.isDeliveryPaused) parts.add(str.pauseDelivery);
+      return str.pausedKinds(parts.join(' + '));
     }
 
     return Container(
@@ -971,9 +972,7 @@ class _PausedBannerBody extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  allDown
-                      ? 'Toàn hệ thống đang tạm ngừng nhận đơn'
-                      : 'Một số chi nhánh đang tạm dừng',
+                  allDown ? str.pausedAll : str.pausedSome,
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: fg,
                     fontWeight: FontWeight.w700,
@@ -1197,10 +1196,9 @@ class _BodyState extends ConsumerState<_Body> {
                 child: Padding(
                   padding: const EdgeInsets.only(top: BananSpacing.lg),
                   child: SectionHeader(
-                    overline: 'Thực đơn',
+                    overline: s.menuOverline,
                     title: s.allCakes,
-                    subtitle:
-                        'Mỗi mẻ bánh ra lò tươi mỗi ngày trong các cửa hàng Banan.',
+                    subtitle: s.menuSub,
                   ),
                 ),
               ),
@@ -1227,10 +1225,15 @@ class _BodyState extends ConsumerState<_Body> {
                     name: p.name,
                     imageUrl: p.coverImage,
                     tagline: p.description,
-                    tags: p.tags,
+                    tags: [for (final t in p.tags) s.localizeTag(t)],
                     minPrice: p.minPrice,
                     hasPriceRange: p.hasPriceRange,
                     seasonal: p.isSeasonal,
+                    fromLabel: s.fromLabel,
+                    soldOutLabel: s.soldOutBadge,
+                    pausedLabel: s.pausedBadge,
+                    seasonalLabel: s.seasonalBadge,
+                    stockLeftLabel: s.stockLeft,
                     averageRating: p.averageRating,
                     reviewCount: p.reviewCount,
                     stockRemaining: showStock ? p.totalLimitedStock : null,
@@ -1485,7 +1488,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                   child: Center(
                     child: _CarouselArrow(
                       icon: Icons.chevron_left_rounded,
-                      tooltip: 'Banner trước',
+                      tooltip: s.bannerPrev,
                       onTap: () => _go(-1),
                     ),
                   ),
@@ -1497,7 +1500,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                   child: Center(
                     child: _CarouselArrow(
                       icon: Icons.chevron_right_rounded,
-                      tooltip: 'Banner kế tiếp',
+                      tooltip: s.bannerNext,
                       onTap: () => _go(1),
                     ),
                   ),
@@ -1597,7 +1600,7 @@ class _ThreadsStrip extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SectionHeader(
-                overline: 'Câu chuyện',
+                overline: s.storyOverline,
                 title: s.fromTheBakery,
                 trailing: filter != null
                     ? InputChip(
@@ -1850,16 +1853,17 @@ class _OrderAgainStrip extends ConsumerWidget {
     final async = ref.watch(recentOrdersProvider);
     final orders = async.valueOrNull ?? const <Order>[];
     if (orders.isEmpty) return const SizedBox.shrink();
+    final s = ref.watch(stringsProvider);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: BananSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
-            overline: 'Nhanh gọn',
-            title: '🔁 Đặt lại',
-            subtitle: 'Thêm lại nhanh những món bạn đã đặt gần đây.',
+          SectionHeader(
+            overline: s.quickOverline,
+            title: s.reorderTitle,
+            subtitle: s.reorderSub,
           ),
           SizedBox(
             height: 168,
@@ -1886,16 +1890,17 @@ class _OrderAgainCard extends ConsumerWidget {
 
   /// "Bánh kem dâu" → "Bánh kem dâu +2 món khác" when the order has more
   /// than one line.
-  String _summary() {
-    if (order.items.isEmpty) return 'Đơn ${order.code}';
+  String _summary(AppStrings s) {
+    if (order.items.isEmpty) return s.orderCode(order.code);
     final first = order.items.first.productName;
     final others = order.items.length - 1;
-    return others <= 0 ? first : '$first +$others món khác';
+    return others <= 0 ? first : '$first ${s.plusOtherItems(others)}';
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final fmt = NumberFormat.currency(
       locale: 'vi_VN',
       symbol: '₫',
@@ -1936,7 +1941,7 @@ class _OrderAgainCard extends ConsumerWidget {
             const SizedBox(height: BananSpacing.xs),
             Expanded(
               child: Text(
-                _summary(),
+                _summary(s),
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -1962,7 +1967,7 @@ class _OrderAgainCard extends ConsumerWidget {
                   ),
                 ),
                 icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Đặt lại'),
+                label: Text(s.reorderBtn),
                 onPressed: () => reorderOrder(context, ref, order),
               ),
             ),
@@ -2139,7 +2144,9 @@ void _confirmAddToCart({
     SnackBar(
       // No "Xem giỏ" action here — the persistent cart FAB on this screen
       // already offers it, so the action would be a duplicate.
-      content: Text('Đã thêm ${product.name} vào giỏ.'),
+      content: Text(
+        ref.read(stringsProvider).addedToCart(product.name),
+      ),
       duration: const Duration(seconds: 2),
     ),
   );
@@ -2156,6 +2163,7 @@ class _CategoryStrip extends ConsumerWidget {
     final products = category.products;
     final session = ref.watch(authSessionProvider).valueOrNull;
     final wishlistAsync = ref.watch(wishlistIdsProvider);
+    final s = ref.watch(stringsProvider);
     final showStock =
         ref.watch(displayConfigProvider).valueOrNull?.showStockToCustomers ??
             false;
@@ -2165,7 +2173,7 @@ class _CategoryStrip extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SectionHeader(
-            overline: 'Danh mục',
+            overline: s.categoriesOverline,
             title: category.name,
           ),
           SizedBox(
@@ -2185,7 +2193,12 @@ class _CategoryStrip extends ConsumerWidget {
                     minPrice: p.minPrice,
                     hasPriceRange: p.hasPriceRange,
                     seasonal: p.isSeasonal,
-                    tags: p.tags,
+                    tags: [for (final t in p.tags) s.localizeTag(t)],
+                    fromLabel: s.fromLabel,
+                    soldOutLabel: s.soldOutBadge,
+                    pausedLabel: s.pausedBadge,
+                    seasonalLabel: s.seasonalBadge,
+                    stockLeftLabel: s.stockLeft,
                     averageRating: p.averageRating,
                     reviewCount: p.reviewCount,
                     stockRemaining: showStock ? p.totalLimitedStock : null,
@@ -2217,17 +2230,17 @@ class _CategoryStrip extends ConsumerWidget {
 /// Compact variant + quantity picker for the menu's quick-add flow. Lives
 /// in a bottom sheet so the customer never leaves the grid — the full
 /// product detail screen is still one tap away on the card body.
-class _QuickAddSheet extends StatefulWidget {
+class _QuickAddSheet extends ConsumerStatefulWidget {
   const _QuickAddSheet({required this.product, required this.onAdd});
 
   final Product product;
   final void Function(ProductVariant variant, int qty) onAdd;
 
   @override
-  State<_QuickAddSheet> createState() => _QuickAddSheetState();
+  ConsumerState<_QuickAddSheet> createState() => _QuickAddSheetState();
 }
 
-class _QuickAddSheetState extends State<_QuickAddSheet> {
+class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
   late ProductVariant _selected;
   int _qty = 1;
 
@@ -2301,7 +2314,10 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
             ],
           ),
           const SizedBox(height: BananSpacing.lg),
-          Text('Chọn phiên bản', style: theme.textTheme.titleSmall),
+          Text(
+            ref.watch(stringsProvider).chooseVariant,
+            style: theme.textTheme.titleSmall,
+          ),
           const SizedBox(height: BananSpacing.sm),
           Wrap(
             spacing: BananSpacing.sm,
@@ -2324,7 +2340,10 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
           const SizedBox(height: BananSpacing.lg),
           Row(
             children: [
-              Text('Số lượng', style: theme.textTheme.titleSmall),
+              Text(
+                ref.watch(stringsProvider).quantity,
+                style: theme.textTheme.titleSmall,
+              ),
               const Spacer(),
               IconButton.outlined(
                 icon: const Icon(Icons.remove),
@@ -2352,7 +2371,8 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
             },
             icon: const Icon(Icons.shopping_basket_outlined),
             label: Text(
-              'Thêm vào giỏ · ${fmt.format(unitPrice * _qty)}',
+              '${ref.watch(stringsProvider).addToCart} · '
+              '${fmt.format(unitPrice * _qty)}',
             ),
           ),
           TextButton(
@@ -2360,7 +2380,7 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
               Navigator.pop(context);
               GoRouter.of(context).push('/product/${widget.product.id}');
             },
-            child: const Text('Xem chi tiết sản phẩm'),
+            child: Text(ref.watch(stringsProvider).viewProductDetail),
           ),
         ],
       ),
@@ -2393,10 +2413,11 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
 
   Future<void> _submit() async {
     final email = _email.text.trim();
+    final s = ref.read(stringsProvider);
     if (!email.contains('@') || email.length < 5) {
       setState(() {
         _ok = false;
-        _msg = 'Vui lòng nhập email hợp lệ.';
+        _msg = s.invalidEmail;
       });
       return;
     }
@@ -2414,9 +2435,7 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
         setState(() {
           _busy = false;
           _ok = true;
-          _msg = r.alreadyConfirmed
-              ? 'Bạn đã đăng ký rồi, cảm ơn!'
-              : 'Đã gửi email xác nhận, mời kiểm tra hộp thư.';
+          _msg = r.alreadyConfirmed ? s.newsletterAlready : s.newsletterSent;
           if (!r.alreadyConfirmed) _email.clear();
         });
       },
@@ -2424,7 +2443,7 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
         setState(() {
           _busy = false;
           _ok = false;
-          _msg = f.message ?? 'Có lỗi xảy ra, vui lòng thử lại.';
+          _msg = f.message ?? s.genericError;
         });
       },
     );
@@ -2433,6 +2452,7 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Container(
       margin: const EdgeInsets.only(
         top: BananSpacing.xl,
@@ -2456,14 +2476,13 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Nhận khuyến mãi từ Banan',
+                s.newsletterTitle,
                 style: theme.textTheme.titleLarge,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: BananSpacing.xs),
               Text(
-                'Đăng ký email để nhận thông tin bánh mới + ưu đãi mùa lễ. '
-                'Tối đa 2 email mỗi tháng, không spam.',
+                s.newsletterSub,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.outline,
                 ),
@@ -2476,8 +2495,8 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
                     child: TextField(
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        hintText: 'your@email.com',
+                      decoration: InputDecoration(
+                        hintText: s.emailPlaceholder,
                         isDense: true,
                       ),
                       onSubmitted: (_) => _busy ? null : _submit(),
@@ -2492,7 +2511,7 @@ class _NewsletterFooterState extends ConsumerState<_NewsletterFooter> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Đăng ký'),
+                        : Text(s.subscribe),
                   ),
                 ],
               ),

@@ -225,11 +225,11 @@ class _StoreOption extends StatelessWidget {
 }
 
 /// "Đang tạm nghỉ" badge shown on a paused branch tile.
-class _PausedChip extends StatelessWidget {
+class _PausedChip extends ConsumerWidget {
   const _PausedChip();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -238,7 +238,7 @@ class _PausedChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        'Đang tạm nghỉ',
+        ref.watch(stringsProvider).onBreak,
         style: theme.textTheme.labelSmall?.copyWith(
           color: theme.colorScheme.onErrorContainer,
           fontWeight: FontWeight.w600,
@@ -323,7 +323,7 @@ class SavedAddressPicker extends ConsumerWidget {
                   ),
                   const SizedBox(width: BananSpacing.sm),
                   Text(
-                    'Dùng địa chỉ đã lưu',
+                    ref.watch(stringsProvider).useSavedAddress,
                     style: theme.textTheme.titleSmall,
                   ),
                 ],
@@ -346,7 +346,7 @@ class SavedAddressPicker extends ConsumerWidget {
   }
 }
 
-class _SavedAddressTile extends StatelessWidget {
+class _SavedAddressTile extends ConsumerWidget {
   const _SavedAddressTile({
     required this.address,
     required this.selected,
@@ -358,7 +358,7 @@ class _SavedAddressTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final color =
         selected ? theme.colorScheme.primary : theme.colorScheme.outline;
@@ -407,9 +407,9 @@ class _SavedAddressTile extends StatelessWidget {
                             color: BananColors.gold,
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Text(
-                            'Mặc định',
-                            style: TextStyle(
+                          child: Text(
+                            ref.watch(stringsProvider).defaultBadge,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -472,35 +472,34 @@ DateTime earliestScheduleSlot(
 /// day-restricted. [allowedDays] are weekdays 0=Sun..6=Sat; [names] are the
 /// cakes that drive the restriction.
 String? dayConstraintNote({
+  required AppStrings s,
   required List<int> allowedDays,
   required List<String> names,
 }) {
   if (allowedDays.isEmpty || allowedDays.length >= 7) return null;
-  const wd = {0: 'CN', 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7'};
   final days =
-      (allowedDays.toList()..sort()).map((d) => wd[d] ?? '?$d').join(', ');
-  final who = names.isEmpty
-      ? 'Một số bánh'
-      : (names.length <= 2
-          ? names.join(', ')
-          : '${names.take(2).join(', ')} và ${names.length - 2} món khác');
-  return '$who chỉ bán vào $days, lịch nhận chỉ hiện các ngày này.';
+      (allowedDays.toList()..sort()).map(s.weekdayShort).join(', ');
+  return s.onlySoldDaysNote(_whoLabel(s, names), days);
 }
 
 /// Builds the "needs preparation time" notice, or null when nothing in the
 /// cart requires advance notice. [names] are the cakes that need lead time.
-String? prepLeadNote({required int leadHours, required List<String> names}) {
+String? prepLeadNote({
+  required AppStrings s,
+  required int leadHours,
+  required List<String> names,
+}) {
   if (leadHours <= 0) return null;
   final span = (leadHours >= 24 && leadHours % 24 == 0)
-      ? '${leadHours ~/ 24} ngày'
-      : '$leadHours giờ';
-  final who = names.isEmpty
-      ? 'Một số bánh'
-      : (names.length <= 2
-          ? names.join(', ')
-          : '${names.take(2).join(', ')} và ${names.length - 2} món khác');
-  return '$who cần đặt trước $span để chuẩn bị. Chúng tôi đã chọn sẵn '
-      'thời gian nhận sớm nhất. Bạn có thể đổi sang giờ muộn hơn.';
+      ? s.leadDaysSpan(leadHours ~/ 24)
+      : s.leadHoursSpan(leadHours);
+  return s.leadNote(_whoLabel(s, names), span);
+}
+
+String _whoLabel(AppStrings s, List<String> names) {
+  if (names.isEmpty) return s.someCakes;
+  if (names.length <= 2) return names.join(', ');
+  return s.andOthers(names.take(2).join(', '), names.length - 2);
 }
 
 /// Wraps [ScheduleSection] with cart-driven lead-time awareness. When the cart
@@ -667,7 +666,7 @@ class ScheduleSection extends ConsumerWidget {
                 const SizedBox(width: BananSpacing.sm),
                 Expanded(
                   child: Text(
-                    'Dự kiến sẵn sàng lúc ${fmt.format(earliest)}',
+                    s.readyAt(fmt.format(earliest)),
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.outline),
                   ),
@@ -711,7 +710,7 @@ class ScheduleSection extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      'Đổi',
+                      s.change,
                       style: theme.textTheme.labelLarge
                           ?.copyWith(color: theme.colorScheme.primary),
                     ),
@@ -774,7 +773,7 @@ class _LeadNoteBanner extends StatelessWidget {
 /// (Hôm nay / Ngày mai / weekday + date), then 30-minute slots from 08:00 to
 /// 20:30, with anything before [earliest] hidden. Much friendlier than the
 /// stacked OS date+time dialogs.
-class _SchedulePickerSheet extends StatefulWidget {
+class _SchedulePickerSheet extends ConsumerStatefulWidget {
   const _SchedulePickerSheet({
     required this.earliest,
     this.initial,
@@ -786,10 +785,11 @@ class _SchedulePickerSheet extends StatefulWidget {
   /// Weekdays (0=Sun..6=Sat) to keep. Null = every day.
   final Set<int>? allowedDays;
   @override
-  State<_SchedulePickerSheet> createState() => _SchedulePickerSheetState();
+  ConsumerState<_SchedulePickerSheet> createState() =>
+      _SchedulePickerSheetState();
 }
 
-class _SchedulePickerSheetState extends State<_SchedulePickerSheet> {
+class _SchedulePickerSheetState extends ConsumerState<_SchedulePickerSheet> {
   static const _openHour = 8;
   static const _closeHour = 20; // last slot 20:30
   late DateTime _day;
@@ -831,19 +831,20 @@ class _SchedulePickerSheetState extends State<_SchedulePickerSheet> {
     return out;
   }
 
-  String _dayLabel(DateTime d) {
+  String _dayLabel(AppStrings s, DateTime d) {
     final now = DateTime.now();
     final t0 = DateTime(now.year, now.month, now.day);
     final diff = DateTime(d.year, d.month, d.day).difference(t0).inDays;
-    if (diff == 0) return 'Hôm nay';
-    if (diff == 1) return 'Ngày mai';
-    const wd = {1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7', 7: 'CN'};
-    return '${wd[d.weekday]} ${DateFormat('dd/MM').format(d)}';
+    if (diff == 0) return s.today;
+    if (diff == 1) return s.tomorrow;
+    return '${s.weekdayShort(d.weekday % 7)} '
+        '${DateFormat('dd/MM').format(d)}';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final slots = _slotsFor(_day);
     final hm = DateFormat('HH:mm');
     final full = DateFormat('HH:mm · dd/MM');
@@ -859,10 +860,10 @@ class _SchedulePickerSheetState extends State<_SchedulePickerSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Chọn giờ nhận', style: theme.textTheme.titleLarge),
+            Text(s.choosePickupTime, style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
-              'Sớm nhất: ${full.format(widget.earliest)}',
+              s.earliestAt(full.format(widget.earliest)),
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline),
             ),
@@ -880,7 +881,7 @@ class _SchedulePickerSheetState extends State<_SchedulePickerSheet> {
                       d.month == _day.month &&
                       d.day == _day.day;
                   return ChoiceChip(
-                    label: Text(_dayLabel(d)),
+                    label: Text(_dayLabel(s, d)),
                     selected: sel,
                     onSelected: (_) => setState(() {
                       _day = DateTime(d.year, d.month, d.day);
@@ -896,13 +897,13 @@ class _SchedulePickerSheetState extends State<_SchedulePickerSheet> {
               ),
             ),
             const SizedBox(height: BananSpacing.md),
-            Text('Giờ nhận', style: theme.textTheme.labelLarge),
+            Text(s.pickupTimeLabel, style: theme.textTheme.labelLarge),
             const SizedBox(height: BananSpacing.sm),
             if (slots.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: BananSpacing.md),
                 child: Text(
-                  'Hết khung giờ nhận trong ngày này. Vui lòng chọn ngày khác.',
+                  s.noSlotsToday,
                   style: theme.textTheme.bodySmall,
                 ),
               )
@@ -934,8 +935,8 @@ class _SchedulePickerSheetState extends State<_SchedulePickerSheet> {
               icon: const Icon(Icons.check),
               label: Text(
                 _selected == null
-                    ? 'Chọn giờ nhận'
-                    : 'Xác nhận ${full.format(_selected!)}',
+                    ? s.choosePickupTime
+                    : s.confirmTime(full.format(_selected!)),
               ),
             ),
           ],

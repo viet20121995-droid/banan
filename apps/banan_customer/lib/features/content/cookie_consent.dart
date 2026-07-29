@@ -1,4 +1,5 @@
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -53,70 +54,76 @@ class CookieConsentBanner extends ConsumerWidget {
     if (consent != CookieConsent.unknown) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final notifier = ref.read(cookieConsentProvider.notifier);
+    final s = ref.watch(stringsProvider);
 
+    // Full-width bar docked to the bottom edge — a floating mid-screen card
+    // read as a broken dialog and covered content on short pages.
     return Align(
       alignment: Alignment.bottomCenter,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(BananSpacing.md),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Material(
-              elevation: 8,
-              borderRadius: BananRadii.rlg,
-              color: theme.colorScheme.surface,
-              child: Padding(
-                padding: const EdgeInsets.all(BananSpacing.lg),
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  alignment: WrapAlignment.spaceBetween,
-                  runSpacing: BananSpacing.sm,
-                  spacing: BananSpacing.md,
-                  children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: Text.rich(
-                        TextSpan(
-                          text: 'Chúng tôi dùng cookie cần thiết để website '
-                              'hoạt động. Bạn có thể chọn bật thêm cookie phân '
-                              'tích. Xem ',
-                          style: theme.textTheme.bodySmall,
-                          children: [
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.middle,
-                              child: InkWell(
-                                onTap: () => context.push('/privacy'),
-                                child: Text(
-                                  'Chính sách bảo mật',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.primary,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
+      child: Material(
+        elevation: 8,
+        color: theme.colorScheme.surface,
+        child: SafeArea(
+          top: false,
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: theme.dividerTheme.color ?? Colors.black12,
+                ),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: BananSpacing.lg,
+              vertical: BananSpacing.md,
+            ),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceBetween,
+              runSpacing: BananSpacing.sm,
+              spacing: BananSpacing.md,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Text.rich(
+                    TextSpan(
+                      text: s.cookieText,
+                      style: theme.textTheme.bodySmall,
+                      children: [
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.middle,
+                          child: InkWell(
+                            onTap: () => context.push('/privacy'),
+                            child: Text(
+                              s.privacyPolicy,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                                decoration: TextDecoration.underline,
                               ),
                             ),
-                            const TextSpan(text: '.'),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextButton(
-                          onPressed: notifier.essentialOnly,
-                          child: const Text('Chỉ cần thiết'),
-                        ),
-                        const SizedBox(width: BananSpacing.sm),
-                        FilledButton(
-                          onPressed: notifier.acceptAll,
-                          child: const Text('Chấp nhận tất cả'),
-                        ),
+                        const TextSpan(text: '.'),
                       ],
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton(
+                      onPressed: notifier.essentialOnly,
+                      child: Text(s.cookieEssential),
+                    ),
+                    const SizedBox(width: BananSpacing.sm),
+                    FilledButton(
+                      onPressed: notifier.acceptAll,
+                      child: Text(s.cookieAcceptAll),
                     ),
                   ],
                 ),
-              ),
+              ],
             ),
           ),
         ),

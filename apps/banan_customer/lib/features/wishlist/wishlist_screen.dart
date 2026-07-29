@@ -1,5 +1,6 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,17 +15,17 @@ class WishlistScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(authSessionProvider).valueOrNull;
+    final s = ref.watch(stringsProvider);
     if (session == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Yêu thích')),
+        appBar: AppBar(title: Text(s.wishlistTitle)),
         body: EmptyState(
-          title: 'Đăng nhập để lưu yêu thích',
-          message:
-              'Đăng nhập để giữ danh sách bánh yêu thích đồng bộ giữa các thiết bị.',
+          title: s.wishlistLoginTitle,
+          message: s.wishlistLoginMsg,
           icon: Icons.favorite_border_rounded,
           action: FilledButton(
             onPressed: () => context.push('/login'),
-            child: const Text('Đăng nhập'),
+            child: Text(s.signIn),
           ),
         ),
       );
@@ -39,7 +40,7 @@ class WishlistScreen extends ConsumerWidget {
         false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Yêu thích')),
+      appBar: AppBar(title: Text(s.wishlistTitle)),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorState(
@@ -49,12 +50,12 @@ class WishlistScreen extends ConsumerWidget {
         data: (items) {
           if (items.isEmpty) {
             return EmptyState(
-              title: 'Chưa có sản phẩm yêu thích',
-              message: 'Bấm trái tim trên bánh bạn thích để lưu lại.',
+              title: s.wishlistEmptyTitle,
+              message: s.wishlistEmptyMsg,
               icon: Icons.favorite_border_rounded,
               action: FilledButton(
                 onPressed: () => context.go('/'),
-                child: const Text('Xem thực đơn'),
+                child: Text(s.viewMenu),
               ),
             );
           }
@@ -84,10 +85,15 @@ class WishlistScreen extends ConsumerWidget {
                       name: p.name,
                       imageUrl: p.coverImage,
                       tagline: p.description,
-                      tags: p.tags,
+                      tags: [for (final t in p.tags) s.localizeTag(t)],
                       minPrice: p.minPrice,
                       hasPriceRange: p.hasPriceRange,
                       seasonal: p.isSeasonal,
+                      fromLabel: s.fromLabel,
+                      soldOutLabel: s.soldOutBadge,
+                      pausedLabel: s.pausedBadge,
+                      seasonalLabel: s.seasonalBadge,
+                      stockLeftLabel: s.stockLeft,
                       averageRating: p.averageRating,
                       reviewCount: p.reviewCount,
                       stockRemaining: showStock ? p.totalLimitedStock : null,

@@ -25,6 +25,11 @@ class ProductCard extends StatelessWidget {
     this.reviewCount = 0,
     this.stockRemaining,
     this.soldOut = false,
+    this.fromLabel = 'Từ',
+    this.soldOutLabel = 'Hết hàng',
+    this.pausedLabel = 'Tạm ngưng',
+    this.seasonalLabel = 'Theo mùa',
+    this.stockLeftLabel,
     super.key,
   });
 
@@ -62,6 +67,16 @@ class ProductCard extends StatelessWidget {
   /// disabled — prevents accidental quick-adds.
   final bool soldOut;
 
+  /// UI copy — the design system holds no locale state, so screens pass the
+  /// active language's labels in (defaults are Vietnamese, the brand default).
+  final String fromLabel;
+  final String soldOutLabel;
+  final String pausedLabel;
+  final String seasonalLabel;
+
+  /// Formats the low-stock badge ("Còn 3" / "3 left"). Null → "Còn $n".
+  final String Function(int n)? stockLeftLabel;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -71,7 +86,7 @@ class ProductCard extends StatelessWidget {
       decimalDigits: 0,
     );
     final priceLabel = hasPriceRange
-        ? 'From ${fmt.format(minPrice)}'
+        ? '$fromLabel ${fmt.format(minPrice)}'
         : fmt.format(minPrice);
 
     return InkWell(
@@ -95,11 +110,11 @@ class ProductCard extends StatelessWidget {
                   children: [
                     _Cover(imageUrl: imageUrl),
                     if (seasonal)
-                      const Positioned(
+                      Positioned(
                         top: BananSpacing.sm,
                         left: BananSpacing.sm,
                         child: _Tag(
-                          label: 'Seasonal',
+                          label: seasonalLabel,
                           color: BananColors.gold,
                         ),
                       ),
@@ -109,7 +124,7 @@ class ProductCard extends StatelessWidget {
                           color: Colors.black.withValues(alpha: 0.35),
                           child: Center(
                             child: Text(
-                              soldOut ? 'Hết hàng' : 'Tạm ngưng',
+                              soldOut ? soldOutLabel : pausedLabel,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600,
@@ -135,7 +150,8 @@ class ProductCard extends StatelessWidget {
                             borderRadius: BananRadii.rPill,
                           ),
                           child: Text(
-                            'Còn $stockRemaining',
+                            stockLeftLabel?.call(stockRemaining!) ??
+                                'Còn $stockRemaining',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,

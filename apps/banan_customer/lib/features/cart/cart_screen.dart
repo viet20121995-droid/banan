@@ -56,7 +56,7 @@ class CartScreen extends ConsumerWidget {
           message: s.emptyCartMsg,
           icon: Icons.shopping_bag_outlined,
           action: PrimaryButton(
-            label: 'Xem thực đơn',
+            label: s.viewMenu,
             icon: Icons.restaurant_menu_outlined,
             onPressed: () => context.go('/'),
           ),
@@ -80,7 +80,7 @@ class CartScreen extends ConsumerWidget {
               Row(
                 children: [
                   Text(
-                    '${s.subtotal} · ${cart.itemCount} món',
+                    '${s.subtotal} · ${s.itemsCount(cart.itemCount)}',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const Spacer(),
@@ -94,7 +94,7 @@ class CartScreen extends ConsumerWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Phí giao & khuyến mãi tính ở bước thanh toán',
+                  s.feesAtCheckout,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.outline,
                   ),
@@ -102,7 +102,7 @@ class CartScreen extends ConsumerWidget {
               ),
               const SizedBox(height: BananSpacing.md),
               PrimaryButton(
-                label: 'Tiếp tục',
+                label: s.continueLabel,
                 icon: Icons.arrow_forward,
                 expand: true,
                 onPressed: () => context.push('/checkout'),
@@ -167,9 +167,9 @@ class CartScreen extends ConsumerWidget {
                         onSelect: (a) => draftCtrl.setDeliveryAddressId(a.id),
                       )
                     else
-                      const _MutedNote(
+                      _MutedNote(
                         icon: Icons.info_outline,
-                        text: 'Bạn sẽ nhập địa chỉ ở bước thanh toán.',
+                        text: s.addressAtCheckout,
                       ),
                   ],
 
@@ -185,6 +185,7 @@ class CartScreen extends ConsumerWidget {
                     onChanged: draftCtrl.setScheduledFor,
                     leadHours: cart.maxLeadHours,
                     leadNote: prepLeadNote(
+                      s: s,
                       leadHours: cart.maxLeadHours,
                       names: cart.leadProductNames,
                     ),
@@ -192,7 +193,7 @@ class CartScreen extends ConsumerWidget {
 
                   // ── Items ───────────────────────────────────────────────
                   const SizedBox(height: BananSpacing.xl),
-                  Text('Món trong giỏ', style: theme.textTheme.titleLarge),
+                  Text(s.itemsInCart, style: theme.textTheme.titleLarge),
                   const SizedBox(height: BananSpacing.md),
                   for (final item in cart.items)
                     Padding(
@@ -296,10 +297,13 @@ class _CrossSellSection extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: BananSpacing.xl),
-            Text('Thêm vào đơn 🧁', style: theme.textTheme.titleLarge),
+            Text(
+              ref.watch(stringsProvider).addToOrderTitle,
+              style: theme.textTheme.titleLarge,
+            ),
             const SizedBox(height: 2),
             Text(
-              'Có thể bạn cũng thích',
+              ref.watch(stringsProvider).youMayLike,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.outline,
               ),
@@ -417,7 +421,8 @@ class _CrossSellCard extends ConsumerWidget {
                   const SizedBox(height: 2),
                   Text(
                     product.hasPriceRange
-                        ? 'Từ ${fmt.format(product.minPrice)}'
+                        ? '${ref.watch(stringsProvider).fromLabel} '
+                            '${fmt.format(product.minPrice)}'
                         : fmt.format(product.minPrice),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.primary,
@@ -430,7 +435,7 @@ class _CrossSellCard extends ConsumerWidget {
                     child: FilledButton.tonalIcon(
                       onPressed: () => _add(context, ref),
                       icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Thêm'),
+                      label: Text(ref.watch(stringsProvider).add),
                       style: FilledButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(
@@ -542,13 +547,14 @@ class _Row extends ConsumerWidget {
                           if ((item.leadTimeHours ?? 0) > 0)
                             _ConstraintChip(
                               icon: Icons.schedule,
-                              label: 'Đặt trước ${item.leadTimeHours}h',
+                              label: s.leadTimeChipH(item.leadTimeHours!),
                             ),
                           if (item.availableDaysOfWeek.isNotEmpty)
                             _ConstraintChip(
                               icon: Icons.event_outlined,
-                              label:
-                                  'Chỉ bán ${_cartDaysLabel(item.availableDaysOfWeek)}',
+                              label: s.onlyOnDays(
+                                _cartDaysLabel(s, item.availableDaysOfWeek),
+                              ),
                             ),
                         ],
                       ),
@@ -600,7 +606,7 @@ class _Row extends ConsumerWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    summary ?? 'Chưa cá nhân hoá',
+                    summary ?? s.notPersonalized,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: summary == null
                           ? theme.colorScheme.outline
@@ -617,7 +623,7 @@ class _Row extends ConsumerWidget {
                       summary == null ? Icons.add : Icons.edit_outlined,
                       size: 16,
                     ),
-                    label: Text(summary == null ? 'Cá nhân hoá' : 'Sửa'),
+                    label: Text(summary == null ? s.personalize : s.edit),
                     style: TextButton.styleFrom(
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -632,10 +638,9 @@ class _Row extends ConsumerWidget {
   }
 }
 
-/// Weekday ints (0=Sun..6=Sat) → short VN labels, sorted, e.g. "T7, CN".
-String _cartDaysLabel(List<int> days) {
-  const wd = {0: 'CN', 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7'};
-  return (days.toList()..sort()).map((d) => wd[d] ?? '?$d').join(', ');
+/// Weekday ints (0=Sun..6=Sat) → short labels, sorted, e.g. "T7, CN".
+String _cartDaysLabel(AppStrings s, List<int> days) {
+  return (days.toList()..sort()).map(s.weekdayShort).join(', ');
 }
 
 /// Small amber pill on a cart line flagging a per-item timeline constraint

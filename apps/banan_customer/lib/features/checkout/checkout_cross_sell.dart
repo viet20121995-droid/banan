@@ -1,6 +1,7 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,7 +53,10 @@ class CheckoutCrossSell extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Thêm vào đơn 🧁', style: theme.textTheme.titleMedium),
+            Text(
+              ref.watch(stringsProvider).addToOrderTitle,
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: BananSpacing.sm),
             _SuggestionStrip(items: suggestions, fmt: fmt),
           ],
@@ -148,7 +152,9 @@ class _Card extends ConsumerWidget {
       ..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Đã thêm ${product.name} vào đơn.'),
+          content: Text(
+            ref.read(stringsProvider).addedToOrder(product.name),
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -207,7 +213,8 @@ class _Card extends ConsumerWidget {
                   const SizedBox(height: 2),
                   Text(
                     product.hasPriceRange
-                        ? 'Từ ${fmt.format(product.minPrice)}'
+                        ? '${ref.watch(stringsProvider).fromLabel} '
+                            '${fmt.format(product.minPrice)}'
                         : fmt.format(product.minPrice),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.primary,
@@ -220,7 +227,7 @@ class _Card extends ConsumerWidget {
                     child: FilledButton.tonalIcon(
                       onPressed: () => _add(context, ref),
                       icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Thêm'),
+                      label: Text(ref.watch(stringsProvider).add),
                       style: FilledButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(
