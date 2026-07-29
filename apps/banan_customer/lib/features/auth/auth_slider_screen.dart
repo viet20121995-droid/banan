@@ -90,7 +90,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
       initialDate: _birthday ?? DateTime(now.year - 25),
       firstDate: DateTime(now.year - 100),
       lastDate: now,
-      helpText: 'Ngày sinh của bạn',
+      helpText: ref.read(stringsProvider).birthdayHelp,
     );
     if (picked != null) setState(() => _birthday = picked);
   }
@@ -129,7 +129,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
                   }
                 },
                 icon: const Icon(Icons.arrow_back, size: 20),
-                label: const Text('Quay lại cửa hàng'),
+                label: Text(ref.watch(stringsProvider).backToShop),
               ),
             ),
           ],
@@ -227,7 +227,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
     final s = ref.watch(stringsProvider);
     return _FormScaffold(
       formKey: _loginKey,
-      title: 'Đăng nhập',
+      title: s.signIn,
       children: [
         _SoftField(
           controller: _loginId,
@@ -236,7 +236,8 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           autofillHints: const [AutofillHints.username],
-          validator: (v) => (v == null || v.trim().isEmpty) ? 'Bắt buộc' : null,
+          validator: (v) =>
+              (v == null || v.trim().isEmpty) ? s.required : null,
         ),
         const SizedBox(height: BananSpacing.md),
         _SoftField(
@@ -249,7 +250,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
           onSubmitted: (_) => _submitLogin(),
           onToggleObscure: () =>
               setState(() => _loginObscure = !_loginObscure),
-          validator: (v) => (v == null || v.isEmpty) ? 'Bắt buộc' : null,
+          validator: (v) => (v == null || v.isEmpty) ? s.required : null,
         ),
         Align(
           alignment: Alignment.centerRight,
@@ -257,7 +258,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
             onPressed: state.submitting
                 ? null
                 : () => context.push('/forgot-password'),
-            child: const Text('Quên mật khẩu?'),
+            child: Text(s.forgotPasswordQ),
           ),
         ),
         if (state.failure != null) _errorBox(theme, state.failure!),
@@ -277,14 +278,15 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
     final s = ref.watch(stringsProvider);
     return _FormScaffold(
       formKey: _regKey,
-      title: 'Tạo tài khoản',
+      title: s.createAccount,
       children: [
         _SoftField(
           controller: _regName,
           label: s.fullName,
           icon: Icons.person_outline,
           textInputAction: TextInputAction.next,
-          validator: (v) => (v == null || v.trim().isEmpty) ? 'Bắt buộc' : null,
+          validator: (v) =>
+              (v == null || v.trim().isEmpty) ? s.required : null,
         ),
         const SizedBox(height: BananSpacing.md),
         _SoftField(
@@ -294,15 +296,15 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           validator: (v) {
-            if (v == null || v.isEmpty) return 'Bắt buộc';
-            if (!v.contains('@')) return 'Email không hợp lệ';
+            if (v == null || v.isEmpty) return s.required;
+            if (!v.contains('@')) return s.invalidEmail;
             return null;
           },
         ),
         const SizedBox(height: BananSpacing.md),
         _SoftField(
           controller: _regPhone,
-          label: '${s.phone} (tuỳ chọn)',
+          label: '${s.phone} (${s.optionalSuffix})',
           icon: Icons.phone_outlined,
           keyboardType: TextInputType.phone,
           textInputAction: TextInputAction.next,
@@ -318,8 +320,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _submitRegister(),
           onToggleObscure: () => setState(() => _regObscure = !_regObscure),
-          validator: (v) =>
-              (v == null || v.length < 8) ? 'Tối thiểu 8 ký tự' : null,
+          validator: (v) => (v == null || v.length < 8) ? s.pwMin8 : null,
         ),
         if (state.failure != null) _errorBox(theme, state.failure!),
         const SizedBox(height: BananSpacing.lg),
@@ -434,20 +435,19 @@ class _FormScaffold extends StatelessWidget {
 
 /// The sliding panel: welcome copy + the toggle (ghost) button. Tinted so the
 /// slide is clearly visible over the cream forms.
-class _OverlayPane extends StatelessWidget {
+class _OverlayPane extends ConsumerWidget {
   const _OverlayPane({required this.signUpActive, required this.onToggle});
   final bool signUpActive;
   final VoidCallback onToggle;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     // When sign-up is active the overlay invites you to sign in, and vice-versa.
-    final title = signUpActive ? 'Chào mừng trở lại!' : 'Xin chào!';
-    final body = signUpActive
-        ? 'Đã có tài khoản? Đăng nhập để tiếp tục đặt bánh.'
-        : 'Chưa có tài khoản? Đăng ký để tích điểm và đặt nhanh hơn.';
-    final cta = signUpActive ? 'ĐĂNG NHẬP' : 'ĐĂNG KÝ';
+    final title = signUpActive ? s.welcomeBack : s.helloThere;
+    final body = signUpActive ? s.overlayHaveAccount : s.overlayNoAccount;
+    final cta = (signUpActive ? s.signIn : s.signUp).toUpperCase();
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -526,14 +526,15 @@ class _OverlayPane extends StatelessWidget {
 }
 
 /// Top tab toggle for the narrow layout.
-class _SegmentedToggle extends StatelessWidget {
+class _SegmentedToggle extends ConsumerWidget {
   const _SegmentedToggle({required this.signUpActive, required this.onChanged});
   final bool signUpActive;
   final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     Widget tab(String label, bool isSignUp) {
       final active = signUpActive == isSignUp;
       return Expanded(
@@ -568,7 +569,7 @@ class _SegmentedToggle extends StatelessWidget {
         borderRadius: BananRadii.rPill,
       ),
       child: Row(
-        children: [tab('Đăng nhập', false), tab('Đăng ký', true)],
+        children: [tab(s.signIn, false), tab(s.signUp, true)],
       ),
     );
   }
@@ -630,25 +631,26 @@ class _SoftField extends StatelessWidget {
 }
 
 /// Optional birthday picker field (read-only, opens a date picker).
-class _BirthdayField extends StatelessWidget {
+class _BirthdayField extends ConsumerWidget {
   const _BirthdayField({required this.value, required this.onTap});
   final DateTime? value;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
     final fmt = DateFormat.yMMMd();
     return InkWell(
       onTap: onTap,
       borderRadius: BananRadii.rmd,
       child: InputDecorator(
-        decoration: const InputDecoration(
-          labelText: 'Ngày sinh (tuỳ chọn)',
-          helperText: 'Tặng bạn ưu đãi mỗi dịp sinh nhật.',
-          prefixIcon: Icon(Icons.cake_outlined, size: 20),
-          suffixIcon: Icon(Icons.calendar_today_outlined, size: 18),
+        decoration: InputDecoration(
+          labelText: s.birthdayOptional,
+          helperText: s.birthdayPerk,
+          prefixIcon: const Icon(Icons.cake_outlined, size: 20),
+          suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
         ),
-        child: Text(value == null ? 'Chạm để chọn…' : fmt.format(value!)),
+        child: Text(value == null ? s.tapToPick : fmt.format(value!)),
       ),
     );
   }

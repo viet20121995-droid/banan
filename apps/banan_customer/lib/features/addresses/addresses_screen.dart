@@ -11,7 +11,8 @@ final myAddressesProvider =
   final res = await ref.watch(addressesRepositoryProvider).list();
   return res.when(
     success: (list) => list,
-    failure: (f) => throw Exception(authFailureMessage(f)),
+    failure: (f) =>
+        throw Exception(authFailureMessage(f, ref.read(stringsProvider))),
   );
 });
 
@@ -284,7 +285,9 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
     setState(() => _saving = false);
     res.when(
       success: (_) => Navigator.pop(context, true),
-      failure: (f) => setState(() => _error = authFailureMessage(f)),
+      failure: (f) => setState(
+        () => _error = authFailureMessage(f, ref.read(stringsProvider)),
+      ),
     );
   }
 
@@ -331,7 +334,7 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
                   labelText: s.city,
                   prefixIcon: const Icon(Icons.location_city_outlined),
                   enabled: false,
-                  helperText: 'Banan hiện chỉ giao trong TP.HCM',
+                  helperText: s.deliveryOnlyHcm,
                 ),
                 child: Text(
                   'Thành phố Hồ Chí Minh',
@@ -407,15 +410,16 @@ class _WardPicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(hcmWardsProvider);
+    final s = ref.watch(stringsProvider);
     return Padding(
       padding: const EdgeInsets.only(bottom: BananSpacing.sm),
       child: async.when(
         loading: () => const LinearProgressIndicator(minHeight: 2),
         error: (e, _) => TextFormField(
           enabled: false,
-          decoration: const InputDecoration(
-            labelText: 'Phường (TP.HCM)',
-            errorText: 'Không tải được danh sách phường',
+          decoration: InputDecoration(
+            labelText: s.wardLabel,
+            errorText: s.wardLoadError,
           ),
         ),
         data: (wards) {
@@ -436,13 +440,13 @@ class _WardPicker extends ConsumerWidget {
             },
             borderRadius: BananRadii.rmd,
             child: InputDecorator(
-              decoration: const InputDecoration(
-                labelText: 'Phường (TP.HCM)',
-                helperText: 'Sau cải cách 7/2025, chọn phường thay cho quận',
-                suffixIcon: Icon(Icons.arrow_drop_down),
+              decoration: InputDecoration(
+                labelText: s.wardLabel,
+                helperText: s.wardReformHelper,
+                suffixIcon: const Icon(Icons.arrow_drop_down),
               ),
               child: Text(
-                selected?.name ?? 'Chọn phường…',
+                selected?.name ?? s.chooseWard,
                 style: selected == null
                     ? Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.outline,
@@ -460,15 +464,15 @@ class _WardPicker extends ConsumerWidget {
 /// Bottom-sheet ward picker with a search field. Filters by name and by the
 /// pre-reform district hint, so customers used to the old "Q1" / "Bình
 /// Thạnh" labels can still find their ward quickly.
-class _WardPickerSheet extends StatefulWidget {
+class _WardPickerSheet extends ConsumerStatefulWidget {
   const _WardPickerSheet({required this.wards});
   final List<HcmWard> wards;
 
   @override
-  State<_WardPickerSheet> createState() => _WardPickerSheetState();
+  ConsumerState<_WardPickerSheet> createState() => _WardPickerSheetState();
 }
 
-class _WardPickerSheetState extends State<_WardPickerSheet> {
+class _WardPickerSheetState extends ConsumerState<_WardPickerSheet> {
   final _query = TextEditingController();
   String _q = '';
 
@@ -488,6 +492,7 @@ class _WardPickerSheetState extends State<_WardPickerSheet> {
                 (w.oldArea ?? '').toLowerCase().contains(lower);
           }).toList();
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
 
     return DraggableScrollableSheet(
       expand: false,
@@ -498,16 +503,16 @@ class _WardPickerSheetState extends State<_WardPickerSheet> {
         child: Column(
           children: [
             Text(
-              'Chọn phường (TP.HCM)',
+              s.chooseWardTitle,
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: BananSpacing.sm),
             TextField(
               controller: _query,
               autofocus: true,
-              decoration: const InputDecoration(
-                hintText: 'Tìm theo tên phường hoặc quận cũ',
-                prefixIcon: Icon(Icons.search),
+              decoration: InputDecoration(
+                hintText: s.wardSearchHint,
+                prefixIcon: const Icon(Icons.search),
               ),
               onChanged: (v) => setState(() => _q = v),
             ),
@@ -516,7 +521,7 @@ class _WardPickerSheetState extends State<_WardPickerSheet> {
               child: filtered.isEmpty
                   ? Center(
                       child: Text(
-                        'Không tìm thấy phường khớp.',
+                        s.noWardMatch,
                         style: theme.textTheme.bodyMedium,
                       ),
                     )
@@ -530,7 +535,7 @@ class _WardPickerSheetState extends State<_WardPickerSheet> {
                           title: Text(w.name),
                           subtitle: w.oldArea == null
                               ? null
-                              : Text('Quận/khu vực cũ: ${w.oldArea}'),
+                              : Text(s.oldAreaLabel(w.oldArea!)),
                           onTap: () => Navigator.pop(context, w),
                         );
                       },

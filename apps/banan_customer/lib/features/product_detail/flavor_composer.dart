@@ -1,12 +1,14 @@
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Inline flavour composer for macaron sets — the customer picks exactly
 /// [pickCount] macarons from [options], repeats allowed. A sticky counter
 /// shows "Đã chọn 3/5"; the parent gates "Add to cart" on
 /// [isComplete]. Selection is a flavour→count map that flows into
 /// `CartItem.personalization` as `{ "flavors": {...} }`.
-class FlavorComposer extends StatelessWidget {
+class FlavorComposer extends ConsumerWidget {
   const FlavorComposer({
     required this.options,
     required this.pickCount,
@@ -39,8 +41,9 @@ class FlavorComposer extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final remaining = pickCount - _total;
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -56,7 +59,7 @@ class FlavorComposer extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Chọn vị macaron',
+                  s.flavorPickTitle,
                   style: theme.textTheme.titleMedium,
                 ),
               ),
@@ -69,7 +72,7 @@ class FlavorComposer extends StatelessWidget {
                       : BananColors.gold.withValues(alpha: 0.18),
                 ),
                 child: Text(
-                  'Đã chọn $_total/$pickCount',
+                  s.flavorPicked(_total, pickCount),
                   style: TextStyle(
                     color: isComplete
                         ? BananColors.success
@@ -83,9 +86,7 @@ class FlavorComposer extends StatelessWidget {
           ),
           const SizedBox(height: BananSpacing.xs),
           Text(
-            isComplete
-                ? 'Đủ rồi! Bạn có thể thêm vào giỏ.'
-                : 'Còn $remaining cái, chọn thêm (có thể nhiều cái cùng vị).',
+            isComplete ? s.flavorComplete : s.flavorRemaining(remaining),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.outline,
             ),

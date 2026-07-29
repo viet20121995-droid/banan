@@ -49,7 +49,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     setState(() => _submitting = false);
     res.when(
       success: (_) => setState(() => _done = true),
-      failure: (f) => setState(() => _error = authFailureMessage(f)),
+      failure: (f) => setState(
+        () => _error = authFailureMessage(f, ref.read(stringsProvider)),
+      ),
     );
   }
 
@@ -58,7 +60,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Đặt lại mật khẩu')),
+      appBar: AppBar(title: Text(ref.watch(stringsProvider).resetTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -72,6 +74,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   }
 
   Widget _buildBody(ThemeData theme) {
+    final s = ref.watch(stringsProvider);
     // No token → the link is malformed or was opened directly.
     if (widget.token.isEmpty) {
       return Column(
@@ -81,15 +84,14 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
           Icon(Icons.link_off_outlined, size: 56, color: theme.colorScheme.error),
           const SizedBox(height: BananSpacing.lg),
           Text(
-            'Liên kết không hợp lệ hoặc đã hết hạn. Vui lòng yêu cầu liên '
-            'kết đặt lại mật khẩu mới.',
+            s.resetLinkInvalid,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge,
           ),
           const SizedBox(height: BananSpacing.xl),
           FilledButton(
             onPressed: () => context.go('/forgot-password'),
-            child: const Text('Yêu cầu liên kết mới'),
+            child: Text(s.requestNewLink),
           ),
         ],
       );
@@ -107,15 +109,14 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
           ),
           const SizedBox(height: BananSpacing.lg),
           Text(
-            'Đặt lại mật khẩu thành công. Bạn có thể đăng nhập bằng mật '
-            'khẩu mới.',
+            s.resetDone,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge,
           ),
           const SizedBox(height: BananSpacing.xl),
           FilledButton(
             onPressed: () => context.go('/login'),
-            child: const Text('Đăng nhập'),
+            child: Text(s.signIn),
           ),
         ],
       );
@@ -128,7 +129,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Nhập mật khẩu mới cho tài khoản của bạn.',
+            s.resetIntro,
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: BananSpacing.xl),
@@ -146,7 +147,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
             controller: _newPassword,
             obscureText: _obscureNew,
             decoration: InputDecoration(
-              labelText: 'Mật khẩu mới',
+              labelText: s.newPassword,
               prefixIcon: const Icon(Icons.lock_outline),
               suffixIcon: IconButton(
                 icon: Icon(
@@ -157,16 +158,14 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                 onPressed: () => setState(() => _obscureNew = !_obscureNew),
               ),
             ),
-            validator: (v) => (v == null || v.length < 8)
-                ? 'Mật khẩu phải có ít nhất 8 ký tự'
-                : null,
+            validator: (v) => (v == null || v.length < 8) ? s.pwMin8 : null,
           ),
           const SizedBox(height: BananSpacing.md),
           TextFormField(
             controller: _confirm,
             obscureText: _obscureConfirm,
             decoration: InputDecoration(
-              labelText: 'Xác nhận mật khẩu mới',
+              labelText: s.confirmNewPassword,
               prefixIcon: const Icon(Icons.lock_reset_outlined),
               suffixIcon: IconButton(
                 icon: Icon(
@@ -178,8 +177,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                     setState(() => _obscureConfirm = !_obscureConfirm),
               ),
             ),
-            validator: (v) =>
-                (v != _newPassword.text) ? 'Mật khẩu xác nhận không khớp' : null,
+            validator: (v) => (v != _newPassword.text) ? s.pwMismatch : null,
           ),
           const SizedBox(height: BananSpacing.xl),
           FilledButton.icon(
@@ -191,7 +189,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.lock_reset_outlined),
-            label: const Text('Đặt lại mật khẩu'),
+            label: Text(s.resetTitle),
           ),
         ],
       ),

@@ -1,5 +1,6 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -54,7 +55,7 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
       }),
       failure: (f) => setState(() {
         _busy = false;
-        _error = f.message ?? 'Gửi không thành công, vui lòng thử lại.';
+        _error = f.message ?? ref.read(stringsProvider).sendFailed;
       }),
     );
   }
@@ -66,24 +67,23 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final cfg = ref.watch(displayConfigProvider).valueOrNull;
     final hotline = cfg?.contactPhone;
     final email = cfg?.contactEmail;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Liên hệ')),
+      appBar: AppBar(title: Text(s.contactTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
           child: ListView(
             padding: const EdgeInsets.all(BananSpacing.lg),
             children: [
-              Text('Liên hệ với Banan', style: theme.textTheme.headlineMedium),
+              Text(s.contactHeading, style: theme.textTheme.headlineMedium),
               const SizedBox(height: BananSpacing.xs),
               Text(
-                'Có thắc mắc về đơn hàng, đặt bánh theo yêu cầu hay hợp tác? '
-                'Gửi tin nhắn cho chúng tôi, hoặc gọi hotline để được hỗ trợ '
-                'ngay.',
+                s.contactIntro,
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.outline),
               ),
@@ -109,7 +109,7 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
               if (_sent)
                 _SentCard(onAnother: () => setState(() => _sent = false))
               else
-                _form(theme),
+                _form(theme, s),
               const SizedBox(height: BananSpacing.xxl),
             ],
           ),
@@ -118,56 +118,56 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
     );
   }
 
-  Widget _form(ThemeData theme) {
+  Widget _form(ThemeData theme, AppStrings s) {
     return Form(
       key: _formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Gửi tin nhắn', style: theme.textTheme.titleLarge),
+          Text(s.sendMessageTitle, style: theme.textTheme.titleLarge),
           const SizedBox(height: BananSpacing.md),
           TextFormField(
             controller: _name,
-            decoration: const InputDecoration(labelText: 'Họ tên *'),
+            decoration: InputDecoration(labelText: s.nameReq),
             textInputAction: TextInputAction.next,
             validator: (v) =>
-                (v == null || v.trim().length < 2) ? 'Nhập họ tên' : null,
+                (v == null || v.trim().length < 2) ? s.enterName : null,
           ),
           const SizedBox(height: BananSpacing.sm),
           TextFormField(
             controller: _email,
-            decoration: const InputDecoration(labelText: 'Email *'),
+            decoration: InputDecoration(labelText: s.emailReq),
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
             validator: (v) => (v == null || !v.contains('@') || v.length < 5)
-                ? 'Email không hợp lệ'
+                ? s.invalidEmail
                 : null,
           ),
           const SizedBox(height: BananSpacing.sm),
           TextFormField(
             controller: _phone,
-            decoration: const InputDecoration(labelText: 'Số điện thoại'),
+            decoration: InputDecoration(labelText: s.phone),
             keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: BananSpacing.sm),
           TextFormField(
             controller: _subject,
-            decoration: const InputDecoration(labelText: 'Chủ đề'),
+            decoration: InputDecoration(labelText: s.subjectLabel),
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: BananSpacing.sm),
           TextFormField(
             controller: _message,
-            decoration: const InputDecoration(
-              labelText: 'Nội dung *',
+            decoration: InputDecoration(
+              labelText: s.messageReq,
               alignLabelWithHint: true,
             ),
             minLines: 4,
             maxLines: 8,
             maxLength: 4000,
             validator: (v) =>
-                (v == null || v.trim().length < 5) ? 'Nhập nội dung' : null,
+                (v == null || v.trim().length < 5) ? s.enterMessage : null,
           ),
           if (_error != null) ...[
             const SizedBox(height: BananSpacing.xs),
@@ -184,7 +184,7 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.send_outlined),
-            label: Text(_busy ? 'Đang gửi…' : 'Gửi tin nhắn'),
+            label: Text(_busy ? s.sending : s.sendMessageBtn),
           ),
         ],
       ),
@@ -220,13 +220,14 @@ class _ContactTile extends StatelessWidget {
   }
 }
 
-class _SentCard extends StatelessWidget {
+class _SentCard extends ConsumerWidget {
   const _SentCard({required this.onAnother});
   final VoidCallback onAnother;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Card(
       color: BananColors.success.withValues(alpha: 0.10),
       child: Padding(
@@ -239,17 +240,17 @@ class _SentCard extends StatelessWidget {
               color: BananColors.success,
             ),
             const SizedBox(height: BananSpacing.sm),
-            Text('Đã gửi tin nhắn!', style: theme.textTheme.titleMedium),
+            Text(s.sentTitle, style: theme.textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
-              'Cảm ơn bạn đã liên hệ. Chúng tôi sẽ phản hồi sớm nhất qua email.',
+              s.sentThanks,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: BananSpacing.md),
             TextButton(
               onPressed: onAnother,
-              child: const Text('Gửi tin nhắn khác'),
+              child: Text(s.sendAnother),
             ),
           ],
         ),

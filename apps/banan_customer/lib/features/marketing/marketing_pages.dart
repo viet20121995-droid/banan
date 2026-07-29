@@ -3,6 +3,7 @@
 // ignore_for_file: require_trailing_commas, prefer_const_constructors
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,11 +27,12 @@ class _ProgramScaffold extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(marketingConfigProvider);
+    final s = ref.watch(stringsProvider);
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => const Center(child: Text('Không tải được.')),
+        error: (e, _) => Center(child: Text(s.loadFailed)),
         data: (cfg) => enabled(cfg)
             ? Center(
                 child: ConstrainedBox(
@@ -38,9 +40,9 @@ class _ProgramScaffold extends ConsumerWidget {
                   child: builder(context, cfg),
                 ),
               )
-            : const EmptyState(
-                title: 'Chương trình chưa mở',
-                message: 'Tính năng này hiện chưa được kích hoạt.',
+            : EmptyState(
+                title: s.programNotOpen,
+                message: s.programNotOpenMsg,
                 icon: Icons.lock_clock_outlined,
               ),
       ),
@@ -58,13 +60,14 @@ class ReferralScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(authSessionProvider).valueOrNull;
+    final s = ref.watch(stringsProvider);
     return _ProgramScaffold(
-      title: 'Giới thiệu bạn bè',
+      title: s.referralTitle,
       enabled: (c) => c.referral.enabled,
       builder: (context, c) {
         final theme = Theme.of(context);
         if (session == null) {
-          return _LoginPrompt(message: 'Đăng nhập để lấy mã giới thiệu của bạn.');
+          return _LoginPrompt(message: s.referralLoginPrompt);
         }
         final code = _code(session.user.id);
         final link = '${Uri.base.origin}/?ref=$code';
@@ -73,7 +76,7 @@ class ReferralScreen extends ConsumerWidget {
         return ListView(
           padding: const EdgeInsets.all(BananSpacing.lg),
           children: [
-            Text('Giới thiệu bạn bè', style: theme.textTheme.headlineMedium),
+            Text(s.referralTitle, style: theme.textTheme.headlineMedium),
             const SizedBox(height: BananSpacing.sm),
             Text(c.referral.strCfg('description'),
                 style: theme.textTheme.bodyLarge),
@@ -83,16 +86,15 @@ class ReferralScreen extends ConsumerWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(BananSpacing.md),
                   child: Text(
-                    'Bạn nhận $referrer điểm • Bạn bè nhận $referee điểm khi '
-                    'họ đặt đơn đầu tiên.',
+                    s.referralBonus(referrer, referee),
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
               ),
             const SizedBox(height: BananSpacing.md),
-            _CopyTile(label: 'Mã giới thiệu', value: code),
+            _CopyTile(label: s.referralCodeLabel, value: code),
             const SizedBox(height: BananSpacing.sm),
-            _CopyTile(label: 'Link chia sẻ', value: link),
+            _CopyTile(label: s.shareLinkLabel, value: link),
           ],
         );
       },
@@ -101,12 +103,13 @@ class ReferralScreen extends ConsumerWidget {
 }
 
 // ── Gift cards ───────────────────────────────────────────────────────────────
-class GiftCardScreen extends StatelessWidget {
+class GiftCardScreen extends ConsumerWidget {
   const GiftCardScreen({super.key});
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
     return _ProgramScaffold(
-      title: 'Thẻ quà tặng',
+      title: s.giftCardTitle,
       enabled: (c) => c.giftCard.enabled,
       builder: (context, c) {
         final theme = Theme.of(context);
@@ -117,7 +120,7 @@ class GiftCardScreen extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(BananSpacing.lg),
           children: [
-            Text('Thẻ quà tặng Banan', style: theme.textTheme.headlineMedium),
+            Text(s.giftCardHeading, style: theme.textTheme.headlineMedium),
             const SizedBox(height: BananSpacing.sm),
             Text(c.giftCard.strCfg('note'), style: theme.textTheme.bodyLarge),
             const SizedBox(height: BananSpacing.lg),
@@ -134,13 +137,13 @@ class GiftCardScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: BananSpacing.md),
-            Text('Hạn sử dụng: ${c.giftCard.numCfg('expiryMonths', 12).toInt()} tháng',
+            Text(s.giftCardExpiry(c.giftCard.numCfg('expiryMonths', 12).toInt()),
                 style: theme.textTheme.bodyMedium),
             const SizedBox(height: BananSpacing.lg),
             FilledButton.icon(
               onPressed: () => context.push('/contact'),
               icon: const Icon(Icons.shopping_bag_outlined),
-              label: const Text('Liên hệ để mua thẻ quà tặng'),
+              label: Text(s.contactToBuyGiftCard),
             ),
           ],
         );
@@ -150,12 +153,13 @@ class GiftCardScreen extends StatelessWidget {
 }
 
 // ── Subscription ─────────────────────────────────────────────────────────────
-class SubscriptionScreen extends StatelessWidget {
+class SubscriptionScreen extends ConsumerWidget {
   const SubscriptionScreen({super.key});
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
     return _ProgramScaffold(
-      title: 'Gói định kỳ',
+      title: s.subscriptionTitle,
       enabled: (c) => c.subscription.enabled,
       builder: (context, c) {
         final theme = Theme.of(context);
@@ -163,7 +167,7 @@ class SubscriptionScreen extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(BananSpacing.lg),
           children: [
-            Text('Nhận bánh định kỳ', style: theme.textTheme.headlineMedium),
+            Text(s.subscriptionHeading, style: theme.textTheme.headlineMedium),
             const SizedBox(height: BananSpacing.sm),
             Text(c.subscription.strCfg('note'),
                 style: theme.textTheme.bodyLarge),
@@ -174,7 +178,7 @@ class SubscriptionScreen extends StatelessWidget {
                 return Card(
                   child: ListTile(
                     title: Text(m['name'] as String? ?? ''),
-                    subtitle: Text('mỗi ${m['period'] ?? ''}'),
+                    subtitle: Text(s.perPeriod('${m['period'] ?? ''}')),
                     trailing: Text(
                       _fmt.format(((m['priceVnd'] as num?) ?? 0).toDouble()),
                       style: theme.textTheme.titleMedium
@@ -187,7 +191,7 @@ class SubscriptionScreen extends StatelessWidget {
             FilledButton.icon(
               onPressed: () => context.push('/contact'),
               icon: const Icon(Icons.event_repeat_outlined),
-              label: const Text('Liên hệ đăng ký'),
+              label: Text(s.contactToSubscribe),
             ),
           ],
         );
@@ -225,7 +229,9 @@ class _CateringScreenState extends ConsumerState<CateringScreen> {
     if (_name.text.trim().isEmpty ||
         _phone.text.trim().isEmpty ||
         _detail.text.trim().length < 5) {
-      setState(() => _msg = 'Vui lòng điền tên, số điện thoại và nội dung.');
+      setState(
+        () => _msg = ref.read(stringsProvider).fillNamePhoneContent,
+      );
       return;
     }
     setState(() {
@@ -256,15 +262,16 @@ class _CateringScreenState extends ConsumerState<CateringScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(stringsProvider);
     return _ProgramScaffold(
-      title: 'Đặt tiệc / Sự kiện',
+      title: s.cateringTitle,
       enabled: (c) => c.catering.enabled,
       builder: (context, c) {
         final theme = Theme.of(context);
         if (_sent) {
-          return const EmptyState(
-            title: 'Đã gửi yêu cầu!',
-            message: 'Cảm ơn bạn, cửa hàng sẽ liên hệ tư vấn sớm nhất.',
+          return EmptyState(
+            title: s.cateringSentTitle,
+            message: s.cateringSentMsg,
             icon: Icons.check_circle_outline,
           );
         }
@@ -273,28 +280,28 @@ class _CateringScreenState extends ConsumerState<CateringScreen> {
         return ListView(
           padding: const EdgeInsets.all(BananSpacing.lg),
           children: [
-            Text('Đặt tiệc & sự kiện', style: theme.textTheme.headlineMedium),
+            Text(s.cateringHeading, style: theme.textTheme.headlineMedium),
             const SizedBox(height: BananSpacing.sm),
             Text(c.catering.strCfg('description'),
                 style: theme.textTheme.bodyLarge),
             const SizedBox(height: BananSpacing.xs),
-            Text('Tối thiểu $minG khách • đặt trước $lead ngày',
+            Text(s.cateringMinLead(minG, lead),
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
             const SizedBox(height: BananSpacing.lg),
-            TextField(controller: _name, decoration: const InputDecoration(labelText: 'Họ tên *')),
+            TextField(controller: _name, decoration: InputDecoration(labelText: s.nameReq)),
             const SizedBox(height: BananSpacing.sm),
-            TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Số điện thoại *')),
+            TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: s.phoneReq)),
             const SizedBox(height: BananSpacing.sm),
-            TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (tuỳ chọn)')),
+            TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: s.emailOptionalLabel)),
             const SizedBox(height: BananSpacing.sm),
             TextField(
               controller: _detail,
               minLines: 3,
               maxLines: 6,
-              decoration: const InputDecoration(
-                labelText: 'Nội dung *',
-                hintText: 'Số khách, ngày, loại bánh / dịch vụ mong muốn…',
+              decoration: InputDecoration(
+                labelText: s.messageReq,
+                hintText: s.contentHintCatering,
               ),
             ),
             if (_msg != null) ...[
@@ -307,7 +314,7 @@ class _CateringScreenState extends ConsumerState<CateringScreen> {
               icon: _busy
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.send_outlined),
-              label: Text(_busy ? 'Đang gửi…' : 'Gửi yêu cầu'),
+              label: Text(_busy ? s.sending : s.sendRequest),
             ),
           ],
         );
@@ -322,8 +329,9 @@ class RewardsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(authSessionProvider).valueOrNull;
+    final s = ref.watch(stringsProvider);
     return _ProgramScaffold(
-      title: 'Đổi điểm lấy quà',
+      title: s.rewardsTitle,
       enabled: (c) => c.rewards.enabled,
       builder: (context, c) {
         final theme = Theme.of(context);
@@ -332,16 +340,16 @@ class RewardsScreen extends ConsumerWidget {
         return ListView(
           padding: const EdgeInsets.all(BananSpacing.lg),
           children: [
-            Text('Đổi điểm lấy quà', style: theme.textTheme.headlineMedium),
+            Text(s.rewardsTitle, style: theme.textTheme.headlineMedium),
             if (balance != null) ...[
               const SizedBox(height: BananSpacing.xs),
-              Text('Điểm của bạn: $balance',
+              Text(s.yourPoints(balance),
                   style: theme.textTheme.titleMedium
                       ?.copyWith(color: theme.colorScheme.primary)),
             ],
             const SizedBox(height: BananSpacing.lg),
             if (items.isEmpty)
-              Text('Chưa có phần quà nào.', style: theme.textTheme.bodyMedium),
+              Text(s.noRewards, style: theme.textTheme.bodyMedium),
             for (final it in items)
               Builder(builder: (_) {
                 final m = (it as Map).cast<String, dynamic>();
@@ -350,22 +358,21 @@ class RewardsScreen extends ConsumerWidget {
                 return Card(
                   child: ListTile(
                     title: Text(m['name'] as String? ?? ''),
-                    subtitle: Text('$pts điểm'),
+                    subtitle: Text(s.rewardPoints(pts)),
                     trailing: FilledButton(
                       onPressed: (session == null || !enough)
                           ? null
                           : () => context.push('/contact'),
                       child: Text(session == null
-                          ? 'Đăng nhập'
-                          : (enough ? 'Đổi' : 'Chưa đủ')),
+                          ? s.signIn
+                          : (enough ? s.redeemWord : s.notEnough)),
                     ),
                   ),
                 );
               }),
             const SizedBox(height: BananSpacing.md),
             Text(
-              'Để đổi quà, vui lòng liên hệ hoặc tới quầy. Nhân viên sẽ xác '
-              'nhận và trừ điểm cho bạn.',
+              s.rewardsNote,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline),
             ),
@@ -377,24 +384,25 @@ class RewardsScreen extends ConsumerWidget {
 }
 
 // ── shared bits ──────────────────────────────────────────────────────────────
-class _CopyTile extends StatelessWidget {
+class _CopyTile extends ConsumerWidget {
   const _CopyTile({required this.label, required this.value});
   final String label;
   final String value;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Card(
       child: ListTile(
         title: Text(label, style: theme.textTheme.bodySmall),
         subtitle: Text(value, style: theme.textTheme.titleSmall),
         trailing: IconButton(
           icon: const Icon(Icons.copy_outlined),
-          tooltip: 'Sao chép',
+          tooltip: s.copyLabel,
           onPressed: () {
             Clipboard.setData(ClipboardData(text: value));
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Đã sao chép')),
+              SnackBar(content: Text(s.copied)),
             );
           },
         ),
@@ -403,11 +411,11 @@ class _CopyTile extends StatelessWidget {
   }
 }
 
-class _LoginPrompt extends StatelessWidget {
+class _LoginPrompt extends ConsumerWidget {
   const _LoginPrompt({required this.message});
   final String message;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -416,7 +424,7 @@ class _LoginPrompt extends StatelessWidget {
           const SizedBox(height: BananSpacing.md),
           FilledButton(
             onPressed: () => context.push('/login'),
-            child: const Text('Đăng nhập'),
+            child: Text(ref.watch(stringsProvider).signIn),
           ),
         ],
       ),

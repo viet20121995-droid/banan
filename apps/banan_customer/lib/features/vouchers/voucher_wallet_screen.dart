@@ -1,6 +1,7 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,16 +17,17 @@ class VoucherWalletScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final walletAsync = ref.watch(voucherWalletProvider);
+    final s = ref.watch(stringsProvider);
     return DefaultTabController(
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Ví voucher'),
-          bottom: const TabBar(
+          title: Text(s.voucherWallet),
+          bottom: TabBar(
             tabs: [
-              Tab(text: 'Khả dụng'),
-              Tab(text: 'Đã dùng'),
-              Tab(text: 'Hết hạn'),
+              Tab(text: s.tabAvailable),
+              Tab(text: s.tabUsed),
+              Tab(text: s.tabExpired),
             ],
           ),
         ),
@@ -41,16 +43,16 @@ class VoucherWalletScreen extends ConsumerWidget {
               children: [
                 _VoucherList(
                   vouchers: wallet.available,
-                  emptyMessage: 'Bạn chưa có voucher nào khả dụng.',
+                  emptyMessage: s.noVoucherAvailable,
                 ),
                 _VoucherList(
                   vouchers: wallet.used,
-                  emptyMessage: 'Bạn chưa dùng voucher nào.',
+                  emptyMessage: s.noVoucherUsed,
                   dimmed: true,
                 ),
                 _VoucherList(
                   vouchers: wallet.expired,
-                  emptyMessage: 'Không có voucher nào hết hạn.',
+                  emptyMessage: s.noVoucherExpired,
                   dimmed: true,
                 ),
               ],
@@ -62,7 +64,7 @@ class VoucherWalletScreen extends ConsumerWidget {
   }
 }
 
-class _VoucherList extends StatelessWidget {
+class _VoucherList extends ConsumerWidget {
   const _VoucherList({
     required this.vouchers,
     required this.emptyMessage,
@@ -74,14 +76,14 @@ class _VoucherList extends StatelessWidget {
   final bool dimmed;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (vouchers.isEmpty) {
       // Stay scrollable so pull-to-refresh works on an empty tab.
       return ListView(
         children: [
           const SizedBox(height: BananSpacing.xxl),
           EmptyState(
-            title: 'Chưa có voucher',
+            title: ref.watch(stringsProvider).noVoucherTitle,
             message: emptyMessage,
             icon: Icons.confirmation_number_outlined,
           ),
@@ -97,7 +99,7 @@ class _VoucherList extends StatelessWidget {
   }
 }
 
-class _VoucherCard extends StatelessWidget {
+class _VoucherCard extends ConsumerWidget {
   const _VoucherCard({required this.voucher, required this.dimmed});
 
   final Voucher voucher;
@@ -112,33 +114,34 @@ class _VoucherCard extends StatelessWidget {
     return n.toString();
   }
 
-  String get _discountSummary {
+  String _discountSummary(AppStrings s) {
     switch (voucher.type) {
       case CouponType.percent:
-        return 'Giảm ${_numText(voucher.value)}%';
+        return s.discountPercent(_numText(voucher.value));
       case CouponType.fixed:
-        return 'Giảm ${_vnd.format(voucher.value)}';
+        return s.discountAmount(_vnd.format(voucher.value));
       case CouponType.freeDelivery:
-        return 'Miễn phí giao hàng';
+        return s.freeDelivery;
     }
   }
 
-  Future<void> _copy(BuildContext context) async {
+  Future<void> _copy(BuildContext context, AppStrings s) async {
     await Clipboard.setData(ClipboardData(text: voucher.code));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
       ..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Đã sao chép mã ${voucher.code}'),
+          content: Text(s.codeCopied(voucher.code)),
           duration: const Duration(seconds: 2),
         ),
       );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final df = DateFormat('dd/MM/yyyy');
     return Opacity(
       opacity: dimmed ? 0.6 : 1,
@@ -162,7 +165,7 @@ class _VoucherCard extends StatelessWidget {
                 const SizedBox(width: BananSpacing.sm),
                 Expanded(
                   child: Text(
-                    _discountSummary,
+                    _discountSummary(s),
                     style: theme.textTheme.titleMedium,
                   ),
                 ),
@@ -203,8 +206,8 @@ class _VoucherCard extends StatelessWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy_outlined, size: 18),
-                  tooltip: 'Sao chép mã',
-                  onPressed: () => _copy(context),
+                  tooltip: s.copyCode,
+                  onPressed: () => _copy(context, s),
                 ),
               ],
             ),
@@ -212,13 +215,13 @@ class _VoucherCard extends StatelessWidget {
             if (voucher.minSubtotal != null && voucher.minSubtotal! > 0)
               _MetaRow(
                 icon: Icons.shopping_bag_outlined,
-                text: 'Đơn tối thiểu ${_vnd.format(voucher.minSubtotal)}',
+                text: s.minOrder(_vnd.format(voucher.minSubtotal)),
               ),
             _MetaRow(
               icon: Icons.event_outlined,
               text: voucher.usedAt != null
-                  ? 'Đã dùng ${df.format(voucher.usedAt!.toLocal())}'
-                  : 'HSD ${df.format(voucher.endsAt.toLocal())}',
+                  ? s.usedOn(df.format(voucher.usedAt!.toLocal()))
+                  : s.expiresOn(df.format(voucher.endsAt.toLocal())),
             ),
           ],
         ),

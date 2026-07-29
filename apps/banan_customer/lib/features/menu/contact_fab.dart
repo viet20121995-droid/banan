@@ -1,5 +1,6 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -20,6 +21,7 @@ class ContactFab extends ConsumerWidget {
     if (cfg == null || !cfg.hasAnyContactChannel) {
       return const SizedBox.shrink();
     }
+    final s = ref.watch(stringsProvider);
     return Positioned(
       right: BananSpacing.lg,
       // Sit above the "Xem giỏ" FAB when both are present (cart FAB is
@@ -29,14 +31,18 @@ class ContactFab extends ConsumerWidget {
         heroTag: 'contact_fab',
         backgroundColor: BananColors.primary,
         foregroundColor: Colors.white,
-        tooltip: 'Liên hệ',
-        onPressed: () => _openSheet(context, cfg),
+        tooltip: s.contactTitle,
+        onPressed: () => _openSheet(context, cfg, s),
         child: const Icon(Icons.support_agent_outlined),
       ),
     );
   }
 
-  Future<void> _openSheet(BuildContext context, DisplayConfig cfg) async {
+  Future<void> _openSheet(
+    BuildContext context,
+    DisplayConfig cfg,
+    AppStrings s,
+  ) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -53,13 +59,12 @@ class ContactFab extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Cần hỗ trợ?',
+                s.needHelp,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: BananSpacing.xs),
               Text(
-                'Chọn kênh phù hợp. Đội Banan trả lời nhanh nhất qua '
-                'Zalo trong giờ mở cửa.',
+                s.contactSub,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.outline,
                     ),
@@ -71,7 +76,7 @@ class ContactFab extends ConsumerWidget {
                   icon: Icons.chat_bubble_outline,
                   iconColor: const Color(0xFF0068FF), // Zalo blue
                   title: 'Zalo Official Account',
-                  subtitle: 'Mở Zalo và chat với đội Banan',
+                  subtitle: s.zaloSub,
                   onTap: () => _launch('https://zalo.me/${cfg.contactZaloOaId}'),
                 ),
               if (cfg.contactMessengerId != null &&
@@ -80,7 +85,7 @@ class ContactFab extends ConsumerWidget {
                   icon: Icons.facebook,
                   iconColor: const Color(0xFF0084FF),
                   title: 'Facebook Messenger',
-                  subtitle: 'Nhắn tin qua trang Banan',
+                  subtitle: s.messengerSub,
                   onTap: () => _launch('https://m.me/${cfg.contactMessengerId}'),
                 ),
               if (cfg.contactPhone != null && cfg.contactPhone!.isNotEmpty)
@@ -88,7 +93,7 @@ class ContactFab extends ConsumerWidget {
                   icon: Icons.phone_outlined,
                   iconColor: BananColors.success,
                   title: cfg.contactPhone!,
-                  subtitle: 'Gọi trực tiếp',
+                  subtitle: s.callDirect,
                   onTap: () => _launch('tel:${cfg.contactPhone}'),
                 ),
               if (cfg.contactEmail != null && cfg.contactEmail!.isNotEmpty)
@@ -96,7 +101,7 @@ class ContactFab extends ConsumerWidget {
                   icon: Icons.email_outlined,
                   iconColor: BananColors.gold,
                   title: cfg.contactEmail!,
-                  subtitle: 'Gửi email',
+                  subtitle: s.sendEmail,
                   onTap: () => _launch('mailto:${cfg.contactEmail}'),
                 ),
             ],

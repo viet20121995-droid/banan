@@ -94,7 +94,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           if (orderUpdates != null) _orderUpdatesOptIn = !orderUpdates;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(authFailureMessage(f))),
+          SnackBar(
+            content: Text(authFailureMessage(f, ref.read(stringsProvider))),
+          ),
         );
       },
     );
@@ -109,11 +111,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
     if ((changed ?? false) && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Đã gửi liên kết xác nhận tới email mới. '
-            'Vui lòng kiểm tra hộp thư.',
-          ),
+        SnackBar(
+          content: Text(ref.read(stringsProvider).emailChangeLinkSent),
         ),
       );
     }
@@ -140,7 +139,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       initialDate: _birthday ?? DateTime(now.year - 25, now.month, now.day),
       firstDate: DateTime(1920),
       lastDate: now,
-      helpText: 'Select your birthday',
+      helpText: ref.read(stringsProvider).birthdayHelp,
     );
     if (picked != null) setState(() => _birthday = picked);
   }
@@ -161,9 +160,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (file.size > _avatarHardMaxMb * 1024 * 1024) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Ảnh vượt quá $_avatarHardMaxMb MB, vui lòng chọn ảnh nhỏ hơn.',
+            ref.read(stringsProvider).avatarTooBig(_avatarHardMaxMb),
           ),
         ),
       );
@@ -172,9 +171,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // Soft warning above the recommended size — still allowed.
     if (file.size > _avatarSoftMaxMb * 1024 * 1024 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Ảnh khá lớn (> $_avatarSoftMaxMb MB), việc tải lên có thể chậm.',
+            ref.read(stringsProvider).avatarBigWarn(_avatarSoftMaxMb),
           ),
         ),
       );
@@ -202,12 +201,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             // Keep the raw-URL fallback field in sync with the new avatar.
             _avatar.text = uploaded.url;
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Đã cập nhật ảnh đại diện')),
+              SnackBar(
+                content: Text(ref.read(stringsProvider).avatarUpdated),
+              ),
             );
           },
           failure: (_) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Tải ảnh thất bại, thử lại')),
+              SnackBar(
+                content: Text(ref.read(stringsProvider).uploadFailed),
+              ),
             );
           },
         );
@@ -216,7 +219,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         if (!mounted) return;
         setState(() => _uploadingAvatar = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tải ảnh thất bại, thử lại')),
+          SnackBar(content: Text(ref.read(stringsProvider).uploadFailed)),
         );
       },
     );
@@ -279,7 +282,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         );
       },
-      failure: (f) => setState(() => _error = authFailureMessage(f)),
+      failure: (f) => setState(
+        () => _error = authFailureMessage(f, ref.read(stringsProvider)),
+      ),
     );
   }
 
@@ -325,7 +330,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           // camera badge hints the tap target.
                           Semantics(
                             button: true,
-                            label: 'Đổi ảnh đại diện',
+                            label: s.changeAvatar,
                             child: InkWell(
                               onTap: _uploadingAvatar ? null : _pickAvatar,
                               customBorder: const CircleBorder(),
@@ -403,8 +408,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             icon: const Icon(Icons.upload_outlined, size: 18),
                             label: Text(
                               _uploadingAvatar
-                                  ? 'Đang tải ảnh…'
-                                  : 'Đổi ảnh đại diện',
+                                  ? s.uploadingPhoto
+                                  : s.changeAvatar,
                             ),
                           ),
                         ],
@@ -489,9 +494,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     // Gender — optional. Tapping the already-selected chip
                     // clears it back to "not set".
                     InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Giới tính',
-                        prefixIcon: Icon(Icons.wc_outlined),
+                      decoration: InputDecoration(
+                        labelText: s.genderLabel,
+                        prefixIcon: const Icon(Icons.wc_outlined),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.zero,
                       ),
@@ -502,7 +507,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           children: [
                             for (final g in Gender.values)
                               ChoiceChip(
-                                label: Text(g.label),
+                                label: Text(s.genderName(g)),
                                 selected: _gender == g,
                                 onSelected: (sel) => setState(
                                   () => _gender = sel ? g : null,
@@ -580,40 +585,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.favorite_outline),
-                      title: const Text('Yêu thích'),
-                      subtitle: const Text(
-                        'Bánh & sản phẩm bạn đã lưu lại để xem sau.',
-                      ),
+                      title: Text(s.wishlistTitle),
+                      subtitle: Text(s.wishlistSub),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/wishlist'),
                     ),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.confirmation_number_outlined),
-                      title: const Text('Ví voucher'),
-                      subtitle: const Text(
-                        'Mã giảm giá khả dụng, đã dùng và hết hạn.',
-                      ),
+                      title: Text(s.voucherWallet),
+                      subtitle: Text(s.voucherWalletSub),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/vouchers'),
                     ),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.lock_outline),
-                      title: const Text('Đổi mật khẩu'),
-                      subtitle: const Text(
-                        'Cập nhật mật khẩu đăng nhập của bạn.',
-                      ),
+                      title: Text(s.changePasswordTitle),
+                      subtitle: Text(s.changePasswordSub),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/change-password'),
                     ),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.alternate_email),
-                      title: const Text('Đổi email'),
-                      subtitle: const Text(
-                        'Gửi liên kết xác nhận tới email mới của bạn.',
-                      ),
+                      title: Text(s.changeEmailTitle),
+                      subtitle: Text(s.changeEmailSub),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: _openChangeEmail,
                     ),
@@ -626,7 +623,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         bottom: BananSpacing.xs,
                       ),
                       child: Text(
-                        'Thông báo',
+                        s.notifications,
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: theme.colorScheme.outline,
                         ),
@@ -638,10 +635,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       onChanged: _savingPrefs
                           ? null
                           : (v) => _togglePref(marketing: v),
-                      title: const Text('Nhận khuyến mãi & tin mới'),
-                      subtitle: const Text(
-                        'Ưu đãi, sản phẩm mới và bản tin từ Banan.',
-                      ),
+                      title: Text(s.marketingOptIn),
+                      subtitle: Text(s.marketingOptInSub),
                       secondary: const Icon(Icons.campaign_outlined),
                     ),
                     SwitchListTile.adaptive(
@@ -650,10 +645,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       onChanged: _savingPrefs
                           ? null
                           : (v) => _togglePref(orderUpdates: v),
-                      title: const Text('Cập nhật trạng thái đơn hàng'),
-                      subtitle: const Text(
-                        'Thông báo khi đơn của bạn được xử lý & giao.',
-                      ),
+                      title: Text(s.orderUpdatesOptIn),
+                      subtitle: Text(s.orderUpdatesOptInSub),
                       secondary: const Icon(Icons.local_shipping_outlined),
                     ),
                     const SizedBox(height: BananSpacing.lg),
@@ -667,7 +660,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         side: BorderSide(color: theme.colorScheme.error),
                       ),
                       icon: const Icon(Icons.delete_forever_outlined),
-                      label: const Text('Xoá tài khoản'),
+                      label: Text(s.deleteAccount),
                     ),
                     const SizedBox(height: BananSpacing.lg),
                   ],
@@ -708,16 +701,17 @@ class _ChangeEmailSheetState extends ConsumerState<_ChangeEmailSheet> {
   }
 
   String _messageFor(AppFailure f) {
+    final s = ref.read(stringsProvider);
     if (f is ServerFailure && f.code == 'AUTH_EMAIL_TAKEN') {
-      return 'Email đã được sử dụng.';
+      return s.emailTaken;
     }
     if (f is AuthFailure && f.code == 'AUTH_INVALID_CREDENTIALS') {
-      return 'Mật khẩu không đúng.';
+      return s.wrongPassword;
     }
     if (f is ValidationFailure) {
-      return f.message ?? 'Email không hợp lệ hoặc trùng email hiện tại.';
+      return f.message ?? s.emailInvalidOrSame;
     }
-    return authFailureMessage(f);
+    return authFailureMessage(f, s);
   }
 
   Future<void> _submit() async {
@@ -741,6 +735,7 @@ class _ChangeEmailSheetState extends ConsumerState<_ChangeEmailSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -755,11 +750,10 @@ class _ChangeEmailSheetState extends ConsumerState<_ChangeEmailSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Đổi email', style: theme.textTheme.titleLarge),
+            Text(s.changeEmailTitle, style: theme.textTheme.titleLarge),
             const SizedBox(height: BananSpacing.xs),
             Text(
-              'Chúng tôi sẽ gửi liên kết xác nhận tới email mới. '
-              'Email chỉ thay đổi sau khi bạn xác nhận.',
+              s.changeEmailIntro,
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: BananSpacing.md),
@@ -778,15 +772,15 @@ class _ChangeEmailSheetState extends ConsumerState<_ChangeEmailSheet> {
               controller: _email,
               keyboardType: TextInputType.emailAddress,
               autocorrect: false,
-              decoration: const InputDecoration(
-                labelText: 'Email mới',
-                prefixIcon: Icon(Icons.alternate_email),
+              decoration: InputDecoration(
+                labelText: s.newEmail,
+                prefixIcon: const Icon(Icons.alternate_email),
               ),
               validator: (v) {
                 final val = (v ?? '').trim();
-                if (val.isEmpty) return 'Vui lòng nhập email mới';
+                if (val.isEmpty) return s.pleaseEnterNewEmail;
                 if (!val.contains('@') || !val.contains('.')) {
-                  return 'Email không hợp lệ';
+                  return s.invalidEmail;
                 }
                 return null;
               },
@@ -796,7 +790,7 @@ class _ChangeEmailSheetState extends ConsumerState<_ChangeEmailSheet> {
               controller: _password,
               obscureText: _obscure,
               decoration: InputDecoration(
-                labelText: 'Mật khẩu hiện tại',
+                labelText: s.currentPassword,
                 prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -808,7 +802,7 @@ class _ChangeEmailSheetState extends ConsumerState<_ChangeEmailSheet> {
                 ),
               ),
               validator: (v) => (v == null || v.isEmpty)
-                  ? 'Vui lòng nhập mật khẩu hiện tại'
+                  ? s.pleaseEnterCurrentPw
                   : null,
             ),
             const SizedBox(height: BananSpacing.xl),
@@ -821,7 +815,7 @@ class _ChangeEmailSheetState extends ConsumerState<_ChangeEmailSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.send_outlined),
-              label: const Text('Gửi liên kết xác nhận'),
+              label: Text(s.sendConfirmLink),
             ),
           ],
         ),
@@ -854,8 +848,9 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
   }
 
   Future<void> _submit() async {
+    final s = ref.read(stringsProvider);
     if (_password.text.isEmpty) {
-      setState(() => _error = 'Vui lòng nhập mật khẩu để xác nhận.');
+      setState(() => _error = s.pleaseEnterPwConfirm);
       return;
     }
     setState(() {
@@ -870,8 +865,8 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
       success: (_) => Navigator.pop(context, true),
       failure: (f) => setState(() {
         _error = f is AuthFailure && f.code == 'AUTH_INVALID_CREDENTIALS'
-            ? 'Mật khẩu không đúng.'
-            : authFailureMessage(f);
+            ? s.wrongPassword
+            : authFailureMessage(f, s);
       }),
     );
   }
@@ -879,14 +874,15 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return AlertDialog(
-      title: const Text('Xoá tài khoản'),
+      title: Text(s.deleteAccount),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Hành động này không thể hoàn tác. Đơn hàng cũ được ẩn danh.',
+            s.deleteAccountWarn,
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: BananSpacing.md),
@@ -903,7 +899,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
             controller: _password,
             obscureText: _obscure,
             decoration: InputDecoration(
-              labelText: 'Mật khẩu hiện tại',
+              labelText: s.currentPassword,
               prefixIcon: const Icon(Icons.lock_outline),
               suffixIcon: IconButton(
                 icon: Icon(
@@ -920,7 +916,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.pop(context, false),
-          child: const Text('Huỷ'),
+          child: Text(s.cancel),
         ),
         FilledButton(
           onPressed: _submitting ? null : _submit,
@@ -936,7 +932,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
                     color: Colors.white,
                   ),
                 )
-              : const Text('Xoá vĩnh viễn'),
+              : Text(s.deleteForever),
         ),
       ],
     );

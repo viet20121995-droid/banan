@@ -1,5 +1,6 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -50,10 +51,8 @@ class _PaymentReturnScreenState extends ConsumerState<PaymentReturnScreen> {
         // assert success here (the `status` param is user-spoofable). Just
         // acknowledge receipt and go home.
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Đã nhận yêu cầu thanh toán. Chúng tôi sẽ xác nhận đơn của bạn qua email/điện thoại.',
-            ),
+          SnackBar(
+            content: Text(ref.read(stringsProvider).paymentReceived),
           ),
         );
         context.go('/');
@@ -79,7 +78,7 @@ class _PaymentReturnScreenState extends ConsumerState<PaymentReturnScreen> {
             ),
             const SizedBox(height: BananSpacing.md),
             Text(
-              'Đang xử lý thanh toán…',
+              ref.watch(stringsProvider).paymentProcessing,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
           ],

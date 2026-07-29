@@ -1,6 +1,7 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -22,7 +23,7 @@ class LocationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(storesListProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Chi nhánh')),
+      appBar: AppBar(title: Text(ref.watch(stringsProvider).locations)),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorState(
@@ -164,12 +165,13 @@ class _StoreCard extends StatelessWidget {
 }
 
 /// Tiny green "Open" / grey "Closed" pill.
-class _OpenClosedChip extends StatelessWidget {
+class _OpenClosedChip extends ConsumerWidget {
   const _OpenClosedChip({required this.open});
   final bool open;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
     final color = open ? BananColors.success : BananColors.cocoaSoft;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -178,7 +180,7 @@ class _OpenClosedChip extends StatelessWidget {
         color: color.withValues(alpha: 0.14),
       ),
       child: Text(
-        open ? 'Đang mở' : 'Đóng cửa',
+        open ? s.openNow : s.closedNow,
         style: TextStyle(
           color: color,
           fontSize: 11,

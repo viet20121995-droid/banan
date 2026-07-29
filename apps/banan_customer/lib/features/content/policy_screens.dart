@@ -1,18 +1,62 @@
 // Long-form policy copy is written as multi-line implicit string
 // concatenation inside the section lists — deliberate, not a missing comma.
 // ignore_for_file: no_adjacent_strings_in_list
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'content_page.dart';
 
 /// Chính sách vận chuyển & giao nhận. Nội dung mẫu cho cửa hàng bánh,
-/// hiển thị công khai (yêu cầu của Bộ Công Thương). Cần rà soát trước khi
-/// phát hành chính thức.
-class ShippingPolicyScreen extends StatelessWidget {
+/// hiển thị công khai (yêu cầu của Bộ Công Thương). Bản EN là bản dịch
+/// tham khảo; bản VI có giá trị pháp lý.
+class ShippingPolicyScreen extends ConsumerWidget {
   const ShippingPolicyScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final en = ref.watch(localeProvider) == AppLocale.en;
+    if (en) {
+      return const ContentPage(
+        title: 'Shipping & delivery policy',
+        updatedLabel: 'Last updated: 06/2026',
+        intro:
+            'Banan Fukuoka Saigon delivers fresh cakes daily from our '
+            'stores in Ho Chi Minh City. This page describes coverage, '
+            'timing, delivery fees and how to check your order on receipt.',
+        sections: [
+          ContentSection('1. Coverage & fulfilment options', [
+            'We deliver within Ho Chi Minh City from Banan Fukuoka Saigon '
+                'stores.',
+            'You can also pick up at the counter (free) at the store you '
+                'chose when ordering.',
+          ]),
+          ContentSection('2. Delivery times', [
+            'Orders are delivered in the window you chose at checkout: '
+                'as soon as possible, or scheduled ahead.',
+            'Birthday cakes and custom orders must be ordered ahead per '
+                "the product's preparation time.",
+            'Delivery times are estimates and may vary with weather, '
+                'traffic or daily order volume.',
+          ]),
+          ContentSection('3. Delivery fees', [
+            'The delivery fee is calculated from the delivery address '
+                '(ward) and shown clearly at checkout before you place '
+                'the order.',
+          ]),
+          ContentSection('4. Checking on receipt', [
+            'Please check your order right away. If the wrong item was '
+                'delivered or a product is damaged, tell the shop or the '
+                'delivery rider immediately so we can resolve it.',
+          ]),
+          ContentSection('5. Storage after receipt', [
+            'Fresh cakes should be refrigerated and consumed per the '
+                'instructions right after receipt for quality and food '
+                'safety.',
+          ]),
+        ],
+      );
+    }
     return const ContentPage(
       title: 'Chính sách vận chuyển & giao nhận',
       updatedLabel: 'Cập nhật lần cuối: 06/2026',
@@ -53,12 +97,48 @@ class ShippingPolicyScreen extends StatelessWidget {
   }
 }
 
-/// Chính sách thanh toán. Nội dung mẫu, cần rà soát trước khi phát hành.
-class PaymentPolicyScreen extends StatelessWidget {
+/// Chính sách thanh toán. Bản EN là bản dịch tham khảo.
+class PaymentPolicyScreen extends ConsumerWidget {
   const PaymentPolicyScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final en = ref.watch(localeProvider) == AppLocale.en;
+    if (en) {
+      return const ContentPage(
+        title: 'Payment policy',
+        updatedLabel: 'Last updated: 06/2026',
+        intro:
+            'This page describes our payment methods, currency, VAT '
+            'invoices and how we keep your transactions secure.',
+        sections: [
+          ContentSection('1. Payment methods', [
+            'Cash on delivery (COD) for both delivery and counter-pickup '
+                'orders.',
+            'Online payment via 9Pay: QR code, domestic / international '
+                'cards, or bank transfer.',
+          ]),
+          ContentSection('2. Currency & prices', [
+            'All transactions are in VND.',
+            'Displayed prices include tax where applicable; delivery fees '
+                'are calculated separately at checkout.',
+          ]),
+          ContentSection('3. VAT invoices', [
+            'We issue VAT invoices when you provide full company details '
+                '(name, tax ID, address, email) at order time.',
+          ]),
+          ContentSection('4. Payment security', [
+            'We do not store your card details on our systems.',
+            'Online transactions are processed through a certified secure '
+                'payment gateway.',
+          ]),
+          ContentSection('5. Discount codes, points & gift cards', [
+            'Discount codes, loyalty points and gift cards are applied at '
+                'checkout.',
+          ]),
+        ],
+      );
+    }
     return const ContentPage(
       title: 'Chính sách thanh toán',
       updatedLabel: 'Cập nhật lần cuối: 06/2026',
@@ -94,13 +174,52 @@ class PaymentPolicyScreen extends StatelessWidget {
   }
 }
 
-/// Chính sách đổi trả & hoàn tiền. Nội dung mẫu, cần rà soát trước khi
-/// phát hành.
-class RefundPolicyScreen extends StatelessWidget {
+/// Chính sách đổi trả & hoàn tiền. Bản EN là bản dịch tham khảo.
+class RefundPolicyScreen extends ConsumerWidget {
   const RefundPolicyScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final en = ref.watch(localeProvider) == AppLocale.en;
+    if (en) {
+      return const ContentPage(
+        title: 'Returns & refund policy',
+        updatedLabel: 'Last updated: 06/2026',
+        intro:
+            'Because our products are fresh food, returns and refunds are '
+            'conditional. Please read the rules below.',
+        sections: [
+          ContentSection('1. General principle', [
+            'As fresh food, we only exchange or refund when the fault is '
+                'ours — for example the wrong item was delivered, or the '
+                'product was damaged / below quality on receipt.',
+          ]),
+          ContentSection('2. Conditions & timeframe', [
+            'Please notify us within 2 hours of receipt, with photos of '
+                'the product.',
+            'The product must be unused (except for clearly visible '
+                'defects).',
+          ]),
+          ContentSection('3. Cancellations', [
+            'You may cancel while the order is still "Pending" or '
+                '"Accepted".',
+            'Once the kitchen starts preparing, the order may no longer '
+                'be cancellable.',
+          ]),
+          ContentSection('4. Refund methods', [
+            'Exchange for an equivalent product, or refund to the original '
+                'payment method.',
+            'COD orders: cash refund or bank transfer. Online orders: '
+                'refund via the payment gateway within its processing '
+                'time.',
+          ]),
+          ContentSection('5. Support', [
+            'Please reach out via our Contact page or hotline for any '
+                'return / refund request.',
+          ]),
+        ],
+      );
+    }
     return const ContentPage(
       title: 'Chính sách đổi trả & hoàn tiền',
       updatedLabel: 'Cập nhật lần cuối: 06/2026',

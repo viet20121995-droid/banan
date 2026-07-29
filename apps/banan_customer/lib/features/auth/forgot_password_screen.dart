@@ -24,10 +24,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   bool _sent = false;
   String? _error;
 
-  static const _confirmation =
-      'Nếu email tồn tại trong hệ thống, chúng tôi đã gửi liên kết đặt lại '
-      'mật khẩu. Vui lòng kiểm tra hộp thư.';
-
   @override
   void dispose() {
     _email.dispose();
@@ -47,16 +43,19 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     res.when(
       // Neutral confirmation either way — do not reveal account existence.
       success: (_) => setState(() => _sent = true),
-      failure: (f) => setState(() => _error = authFailureMessage(f)),
+      failure: (f) => setState(
+        () => _error = authFailureMessage(f, ref.read(stringsProvider)),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Quên mật khẩu')),
+      appBar: AppBar(title: Text(s.forgotTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -74,14 +73,14 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                       ),
                       const SizedBox(height: BananSpacing.lg),
                       Text(
-                        _confirmation,
+                        s.forgotSent,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyLarge,
                       ),
                       const SizedBox(height: BananSpacing.xl),
                       FilledButton(
                         onPressed: () => context.go('/login'),
-                        child: const Text('Quay lại đăng nhập'),
+                        child: Text(s.backToLogin),
                       ),
                     ],
                   )
@@ -92,8 +91,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          'Nhập email của bạn và chúng tôi sẽ gửi liên kết '
-                          'đặt lại mật khẩu.',
+                          s.forgotIntro,
                           style: theme.textTheme.bodyMedium,
                         ),
                         const SizedBox(height: BananSpacing.xl),
@@ -123,10 +121,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           validator: (v) {
                             final value = v?.trim() ?? '';
                             if (value.isEmpty) {
-                              return 'Vui lòng nhập email';
+                              return s.pleaseEnterEmail;
                             }
                             if (!value.contains('@') || !value.contains('.')) {
-                              return 'Email không hợp lệ';
+                              return s.invalidEmail;
                             }
                             return null;
                           },
@@ -143,7 +141,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                                   ),
                                 )
                               : const Icon(Icons.send_outlined),
-                          label: const Text('Gửi liên kết đặt lại'),
+                          label: Text(s.sendResetLink),
                         ),
                       ],
                     ),

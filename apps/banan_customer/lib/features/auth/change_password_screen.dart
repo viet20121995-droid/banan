@@ -49,20 +49,23 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
     res.when(
       success: (_) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã đổi mật khẩu')),
+          SnackBar(content: Text(ref.read(stringsProvider).passwordChanged)),
         );
         if (mounted) context.pop();
       },
-      failure: (f) => setState(() => _error = authFailureMessage(f)),
+      failure: (f) => setState(
+        () => _error = authFailureMessage(f, ref.read(stringsProvider)),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Đổi mật khẩu')),
+      appBar: AppBar(title: Text(s.changePasswordTitle)),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -89,7 +92,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                       controller: _current,
                       obscureText: _obscureCurrent,
                       decoration: InputDecoration(
-                        labelText: 'Mật khẩu hiện tại',
+                        labelText: s.currentPassword,
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -103,7 +106,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                         ),
                       ),
                       validator: (v) => (v == null || v.isEmpty)
-                          ? 'Vui lòng nhập mật khẩu hiện tại'
+                          ? s.pleaseEnterCurrentPw
                           : null,
                     ),
                     const SizedBox(height: BananSpacing.md),
@@ -111,7 +114,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                       controller: _newPassword,
                       obscureText: _obscureNew,
                       decoration: InputDecoration(
-                        labelText: 'Mật khẩu mới',
+                        labelText: s.newPassword,
                         prefixIcon: const Icon(Icons.lock_reset_outlined),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -123,16 +126,15 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                               setState(() => _obscureNew = !_obscureNew),
                         ),
                       ),
-                      validator: (v) => (v == null || v.length < 8)
-                          ? 'Mật khẩu mới phải có ít nhất 8 ký tự'
-                          : null,
+                      validator: (v) =>
+                          (v == null || v.length < 8) ? s.pwMin8 : null,
                     ),
                     const SizedBox(height: BananSpacing.md),
                     TextFormField(
                       controller: _confirm,
                       obscureText: _obscureConfirm,
                       decoration: InputDecoration(
-                        labelText: 'Xác nhận mật khẩu mới',
+                        labelText: s.confirmNewPassword,
                         prefixIcon: const Icon(Icons.lock_reset_outlined),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -145,9 +147,8 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                           ),
                         ),
                       ),
-                      validator: (v) => (v != _newPassword.text)
-                          ? 'Mật khẩu xác nhận không khớp'
-                          : null,
+                      validator: (v) =>
+                          (v != _newPassword.text) ? s.pwMismatch : null,
                     ),
                     const SizedBox(height: BananSpacing.xl),
                     FilledButton.icon(
@@ -159,7 +160,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save_outlined),
-                      label: const Text('Đổi mật khẩu'),
+                      label: Text(s.changePasswordTitle),
                     ),
                   ],
                 ),

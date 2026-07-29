@@ -175,7 +175,7 @@ class _Body extends ConsumerWidget {
       res.when(
         success: (_) => ref.invalidate(_orderProvider(order.id)),
         failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(authFailureMessage(f))),
+          SnackBar(content: Text(authFailureMessage(f, s))),
         ),
       );
     }
@@ -214,7 +214,9 @@ class _Body extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       StatusBadge(
-                        label: 'Bếp · ${order.kitchenStatus!.label}',
+                        label: s.kitchenBadge(
+                          s.kitchenStatusLabel(order.kitchenStatus!),
+                        ),
                         intent: order.kitchenStatus == KitchenStatus.readyDispatch
                             ? StatusIntent.success
                             : StatusIntent.progress,
@@ -342,7 +344,7 @@ class _Body extends ConsumerWidget {
                 if (!readOnly) ...[
                   FilledButton.icon(
                     icon: const Icon(Icons.refresh_outlined),
-                    label: const Text('Đặt lại đơn này'),
+                    label: Text(s.reorderThisOrder),
                     onPressed: () => reorderOrder(context, ref, order),
                   ),
                   const SizedBox(height: BananSpacing.md),
@@ -365,13 +367,13 @@ class _Body extends ConsumerWidget {
   }
 }
 
-class _PaymentBanner extends StatelessWidget {
+class _PaymentBanner extends ConsumerWidget {
   const _PaymentBanner({required this.payment, required this.fmt});
   final PaymentSummary payment;
   final NumberFormat fmt;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final intent = switch (payment.status) {
       PaymentStatus.captured => StatusIntent.success,
@@ -401,25 +403,30 @@ class _PaymentBanner extends StatelessWidget {
           const SizedBox(width: BananSpacing.sm),
           Expanded(
             child: Text(
-              '${payment.provider.label} · ${fmt.format(payment.amount)}',
+              '${ref.watch(stringsProvider).paymentMethodLabel(payment.provider)} · ${fmt.format(payment.amount)}',
               style: theme.textTheme.bodyMedium,
             ),
           ),
-          StatusBadge(label: payment.status.label, intent: intent, dense: true),
+          StatusBadge(
+            label: ref.watch(stringsProvider).paymentStatusLabel(payment.status),
+            intent: intent,
+            dense: true,
+          ),
         ],
       ),
     );
   }
 }
 
-class _RefundBanner extends StatelessWidget {
+class _RefundBanner extends ConsumerWidget {
   const _RefundBanner({required this.refund, required this.fmt});
   final Refund refund;
   final NumberFormat fmt;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final intent = switch (refund.status) {
       RefundStatus.requested => StatusIntent.warning,
       RefundStatus.approved => StatusIntent.progress,
@@ -448,11 +455,15 @@ class _RefundBanner extends StatelessWidget {
               const SizedBox(width: BananSpacing.sm),
               Expanded(
                 child: Text(
-                  'Refund · ${fmt.format(refund.amount)}',
+                  '${s.refundLabel} · ${fmt.format(refund.amount)}',
                   style: theme.textTheme.titleSmall,
                 ),
               ),
-              StatusBadge(label: refund.status.label, intent: intent, dense: true),
+              StatusBadge(
+                label: s.refundStatusLabel(refund.status),
+                intent: intent,
+                dense: true,
+              ),
             ],
           ),
           if (refund.reason.isNotEmpty) ...[
@@ -488,17 +499,18 @@ class _Line extends StatelessWidget {
 /// Highlights the customer-chosen pickup/delivery time on scheduled orders.
 /// Shown for the entire lifecycle of the order — turns subtle once we're
 /// past the moment.
-class _ScheduledForBanner extends StatelessWidget {
+class _ScheduledForBanner extends ConsumerWidget {
   const _ScheduledForBanner({required this.scheduledFor});
   final DateTime scheduledFor;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final fmt = DateFormat.yMMMEd().add_jm();
     final local = scheduledFor.toLocal();
     final diff = local.difference(DateTime.now());
-    final relative = _relative(diff);
+    final relative = _relative(s, diff);
     final past = diff.isNegative;
 
     return Container(
@@ -526,7 +538,7 @@ class _ScheduledForBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  past ? 'Scheduled for' : 'Scheduled for',
+                  s.scheduledFor,
                   style: theme.textTheme.bodySmall,
                 ),
                 Text(
@@ -541,25 +553,26 @@ class _ScheduledForBanner extends StatelessWidget {
     );
   }
 
-  String _relative(Duration diff) {
-    if (diff.isNegative) return 'was scheduled';
-    if (diff.inMinutes < 60) return 'in ${diff.inMinutes} min';
-    if (diff.inHours < 24) return 'in ${diff.inHours} hr';
-    if (diff.inDays == 1) return 'tomorrow';
-    return 'in ${diff.inDays} days';
+  String _relative(AppStrings s, Duration diff) {
+    if (diff.isNegative) return s.scheduleWas;
+    if (diff.inMinutes < 60) return s.inMinutes(diff.inMinutes);
+    if (diff.inHours < 24) return s.inHours(diff.inHours);
+    if (diff.inDays == 1) return s.tomorrow;
+    return s.inDays(diff.inDays);
   }
 }
 
 /// Tells the customer which department is preparing the order — counter
 /// staff or the central kitchen. Hidden once the order has left preparation
 /// (ready / delivering / completed / cancelled).
-class _PrepDepartmentBanner extends StatelessWidget {
+class _PrepDepartmentBanner extends ConsumerWidget {
   const _PrepDepartmentBanner({required this.order});
   final Order order;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final wentToKitchen = order.status == OrderStatus.sentToKitchen ||
         order.statusEvents.any((e) => e.toStatus == OrderStatus.sentToKitchen);
     final isPreparing = order.status == OrderStatus.inPreparation ||
@@ -571,12 +584,11 @@ class _PrepDepartmentBanner extends StatelessWidget {
     final icon = wentToKitchen
         ? Icons.factory_outlined
         : Icons.storefront_outlined;
-    final headline = wentToKitchen
-        ? 'Being prepared in our kitchen'
-        : 'Being prepared at the counter';
+    final headline =
+        wentToKitchen ? s.prepKitchenHeadline : s.prepCounterHeadline;
     final detail = wentToKitchen
-        ? _kitchenDetailFor(order.kitchenStatus)
-        : "Our team is on it — we'll let you know when it's ready.";
+        ? _kitchenDetailFor(s, order.kitchenStatus)
+        : s.prepCounterDetail;
 
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -613,17 +625,17 @@ class _PrepDepartmentBanner extends StatelessWidget {
     );
   }
 
-  String _kitchenDetailFor(KitchenStatus? s) {
-    switch (s) {
+  String _kitchenDetailFor(AppStrings s, KitchenStatus? status) {
+    switch (status) {
       case KitchenStatus.pendingAck:
-        return 'Waiting for the kitchen team to start.';
+        return s.kitchenDetailPending;
       case KitchenStatus.preparing:
-        return 'Our bakers are crafting your order right now.';
+        return s.kitchenDetailPreparing;
       case KitchenStatus.readyDispatch:
-        return 'Ready and on its way back to the store.';
+        return s.kitchenDetailReady;
       case null:
       case KitchenStatus.unknown:
-        return "We'll keep you posted as it moves through the kitchen.";
+        return s.kitchenDetailUnknown;
     }
   }
 }
@@ -751,25 +763,25 @@ class _OrderProgressTracker extends ConsumerWidget {
         order.statusEvents.any((e) => e.toStatus == OrderStatus.sentToKitchen);
 
     final steps = <_Step>[
-      _Step('Placed', Icons.shopping_bag_outlined,
+      _Step(s.stepPlaced, Icons.shopping_bag_outlined,
           _reached(order.status, OrderStatus.pending),),
-      _Step('Accepted', Icons.check_circle_outline,
+      _Step(s.stepAccepted, Icons.check_circle_outline,
           _reached(order.status, OrderStatus.accepted),),
       _Step(
-        wentToKitchen ? 'Kitchen' : 'Counter',
+        wentToKitchen ? s.stepKitchen : s.stepCounter,
         wentToKitchen ? Icons.factory_outlined : Icons.storefront_outlined,
         _reached(order.status, OrderStatus.inPreparation) ||
             _reached(order.status, OrderStatus.sentToKitchen),
       ),
       _Step(
-        isDelivery ? 'On the way' : 'Ready',
+        isDelivery ? s.stepOnTheWay : s.stepReady,
         isDelivery
             ? Icons.delivery_dining_outlined
             : Icons.takeout_dining_outlined,
         _reached(order.status,
             isDelivery ? OrderStatus.delivering : OrderStatus.readyForPickup,),
       ),
-      _Step('Completed', Icons.task_alt,
+      _Step(s.stepCompleted, Icons.task_alt,
           _reached(order.status, OrderStatus.completed),),
     ];
 
@@ -890,12 +902,12 @@ class _Connector extends StatelessWidget {
   }
 }
 
-class _TimelineRow extends StatelessWidget {
+class _TimelineRow extends ConsumerWidget {
   const _TimelineRow({required this.event});
   final OrderStatusEvent event;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: BananSpacing.xs),
@@ -917,7 +929,7 @@ class _TimelineRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  event.toStatus.label,
+                  ref.watch(stringsProvider).orderStatusLabel(event.toStatus),
                   style: theme.textTheme.titleSmall,
                 ),
                 Text(
@@ -1006,8 +1018,10 @@ class _OrderItemRow extends ConsumerWidget {
                       icon: const Icon(Icons.star_border_rounded, size: 14),
                       label: Text(
                         existing == null
-                            ? 'Đánh giá sản phẩm'
-                            : 'Sửa đánh giá (${existing.rating}★)',
+                            ? ref.watch(stringsProvider).reviewProduct
+                            : ref
+                                .watch(stringsProvider)
+                                .editReview(existing.rating),
                         style: const TextStyle(fontSize: 12),
                       ),
                       onPressed: () => _openReviewSheet(context, ref, existing),
@@ -1119,6 +1133,7 @@ class _ReviewSheetState extends ConsumerState<_ReviewSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.viewInsetsOf(context).bottom,
@@ -1131,7 +1146,7 @@ class _ReviewSheetState extends ConsumerState<_ReviewSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Đánh giá: ${widget.productName}',
+                s.reviewTitleFor(widget.productName),
                 style: theme.textTheme.titleLarge,
               ),
               const SizedBox(height: BananSpacing.md),
@@ -1156,9 +1171,9 @@ class _ReviewSheetState extends ConsumerState<_ReviewSheet> {
                 controller: _body,
                 maxLines: 4,
                 maxLength: 2000,
-                decoration: const InputDecoration(
-                  labelText: 'Chia sẻ cảm nhận (tuỳ chọn)',
-                  helperText: 'Hương vị, mức độ tươi, đóng gói, …',
+                decoration: InputDecoration(
+                  labelText: s.reviewShareOptional,
+                  helperText: s.reviewHelper,
                 ),
               ),
               if (_error != null) ...[
@@ -1181,7 +1196,7 @@ class _ReviewSheetState extends ConsumerState<_ReviewSheet> {
                       )
                     : const Icon(Icons.send_rounded),
                 label: Text(
-                  widget.existing == null ? 'Gửi đánh giá' : 'Cập nhật',
+                  widget.existing == null ? s.submitReview : s.update,
                 ),
               ),
             ],
@@ -1195,13 +1210,14 @@ class _ReviewSheetState extends ConsumerState<_ReviewSheet> {
 /// Customer-facing VAT-invoice block — purely informational. Shows the
 /// company info captured at checkout so the customer can confirm what
 /// was sent to the merchant. Merchant issues the invoice outside the app.
-class _VatInvoiceBlock extends StatelessWidget {
+class _VatInvoiceBlock extends ConsumerWidget {
   const _VatInvoiceBlock({required this.order});
   final Order order;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -1217,7 +1233,7 @@ class _VatInvoiceBlock extends StatelessWidget {
             children: [
               const Icon(Icons.receipt_long_outlined, size: 18),
               const SizedBox(width: BananSpacing.xs),
-              Text('Thông tin hoá đơn VAT',
+              Text(s.vatInvoiceInfo,
                   style: theme.textTheme.titleSmall,),
             ],
           ),
@@ -1226,7 +1242,7 @@ class _VatInvoiceBlock extends StatelessWidget {
             Text(order.invoiceCompanyName!,
                 style: theme.textTheme.bodyLarge,),
           if (order.invoiceTaxId != null)
-            Text('MST: ${order.invoiceTaxId}',
+            Text(s.taxIdShort(order.invoiceTaxId!),
                 style: theme.textTheme.bodySmall,),
           if (order.invoiceAddress != null)
             Text(order.invoiceAddress!,
@@ -1247,13 +1263,14 @@ class _VatInvoiceBlock extends StatelessWidget {
 /// "🎁 Đơn quà tặng" card on the customer order detail — confirms the
 /// greeting message, recipient (name + phone) and shows a "Gói quà" badge
 /// when the order was wrapped. Rendered only when `order.isGift` is true.
-class _GiftBlock extends StatelessWidget {
+class _GiftBlock extends ConsumerWidget {
   const _GiftBlock({required this.order});
   final Order order;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final hasRecipient = (order.giftRecipientName?.isNotEmpty ?? false) ||
         (order.giftRecipientPhone?.isNotEmpty ?? false);
     return Container(
@@ -1271,10 +1288,10 @@ class _GiftBlock extends StatelessWidget {
             children: [
               const Text('🎁', style: TextStyle(fontSize: 18)),
               const SizedBox(width: BananSpacing.xs),
-              Text('Đơn quà tặng', style: theme.textTheme.titleSmall),
+              Text(s.giftOrder, style: theme.textTheme.titleSmall),
               if (order.giftWrap) ...[
                 const SizedBox(width: BananSpacing.sm),
-                const _GiftFlagChip(label: 'Gói quà'),
+                _GiftFlagChip(label: s.giftWrapBadge),
               ],
             ],
           ),
@@ -1300,7 +1317,7 @@ class _GiftBlock extends StatelessWidget {
                 const SizedBox(width: BananSpacing.xs),
                 Expanded(
                   child: Text(
-                    'Người nhận: '
+                    '${s.giftRecipientLabel}: '
                     '${order.giftRecipientName ?? '—'}'
                     '${(order.giftRecipientPhone?.isNotEmpty ?? false) ? ' · ${order.giftRecipientPhone}' : ''}',
                     style: theme.textTheme.bodySmall,
@@ -1312,7 +1329,7 @@ class _GiftBlock extends StatelessWidget {
           if (order.hidePrice) ...[
             const SizedBox(height: BananSpacing.xs),
             Text(
-              'Phiếu giao cho người nhận sẽ ẩn giá tiền.',
+              s.hidePriceNote,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.outline,
               ),
@@ -1354,13 +1371,14 @@ class _GiftFlagChip extends StatelessWidget {
 /// under the item title. Same shape on customer + merchant order detail
 /// — the merchant uses it as a kitchen-instruction snippet, the
 /// customer uses it to confirm what they ordered.
-class _PersonalizationSummary extends StatelessWidget {
+class _PersonalizationSummary extends ConsumerWidget {
   const _PersonalizationSummary({required this.payload});
   final Map<String, dynamic> payload;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final text = payload['textOnCake'] as String?;
     final candle = candleLabel(
       candleType: payload['candleType'] as String?,
@@ -1396,7 +1414,7 @@ class _PersonalizationSummary extends StatelessWidget {
                   size: 14, color: BananColors.primary,),
               const SizedBox(width: 4),
               Text(
-                'Cá nhân hoá',
+                s.personalization,
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: BananColors.primary,
                   fontWeight: FontWeight.w700,
@@ -1407,19 +1425,19 @@ class _PersonalizationSummary extends StatelessWidget {
           if (text != null && text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text('Chữ trên bánh: "$text"',
+              child: Text(s.textOnCakeLine(text),
                   style: theme.textTheme.bodySmall,),
             ),
           if (candle != null)
-            Text('Nến: $candle', style: theme.textTheme.bodySmall),
+            Text(s.candleLine(candle), style: theme.textTheme.bodySmall),
           if (flavorLine != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text('Vị: $flavorLine',
+              child: Text(s.flavorLine(flavorLine),
                   style: theme.textTheme.bodySmall,),
             ),
           if (note != null && note.isNotEmpty)
-            Text('Ghi chú: $note', style: theme.textTheme.bodySmall),
+            Text(s.noteLine(note), style: theme.textTheme.bodySmall),
         ],
       ),
     );

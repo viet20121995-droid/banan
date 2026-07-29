@@ -1,6 +1,7 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,10 +31,11 @@ class BundleStrip extends ConsumerWidget {
       orElse: () => const SizedBox.shrink(),
       data: (bundles) {
         if (bundles.isEmpty) return const SizedBox.shrink();
+        final s = ref.watch(stringsProvider);
         return _BundlesCarousel(
-          overline: 'Tiết kiệm hơn',
-          title: 'Combo nổi bật',
-          subtitle: 'Đặt set có sẵn, rẻ hơn 10-20% so với mua lẻ.',
+          overline: s.bundlesOverline,
+          title: s.bundlesTitle,
+          subtitle: s.bundlesSub,
           bundles: bundles,
         );
       },
@@ -60,10 +62,11 @@ class AllBundlesStrip extends ConsumerWidget {
         final pinnedIds = pinned.map((b) => b.id).toSet();
         final rest = all.where((b) => !pinnedIds.contains(b.id)).toList();
         if (rest.isEmpty) return const SizedBox.shrink();
+        final s = ref.watch(stringsProvider);
         return _BundlesCarousel(
-          overline: 'Combo',
-          title: 'Tất cả combo',
-          subtitle: 'Mọi set đang bán. Chọn combo bạn thích.',
+          overline: s.comboTitle,
+          title: s.allBundlesTitle,
+          subtitle: s.allBundlesSub,
           bundles: rest,
         );
       },

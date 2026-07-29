@@ -3,7 +3,9 @@ import 'dart:math' as math;
 
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Compact, kissaten-flavoured scrapbook-style promo popup. Smaller than
@@ -13,7 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 /// Entrance is a scale + fade with a soft `easeOutBack` overshoot so the
 /// card "lands" like a sticker dropped onto a scrapbook page. A tiny
 /// washi-tape strip at the top sells the metaphor.
-class PromoPopupDialog extends StatefulWidget {
+class PromoPopupDialog extends ConsumerStatefulWidget {
   const PromoPopupDialog({required this.popup, super.key});
 
   final PromoPopup popup;
@@ -51,10 +53,10 @@ class PromoPopupDialog extends StatefulWidget {
   }
 
   @override
-  State<PromoPopupDialog> createState() => _PromoPopupDialogState();
+  ConsumerState<PromoPopupDialog> createState() => _PromoPopupDialogState();
 }
 
-class _PromoPopupDialogState extends State<PromoPopupDialog> {
+class _PromoPopupDialogState extends ConsumerState<PromoPopupDialog> {
   Timer? _ticker;
   late int _remaining;
 
@@ -239,7 +241,7 @@ class _PromoPopupDialogState extends State<PromoPopupDialog> {
                         minWidth: 32,
                         minHeight: 32,
                       ),
-                      tooltip: 'Đóng',
+                      tooltip: ref.watch(stringsProvider).promoClose,
                       icon: const Icon(Icons.close),
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
@@ -256,13 +258,13 @@ class _PromoPopupDialogState extends State<PromoPopupDialog> {
 
 /// Compact countdown row with a thin progress bar. Visible only when the
 /// admin set a non-zero `countdownSeconds`.
-class _Countdown extends StatelessWidget {
+class _Countdown extends ConsumerWidget {
   const _Countdown({required this.remaining, required this.total});
   final int remaining;
   final int total;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -276,7 +278,7 @@ class _Countdown extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              'Tự đóng sau ${remaining}s',
+              ref.watch(stringsProvider).promoAutoClose(remaining),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.outline,
               ),

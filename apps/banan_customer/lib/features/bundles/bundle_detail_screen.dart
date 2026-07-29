@@ -1,6 +1,7 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -32,7 +33,7 @@ class BundleDetailScreen extends ConsumerWidget {
       decimalDigits: 0,
     );
     return Scaffold(
-      appBar: AppBar(title: const Text('Combo')),
+      appBar: AppBar(title: Text(ref.watch(stringsProvider).comboTitle)),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
@@ -48,12 +49,13 @@ class _BundleBody extends ConsumerWidget {
   final NumberFormat fmt;
 
   void _addToCart(BuildContext context, WidgetRef ref) {
+    final s = ref.read(stringsProvider);
     // Bundle becomes a single line item — `productId` = bundle.id (so
     // the cart key dedupes correctly) and the variant slot carries a
     // synthetic id so the cart row schema is satisfied.
     final synth = 'bundle:${bundle.id}';
     final itemsSummary = bundle.items
-        .map((it) => '${it.quantity}× ${it.product?.name ?? "Sản phẩm"}')
+        .map((it) => '${it.quantity}× ${it.product?.name ?? s.productFallback}')
         .join(' + ');
     // A combo's advance-notice requirement is the longest of its parts.
     final bundleLead = bundle.items.fold<int>(
@@ -97,10 +99,10 @@ class _BundleBody extends ConsumerWidget {
     final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
-        content: Text('Đã thêm combo "${bundle.name}" vào giỏ.'),
+        content: Text(s.addedCombo(bundle.name)),
         duration: const Duration(seconds: 3),
         action: SnackBarAction(
-          label: 'Xem giỏ',
+          label: s.viewCartShort,
           onPressed: () {
             messenger.hideCurrentSnackBar();
             context.push('/checkout');
@@ -113,6 +115,7 @@ class _BundleBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return ListView(
       padding: const EdgeInsets.all(BananSpacing.lg),
       children: [
@@ -168,7 +171,7 @@ class _BundleBody extends ConsumerWidget {
                   color: BananColors.success.withValues(alpha: 0.15),
                 ),
                 child: Text(
-                  'Tiết kiệm ${fmt.format(bundle.savedVnd)}',
+                  s.saveAmount(fmt.format(bundle.savedVnd)),
                   style: const TextStyle(
                     color: BananColors.success,
                     fontWeight: FontWeight.w700,
@@ -186,7 +189,7 @@ class _BundleBody extends ConsumerWidget {
           Text(bundle.description!, style: theme.textTheme.bodyMedium),
         ],
         const SizedBox(height: BananSpacing.xl),
-        Text('Combo gồm', style: theme.textTheme.titleMedium),
+        Text(s.bundleIncludes, style: theme.textTheme.titleMedium),
         const SizedBox(height: BananSpacing.sm),
         for (final item in bundle.items)
           _BundleItemRow(item: item, fmt: fmt),
@@ -199,7 +202,7 @@ class _BundleBody extends ConsumerWidget {
         ),
         const SizedBox(height: BananSpacing.md),
         PrimaryButton(
-          label: 'Thêm combo vào giỏ',
+          label: s.addComboToCart,
           icon: Icons.shopping_bag_outlined,
           expand: true,
           onPressed: () => _addToCart(context, ref),
@@ -209,14 +212,15 @@ class _BundleBody extends ConsumerWidget {
   }
 }
 
-class _BundleItemRow extends StatelessWidget {
+class _BundleItemRow extends ConsumerWidget {
   const _BundleItemRow({required this.item, required this.fmt});
   final BundleItem item;
   final NumberFormat fmt;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final p = item.product;
     final cover = p?.coverImage;
     return Padding(
@@ -246,11 +250,11 @@ class _BundleItemRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  p?.name ?? 'Sản phẩm',
+                  p?.name ?? s.productFallback,
                   style: theme.textTheme.titleSmall,
                 ),
                 Text(
-                  '${item.quantity} cái${item.variant != null
+                  '${s.bundleQty(item.quantity)}${item.variant != null
                           ? ' · ${item.variant!.label}'
                           : ''}',
                   style: theme.textTheme.bodySmall?.copyWith(

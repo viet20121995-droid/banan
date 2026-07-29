@@ -1,18 +1,87 @@
 // Long-form legal copy is written as multi-line implicit string
 // concatenation inside the section lists — deliberate, not a missing comma.
 // ignore_for_file: no_adjacent_strings_in_list
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'content_page.dart';
 
 /// Chính sách bảo mật — soạn theo tinh thần Nghị định 13/2023/NĐ-CP về
 /// bảo vệ dữ liệu cá nhân. Nội dung mẫu, cần luật sư rà soát trước khi
-/// phát hành chính thức ra công chúng.
-class PrivacyScreen extends StatelessWidget {
+/// phát hành chính thức. Bản EN là bản dịch tham khảo; bản VI có giá trị
+/// pháp lý.
+class PrivacyScreen extends ConsumerWidget {
   const PrivacyScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final en = ref.watch(localeProvider) == AppLocale.en;
+    if (en) {
+      return const ContentPage(
+        title: 'Privacy policy',
+        updatedLabel: 'Last updated: 06/2026',
+        intro:
+            'Banan Fukuoka Saigon ("we") respects and is committed to '
+            'protecting your personal data under Decree 13/2023/NĐ-CP and '
+            'applicable Vietnamese law. This policy explains what we collect, '
+            'how we use it and how we protect it. The Vietnamese version '
+            'prevails legally.',
+        sections: [
+          ContentSection('1. Data we collect', [
+            'Identity details: full name, phone number, email, birthday '
+                '(when you provide it for birthday offers).',
+            'Delivery details: delivery address, ward, delivery notes.',
+            'Order details: products, cake customizations, purchase history, '
+                'loyalty points and discount codes used.',
+            'Technical data: device, browser, IP address and cookies '
+                'required to run the website.',
+          ]),
+          ContentSection('2. How we use it', [
+            'To process and deliver orders, support customers, and issue VAT '
+                'invoices on request.',
+            'To run the loyalty program, birthday offers and promotions you '
+                'have opted into.',
+            'To improve our products, services and website experience.',
+            'To meet legal obligations on tax, accounting and food safety.',
+          ]),
+          ContentSection('3. Legal basis & consent', [
+            'We only process data with your consent, when necessary to '
+                'fulfil a contract (your order), or when required by law.',
+            'You may withdraw consent at any time. This does not affect '
+                'processing already carried out.',
+          ]),
+          ContentSection('4. Sharing', [
+            'We do not sell your personal data.',
+            'We only share it with: delivery partners (to deliver orders), '
+                'payment gateways (to process transactions) and state '
+                'authorities on lawful request.',
+          ]),
+          ContentSection('5. Storage & security', [
+            'Data is stored on access-controlled infrastructure with '
+                'encrypted connections (HTTPS) and regular backups.',
+            'Order data is kept for the period required by accounting/tax '
+                'law; marketing data is kept until you unsubscribe.',
+          ]),
+          ContentSection('6. Your rights', [
+            'You have the right to know, access, correct, delete, restrict '
+                'processing, withdraw consent and complain about your '
+                'personal data.',
+            'To exercise these rights, please reach out via our Contact page '
+                'or hotline.',
+          ]),
+          ContentSection('7. Cookies', [
+            'We use essential cookies so sign-in and the cart work. '
+                'Analytics/non-essential cookies are only enabled when you '
+                'agree on the cookie banner.',
+          ]),
+          ContentSection('8. Contact', [
+            'For any personal-data request, please use our Contact page. '
+                'We respond as soon as possible.',
+          ]),
+        ],
+      );
+    }
     return const ContentPage(
       title: 'Chính sách bảo mật',
       updatedLabel: 'Cập nhật lần cuối: 06/2026',
@@ -78,12 +147,67 @@ class PrivacyScreen extends StatelessWidget {
   }
 }
 
-/// Điều khoản sử dụng / điều kiện đặt hàng.
-class TermsScreen extends StatelessWidget {
+/// Điều khoản sử dụng / điều kiện đặt hàng. Bản EN là bản dịch tham khảo.
+class TermsScreen extends ConsumerWidget {
   const TermsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final en = ref.watch(localeProvider) == AppLocale.en;
+    if (en) {
+      return const ContentPage(
+        title: 'Terms of service',
+        updatedLabel: 'Last updated: 06/2026',
+        intro:
+            'By ordering on Banan Fukuoka Saigon you agree to the terms '
+            'below. Please read them before using the service. The '
+            'Vietnamese version prevails legally.',
+        sections: [
+          ContentSection('1. Ordering', [
+            'An order is confirmed once you complete payment or choose pay '
+                'on receipt. Some products (birthday cakes, custom sets) '
+                'must be ordered ahead per their preparation time.',
+            'We may decline or cancel an order if a product is out of '
+                'stock, the details are invalid, or fraud is suspected.',
+          ]),
+          ContentSection('2. Prices & payment', [
+            'Prices are shown in VND, tax included where applicable. '
+                'Delivery fees are calculated by address at checkout.',
+            'We support pay on receipt (store pickup) and online payment '
+                'gateways. VAT invoices are issued when you provide full '
+                'company details.',
+          ]),
+          ContentSection('3. Cancellations & refunds', [
+            'You may cancel while the order is still "Pending" or '
+                '"Accepted". Once the kitchen starts preparing, a '
+                'cancellation may not be accepted.',
+            'For orders paid online, refunds are returned to the original '
+                "payment method within the payment provider's timeframe.",
+          ]),
+          ContentSection('4. Delivery & pickup', [
+            'Delivery times are estimates and may vary with weather, '
+                'traffic and order volume. Please provide an accurate '
+                'address and phone number.',
+            'Fresh cakes should be stored and consumed per the '
+                'instructions right after receipt.',
+          ]),
+          ContentSection('5. Intellectual property', [
+            'All trademarks, images, recipes and content on this website '
+                'belong to Banan Fukuoka Saigon. Do not copy without '
+                'written consent.',
+          ]),
+          ContentSection('6. Limitation of liability', [
+            'We are not liable for indirect damages beyond our reasonable '
+                'control. Our maximum liability is limited to the value of '
+                'the related order.',
+          ]),
+          ContentSection('7. Governing law', [
+            'These terms are governed by Vietnamese law. Disputes are '
+                'settled by the competent court in Ho Chi Minh City.',
+          ]),
+        ],
+      );
+    }
     return const ContentPage(
       title: 'Điều khoản sử dụng',
       updatedLabel: 'Cập nhật lần cuối: 06/2026',

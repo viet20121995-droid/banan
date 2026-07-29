@@ -34,10 +34,11 @@ class _ChangeEmailConfirmScreenState
   }
 
   Future<void> _confirm() async {
+    final s = ref.read(stringsProvider);
     if (widget.token.isEmpty) {
       setState(() {
         _loading = false;
-        _error = 'Liên kết không hợp lệ hoặc đã hết hạn.';
+        _error = s.linkInvalidExpired;
       });
       return;
     }
@@ -52,8 +53,8 @@ class _ChangeEmailConfirmScreenState
       failure: (f) => setState(() {
         _loading = false;
         _error = f is ValidationFailure
-            ? 'Liên kết không hợp lệ hoặc đã hết hạn.'
-            : authFailureMessage(f);
+            ? s.linkInvalidExpired
+            : authFailureMessage(f, s);
       }),
     );
   }
@@ -62,7 +63,9 @@ class _ChangeEmailConfirmScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Đổi email')),
+      appBar: AppBar(
+        title: Text(ref.watch(stringsProvider).changeEmailTitle),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -76,13 +79,14 @@ class _ChangeEmailConfirmScreenState
   }
 
   Widget _buildBody(ThemeData theme) {
+    final s = ref.watch(stringsProvider);
     if (_loading) {
-      return const Column(
+      return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: BananSpacing.lg),
-          Text('Đang xác nhận đổi email…', textAlign: TextAlign.center),
+          const CircularProgressIndicator(),
+          const SizedBox(height: BananSpacing.lg),
+          Text(s.confirmingEmailChange, textAlign: TextAlign.center),
         ],
       );
     }
@@ -103,7 +107,7 @@ class _ChangeEmailConfirmScreenState
           const SizedBox(height: BananSpacing.xl),
           FilledButton(
             onPressed: () => context.go('/login'),
-            child: const Text('Đăng nhập'),
+            child: Text(s.signIn),
           ),
         ],
       );
@@ -120,7 +124,7 @@ class _ChangeEmailConfirmScreenState
         ),
         const SizedBox(height: BananSpacing.lg),
         Text(
-          'Đã đổi email thành công. Vui lòng đăng nhập lại.',
+          s.emailChanged,
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyLarge,
         ),
@@ -138,7 +142,7 @@ class _ChangeEmailConfirmScreenState
         const SizedBox(height: BananSpacing.xl),
         FilledButton(
           onPressed: () => context.go('/login'),
-          child: const Text('Đăng nhập'),
+          child: Text(s.signIn),
         ),
       ],
     );

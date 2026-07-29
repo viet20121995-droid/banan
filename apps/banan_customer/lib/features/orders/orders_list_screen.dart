@@ -33,13 +33,23 @@ final myOrdersProvider = FutureProvider.autoDispose<List<Order>>((ref) async {
 /// Client-side status filter for the orders list. "Đang xử lý" = any
 /// non-terminal status; "Hoàn thành" = COMPLETED; "Đã hủy" = CANCELLED.
 enum _OrderFilter {
-  all('Tất cả'),
-  processing('Đang xử lý'),
-  completed('Hoàn thành'),
-  cancelled('Đã hủy');
+  all,
+  processing,
+  completed,
+  cancelled;
 
-  const _OrderFilter(this.label);
-  final String label;
+  String label(AppStrings s) {
+    switch (this) {
+      case _OrderFilter.all:
+        return s.all;
+      case _OrderFilter.processing:
+        return s.filterProcessing;
+      case _OrderFilter.completed:
+        return s.filterCompleted;
+      case _OrderFilter.cancelled:
+        return s.filterCancelled;
+    }
+  }
 
   bool matches(OrderStatus status) {
     switch (this) {
@@ -112,9 +122,8 @@ class _OrdersListScreenState extends ConsumerState<OrdersListScreen> {
                           children: [
                             const SizedBox(height: BananSpacing.xxl),
                             EmptyState(
-                              title: 'Không có đơn',
-                              message:
-                                  'Không có đơn hàng nào ở mục "${_filter.label}".',
+                              title: s.noOrdersInFilterTitle,
+                              message: s.noOrdersInFilter(_filter.label(s)),
                               icon: Icons.filter_list_off_outlined,
                             ),
                           ],
@@ -144,14 +153,15 @@ class _OrdersListScreenState extends ConsumerState<OrdersListScreen> {
 }
 
 /// Horizontally-scrolling status filter chips above the orders list.
-class _FilterChips extends StatelessWidget {
+class _FilterChips extends ConsumerWidget {
   const _FilterChips({required this.selected, required this.onChanged});
 
   final _OrderFilter selected;
   final ValueChanged<_OrderFilter> onChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(
@@ -162,7 +172,7 @@ class _FilterChips extends StatelessWidget {
         children: [
           for (final f in _OrderFilter.values) ...[
             ChoiceChip(
-              label: Text(f.label),
+              label: Text(f.label(s)),
               selected: selected == f,
               onSelected: (_) => onChanged(f),
             ),
@@ -217,7 +227,7 @@ class _OrderRow extends ConsumerWidget {
                   Text(order.code, style: theme.textTheme.titleSmall),
                   const SizedBox(height: 2),
                   Text(
-                    '${order.itemCount} item${order.itemCount == 1 ? '' : 's'} · ${fmt.format(order.total)}',
+                    '${s.itemsCount(order.itemCount)} · ${fmt.format(order.total)}',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -241,7 +251,10 @@ class _OrderRow extends ConsumerWidget {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   icon: const Icon(Icons.refresh, size: 14),
-                  label: const Text('Đặt lại', style: TextStyle(fontSize: 12)),
+                  label: Text(
+                    s.reorderShort,
+                    style: const TextStyle(fontSize: 12),
+                  ),
                   onPressed: () => reorderOrder(context, ref, order),
                 ),
               ],

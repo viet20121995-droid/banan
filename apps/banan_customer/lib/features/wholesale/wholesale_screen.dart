@@ -1,5 +1,6 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -31,21 +32,22 @@ final _debtsProvider = FutureProvider.autoDispose((ref) async {
 final _money =
     NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0);
 
-class WholesaleScreen extends StatelessWidget {
+class WholesaleScreen extends ConsumerWidget {
   const WholesaleScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
     return DefaultTabController(
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Đặt hàng sỉ'),
-          bottom: const TabBar(
+          title: Text(s.whTitle),
+          bottom: TabBar(
             tabs: [
-              Tab(text: 'Đặt hàng'),
-              Tab(text: 'Đơn của tôi'),
-              Tab(text: 'Công nợ'),
+              Tab(text: s.whTabOrder),
+              Tab(text: s.whTabMyOrders),
+              Tab(text: s.whTabDebts),
             ],
           ),
         ),
@@ -84,14 +86,15 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
   }
 
   Future<void> submit(WholesaleContractView contract) async {
+    final s = ref.read(stringsProvider);
     final selected =
         contract.lines.where((line) => (quantities[line.id] ?? 0) > 0).toList();
     if (selected.isEmpty) {
-      _message('Chọn ít nhất một sản phẩm.');
+      _message(s.whPickAtLeastOne);
       return;
     }
     if (contract.requiresDeliveryDate && scheduledFor == null) {
-      _message('Hợp đồng này yêu cầu chọn ngày giao hàng.');
+      _message(s.whNeedDeliveryDate);
       return;
     }
     setState(() => saving = true);
@@ -124,7 +127,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
         ref
           ..invalidate(_ordersProvider)
           ..invalidate(_debtsProvider);
-        _message('Đã đặt ${order.code}. Đơn đang chờ admin xác nhận.');
+        _message(s.whOrderPlaced(order.code));
       },
       failure: (failure) => _message(failure.message ?? failure.code),
     );
@@ -136,6 +139,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(_catalogProvider);
+    final s = ref.watch(stringsProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => Center(
@@ -146,24 +150,23 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
             children: [
               const Icon(Icons.lock_outline, size: 44),
               const SizedBox(height: 12),
-              const Text('Tài khoản chưa được phép đặt sỉ.'),
+              Text(s.whNotAllowed),
               const SizedBox(height: 8),
               Text('$error', textAlign: TextAlign.center),
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: () => ref.invalidate(_catalogProvider),
                 icon: const Icon(Icons.refresh),
-                label: const Text('Thử lại'),
+                label: Text(s.retry),
               ),
             ],
           ),
         ),
       ),
       data: (contracts) => contracts.isEmpty
-          ? const EmptyState(
-              title: 'Chưa có hợp đồng hiệu lực',
-              message:
-                  'Liên hệ Banan để kiểm tra thời hạn và danh mục hợp đồng.',
+          ? EmptyState(
+              title: s.whNoContractsTitle,
+              message: s.whNoContractsMsg,
             )
           : ListView.separated(
               padding: const EdgeInsets.all(16),
@@ -191,7 +194,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
   }
 }
 
-class _ContractOrderForm extends StatelessWidget {
+class _ContractOrderForm extends ConsumerWidget {
   const _ContractOrderForm({
     required this.contract,
     required this.quantities,
@@ -215,7 +218,8 @@ class _ContractOrderForm extends StatelessWidget {
   final VoidCallback onSubmit;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
     final goods = contract.lines.fold<double>(
       0,
       (sum, line) => sum + line.contractPrice * (quantities[line.id] ?? 0),
@@ -227,7 +231,7 @@ class _ContractOrderForm extends StatelessWidget {
       children: [
         Text(contract.name, style: Theme.of(context).textTheme.titleLarge),
         if (contract.minOrderVnd != null)
-          Text('Giá trị tối thiểu ${_money.format(contract.minOrderVnd)}'),
+          Text(s.whMinOrderValue(_money.format(contract.minOrderVnd))),
         const SizedBox(height: 12),
         for (final line in contract.lines) ...[
           ListTile(
@@ -236,15 +240,15 @@ class _ContractOrderForm extends StatelessWidget {
             subtitle: Text(
               [
                 if (line.variantLabel != null) line.variantLabel!,
-                'Giá hợp đồng ${_money.format(line.contractPrice)}',
-                'Tối thiểu ${line.minQty}',
-                if (line.multipleQty > 1) 'Bội số ${line.multipleQty}',
+                s.whContractPrice(_money.format(line.contractPrice)),
+                s.whMinQty(line.minQty),
+                if (line.multipleQty > 1) s.whMultipleQty(line.multipleQty),
                 if (line.deliveryDays.isNotEmpty)
-                  'Chỉ giao ${_dayNames(line.deliveryDays)}',
+                  s.whOnlyDeliverOn(_dayNames(s, line.deliveryDays)),
                 if (line.leadTimeDays != null && line.leadTimeDays! > 0)
-                  'Đặt trước ${line.leadTimeDays} ngày',
+                  s.whLeadDays(line.leadTimeDays!),
                 if (line.leadTimeHours != null)
-                  'Đặt trước ${line.leadTimeHours} giờ',
+                  s.whLeadHours(line.leadTimeHours!),
               ].join(' · '),
             ),
             trailing: _QuantityControl(
@@ -315,9 +319,11 @@ class _ContractOrderForm extends StatelessWidget {
           label: Text(
             scheduledFor == null
                 ? (contract.requiresDeliveryDate
-                    ? 'Chọn ngày giao (bắt buộc)'
-                    : 'Chọn thời gian cần giao')
-                : 'Giao ${DateFormat('dd/MM/yyyy HH:mm').format(scheduledFor!)}',
+                    ? s.whPickDateRequired
+                    : s.whPickDate)
+                : s.whDeliverAt(
+                    DateFormat('dd/MM/yyyy HH:mm').format(scheduledFor!),
+                  ),
           ),
         ),
         if (contract.nextDayCutoffMinutes != null ||
@@ -327,10 +333,9 @@ class _ContractOrderForm extends StatelessWidget {
             child: Text(
               [
                 if (contract.nextDayCutoffMinutes != null)
-                  'Đặt trước ${_hhmm(contract.nextDayCutoffMinutes!)} để được '
-                      'giao vào ngày hôm sau.',
+                  s.whCutoffNote(_hhmm(contract.nextDayCutoffMinutes!)),
                 if (contract.noDeliveryDays.isNotEmpty)
-                  'Không giao vào ${_dayNames(contract.noDeliveryDays)}.',
+                  s.whNoDeliveryOn(_dayNames(s, contract.noDeliveryDays)),
               ].join(' '),
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -338,23 +343,23 @@ class _ContractOrderForm extends StatelessWidget {
         const SizedBox(height: 12),
         TextField(
           controller: poCode,
-          decoration: const InputDecoration(
-            labelText: 'Mã đơn mua hàng (PO), tuỳ chọn',
-            helperText: 'Mã PO nội bộ của công ty bạn, in kèm đơn để đối soát.',
+          decoration: InputDecoration(
+            labelText: s.whPoLabel,
+            helperText: s.whPoHelper,
           ),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: notes,
           maxLines: 2,
-          decoration: const InputDecoration(labelText: 'Ghi chú đơn hàng'),
+          decoration: InputDecoration(labelText: s.whOrderNotes),
         ),
         const SizedBox(height: 16),
         if (contract.shipFeeVnd > 0 && goods > 0)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
-              'Phí giao hàng: ${_money.format(contract.shipFeeVnd)}',
+              s.whShipFee(_money.format(contract.shipFeeVnd)),
               textAlign: TextAlign.end,
             ),
           ),
@@ -366,20 +371,22 @@ class _ContractOrderForm extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.send_outlined),
-          label: Text('Đặt theo công nợ · ${_money.format(total)}'),
+          label: Text(s.whSubmit(_money.format(total))),
         ),
       ],
     );
   }
 }
 
-const _weekdayVi = ['', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
-String _dayNames(List<int> days) => days.map((d) => _weekdayVi[d]).join(', ');
+/// [days] use DateTime.weekday numbering (1=Mon..7=Sun);
+/// AppStrings.weekdayShort wants 0=Sun..6=Sat — hence the `% 7`.
+String _dayNames(AppStrings s, List<int> days) =>
+    days.map((d) => s.weekdayShort(d % 7)).join(', ');
 String _hhmm(int minutes) =>
     '${(minutes ~/ 60).toString().padLeft(2, '0')}:'
     '${(minutes % 60).toString().padLeft(2, '0')}';
 
-class _QuantityControl extends StatelessWidget {
+class _QuantityControl extends ConsumerWidget {
   const _QuantityControl({
     required this.value,
     required this.minimum,
@@ -397,11 +404,11 @@ class _QuantityControl extends StatelessWidget {
   int get _first => ((minimum + step - 1) ~/ step) * step;
 
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context, WidgetRef ref) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            tooltip: 'Giảm',
+            tooltip: ref.watch(stringsProvider).decrease,
             onPressed: value == 0
                 ? null
                 : () => onChanged(value <= _first ? 0 : value - step),
@@ -412,7 +419,7 @@ class _QuantityControl extends StatelessWidget {
             child: Text('$value', textAlign: TextAlign.center),
           ),
           IconButton(
-            tooltip: 'Tăng',
+            tooltip: ref.watch(stringsProvider).increase,
             onPressed: () => onChanged(value == 0 ? _first : value + step),
             icon: const Icon(Icons.add_circle_outline),
           ),
@@ -425,6 +432,7 @@ class _MyOrdersTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_ordersProvider);
+    final s = ref.watch(stringsProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => ErrorState(
@@ -435,11 +443,11 @@ class _MyOrdersTab extends ConsumerWidget {
         onRefresh: () async => ref.invalidate(_ordersProvider),
         child: orders.isEmpty
             ? ListView(
-                children: const [
-                  SizedBox(height: 160),
+                children: [
+                  const SizedBox(height: 160),
                   EmptyState(
-                    title: 'Chưa có đơn',
-                    message: 'Đơn sỉ đã đặt sẽ hiển thị tại đây.',
+                    title: s.whNoOrders,
+                    message: s.whNoOrdersMsg,
                   ),
                 ],
               )
@@ -453,7 +461,7 @@ class _MyOrdersTab extends ConsumerWidget {
                     leading: Icon(_statusIcon(order.status)),
                     title: Text(order.code),
                     subtitle: Text(
-                      '${order.items.length} món · ${_money.format(order.total)}',
+                      '${s.itemsCount(order.items.length)} · ${_money.format(order.total)}',
                     ),
                     trailing: order.status == 'PENDING'
                         ? TextButton.icon(
@@ -480,9 +488,9 @@ class _MyOrdersTab extends ConsumerWidget {
                               );
                             },
                             icon: const Icon(Icons.close, size: 18),
-                            label: const Text('Hủy đơn'),
+                            label: Text(s.cancelOrder),
                           )
-                        : Chip(label: Text(_status(order.status))),
+                        : Chip(label: Text(s.whStatusLabel(order.status))),
                   );
                 },
               ),
@@ -496,6 +504,7 @@ class _MyDebtsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_debtsProvider);
+    final s = ref.watch(stringsProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => ErrorState(
@@ -506,11 +515,11 @@ class _MyDebtsTab extends ConsumerWidget {
         onRefresh: () async => ref.invalidate(_debtsProvider),
         child: rows.isEmpty
             ? ListView(
-                children: const [
-                  SizedBox(height: 160),
+                children: [
+                  const SizedBox(height: 160),
                   EmptyState(
-                    title: 'Chưa có công nợ',
-                    message: 'Công nợ theo hợp đồng sẽ hiển thị tại đây.',
+                    title: s.whNoDebtsTitle,
+                    message: s.whNoDebtsMsg,
                   ),
                 ],
               )
@@ -527,15 +536,23 @@ class _MyDebtsTab extends ConsumerWidget {
                           : Icons.receipt_long_outlined,
                     ),
                     title: Text(
-                      '${row.orderCode ?? 'Đơn hàng'} · ${_money.format(row.amountVnd)}',
+                      '${row.orderCode ?? s.whOrderFallback} · ${_money.format(row.amountVnd)}',
                     ),
                     subtitle: Text(
                       row.dueDate == null
-                          ? 'Kỳ hạn bắt đầu sau khi đơn được xác nhận'
-                          : 'Hạn thanh toán ${DateFormat('dd/MM/yyyy').format(row.dueDate!.toLocal())}',
+                          ? s.whDebtStartsAfterConfirm
+                          : s.whDueDate(
+                              DateFormat('dd/MM/yyyy')
+                                  .format(row.dueDate!.toLocal()),
+                            ),
                     ),
                     trailing: Chip(
-                      label: Text(_debtStatus(row.status, row.isOverdue)),
+                      label: Text(
+                        s.whDebtStatusLabel(
+                          row.status,
+                          overdue: row.isOverdue,
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -545,26 +562,9 @@ class _MyDebtsTab extends ConsumerWidget {
   }
 }
 
-String _status(String value) => switch (value) {
-      'PENDING' => 'Đã đặt đơn',
-      'DELIVERING' => 'Đang giao hàng',
-      'CANCELLED' => 'Đã hủy',
-      _ => 'Đã xác nhận',
-    };
-
 IconData _statusIcon(String value) => switch (value) {
       'PENDING' => Icons.schedule_outlined,
       'DELIVERING' => Icons.local_shipping_outlined,
       'CANCELLED' => Icons.cancel_outlined,
       _ => Icons.check_circle_outline,
     };
-
-String _debtStatus(String status, bool overdue) {
-  if (overdue) return 'Quá hạn';
-  return switch (status) {
-    'PENDING' => 'Chờ xác nhận đơn',
-    'PAID' => 'Đã thanh toán',
-    'CANCELLED' => 'Đã hủy',
-    _ => 'Chưa thanh toán',
-  };
-}

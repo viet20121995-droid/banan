@@ -1,5 +1,7 @@
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Candle type values stored in the personalization JSON.
 /// `regular` = nến thường, `number` = nến số (digit candles by age),
@@ -20,18 +22,19 @@ String? candleLabel({
   String? candleType,
   int? candleCount,
   int? candleNumber,
+  AppStrings s = viStrings,
 }) {
   final type = candleType ?? (candleCount != null ? CandleType.regular : null);
   switch (type) {
     case CandleType.number:
       if (candleNumber == null) return null;
-      return 'nến số $candleNumber';
+      return s.candleNumber(candleNumber);
     case CandleType.spiral:
       if (candleCount == null) return null;
-      return '$candleCount nến xoắn';
+      return s.candleSpiral(candleCount);
     case CandleType.regular:
       if (candleCount == null) return null;
-      return '$candleCount nến';
+      return s.candleRegular(candleCount);
     default:
       return null;
   }
@@ -92,7 +95,7 @@ class CakePersonalization {
 
   /// Short human-readable summary for chips / order rows. Returns null
   /// when there's nothing to show.
-  String? summarize() {
+  String? summarize({AppStrings s = viStrings}) {
     final parts = <String>[];
     if (textOnCake != null && textOnCake!.isNotEmpty) {
       parts.add('"${textOnCake!}"');
@@ -101,16 +104,17 @@ class CakePersonalization {
       candleType: candleType,
       candleCount: candleCount,
       candleNumber: candleNumber,
+      s: s,
     );
     if (candle != null) parts.add(candle);
-    if (note != null && note!.isNotEmpty) parts.add('ghi chú');
+    if (note != null && note!.isNotEmpty) parts.add(s.noteWord);
     return parts.isEmpty ? null : parts.join(' · ');
   }
 }
 
 /// Bottom-sheet wizard for birthday-cake personalization. Returns the
 /// finalised `CakePersonalization` on save, or null on dismiss.
-class CakeWizardSheet extends StatefulWidget {
+class CakeWizardSheet extends ConsumerStatefulWidget {
   const CakeWizardSheet({
     required this.productName,
     this.initial,
@@ -121,13 +125,13 @@ class CakeWizardSheet extends StatefulWidget {
   final CakePersonalization? initial;
 
   @override
-  State<CakeWizardSheet> createState() => _CakeWizardSheetState();
+  ConsumerState<CakeWizardSheet> createState() => _CakeWizardSheetState();
 }
 
 /// The four candle modes offered in the wizard. `null` selection = none.
 enum _CandleMode { none, regular, number, spiral }
 
-class _CakeWizardSheetState extends State<CakeWizardSheet> {
+class _CakeWizardSheetState extends ConsumerState<CakeWizardSheet> {
   late final TextEditingController _text;
   late final TextEditingController _note;
 
@@ -181,6 +185,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.viewInsetsOf(context).bottom,
@@ -199,7 +204,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                   const SizedBox(width: BananSpacing.sm),
                   Expanded(
                     child: Text(
-                      'Cá nhân hoá: ${widget.productName}',
+                      s.wizTitle(widget.productName),
                       style: theme.textTheme.titleLarge,
                     ),
                   ),
@@ -207,8 +212,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
               ),
               const SizedBox(height: BananSpacing.xs),
               Text(
-                'Tất cả trường đều tuỳ chọn. Để trống các phần bạn không '
-                'cần. Bánh sẽ làm theo mặc định.',
+                s.wizIntro,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.outline,
                 ),
@@ -219,10 +223,10 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
               TextField(
                 controller: _text,
                 maxLength: 60,
-                decoration: const InputDecoration(
-                  labelText: 'Chữ viết trên bánh',
-                  hintText: 'vd: Chúc mừng sinh nhật An!',
-                  prefixIcon: Icon(Icons.edit_outlined),
+                decoration: InputDecoration(
+                  labelText: s.wizTextOnCake,
+                  hintText: s.wizTextHint,
+                  prefixIcon: const Icon(Icons.edit_outlined),
                 ),
               ),
 
@@ -243,12 +247,12 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                       children: [
                         const Icon(Icons.local_fire_department_outlined),
                         const SizedBox(width: BananSpacing.sm),
-                        Text('Nến', style: theme.textTheme.titleSmall),
+                        Text(s.wizCandles, style: theme.textTheme.titleSmall),
                       ],
                     ),
                     const SizedBox(height: BananSpacing.xs),
                     Text(
-                      'Loại nến',
+                      s.wizCandleType,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.outline,
                       ),
@@ -258,11 +262,11 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        for (final entry in const [
-                          (_CandleMode.none, 'Không nến'),
-                          (_CandleMode.regular, 'Nến thường'),
-                          (_CandleMode.number, 'Nến số'),
-                          (_CandleMode.spiral, 'Nến xoắn'),
+                        for (final entry in [
+                          (_CandleMode.none, s.wizNoCandles),
+                          (_CandleMode.regular, s.wizRegularCandles),
+                          (_CandleMode.number, s.wizNumberCandles),
+                          (_CandleMode.spiral, s.wizSpiralCandles),
                         ])
                           ChoiceChip(
                             label: Text(entry.$2),
@@ -289,8 +293,8 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                           const SizedBox(width: BananSpacing.xs),
                           Text(
                             _mode == _CandleMode.spiral
-                                ? 'Số nến xoắn'
-                                : 'Số nến',
+                                ? s.wizSpiralCount
+                                : s.wizCandleCount,
                             style: theme.textTheme.bodyMedium,
                           ),
                           const Spacer(),
@@ -328,7 +332,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                             color: BananColors.primary,
                           ),
                           const SizedBox(width: BananSpacing.xs),
-                          Text('Số tuổi', style: theme.textTheme.bodyMedium),
+                          Text(s.wizAge, style: theme.textTheme.bodyMedium),
                           const Spacer(),
                           _Stepper(
                             value: _number,
@@ -340,7 +344,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                       ),
                       const SizedBox(height: BananSpacing.xs),
                       Text(
-                        'Nến hình con số theo tuổi (vd: 25)',
+                        s.wizAgeHelper,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.outline,
                         ),
@@ -356,11 +360,10 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                 controller: _note,
                 maxLength: 240,
                 maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Ghi chú thêm cho thợ bánh',
-                  hintText:
-                      'vd: ribbon vàng, không sprinkles, kem ít ngọt …',
-                  prefixIcon: Icon(Icons.sticky_note_2_outlined),
+                decoration: InputDecoration(
+                  labelText: s.wizNote,
+                  hintText: s.wizNoteHint,
+                  prefixIcon: const Icon(Icons.sticky_note_2_outlined),
                 ),
               ),
 
@@ -369,7 +372,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(null),
-                    child: const Text('Huỷ'),
+                    child: Text(s.cancel),
                   ),
                   const Spacer(),
                   if (widget.initial != null && !widget.initial!.isEmpty)
@@ -377,7 +380,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                       onPressed: () => Navigator.of(context)
                           .pop(const CakePersonalization()),
                       icon: const Icon(Icons.delete_outline, size: 16),
-                      label: const Text('Xoá cá nhân hoá'),
+                      label: Text(s.wizClear),
                       style: TextButton.styleFrom(
                         foregroundColor: theme.colorScheme.error,
                       ),
@@ -423,7 +426,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
                       Navigator.of(context).pop(value);
                     },
                     icon: const Icon(Icons.check),
-                    label: const Text('Lưu'),
+                    label: Text(s.save),
                   ),
                 ],
               ),
@@ -437,7 +440,7 @@ class _CakeWizardSheetState extends State<CakeWizardSheet> {
 
 /// A compact − / value / + stepper that lets any integer in [min]..[max]
 /// be reached (so the candle quantity is never limited to presets).
-class _Stepper extends StatelessWidget {
+class _Stepper extends ConsumerWidget {
   const _Stepper({
     required this.value,
     required this.min,
@@ -451,8 +454,9 @@ class _Stepper extends StatelessWidget {
   final ValueChanged<int> onChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     return Container(
       decoration: BoxDecoration(
         borderRadius: BananRadii.rPill,
@@ -469,7 +473,7 @@ class _Stepper extends StatelessWidget {
             onPressed:
                 value > min ? () => onChanged(value - 1) : null,
             icon: const Icon(Icons.remove),
-            tooltip: 'Giảm',
+            tooltip: s.decrease,
           ),
           ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 32),
@@ -485,7 +489,7 @@ class _Stepper extends StatelessWidget {
             onPressed:
                 value < max ? () => onChanged(value + 1) : null,
             icon: const Icon(Icons.add),
-            tooltip: 'Tăng',
+            tooltip: s.increase,
           ),
         ],
       ),

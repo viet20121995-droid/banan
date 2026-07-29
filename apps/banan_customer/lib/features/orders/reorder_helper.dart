@@ -1,5 +1,6 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -88,13 +89,14 @@ Future<void> reorderOrder(
   }
 
   final messenger = ScaffoldMessenger.of(context)..removeCurrentSnackBar();
+  final s = ref.read(stringsProvider);
 
   if (available.isEmpty) {
     // Nothing left to add — tell the customer and stay put (no navigation).
     messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Các món trong đơn này hiện không còn'),
-        duration: Duration(seconds: 3),
+      SnackBar(
+        content: Text(s.reorderUnavailable),
+        duration: const Duration(seconds: 3),
       ),
     );
     return;
@@ -122,9 +124,9 @@ Future<void> reorderOrder(
 
   if (added == 0) {
     messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Các món trong đơn này hiện không còn'),
-        duration: Duration(seconds: 3),
+      SnackBar(
+        content: Text(s.reorderUnavailable),
+        duration: const Duration(seconds: 3),
       ),
     );
     return;
@@ -134,8 +136,8 @@ Future<void> reorderOrder(
     SnackBar(
       content: Text(
         notAdded == 0
-            ? 'Đã thêm $added món vào giỏ'
-            : 'Đã thêm $added món · $notAdded món không còn bán',
+            ? s.reorderAdded(added)
+            : s.reorderAddedSkipped(added, notAdded),
       ),
       duration: const Duration(seconds: 3),
     ),

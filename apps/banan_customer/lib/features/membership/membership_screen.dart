@@ -79,7 +79,7 @@ class _Body extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Hạng ${summary.tier.label}'.toUpperCase(),
+                        s.tierHeading(s.tierName(summary.tier)).toUpperCase(),
                         style: theme.textTheme.labelMedium?.copyWith(
                           color: Colors.white.withValues(alpha: 0.8),
                           letterSpacing: 2,
@@ -113,8 +113,8 @@ class _Body extends ConsumerWidget {
                 // Quick link into the voucher wallet.
                 _NavTile(
                   icon: Icons.confirmation_number_outlined,
-                  title: 'Ví voucher',
-                  subtitle: 'Mã giảm giá khả dụng, đã dùng và hết hạn.',
+                  title: s.voucherWallet,
+                  subtitle: s.voucherWalletSub,
                   onTap: () => context.push('/vouchers'),
                 ),
                 const SizedBox(height: BananSpacing.xl),
@@ -168,7 +168,7 @@ class _Body extends ConsumerWidget {
 /// Shows all four tiers (Đồng → Bạch kim) as a vertical ladder. The
 /// customer's current tier is highlighted; a progress bar under the active
 /// row tracks points toward the next tier using the loyalty thresholds.
-class _TierLadder extends StatelessWidget {
+class _TierLadder extends ConsumerWidget {
   const _TierLadder({required this.summary});
   final MembershipSummary summary;
 
@@ -180,8 +180,9 @@ class _TierLadder extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final fmt = NumberFormat.decimalPattern('vi_VN');
     final next = summary.nextTier;
     return Container(
@@ -194,7 +195,7 @@ class _TierLadder extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Các hạng thành viên', style: theme.textTheme.titleMedium),
+          Text(s.memberTiers, style: theme.textTheme.titleMedium),
           const SizedBox(height: BananSpacing.sm),
           for (final tier in _tiers) ...[
             _TierRow(
@@ -213,7 +214,7 @@ class _TierLadder extends StatelessWidget {
   }
 }
 
-class _TierRow extends StatelessWidget {
+class _TierRow extends ConsumerWidget {
   const _TierRow({
     required this.tier,
     required this.threshold,
@@ -231,8 +232,9 @@ class _TierRow extends StatelessWidget {
   final NumberFormat fmt;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
     final color = _tierColor(tier);
     return Container(
       padding: const EdgeInsets.all(BananSpacing.sm),
@@ -249,7 +251,7 @@ class _TierRow extends StatelessWidget {
               const SizedBox(width: BananSpacing.sm),
               Expanded(
                 child: Text(
-                  tier.label,
+                  s.tierName(tier),
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
                   ),
@@ -266,7 +268,7 @@ class _TierRow extends StatelessWidget {
                     color: color,
                   ),
                   child: Text(
-                    'Hiện tại',
+                    s.currentBadge,
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: Colors.white,
                     ),
@@ -274,7 +276,7 @@ class _TierRow extends StatelessWidget {
                 )
               else
                 Text(
-                  'Từ ${fmt.format(threshold)} điểm',
+                  s.fromPoints(fmt.format(threshold)),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.outline,
                   ),
@@ -335,7 +337,7 @@ class _NextTierProgress extends ConsumerWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Còn $remaining điểm để lên hạng ${next.label}',
+          s.pointsToTier(remaining, s.tierName(next)),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.outline,
           ),
@@ -399,12 +401,12 @@ class _NavTile extends StatelessWidget {
   }
 }
 
-class _HistoryRow extends StatelessWidget {
+class _HistoryRow extends ConsumerWidget {
   const _HistoryRow({required this.event});
   final LoyaltyEvent event;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final positive = event.delta > 0;
     return Padding(
@@ -422,7 +424,8 @@ class _HistoryRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  event.reason ?? event.type.label,
+                  event.reason ??
+                      ref.watch(stringsProvider).loyaltyTypeLabel(event.type),
                   style: theme.textTheme.bodyMedium,
                 ),
                 Text(
