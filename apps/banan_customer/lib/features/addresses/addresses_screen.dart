@@ -5,6 +5,8 @@ import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/ward_picker.dart';
+
 /// The signed-in customer's saved delivery addresses.
 final myAddressesProvider =
     FutureProvider.autoDispose<List<Address>>((ref) async {
@@ -345,9 +347,12 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
             // Post-2025 reform: HCMC removed districts; addresses are now
             // identified by ward (phường/xã). The picker reads the catalog
             // from the server so the list stays current without a redeploy.
-            _WardPicker(
-              selectedCode: _wardCode,
-              onChanged: (code) => setState(() => _wardCode = code),
+            Padding(
+              padding: const EdgeInsets.only(bottom: BananSpacing.sm),
+              child: WardPickerField(
+                selectedCode: _wardCode,
+                onChanged: (code) => setState(() => _wardCode = code),
+              ),
             ),
             _field(s, _district, s.districtOptional),
             _field(s, _postal, s.postalOptional),
@@ -393,156 +398,6 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
             ? (v) =>
                 (v == null || v.trim().isEmpty) ? s.required : null
             : null,
-      ),
-    );
-  }
-}
-
-/// Searchable ward picker for HCMC (post-2025 admin reform). Sources from
-/// `hcmWardsProvider`. Customers can type to filter by ward name or by the
-/// pre-reform district hint (e.g. typing "Q1" surfaces all old-District-1
-/// wards). Saves the selected ward's `code` to the form.
-class _WardPicker extends ConsumerWidget {
-  const _WardPicker({required this.selectedCode, required this.onChanged});
-  final String? selectedCode;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(hcmWardsProvider);
-    final s = ref.watch(stringsProvider);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: BananSpacing.sm),
-      child: async.when(
-        loading: () => const LinearProgressIndicator(minHeight: 2),
-        error: (e, _) => TextFormField(
-          enabled: false,
-          decoration: InputDecoration(
-            labelText: s.wardLabel,
-            errorText: s.wardLoadError,
-          ),
-        ),
-        data: (wards) {
-          final selected =
-              wards.cast<HcmWard?>().firstWhere(
-                    (w) => w?.code == selectedCode,
-                    orElse: () => null,
-                  );
-          return InkWell(
-            onTap: () async {
-              final picked = await showModalBottomSheet<HcmWard?>(
-                context: context,
-                isScrollControlled: true,
-                showDragHandle: true,
-                builder: (_) => _WardPickerSheet(wards: wards),
-              );
-              if (picked != null) onChanged(picked.code);
-            },
-            borderRadius: BananRadii.rmd,
-            child: InputDecorator(
-              decoration: InputDecoration(
-                labelText: s.wardLabel,
-                helperText: s.wardReformHelper,
-                suffixIcon: const Icon(Icons.arrow_drop_down),
-              ),
-              child: Text(
-                selected?.name ?? s.chooseWard,
-                style: selected == null
-                    ? Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
-                        )
-                    : Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Bottom-sheet ward picker with a search field. Filters by name and by the
-/// pre-reform district hint, so customers used to the old "Q1" / "Bình
-/// Thạnh" labels can still find their ward quickly.
-class _WardPickerSheet extends ConsumerStatefulWidget {
-  const _WardPickerSheet({required this.wards});
-  final List<HcmWard> wards;
-
-  @override
-  ConsumerState<_WardPickerSheet> createState() => _WardPickerSheetState();
-}
-
-class _WardPickerSheetState extends ConsumerState<_WardPickerSheet> {
-  final _query = TextEditingController();
-  String _q = '';
-
-  @override
-  void dispose() {
-    _query.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final lower = _q.trim().toLowerCase();
-    final filtered = lower.isEmpty
-        ? widget.wards
-        : widget.wards.where((w) {
-            return w.name.toLowerCase().contains(lower) ||
-                (w.oldArea ?? '').toLowerCase().contains(lower);
-          }).toList();
-    final theme = Theme.of(context);
-    final s = ref.watch(stringsProvider);
-
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      maxChildSize: 0.9,
-      builder: (context, scrollCtrl) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: BananSpacing.lg),
-        child: Column(
-          children: [
-            Text(
-              s.chooseWardTitle,
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: BananSpacing.sm),
-            TextField(
-              controller: _query,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: s.wardSearchHint,
-                prefixIcon: const Icon(Icons.search),
-              ),
-              onChanged: (v) => setState(() => _q = v),
-            ),
-            const SizedBox(height: BananSpacing.sm),
-            Expanded(
-              child: filtered.isEmpty
-                  ? Center(
-                      child: Text(
-                        s.noWardMatch,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    )
-                  : ListView.separated(
-                      controller: scrollCtrl,
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final w = filtered[i];
-                        return ListTile(
-                          title: Text(w.name),
-                          subtitle: w.oldArea == null
-                              ? null
-                              : Text(s.oldAreaLabel(w.oldArea!)),
-                          onTap: () => Navigator.pop(context, w),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
       ),
     );
   }

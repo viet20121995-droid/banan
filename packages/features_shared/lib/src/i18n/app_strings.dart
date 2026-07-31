@@ -743,6 +743,15 @@ abstract class AppStrings {
   String get redeemWord;
   String get notEnough;
   String get rewardsNote;
+
+  // Checkout validation
+  String get checkMarkedFields;
+  String get wardRequired;
+  String get wardNotServiceable;
+  String get wardReselectRequired;
+  String get quotePending;
+  String get quoteFailed;
+  String get pickupStoreRequired;
 }
 
 class _Vi extends AppStrings {
@@ -2164,6 +2173,27 @@ class _Vi extends AppStrings {
   String get rewardsNote =>
       'Để đổi quà, vui lòng liên hệ hoặc tới quầy. Nhân viên sẽ xác '
       'nhận và trừ điểm cho bạn.';
+
+  // Checkout validation
+  @override
+  String get checkMarkedFields =>
+      'Vui lòng kiểm tra thông tin được đánh dấu';
+  @override
+  String get wardRequired => 'Vui lòng chọn phường/xã';
+  @override
+  String get wardNotServiceable =>
+      'Hiện chưa hỗ trợ giao đến khu vực này';
+  @override
+  String get wardReselectRequired =>
+      'Phường cũ đã được chia tách, vui lòng chọn lại phường/xã mới';
+  @override
+  String get quotePending =>
+      'Đang tính phí giao hàng, vui lòng chờ giây lát rồi thử lại';
+  @override
+  String get quoteFailed =>
+      'Không tính được phí giao hàng. Vui lòng thử lại.';
+  @override
+  String get pickupStoreRequired => 'Vui lòng chọn chi nhánh nhận bánh';
 }
 
 class _En extends AppStrings {
@@ -3652,4 +3682,24 @@ class _En extends AppStrings {
   String get rewardsNote =>
       'To redeem, please contact us or visit the counter. Our staff '
       'will confirm and deduct your points.';
+
+  // Checkout validation
+  @override
+  String get checkMarkedFields => 'Please check the highlighted fields';
+  @override
+  String get wardRequired => 'Please pick a ward';
+  @override
+  String get wardNotServiceable =>
+      "We don't deliver to this area yet";
+  @override
+  String get wardReselectRequired =>
+      'This ward was split in the 2025 reform — please pick your new ward';
+  @override
+  String get quotePending =>
+      'Calculating the delivery fee — give it a second and try again';
+  @override
+  String get quoteFailed =>
+      'Could not calculate the delivery fee. Please try again.';
+  @override
+  String get pickupStoreRequired => 'Please choose a pickup branch';
 }

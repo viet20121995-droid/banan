@@ -3,6 +3,8 @@ import type { DeliveryConfig } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
+import { canonicalWardCode } from './hcm-wards';
+
 /**
  * Reads / writes the admin-tunable delivery-pricing config. Stored as a
  * singleton row (id = "default") so a single update mutates the live
@@ -59,8 +61,12 @@ export class DeliveryConfigService {
     storeWardCode: string | null | undefined,
     hasBirthdayCake: boolean,
   ): number {
-    const sameWard =
-      customerWardCode != null && storeWardCode != null && customerWardCode === storeWardCode;
+    // Normalize both sides through the alias map so a saved address that
+    // still carries a pre-reform code (e.g. `cau-kho`) matches a store in
+    // the ward that absorbed it (`cau-ong-lanh`).
+    const customer = canonicalWardCode(customerWardCode);
+    const store = canonicalWardCode(storeWardCode);
+    const sameWard = customer != null && store != null && customer === store;
     if (hasBirthdayCake) {
       return sameWard ? config.birthdayCakeFeeSameWardVnd : config.birthdayCakeFeeOtherWardVnd;
     }

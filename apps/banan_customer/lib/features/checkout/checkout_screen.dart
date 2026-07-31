@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../shared/ward_picker.dart';
 import '../addresses/addresses_screen.dart' show myAddressesProvider;
 import '../cart/cart_controller.dart';
 import 'checkout_cross_sell.dart';
@@ -85,6 +86,40 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   int _pointsToRedeem = 0;
   bool _placing = false;
   String? _error;
+
+  // ── Submit-time validation UX ─────────────────────────────────────────
+  // After the first failed submit, fields revalidate as the customer types
+  // so fixed errors disappear immediately instead of waiting for the next
+  // "Đặt hàng" tap.
+  bool _autovalidate = false;
+
+  /// Error surfaced under the section widgets that aren't TextFormFields —
+  /// cleared as soon as the customer picks a value.
+  String? _pickupError;
+  String? _wardError;
+  String? _scheduleError;
+
+  // Scroll anchors — one per section that can fail validation, in on-screen
+  // order. `Scrollable.ensureVisible` needs a context, so each key is
+  // attached to the section's widget.
+  final _guestKey = GlobalKey();
+  final _pickupKey = GlobalKey();
+  final _scheduleKey = GlobalKey();
+  final _addressKey = GlobalKey();
+  final _wardKey = GlobalKey();
+  final _vatKey = GlobalKey();
+
+  // Focus targets so the first invalid TextFormField also gets the caret.
+  final _guestNameFocus = FocusNode();
+  final _guestPhoneFocus = FocusNode();
+  final _guestEmailFocus = FocusNode();
+  final _recipientFocus = FocusNode();
+  final _phoneFocus = FocusNode();
+  final _line1Focus = FocusNode();
+  final _invoiceCompanyFocus = FocusNode();
+  final _invoiceTaxIdFocus = FocusNode();
+  final _invoiceAddressFocus = FocusNode();
+  final _invoiceEmailFocus = FocusNode();
 
   /// Structured per-item timeline rejection from the backend — when set, the
   /// checkout shows which exact cakes don't fit the chosen time plus one-tap
@@ -161,6 +196,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _giftMessage.dispose();
     _giftRecipientName.dispose();
     _giftRecipientPhone.dispose();
+    _guestNameFocus.dispose();
+    _guestPhoneFocus.dispose();
+    _guestEmailFocus.dispose();
+    _recipientFocus.dispose();
+    _phoneFocus.dispose();
+    _line1Focus.dispose();
+    _invoiceCompanyFocus.dispose();
+    _invoiceTaxIdFocus.dispose();
+    _invoiceAddressFocus.dispose();
+    _invoiceEmailFocus.dispose();
     super.dispose();
   }
 
@@ -280,13 +325,176 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     });
   }
 
-  Future<void> _place() async {
-    if (!(_formKey.currentState?.validate() ?? false)) {
-      // Surface a visible hint instead of silently doing nothing — the
-      // invalid field(s) above are highlighted but may be scrolled off.
-      setState(
-        () => _error = ref.read(stringsProvider).fillMissing,
+  /// One failed precondition: where to scroll and (optionally) what to
+  /// focus. Collected in on-screen order so the FIRST issue is the topmost.
+  ({GlobalKey anchor, FocusNode? focus})? _firstIssue() {
+    final s = ref.read(stringsProvider);
+    final cart = ref.read(cartControllerProvider);
+    final isGuest = ref.read(authSessionProvider).valueOrNull == null;
+    ({GlobalKey anchor, FocusNode? focus})? first;
+    String? pickupError;
+    String? wardError;
+    String? scheduleError;
+    void add(GlobalKey anchor, [FocusNode? focus]) {
+      first ??= (anchor: anchor, focus: focus);
+    }
+
+    // 1. Guest contact — top of the form.
+    if (isGuest) {
+      if (_guestName.text.trim().isEmpty) add(_guestKey, _guestNameFocus);
+      final phone = _guestPhone.text.trim();
+      if (phone.isEmpty || phone.length < 7) add(_guestKey, _guestPhoneFocus);
+      final email = _guestEmail.text.trim();
+      if (email.isNotEmpty && (!email.contains('@') || !email.contains('.'))) {
+        add(_guestKey, _guestEmailFocus);
+      }
+    }
+    // 2. Pickup branch.
+    if (_fulfillment == FulfillmentType.pickup && _pickupStoreId == null) {
+      pickupError = s.pickupStoreRequired;
+      add(_pickupKey);
+    }
+    // 3. Schedule — a cart whose items share no sale day can never be
+    // scheduled; a hand-picked past time is stale.
+    if (cart.hasDayConflict) {
+      scheduleError = s.mixedDaysError;
+      add(_scheduleKey);
+    } else if (_scheduledFor != null &&
+        _scheduledFor!.isBefore(DateTime.now())) {
+      scheduleError = s.pickEarliest;
+      add(_scheduleKey);
+    }
+    // 4. Delivery address + ward.
+    if (_fulfillment == FulfillmentType.delivery) {
+      if (_recipient.text.trim().isEmpty) add(_addressKey, _recipientFocus);
+      if (_phone.text.trim().isEmpty) add(_addressKey, _phoneFocus);
+      if (_line1.text.trim().isEmpty) add(_addressKey, _line1Focus);
+      if (_wardCode == null || _wardCode!.isEmpty) {
+        wardError = s.wardRequired;
+        add(_wardKey);
+      } else {
+        // A saved address may carry a pre-reform code the catalog no longer
+        // resolves (unknown, or a SPLIT ward that must not be guessed) —
+        // force a fresh pick instead of submitting a code the backend
+        // will refuse.
+        final wards = ref.read(hcmWardsProvider).valueOrNull;
+        final resolved = wards?.cast<HcmWard?>().firstWhere(
+              (w) => w?.matchesCode(_wardCode) ?? false,
+              orElse: () => null,
+            );
+        if (wards != null && resolved == null) {
+          wardError = s.wardReselectRequired;
+          add(_wardKey);
+        } else {
+          // The live quote is the delivery-policy oracle: block while it's
+          // still loading, when it failed, when the ward is outside the
+          // zone, and when no branch can deliver — never submit an order
+          // the backend will reject (or price blind).
+          ref
+              .read(
+            _deliveryQuoteProvider(
+              (
+                wardCode: _wardCode,
+                productIdsCsv: cart.orderedProductIds.join(','),
+              ),
+            ),
+          )
+              .when(
+            data: (quote) {
+              if (!quote.serviceable) {
+                wardError = s.wardNotServiceable;
+                add(_wardKey);
+              } else if (quote.noStoreAvailable || quote.store == null) {
+                wardError = s.noStoreForWard;
+                add(_wardKey);
+              }
+            },
+            loading: () {
+              wardError = s.quotePending;
+              add(_wardKey);
+            },
+            error: (_, __) {
+              wardError = s.quoteFailed;
+              add(_wardKey);
+            },
+          );
+        }
+      }
+    }
+    // 5. VAT invoice — all four company fields required once the toggle is
+    // on. Field-level validators paint the inline errors; this anchors the
+    // scroll to the section.
+    if (_requestVatInvoice) {
+      if (_invoiceCompany.text.trim().isEmpty) {
+        add(_vatKey, _invoiceCompanyFocus);
+      }
+      if (_invoiceTaxId.text.trim().isEmpty) add(_vatKey, _invoiceTaxIdFocus);
+      if (_invoiceAddress.text.trim().isEmpty) {
+        add(_vatKey, _invoiceAddressFocus);
+      }
+      final invEmail = _invoiceEmail.text.trim();
+      if (invEmail.isEmpty ||
+          !invEmail.contains('@') ||
+          !invEmail.contains('.')) {
+        add(_vatKey, _invoiceEmailFocus);
+      }
+    }
+
+    setState(() {
+      _pickupError = pickupError;
+      _wardError = wardError;
+      _scheduleError = scheduleError;
+    });
+    return first;
+  }
+
+  /// Smooth-scrolls the failing section into view and focuses its first
+  /// invalid input. `ensureVisible` walks up from the section's own context,
+  /// so it works in both the narrow single-column and wide two-column
+  /// layouts without guessing offsets.
+  Future<void> _revealIssue(({GlobalKey anchor, FocusNode? focus}) issue) async {
+    final ctx = issue.anchor.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        alignment: 0.08,
       );
+    }
+    issue.focus?.requestFocus();
+  }
+
+  Future<void> _place() async {
+    // Hard double-submit guard — the button is disabled while placing, but
+    // a queued tap/Enter can still land between frames.
+    if (_placing) return;
+
+    final s = ref.read(stringsProvider);
+    // Paint every TextFormField error inline…
+    _formKey.currentState?.validate();
+    // …then find the topmost failing section (fields + business rules).
+    final issue = _firstIssue();
+    if (issue != null) {
+      setState(() {
+        // From now on fields revalidate as the customer types.
+        _autovalidate = true;
+        _error = s.checkMarkedFields;
+      });
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(s.checkMarkedFields),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      // Let the error banner / inline errors lay out first — they push the
+      // form down, so scrolling against the pre-rebuild geometry would land
+      // the target just below the fold.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      await _revealIssue(issue);
       return;
     }
     setState(() {
@@ -582,6 +790,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       ),
       body: Form(
         key: _formKey,
+        // After the first failed submit every field revalidates on edit, so
+        // fixed errors clear immediately (and new ones appear) without
+        // waiting for another "Đặt hàng" tap.
+        autovalidateMode: _autovalidate
+            ? AutovalidateMode.onUserInteraction
+            : AutovalidateMode.disabled,
         child: ListView(
           padding: const EdgeInsets.all(BananSpacing.lg),
           children: [
@@ -619,9 +833,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       ),
                     if (isGuest) ...[
                       _GuestContactSection(
+                        key: _guestKey,
                         nameController: _guestName,
                         phoneController: _guestPhone,
                         emailController: _guestEmail,
+                        nameFocus: _guestNameFocus,
+                        phoneFocus: _guestPhoneFocus,
+                        emailFocus: _guestEmailFocus,
                       ),
                       const SizedBox(height: BananSpacing.xl),
                     ],
@@ -651,11 +869,27 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: BananSpacing.md),
-                      PickupStorePicker(
-                        selectedId: _pickupStoreId,
-                        onSelect: (id) =>
-                            setState(() => _pickupStoreId = id),
+                      KeyedSubtree(
+                        key: _pickupKey,
+                        child: PickupStorePicker(
+                          selectedId: _pickupStoreId,
+                          onSelect: (id) => setState(() {
+                            _pickupStoreId = id;
+                            if (id != null) _pickupError = null;
+                          }),
+                        ),
                       ),
+                      if (_pickupError != null)
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(top: BananSpacing.xs),
+                          child: Text(
+                            _pickupError!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.error,
+                            ),
+                          ),
+                        ),
                     ],
                     const SizedBox(height: BananSpacing.xl),
                     Text(
@@ -665,14 +899,30 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       style: theme.textTheme.titleLarge,
                     ),
                     const SizedBox(height: BananSpacing.md),
-                    LeadAwareSchedule(
-                      value: _scheduledFor,
-                      onChanged: (next) =>
-                          setState(() => _scheduledFor = next),
-                      leadHours: cart.maxLeadHours,
-                      leadNote: _scheduleNote(cart),
-                      allowedDays: cart.allowedDaysOfWeek,
+                    KeyedSubtree(
+                      key: _scheduleKey,
+                      child: LeadAwareSchedule(
+                        value: _scheduledFor,
+                        onChanged: (next) => setState(() {
+                          _scheduledFor = next;
+                          _scheduleError = null;
+                        }),
+                        leadHours: cart.maxLeadHours,
+                        leadNote: _scheduleNote(cart),
+                        allowedDays: cart.allowedDaysOfWeek,
+                      ),
                     ),
+                    if (_scheduleError != null)
+                      Padding(
+                        padding:
+                            const EdgeInsets.only(top: BananSpacing.xs),
+                        child: Text(
+                          _scheduleError!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
                     if (_fulfillment == FulfillmentType.delivery) ...[
                       const SizedBox(height: BananSpacing.xl),
                       Text(
@@ -691,7 +941,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         const SizedBox(height: BananSpacing.md),
                       ],
                       TextFormField(
+                        key: _addressKey,
                         controller: _recipient,
+                        focusNode: _recipientFocus,
                         decoration:
                             InputDecoration(labelText: s.recipient),
                         onChanged: (_) => _clearSavedSelection(),
@@ -701,6 +953,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       const SizedBox(height: BananSpacing.md),
                       TextFormField(
                         controller: _phone,
+                        focusNode: _phoneFocus,
                         keyboardType: TextInputType.phone,
                         decoration: InputDecoration(labelText: s.phone),
                         onChanged: (_) => _clearSavedSelection(),
@@ -710,6 +963,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       const SizedBox(height: BananSpacing.md),
                       TextFormField(
                         controller: _line1,
+                        focusNode: _line1Focus,
                         decoration: InputDecoration(
                           labelText: s.addressLine,
                           helperText: s.addressHelperEx,
@@ -736,13 +990,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         ),
                       ),
                       const SizedBox(height: BananSpacing.md),
-                      // HCMC post-2025 ward picker. Required for accurate
-                      // delivery distance check; without it we charge base
-                      // fee regardless of where the customer is.
-                      _CheckoutWardPicker(
+                      // HCMC post-2025 ward picker (full 168-unit catalog,
+                      // shared with the address book). Required for the
+                      // ward-equality fee + routing; wards outside the
+                      // delivery zone stay listed but block submit with
+                      // "chưa hỗ trợ giao đến khu vực này".
+                      WardPickerField(
+                        key: _wardKey,
                         selectedCode: _wardCode,
-                        onChanged: (code) =>
-                            setState(() => _wardCode = code),
+                        errorText: _wardError,
+                        onChanged: (code) => setState(() {
+                          _wardCode = code;
+                          _wardError = null;
+                        }),
                       ),
                       const SizedBox(height: BananSpacing.sm),
                       // Live quote — surfaces the 15.000₫ surcharge for
@@ -778,6 +1038,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _VatInvoiceSection(
+                      key: _vatKey,
                       enabled: _requestVatInvoice,
                       onToggle: (v) =>
                           setState(() => _requestVatInvoice = v),
@@ -785,6 +1046,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       taxId: _invoiceTaxId,
                       address: _invoiceAddress,
                       email: _invoiceEmail,
+                      companyFocus: _invoiceCompanyFocus,
+                      taxIdFocus: _invoiceTaxIdFocus,
+                      addressFocus: _invoiceAddressFocus,
+                      emailFocus: _invoiceEmailFocus,
                     ),
                     const SizedBox(height: BananSpacing.md),
                     _GiftSection(
@@ -943,6 +1208,11 @@ class _VatInvoiceSection extends ConsumerWidget {
     required this.taxId,
     required this.address,
     required this.email,
+    this.companyFocus,
+    this.taxIdFocus,
+    this.addressFocus,
+    this.emailFocus,
+    super.key,
   });
 
   final bool enabled;
@@ -951,6 +1221,10 @@ class _VatInvoiceSection extends ConsumerWidget {
   final TextEditingController taxId;
   final TextEditingController address;
   final TextEditingController email;
+  final FocusNode? companyFocus;
+  final FocusNode? taxIdFocus;
+  final FocusNode? addressFocus;
+  final FocusNode? emailFocus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -985,34 +1259,52 @@ class _VatInvoiceSection extends ConsumerWidget {
             const SizedBox(height: BananSpacing.xs),
             TextFormField(
               controller: company,
+              focusNode: companyFocus,
               decoration: InputDecoration(
                 labelText: s.companyName,
               ),
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? s.required : null,
             ),
             const SizedBox(height: BananSpacing.sm),
             TextFormField(
               controller: taxId,
+              focusNode: taxIdFocus,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 labelText: s.taxCode,
                 helperText: s.taxCodeHelper,
               ),
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? s.required : null,
             ),
             const SizedBox(height: BananSpacing.sm),
             TextFormField(
               controller: address,
+              focusNode: addressFocus,
               maxLines: 2,
               decoration: InputDecoration(
                 labelText: s.companyAddress,
               ),
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? s.required : null,
             ),
             const SizedBox(height: BananSpacing.sm),
             TextFormField(
               controller: email,
+              focusNode: emailFocus,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
                 labelText: s.invoiceEmail,
               ),
+              validator: (v) {
+                final val = (v ?? '').trim();
+                if (val.isEmpty) return s.required;
+                if (!val.contains('@') || !val.contains('.')) {
+                  return s.invalidEmail;
+                }
+                return null;
+              },
             ),
             const SizedBox(height: BananSpacing.sm),
           ],
@@ -1600,11 +1892,18 @@ class _GuestContactSection extends ConsumerWidget {
     required this.nameController,
     required this.phoneController,
     required this.emailController,
+    this.nameFocus,
+    this.phoneFocus,
+    this.emailFocus,
+    super.key,
   });
 
   final TextEditingController nameController;
   final TextEditingController phoneController;
   final TextEditingController emailController;
+  final FocusNode? nameFocus;
+  final FocusNode? phoneFocus;
+  final FocusNode? emailFocus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1649,6 +1948,7 @@ class _GuestContactSection extends ConsumerWidget {
           const SizedBox(height: BananSpacing.md),
           TextFormField(
             controller: nameController,
+            focusNode: nameFocus,
             textCapitalization: TextCapitalization.words,
             decoration: InputDecoration(labelText: t.fullName),
             validator: (v) =>
@@ -1657,6 +1957,7 @@ class _GuestContactSection extends ConsumerWidget {
           const SizedBox(height: BananSpacing.md),
           TextFormField(
             controller: phoneController,
+            focusNode: phoneFocus,
             keyboardType: TextInputType.phone,
             decoration: InputDecoration(
               labelText: t.phone,
@@ -1672,6 +1973,7 @@ class _GuestContactSection extends ConsumerWidget {
           const SizedBox(height: BananSpacing.md),
           TextFormField(
             controller: emailController,
+            focusNode: emailFocus,
             keyboardType: TextInputType.emailAddress,
             decoration: InputDecoration(
               labelText: t.emailOptional,
@@ -1686,154 +1988,6 @@ class _GuestContactSection extends ConsumerWidget {
             },
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Bottom-sheet ward picker for the inline delivery form at checkout.
-/// Mirrors the one in the address book but lives here so the checkout
-/// form doesn't depend on the addresses feature.
-class _CheckoutWardPicker extends ConsumerWidget {
-  const _CheckoutWardPicker({
-    required this.selectedCode,
-    required this.onChanged,
-  });
-  final String? selectedCode;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(hcmWardsProvider);
-    final s = ref.watch(stringsProvider);
-    return async.when(
-      loading: () => const LinearProgressIndicator(minHeight: 2),
-      error: (_, __) => InputDecorator(
-        decoration: InputDecoration(
-          labelText: s.wardLabel,
-          errorText: s.wardLoadError,
-        ),
-        child: const Text('—'),
-      ),
-      data: (wards) {
-        final selected = wards.cast<HcmWard?>().firstWhere(
-              (w) => w?.code == selectedCode,
-              orElse: () => null,
-            );
-        return InkWell(
-          onTap: () async {
-            final picked = await showModalBottomSheet<HcmWard?>(
-              context: context,
-              isScrollControlled: true,
-              showDragHandle: true,
-              builder: (_) => _WardPickerSheet(wards: wards),
-            );
-            if (picked != null) onChanged(picked.code);
-          },
-          borderRadius: BananRadii.rmd,
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: s.wardLabel,
-              helperText: s.wardHelper,
-              suffixIcon: const Icon(Icons.arrow_drop_down),
-            ),
-            child: Text(
-              selected?.name ?? s.chooseWard,
-              style: selected == null
-                  ? Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.outline,
-                      )
-                  : Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _WardPickerSheet extends ConsumerStatefulWidget {
-  const _WardPickerSheet({required this.wards});
-  final List<HcmWard> wards;
-
-  @override
-  ConsumerState<_WardPickerSheet> createState() => _WardPickerSheetState();
-}
-
-class _WardPickerSheetState extends ConsumerState<_WardPickerSheet> {
-  final _query = TextEditingController();
-  String _q = '';
-
-  @override
-  void dispose() {
-    _query.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final lower = _q.trim().toLowerCase();
-    final filtered = lower.isEmpty
-        ? widget.wards
-        : widget.wards.where((w) {
-            return w.name.toLowerCase().contains(lower) ||
-                (w.oldArea ?? '').toLowerCase().contains(lower);
-          }).toList();
-    final theme = Theme.of(context);
-
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      maxChildSize: 0.9,
-      builder: (context, scrollCtrl) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: BananSpacing.lg),
-        child: Column(
-          children: [
-            Text(
-              ref.watch(stringsProvider).chooseWardTitle,
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: BananSpacing.sm),
-            TextField(
-              controller: _query,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: ref.watch(stringsProvider).wardSearchHint,
-                prefixIcon: const Icon(Icons.search),
-              ),
-              onChanged: (v) => setState(() => _q = v),
-            ),
-            const SizedBox(height: BananSpacing.sm),
-            Expanded(
-              child: filtered.isEmpty
-                  ? Center(
-                      child: Text(
-                        ref.watch(stringsProvider).noWardMatch,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    )
-                  : ListView.separated(
-                      controller: scrollCtrl,
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final w = filtered[i];
-                        return ListTile(
-                          title: Text(w.name),
-                          subtitle: w.oldArea == null
-                              ? null
-                              : Text(
-                                  ref
-                                      .watch(stringsProvider)
-                                      .oldAreaLabel(w.oldArea!),
-                                ),
-                          onTap: () => Navigator.pop(context, w),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1878,6 +2032,38 @@ class _DeliveryQuoteBox extends ConsumerWidget {
         ),
       ),
       data: (q) {
+        // Valid ward, outside the delivery zone — say so instead of quoting
+        // a fee the backend would refuse anyway.
+        if (!q.serviceable) {
+          return Container(
+            padding: const EdgeInsets.all(BananSpacing.md),
+            decoration: BoxDecoration(
+              borderRadius: BananRadii.rmd,
+              color: theme.colorScheme.errorContainer.withValues(alpha: 0.4),
+              border: Border.all(
+                color: theme.dividerTheme.color ?? Colors.black12,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.location_off_outlined,
+                  size: 18,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(width: BananSpacing.sm),
+                Expanded(
+                  child: Text(
+                    s.wardNotServiceable,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
         final bg = q.noStoreAvailable
             ? theme.colorScheme.errorContainer.withValues(alpha: 0.4)
             : q.isOtherWard

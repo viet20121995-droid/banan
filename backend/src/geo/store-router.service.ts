@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 
-import { findWard, haversineKm, HcmWard } from './hcm-wards';
+import { findWard, haversineKm, HcmWard, isWardServiceable } from './hcm-wards';
 
 export interface RoutedStore {
   storeId: string;
@@ -32,11 +32,12 @@ export class StoreRouterService {
   constructor(private readonly prisma: PrismaService) {}
 
   /// Resolves the fulfilling branch for a given ward. Returns null when the
-  /// ward is unknown, has no eligible stores, or no store has coordinates.
+  /// ward is unknown, has no verified centroid (outside the delivery zone),
+  /// has no eligible stores, or no store has coordinates.
   async pickNearestDeliveryStore(wardCode: string | null | undefined): Promise<RoutedStore | null> {
     const ward = findWard(wardCode);
-    if (!ward) return null;
-    return this.pickNearestForPoint(ward);
+    if (!isWardServiceable(ward)) return null;
+    return this.pickNearestForPoint({ lat: ward!.lat!, lng: ward!.lng! });
   }
 
   /// Same as above but for an arbitrary point — exposed in case we add a

@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Address } from '@prisma/client';
 
+import { canonicalWardCode, isAmbiguousLegacyWard } from '../geo/hcm-wards';
 import { PrismaService } from '../prisma/prisma.service';
 
 import type { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
@@ -8,6 +9,32 @@ import type { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 @Injectable()
 export class AddressesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Validates + canonicalizes a wardCode before it hits the address row:
+   * safe legacy aliases are rewritten to the new canonical code, split-ward
+   * codes are refused (the customer must re-pick — never guessed), and
+   * unknown codes are rejected outright. Empty/omitted stays null.
+   */
+  private normalizeWardCode(raw: string | undefined): string | null {
+    const code = raw?.trim();
+    if (!code) return null;
+    if (isAmbiguousLegacyWard(code)) {
+      throw new BadRequestException({
+        code: 'WARD_RESELECTION_REQUIRED',
+        message:
+          'Phường cũ đã được chia tách sau sắp xếp hành chính. Vui lòng chọn lại phường/xã mới.',
+      });
+    }
+    const canonical = canonicalWardCode(code);
+    if (!canonical) {
+      throw new BadRequestException({
+        code: 'WARD_NOT_FOUND',
+        message: 'Phường/xã không hợp lệ. Vui lòng chọn lại từ danh sách.',
+      });
+    }
+    return canonical;
+  }
 
   /** A user's address book — default first, then newest. */
   list(userId: string): Promise<Address[]> {
@@ -38,7 +65,7 @@ export class AddressesService {
           line2: dto.line2?.trim() || null,
           city: dto.city.trim(),
           district: dto.district?.trim() || null,
-          wardCode: dto.wardCode?.trim() || null,
+          wardCode: this.normalizeWardCode(dto.wardCode),
           postalCode: dto.postalCode?.trim() || null,
           isDefault: makeDefault,
         },
@@ -65,7 +92,7 @@ export class AddressesService {
           ...(dto.line2 !== undefined ? { line2: dto.line2.trim() || null } : {}),
           ...(dto.city !== undefined ? { city: dto.city.trim() } : {}),
           ...(dto.district !== undefined ? { district: dto.district.trim() || null } : {}),
-          ...(dto.wardCode !== undefined ? { wardCode: dto.wardCode.trim() || null } : {}),
+          ...(dto.wardCode !== undefined ? { wardCode: this.normalizeWardCode(dto.wardCode) } : {}),
           ...(dto.postalCode !== undefined ? { postalCode: dto.postalCode.trim() || null } : {}),
           ...(dto.isDefault === true ? { isDefault: true } : {}),
         },

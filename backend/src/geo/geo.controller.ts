@@ -17,7 +17,15 @@ import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 
 import { DeliveryConfigService } from './delivery-config.service';
-import { findWard, HCM_WARDS } from './hcm-wards';
+import {
+  canonicalWardCode,
+  findWard,
+  FORMER_HCMC_WARDS,
+  isAmbiguousLegacyWard,
+  isFormerHcmcWard,
+  isWardServiceable,
+  LEGACY_WARD_ALIASES,
+} from './hcm-wards';
 import { StoreRouterService } from './store-router.service';
 
 class QuoteRequestDto {
@@ -72,16 +80,27 @@ export class GeoController {
     private readonly config: DeliveryConfigService,
   ) {}
 
-  /// Catalog of HCMC wards (post-2025 reform).
+  /// Customer delivery-address catalog. The backend retains all 168 current
+  /// units, but Banan only delivers within the 102 units formed from the
+  /// pre-merger TP.HCM footprint.
   @Public()
   @Get('hcm-wards')
   hcmWards() {
-    return HCM_WARDS.map((w) => ({
+    const legacyByCanonical = new Map<string, string[]>();
+    for (const [legacy, canonical] of Object.entries(LEGACY_WARD_ALIASES)) {
+      const list = legacyByCanonical.get(canonical) ?? [];
+      list.push(legacy);
+      legacyByCanonical.set(canonical, list);
+    }
+    return FORMER_HCMC_WARDS.map((w) => ({
       code: w.code,
       name: w.name,
+      type: w.type,
       lat: w.lat,
       lng: w.lng,
       oldArea: w.oldArea ?? null,
+      serviceable: isWardServiceable(w),
+      legacyCodes: legacyByCanonical.get(w.code) ?? [],
     }));
   }
 
@@ -114,11 +133,32 @@ export class GeoController {
       };
     }
 
+    // A split pre-reform ward can't be auto-mapped — tell the client to ask
+    // the customer for a fresh pick instead of guessing a fee.
+    if (isAmbiguousLegacyWard(dto.wardCode)) {
+      throw new BadRequestException({ code: 'WARD_RESELECTION_REQUIRED' });
+    }
     const ward = findWard(dto.wardCode);
     if (!ward) {
       throw new BadRequestException({ code: 'WARD_NOT_FOUND' });
     }
-    const routed = await this.router.pickNearestForPoint(ward);
+    if (!isFormerHcmcWard(ward)) {
+      throw new BadRequestException({ code: 'WARD_OUTSIDE_DELIVERY_AREA' });
+    }
+    // Valid ward, but no verified centroid yet → outside the delivery zone.
+    // NOT an error: the picker must keep listing it; checkout shows "chưa
+    // hỗ trợ giao đến khu vực này" and blocks delivery (pickup still fine).
+    if (!isWardServiceable(ward)) {
+      const fee = hasBirthdayCake ? cfg.birthdayCakeFeeOtherWardVnd : cfg.standardFeeOtherWardVnd;
+      return {
+        ...this._breakdown(fee, hasBirthdayCake, 'other'),
+        distanceKm: null as number | null,
+        wardKnown: true,
+        serviceable: false,
+        store: null,
+      };
+    }
+    const routed = await this.router.pickNearestForPoint({ lat: ward.lat!, lng: ward.lng! });
     if (!routed) {
       const fee = hasBirthdayCake ? cfg.birthdayCakeFeeOtherWardVnd : cfg.standardFeeOtherWardVnd;
       return {
@@ -129,12 +169,18 @@ export class GeoController {
         noStoreAvailable: true,
       };
     }
-    const sameWard = routed.storeWardCode != null && routed.storeWardCode === dto.wardCode;
     const fee = this.config.feeFor(cfg, dto.wardCode, routed.storeWardCode, hasBirthdayCake);
+    // Compare via canonical codes so a saved address carrying a legacy alias
+    // (e.g. `cau-kho`) still counts as "same ward" as a store in the merged
+    // ward (`cau-ong-lanh`).
+    const sameWard =
+      routed.storeWardCode != null &&
+      canonicalWardCode(routed.storeWardCode) === canonicalWardCode(dto.wardCode);
     return {
       ...this._breakdown(fee, hasBirthdayCake, sameWard ? 'same' : 'other'),
       distanceKm: Math.round(routed.distanceKm * 10) / 10,
       wardKnown: true,
+      serviceable: true,
       store: {
         id: routed.storeId,
         name: routed.storeName,

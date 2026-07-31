@@ -287,6 +287,7 @@ describe('WholesaleService.createOrder — delivery rules', () => {
 
   it('refuses delivery on a contract-wide no-delivery weekday', async () => {
     const { svc } = makeService({ contract: ruleContract({ noDeliveryDays: [7] }) });
+    jest.useFakeTimers({ now: new Date('2026-07-23T01:00:00Z') });
     // 26/07/2026 (10:00 VN) is a Sunday — weekday 7.
     await expect(
       svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-26T03:00:00Z' }),
@@ -305,6 +306,7 @@ describe('WholesaleService.createOrder — delivery rules', () => {
 
   it('an item with fixed delivery weekdays refuses other days', async () => {
     const { svc } = makeService({ contract: ruleContract({}, { deliveryDays: [2] }) });
+    jest.useFakeTimers({ now: new Date('2026-07-23T01:00:00Z') });
     // 29/07/2026 is a Wednesday; the line only ships Tuesdays (weekday 2).
     await expect(
       svc.createOrder('u1', { ...dto, scheduledFor: '2026-07-29T03:00:00Z' }),

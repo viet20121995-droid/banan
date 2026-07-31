@@ -21,9 +21,14 @@ class GeoApi {
               return HcmWard(
                 code: m['code'] as String,
                 name: m['name'] as String,
-                lat: (m['lat'] as num).toDouble(),
-                lng: (m['lng'] as num).toDouble(),
+                lat: (m['lat'] as num?)?.toDouble(),
+                lng: (m['lng'] as num?)?.toDouble(),
                 oldArea: m['oldArea'] as String?,
+                serviceable: m['serviceable'] as bool? ?? m['lat'] != null,
+                legacyCodes: (m['legacyCodes'] as List?)
+                        ?.map((c) => c as String)
+                        .toList() ??
+                    const [],
               );
             })
             .toList(),
@@ -68,6 +73,7 @@ class GeoApi {
               : DeliveryWardMatch.same,
           hasBirthdayCake: m['hasBirthdayCake'] as bool? ?? false,
           noStoreAvailable: m['noStoreAvailable'] as bool? ?? false,
+          serviceable: m['serviceable'] as bool? ?? true,
           store: storeJson == null
               ? null
               : RoutedStore(

@@ -12,6 +12,12 @@ import { randomBytes } from 'node:crypto';
 import { AuthService } from '../auth/auth.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DeliveryConfigService } from '../geo/delivery-config.service';
+import {
+  findWard,
+  isAmbiguousLegacyWard,
+  isFormerHcmcWard,
+  isWardServiceable,
+} from '../geo/hcm-wards';
 import { StoreRouterService } from '../geo/store-router.service';
 import { LoyaltyService, LOYALTY_CONFIG } from '../loyalty/loyalty.service';
 import {
@@ -180,6 +186,49 @@ export class OrdersService {
         throw new BadRequestException({
           code: 'INVOICE_FIELDS_REQUIRED',
           message: `Vui lòng điền: ${missing.join(', ')} để xuất hoá đơn VAT.`,
+        });
+      }
+    }
+
+    // DELIVERY ward policy — validated before ANY side effect (guest
+    // creation, coupon burns, …) so a rejected order leaves nothing behind.
+    // wardCode is required: without it the fee/routing rules can't run and
+    // old clients would silently fall back to the catalog store.
+    if (dto.fulfillmentType === 'DELIVERY') {
+      const wardCode = dto.address?.wardCode?.trim();
+      if (!wardCode) {
+        throw new BadRequestException({
+          code: 'WARD_REQUIRED',
+          message: 'Vui lòng chọn phường/xã cho địa chỉ giao hàng.',
+        });
+      }
+      // Pre-reform wards that were SPLIT between two new units can't be
+      // auto-mapped — the customer must pick their new ward.
+      if (isAmbiguousLegacyWard(wardCode)) {
+        throw new BadRequestException({
+          code: 'WARD_RESELECTION_REQUIRED',
+          message: 'Phường cũ trong địa chỉ đã được chia tách. Vui lòng chọn lại phường/xã mới.',
+        });
+      }
+      const ward = findWard(wardCode);
+      if (!ward) {
+        throw new BadRequestException({
+          code: 'WARD_NOT_FOUND',
+          message: 'Phường/xã không hợp lệ. Vui lòng chọn lại từ danh sách.',
+        });
+      }
+      if (!isFormerHcmcWard(ward)) {
+        throw new BadRequestException({
+          code: 'WARD_OUTSIDE_DELIVERY_AREA',
+          message: 'Banan chỉ giao hàng trong địa giới TP.HCM cũ.',
+        });
+      }
+      // Valid catalog entry but outside the approved delivery zone —
+      // pickup is still fine, delivery is refused with a dedicated code.
+      if (!isWardServiceable(ward)) {
+        throw new BadRequestException({
+          code: 'WARD_NOT_SERVICEABLE',
+          message: 'Hiện chưa hỗ trợ giao đến khu vực này.',
         });
       }
     }
