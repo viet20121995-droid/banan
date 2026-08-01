@@ -39,8 +39,9 @@ const _wards = <HcmWard>[
   HcmWard(
     code: 'an-phu-dong',
     name: 'Phường An Phú Đông',
+    lat: 10.861,
+    lng: 106.6918,
     oldArea: 'Thạnh Lộc, An Phú Đông · Quận 12',
-    serviceable: false,
   ),
   HcmWard(
     code: 'trung-my-tay',
@@ -276,8 +277,8 @@ void main() {
     });
 
     testWidgets(
-        'delivery to a Q12 ward outside the zone: picker finds it via "Q12", '
-        'submit blocked with "chưa hỗ trợ giao"', (tester) async {
+        'delivery to Q12: picker finds it via "Q12", hides the ward outside '
+        'the zone, and the order goes through', (tester) async {
       final h = _buildContainer();
       addTearDown(h.container.dispose);
       await _pumpCheckout(
@@ -293,20 +294,21 @@ void main() {
       await tester.enterText(_formField(5), '12 TL08');
 
       // Open the shared ward picker sheet and search with the old-district
-      // shorthand. Both Q12 wards must match; pick An Phú Đông.
+      // shorthand. Serviceable An Phú Đông matches; Trung Mỹ Tây is still
+      // outside the delivery zone so the picker hides it entirely.
       await _scrollToAndTap(tester, find.text(s.chooseWard));
       await tester.enterText(find.byType(TextField).last, 'Q12');
       await tester.pumpAndSettle();
       expect(find.text('Phường An Phú Đông'), findsOneWidget);
-      expect(find.text('Phường Trung Mỹ Tây'), findsOneWidget);
+      expect(find.text('Phường Trung Mỹ Tây'), findsNothing);
       await tester.tap(find.text('Phường An Phú Đông'));
       await tester.pumpAndSettle();
 
       await _tapPlaceOrder(tester);
 
-      expect(h.orders.placeOrderCalls, 0);
-      // Both the picker error and the quote box carry the message.
-      expect(find.text(s.wardNotServiceable), findsWidgets);
+      // Fully valid delivery order — the round-trip reaches the repository.
+      expect(h.orders.placeOrderCalls, 1);
+      expect(find.text('test-rejected'), findsWidgets);
     });
 
     testWidgets('pickup with no branch available: blocked with picker error',

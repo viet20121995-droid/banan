@@ -118,8 +118,11 @@ class _WardPickerSheetState extends ConsumerState<_WardPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered =
-        widget.wards.where((w) => wardMatchesQuery(w, _q)).toList();
+    // Only wards Banan actually delivers to are offered — a ward the
+    // customer can never check out with is noise, not choice.
+    final filtered = widget.wards
+        .where((w) => w.serviceable && wardMatchesQuery(w, _q))
+        .toList();
     final theme = Theme.of(context);
     final s = ref.watch(stringsProvider);
 
@@ -165,17 +168,6 @@ class _WardPickerSheetState extends ConsumerState<_WardPickerSheet> {
                           subtitle: w.oldArea == null
                               ? null
                               : Text(s.oldAreaLabel(w.oldArea!)),
-                          // A ward outside the delivery zone stays listed —
-                          // pickable for pickup orders and the address book —
-                          // with a hint instead of disappearing.
-                          trailing: w.serviceable
-                              ? null
-                              : Text(
-                                  s.wardNotServiceable,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: theme.colorScheme.outline,
-                                  ),
-                                ),
                           onTap: () => Navigator.pop(context, w),
                         );
                       },

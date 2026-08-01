@@ -124,6 +124,10 @@ describe('HCM ward catalog (NQ 1685/NQ-UBTVQH15)', () => {
     ]);
     // Searchable via a constituent old ward name too.
     expect(q12.some((w) => (w.oldArea ?? '').includes('Thạnh Lộc'))).toBe(true);
+    // Delivery to the whole old Q12 area opened 08/2026 (OSM centroids).
+    for (const w of q12) {
+      expect(isWardServiceable(w)).toBe(true);
+    }
   });
 
   it('keeps name collisions across merged provinces on distinct codes', () => {
