@@ -129,6 +129,10 @@ export class EmailService {
         this.logger.error(
           `EMAIL SEND FAILED (staff-alert) to ${to.join(',')}: ${result.error.message}`,
         );
+      } else {
+        // Ops needs positive confirmation in the logs — silence is
+        // indistinguishable from "never attempted" when debugging alerts.
+        this.logger.log(`Staff alert emailed to ${to.join(',')} — "${args.subject}"`);
       }
     } catch (err) {
       this.logger.error(
