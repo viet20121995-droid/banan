@@ -10,6 +10,7 @@ import type { ConfigService } from '@nestjs/config';
 
 import { EmailService } from './email.service';
 import type { NotificationTemplate } from './notification-templates';
+import { OPS_ALERT_EMAILS, STORE_ALERT_EMAILS, storeAlertRecipients } from './store-alert-emails';
 
 const TPL = (over: Partial<NotificationTemplate> = {}): NotificationTemplate =>
   ({ type: 'order.status', title: 'Đơn đã xác nhận', body: 'Cảm ơn bạn.', ...over }) as never;
@@ -146,5 +147,71 @@ describe('EmailService — CONFIGURED (RESEND_API_KEY set)', () => {
     const s = configured();
     expect(s.apiBaseUrl).toBe('https://api.banancakes.vn/api/v1');
     expect(s.customerAppBaseUrl).toBe('https://banancakes.vn');
+  });
+
+  it('staff-alert: ONE send, deduped + filtered to array, lines + merchant CTA in html', async () => {
+    mockSend.mockResolvedValue({ error: null });
+    await configured().sendStaffOrderAlert({
+      to: ['branch@gmail.com', 'ops@banancakes.com', 'branch@gmail.com', 'x@banan.local', ''],
+      subject: 'Đơn mới · BAN-9',
+      heading: 'Đơn mới · BAN-9',
+      lines: ['Chi nhánh: Banan – Trường Sa', '2 món · Giao hàng', 'Tổng: 350.000₫'],
+    });
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    const a = mockSend.mock.calls[0][0];
+    expect(a.to).toEqual(['branch@gmail.com', 'ops@banancakes.com']);
+    expect(a.subject).toBe('Đơn mới · BAN-9');
+    expect(a.html).toContain('Banan – Trường Sa');
+    expect(a.html).toContain('350.000₫');
+    expect(a.html).toContain('https://merchant.banancakes.vn');
+  });
+
+  it('staff-alert: no valid recipients → no send', async () => {
+    await configured().sendStaffOrderAlert({
+      to: ['g@banan.local'],
+      subject: 'S',
+      heading: 'S',
+      lines: [],
+    });
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it('staff-alert: dry-run without API key never sends', async () => {
+    await svc().sendStaffOrderAlert({
+      to: ['branch@gmail.com'],
+      subject: 'S',
+      heading: 'S',
+      lines: ['x'],
+    });
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+});
+
+describe('storeAlertRecipients', () => {
+  it('maps all 4 branches and always appends ops', () => {
+    expect(storeAlertRecipients('banan-ngo-quang-huy')).toEqual([
+      'info.banancafe@gmail.com',
+      ...OPS_ALERT_EMAILS,
+    ]);
+    expect(storeAlertRecipients('banan-truong-sa')).toEqual([
+      'bananphunhuan@gmail.com',
+      ...OPS_ALERT_EMAILS,
+    ]);
+    expect(storeAlertRecipients('banan-su-van-hanh')).toEqual([
+      'banansuvanhanh@gmail.com',
+      ...OPS_ALERT_EMAILS,
+    ]);
+    expect(storeAlertRecipients('banan-le-thanh-ton')).toEqual([
+      'bananlethanhton@gmail.com',
+      ...OPS_ALERT_EMAILS,
+    ]);
+    expect(Object.keys(STORE_ALERT_EMAILS)).toHaveLength(4);
+    expect(OPS_ALERT_EMAILS).toEqual(['operationmanager@banancakes.com', 'ntyen104@gmail.com']);
+  });
+
+  it('unknown / missing slug → ops only (new store never silently drops ops)', () => {
+    expect(storeAlertRecipients('banan-chi-nhanh-moi')).toEqual(OPS_ALERT_EMAILS);
+    expect(storeAlertRecipients(null)).toEqual(OPS_ALERT_EMAILS);
+    expect(storeAlertRecipients(undefined)).toEqual(OPS_ALERT_EMAILS);
   });
 });

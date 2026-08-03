@@ -924,7 +924,8 @@ export class OrdersService {
     );
 
     // Alert the fulfilling store's staff — in-app + web push (with sound on
-    // the open merchant screen). Fire-and-forget; never blocks the order.
+    // the open merchant screen) + branch/ops email. Fire-and-forget; never
+    // blocks the order.
     void this.notifications.notifyStoreStaff(
       storeId,
       {
@@ -934,7 +935,13 @@ export class OrdersService {
           `${order.items.length} món · ` +
           `${order.fulfillmentType === 'DELIVERY' ? 'Giao hàng' : 'Lấy tại quầy'}`,
       },
-      { code: order.code },
+      {
+        code: order.code,
+        totalVnd: Number(order.total.toString()),
+        contact:
+          [order.address?.recipient, order.address?.phone].filter(Boolean).join(' · ') || undefined,
+        scheduledFor: order.scheduledFor?.toISOString(),
+      },
     );
 
     // For fresh guest users only: issue auth tokens AND echo the full user

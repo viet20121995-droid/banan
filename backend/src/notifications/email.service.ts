@@ -19,6 +19,7 @@ export class EmailService {
   private readonly client: Resend | null;
   private readonly from: string;
   private readonly customerAppUrl: string;
+  private readonly merchantAppUrl: string;
   private readonly apiUrl: string;
 
   constructor(private readonly config: ConfigService) {
@@ -30,6 +31,7 @@ export class EmailService {
     // Public API base for self-handled email links (newsletter confirm /
     // unsubscribe). Prefer PUBLIC_API_URL; else derive api.<BASE_DOMAIN>.
     const domain = this.config.get<string>('BASE_DOMAIN');
+    this.merchantAppUrl = domain ? `https://merchant.${domain}` : 'http://localhost:8082';
     this.apiUrl = (
       this.config.get<string>('PUBLIC_API_URL') ??
       (domain ? `https://api.${domain}/api/v1` : 'http://localhost:3000/api/v1')
@@ -91,6 +93,46 @@ export class EmailService {
     } catch (err) {
       this.logger.error(
         `EMAIL SEND FAILED (order-status) to ${args.toEmail}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /// Staff-facing new-order alert — ONE email whose `to` covers the branch
+  /// inbox + ops addresses (recipients see each other; all internal). Same
+  /// best-effort semantics as the customer emails: never throws, dry-run
+  /// logs when Resend is unconfigured.
+  async sendStaffOrderAlert(args: {
+    to: string[];
+    subject: string;
+    heading: string;
+    lines: string[];
+  }): Promise<void> {
+    const to = [...new Set(args.to.filter(isRealEmail))];
+    if (to.length === 0) return;
+    if (!this.client) {
+      this.logger.log(`[email dry-run] to=${to.join(',')} subject="${args.subject}"`);
+      return;
+    }
+    const html = renderStaffAlertEmail({
+      heading: args.heading,
+      lines: args.lines,
+      merchantUrl: this.merchantAppUrl,
+    });
+    try {
+      const result = await this.client.emails.send({
+        from: this.from,
+        to,
+        subject: args.subject,
+        html,
+      });
+      if (result.error) {
+        this.logger.error(
+          `EMAIL SEND FAILED (staff-alert) to ${to.join(',')}: ${result.error.message}`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `EMAIL SEND FAILED (staff-alert) to ${to.join(',')}: ${(err as Error).message}`,
       );
     }
   }
@@ -256,6 +298,69 @@ function renderOrderEmail(args: {
               </p>
               <p style="margin:0;font-size:12px;color:#6B5A52;">
                 Cảm ơn bạn đã chọn Banan ♥
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/// Staff alert — same branded shell, no customer greeting: a headline, the
+/// summary lines, and a button into the merchant app.
+function renderStaffAlertEmail(args: {
+  heading: string;
+  lines: string[];
+  merchantUrl: string;
+}): string {
+  const lines = args.lines
+    .map(
+      (l) =>
+        `<p style="margin:0 0 8px 0;font-size:15px;line-height:1.6;color:#3B2A22;">${escapeHtml(l)}</p>`,
+    )
+    .join('\n');
+  return `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escapeHtml(args.heading)}</title>
+</head>
+<body style="margin:0;padding:0;background:#FAF6F1;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#3B2A22;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FAF6F1;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #E0D7CC;border-radius:12px;overflow:hidden;">
+          <tr>
+            <td style="padding:32px 32px 8px 32px;">
+              <div style="font-family:Georgia,serif;font-size:24px;color:#C9405C;font-weight:700;letter-spacing:-0.3px;">
+                Banan
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 32px 24px 32px;">
+              <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#3B2A22;">
+                ${escapeHtml(args.heading)}
+              </h1>
+              ${lines}
+              <a href="${escapeHtml(args.merchantUrl)}"
+                 style="display:inline-block;margin-top:16px;padding:12px 28px;background:#C9405C;
+                        color:#ffffff;text-decoration:none;border-radius:24px;
+                        font-weight:600;letter-spacing:0.3px;">
+                Mở trang quản lý
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px 28px 32px;">
+              <hr style="border:none;border-top:1px solid #E0D7CC;margin:0 0 20px 0;" />
+              <p style="margin:0;font-size:12px;color:#6B5A52;">
+                Email tự động cho nhân viên Banan — gửi khi có đơn hàng mới vì
+                bản web trên iPad không nhận được thông báo đẩy.
               </p>
             </td>
           </tr>

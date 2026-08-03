@@ -7,6 +7,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { EmailService } from './email.service';
 import type { NotificationTemplate } from './notification-templates';
 import { PushService } from './push.service';
+import { storeAlertRecipients } from './store-alert-emails';
 
 @Injectable()
 export class NotificationsService {
@@ -55,12 +56,18 @@ export class NotificationsService {
     return notification;
   }
 
-  /** Alert the fulfilling store's owner + staff (in-app + push, no email). */
+  /**
+   * Alert the fulfilling store's owner + staff (in-app + push — staff user
+   * accounts get no per-user email). ALSO emails the branch's shared inbox +
+   * the ops addresses: the merchant web app often sits logged-in on an iPad
+   * where push never fires, so the mailbox is the reliable channel.
+   */
   async notifyStoreStaff(
     storeId: string,
     template: NotificationTemplate,
     data?: Record<string, unknown>,
   ): Promise<void> {
+    void this.emailStoreAlert(storeId, template, data);
     const staff = await this.prisma.user.findMany({
       where: {
         storeId,
@@ -70,6 +77,51 @@ export class NotificationsService {
     });
     for (const u of staff) {
       await this.sendToUser(u.id, template, data, { email: false });
+    }
+  }
+
+  /** Fire-and-forget branch + ops email for a store alert. Never throws. */
+  private async emailStoreAlert(
+    storeId: string,
+    template: NotificationTemplate,
+    data?: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const store = await this.prisma.store.findUnique({
+        where: { id: storeId },
+        select: { name: true, slug: true },
+      });
+      const lines: string[] = [];
+      if (store) lines.push(`Chi nhánh: ${store.name}`);
+      lines.push(template.body);
+      if (typeof data?.totalVnd === 'number') {
+        lines.push(`Tổng: ${data.totalVnd.toLocaleString('vi-VN')}₫`);
+      }
+      if (typeof data?.contact === 'string' && data.contact) {
+        lines.push(`Khách: ${data.contact}`);
+      }
+      if (typeof data?.scheduledFor === 'string') {
+        const at = new Date(data.scheduledFor);
+        if (!Number.isNaN(at.getTime())) {
+          lines.push(
+            `Hẹn: ${at.toLocaleString('vi-VN', {
+              timeZone: 'Asia/Ho_Chi_Minh',
+              hour: '2-digit',
+              minute: '2-digit',
+              day: '2-digit',
+              month: '2-digit',
+            })}`,
+          );
+        }
+      }
+      await this.email.sendStaffOrderAlert({
+        to: storeAlertRecipients(store?.slug),
+        subject: template.title,
+        heading: template.title,
+        lines,
+      });
+    } catch (err) {
+      this.logger.warn(`Store alert email failed: ${(err as Error).message}`);
     }
   }
 
