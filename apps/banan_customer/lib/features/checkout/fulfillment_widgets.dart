@@ -725,13 +725,8 @@ class ScheduleSection extends ConsumerWidget {
     );
   }
 
-  String _relativeLabel(DateTime when, AppStrings s) {
-    final diff = when.difference(DateTime.now());
-    if (diff.inMinutes < 60) return s.inMinutes(diff.inMinutes);
-    if (diff.inHours < 24) return s.inHours(diff.inHours);
-    final days = diff.inDays;
-    return days == 1 ? s.tomorrow : s.inDays(days);
-  }
+  String _relativeLabel(DateTime when, AppStrings s) =>
+      relativeDayLabel(s, when, DateTime.now());
 }
 
 /// Amber "needs preparation time" banner shown above the schedule toggle.

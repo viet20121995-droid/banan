@@ -509,9 +509,9 @@ class _ScheduledForBanner extends ConsumerWidget {
     final s = ref.watch(stringsProvider);
     final fmt = DateFormat.yMMMEd().add_jm();
     final local = scheduledFor.toLocal();
-    final diff = local.difference(DateTime.now());
-    final relative = _relative(s, diff);
-    final past = diff.isNegative;
+    final now = DateTime.now();
+    final relative = relativeDayLabel(s, local, now);
+    final past = local.isBefore(now);
 
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -553,13 +553,6 @@ class _ScheduledForBanner extends ConsumerWidget {
     );
   }
 
-  String _relative(AppStrings s, Duration diff) {
-    if (diff.isNegative) return s.scheduleWas;
-    if (diff.inMinutes < 60) return s.inMinutes(diff.inMinutes);
-    if (diff.inHours < 24) return s.inHours(diff.inHours);
-    if (diff.inDays == 1) return s.tomorrow;
-    return s.inDays(diff.inDays);
-  }
 }
 
 /// Tells the customer which department is preparing the order — counter
