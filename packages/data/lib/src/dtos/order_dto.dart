@@ -269,10 +269,21 @@ class OrderDto {
     this.destinationStoreId,
     this.wholesaleCompanyName,
     this.wholesaleDeliveryAddress,
+    this.customerName,
+    this.customerPhone,
+    this.customerEmail,
   });
 
   factory OrderDto.fromJson(Map<String, dynamic> json) {
     final store = json['store'] as Map<String, dynamic>?;
+    final customer = json['customer'] as Map<String, dynamic>?;
+    // Guest checkout without an email gets a synthetic `@banan.local`
+    // address — not a real inbox, so hide it from every screen.
+    final rawEmail = customer?['email'] as String?;
+    final customerEmail =
+        (rawEmail == null || rawEmail.endsWith('@banan.local'))
+            ? null
+            : rawEmail;
     final campaignInfoRaw = json['campaignInfo'] as List?;
     return OrderDto(
       id: json['id'] as String,
@@ -341,6 +352,9 @@ class OrderDto {
           (json['wholesaleAccount'] as Map?)?['companyName'] as String?,
       wholesaleDeliveryAddress:
           (json['wholesaleAccount'] as Map?)?['deliveryAddress'] as String?,
+      customerName: customer?['fullName'] as String?,
+      customerPhone: customer?['phone'] as String?,
+      customerEmail: customerEmail,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -396,6 +410,9 @@ class OrderDto {
   final String? destinationStoreId;
   final String? wholesaleCompanyName;
   final String? wholesaleDeliveryAddress;
+  final String? customerName;
+  final String? customerPhone;
+  final String? customerEmail;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -453,6 +470,9 @@ class OrderDto {
         destinationStoreId: destinationStoreId,
         wholesaleCompanyName: wholesaleCompanyName,
         wholesaleDeliveryAddress: wholesaleDeliveryAddress,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        customerEmail: customerEmail,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );

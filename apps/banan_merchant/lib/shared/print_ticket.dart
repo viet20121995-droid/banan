@@ -136,6 +136,17 @@ void printReceipt(Order order) {
         '<div class="muted">${DateFormat.yMMMd().add_jm().format(order.createdAt.toLocal())}</div>')
     ..write(
         '<div class="muted">${order.fulfillmentType == FulfillmentType.delivery ? 'Giao hàng' : 'Tự đến lấy'}</div>');
+  // Orderer contact — essential on a PICKUP slip (no address block). Left
+  // off the hide-price gift slip: that copy goes inside the gift box.
+  if (!hidePrice) {
+    final contact = [order.customerName, order.customerPhone]
+        .whereType<String>()
+        .where((v) => v.isNotEmpty)
+        .join(' · ');
+    if (contact.isNotEmpty) {
+      b.write('<div class="muted">Khách: ${_esc(contact)}</div>');
+    }
+  }
   if (order.address != null) {
     b.write(
         '<div class="muted">${_esc(order.address!.recipient)} · ${_esc(order.address!.phone)}<br>${_esc(order.address!.oneLine)}</div>');

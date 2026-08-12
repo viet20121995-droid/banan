@@ -75,6 +75,11 @@ const ORDER_INCLUDE = {
     },
   },
   address: true,
+  // Orderer contact for the merchant board — a PICKUP order has no address
+  // row, so without this the staff see no name/phone at all. Never expose
+  // password/role fields; email may be a synthetic @banan.local guest one
+  // (clients hide those).
+  customer: { select: { fullName: true, phone: true, email: true } },
   store: { select: { id: true, name: true, slug: true } },
   statusEvents: { orderBy: { createdAt: 'asc' } },
   payments: { orderBy: { createdAt: 'desc' } },
@@ -98,6 +103,10 @@ type OrderWithIncludes = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE 
 // exactly the fields the client DTOs read; everything else mirrors ORDER_INCLUDE.
 const TRACK_INCLUDE = {
   ...ORDER_INCLUDE,
+  // The tracking link is a bearer URL — anyone holding it sees the page, so
+  // don't ship the orderer's account contact there (the address block already
+  // carries what the recipient needs).
+  customer: false,
   payments: {
     orderBy: { createdAt: 'desc' },
     select: {

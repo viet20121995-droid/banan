@@ -535,6 +535,7 @@ class _Body extends StatelessWidget {
                           ],
                         ),
                         Text(
+                          '${(o.customerName ?? '').isNotEmpty ? '${o.customerName} · ' : ''}'
                           '${o.itemCount} món · '
                           '${fmt.format(o.total)} · '
                           '${DateFormat.jm().format(o.createdAt.toLocal())}',

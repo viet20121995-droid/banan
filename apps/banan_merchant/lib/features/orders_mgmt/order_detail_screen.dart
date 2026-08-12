@@ -305,6 +305,42 @@ class _Body extends ConsumerWidget {
                     ),
                   ],
                 ),
+                // Orderer contact — the only customer info a PICKUP order
+                // has (no address block). Internal transfers are staff-keyed,
+                // their "customer" is the requesting employee: skip.
+                if (order.source != 'INTERNAL_TRANSFER' &&
+                    ((order.customerName ?? order.customerPhone) !=
+                        null)) ...[
+                  const SizedBox(height: BananSpacing.md),
+                  Container(
+                    padding: const EdgeInsets.all(BananSpacing.md),
+                    decoration: BoxDecoration(
+                      borderRadius: BananRadii.rmd,
+                      color: theme.colorScheme.surface,
+                      border: Border.all(
+                        color: theme.dividerTheme.color ?? Colors.black12,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Khách hàng', style: theme.textTheme.bodySmall),
+                        Text(
+                          [order.customerName, order.customerPhone]
+                              .whereType<String>()
+                              .where((v) => v.isNotEmpty)
+                              .join(' · '),
+                          style: theme.textTheme.titleSmall,
+                        ),
+                        if (order.customerEmail != null)
+                          Text(
+                            order.customerEmail!,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (order.address != null) ...[
                   const SizedBox(height: BananSpacing.md),
                   Container(
@@ -319,6 +355,7 @@ class _Body extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Text('Giao đến', style: theme.textTheme.bodySmall),
                         Text(
                           '${order.address!.recipient} · ${order.address!.phone}',
                           style: theme.textTheme.titleSmall,

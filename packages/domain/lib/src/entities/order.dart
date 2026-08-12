@@ -150,6 +150,9 @@ class Order extends Equatable {
     this.destinationStoreId,
     this.wholesaleCompanyName,
     this.wholesaleDeliveryAddress,
+    this.customerName,
+    this.customerPhone,
+    this.customerEmail,
     this.mfgItems = const [],
   });
 
@@ -244,6 +247,14 @@ class Order extends Equatable {
   final String? wholesaleCompanyName;
   final String? wholesaleDeliveryAddress;
 
+  /// Orderer contact (account holder / guest who placed the order) — the
+  /// staff boards need it for PICKUP orders, which carry no address block.
+  /// Null on payloads that don't ship it (e.g. the public tracking link).
+  /// `customerEmail` is null for synthetic guest addresses.
+  final String? customerName;
+  final String? customerPhone;
+  final String? customerEmail;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -306,6 +317,9 @@ class Order extends Equatable {
         destinationStoreId,
         wholesaleCompanyName,
         wholesaleDeliveryAddress,
+        customerName,
+        customerPhone,
+        customerEmail,
         createdAt,
         updatedAt,
       ];
