@@ -80,6 +80,48 @@ export class NotificationsService {
     }
   }
 
+  /**
+   * "Đơn mới" alert for the fulfilling store, built from the order row itself
+   * so every caller alerts identically. Called at CREATION for orders that
+   * settle offline (CASH / 0₫ gift-card covered), but only at PAYMENT CAPTURE
+   * for online-gateway orders — an unpaid 9Pay checkout the customer abandons
+   * must never ring the store (that's how one paid customer showed up as two
+   * live orders).
+   */
+  async notifyNewOrder(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        code: true,
+        storeId: true,
+        total: true,
+        fulfillmentType: true,
+        scheduledFor: true,
+        address: { select: { recipient: true, phone: true } },
+        _count: { select: { items: true } },
+      },
+    });
+    if (!order) return;
+    await this.notifyStoreStaff(
+      order.storeId,
+      {
+        type: 'order_new',
+        title: `Đơn mới · ${order.code}`,
+        body:
+          `${order._count.items} món · ` +
+          `${order.fulfillmentType === 'DELIVERY' ? 'Giao hàng' : 'Lấy tại quầy'}`,
+      },
+      {
+        code: order.code,
+        totalVnd: Number(order.total.toString()),
+        contact:
+          [order.address?.recipient, order.address?.phone].filter(Boolean).join(' · ') || undefined,
+        scheduledFor: order.scheduledFor?.toISOString(),
+      },
+    );
+  }
+
   /** Fire-and-forget branch + ops email for a store alert. Never throws. */
   private async emailStoreAlert(
     storeId: string,

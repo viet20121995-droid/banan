@@ -95,6 +95,31 @@ const ORDER_INCLUDE = {
 
 type OrderWithIncludes = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE }>;
 
+/** Redirect gateways whose payment starts INITIATED and only becomes real on
+ *  capture (CASH starts AUTHORIZED, so it never matches this list's filter). */
+export const ONLINE_GATEWAY_PROVIDERS = ['STRIPE', 'PAYOS', 'MOMO', 'NINEPAY'] as const;
+
+/**
+ * A checkout the customer never paid: PENDING, its gateway payment INITIATED
+ * (abandoned tab — no callback ever fires) or FAILED (customer pressed "Huỷ"
+ * on the gateway page / declined card — 9Pay's final 6/8/9 flips it via
+ * applyFailure), and nothing captured. Hidden from the merchant board —
+ * staff must not bake an unpaid order (one real payment once showed up as
+ * two "orders"). The expiry cron cancels these after
+ * `UNPAID_ONLINE_EXPIRY_MINUTES`; a FAILED payment is terminal (applyCapture
+ * refuses it), so such an order can never become payable.
+ */
+export const AWAITING_ONLINE_PAYMENT: Prisma.OrderWhereInput = {
+  status: 'PENDING',
+  payments: {
+    some: {
+      provider: { in: [...ONLINE_GATEWAY_PROVIDERS] },
+      status: { in: ['INITIATED', 'FAILED'] },
+    },
+  },
+  NOT: { payments: { some: { status: { in: ['CAPTURED', 'AUTHORIZED'] } } } },
+};
+
 // Public order-tracking include (GET /orders/:id/track). The tracking link is
 // shared with guests, so it must NOT ship gateway internals that even the
 // customer's own app never parses: Payment.rawPayload (verbatim 9Pay/MoMo/
@@ -896,24 +921,7 @@ export class OrdersService {
         `Payment initiation failed for order ${created.id} — compensating and cancelling`,
         err as Error,
       );
-      // Reverse every consumable AND flip the order to CANCELLED in ONE
-      // transaction, so we never end up with resources returned but the order
-      // still PENDING (or vice-versa).
-      await this.prisma.$transaction(
-        async (tx) => {
-          await this.loyalty.refundRedemption(created.id, tx);
-          await this.restoreInventory(created.id, tx);
-          await this.restoreGiftCard(created.id, tx);
-          await this.coupons.reverseRedemption(created.id, tx);
-          await this.promotions.reverseUsage(created.id, tx);
-          await this.payments.onOrderCancelled(created.id, tx);
-          await tx.order.update({
-            where: { id: created.id },
-            data: { status: 'CANCELLED' },
-          });
-        },
-        { timeout: 15_000 },
-      );
+      await this.cancelUnpayableOrder(created.id, 'Huỷ: không khởi tạo được thanh toán');
       throw new BadRequestException({
         code: 'PAYMENT_INIT_FAILED',
         message: 'Không khởi tạo được thanh toán. Đơn hàng đã được huỷ, vui lòng thử lại.',
@@ -926,32 +934,21 @@ export class OrdersService {
       include: ORDER_INCLUDE,
     });
 
+    // An online-gateway (9Pay/Stripe/MoMo) order is not real for the store
+    // until the money lands: alerting at creation made every abandoned
+    // checkout look like a live order — and a retried checkout like TWO
+    // (one payment, two "Đơn mới" alerts). CASH — incl. a 0₫ gift-card
+    // covered order — settles offline, so those alert immediately; gateway
+    // orders alert from PaymentsService.onCaptured instead. The store room
+    // gets `order.payment_captured` at that moment (the merchant board
+    // already chimes + refreshes on it), so it hears nothing here.
+    const staffAlertNow = effectiveMethod === 'CASH';
     this.realtime.emit(
-      [`store:${storeId}`, `user:${customerId}`],
+      staffAlertNow ? [`store:${storeId}`, `user:${customerId}`] : [`user:${customerId}`],
       'order.created',
       this.toEventPayload(order),
     );
-
-    // Alert the fulfilling store's staff — in-app + web push (with sound on
-    // the open merchant screen) + branch/ops email. Fire-and-forget; never
-    // blocks the order.
-    void this.notifications.notifyStoreStaff(
-      storeId,
-      {
-        type: 'order_new',
-        title: `Đơn mới · ${order.code}`,
-        body:
-          `${order.items.length} món · ` +
-          `${order.fulfillmentType === 'DELIVERY' ? 'Giao hàng' : 'Lấy tại quầy'}`,
-      },
-      {
-        code: order.code,
-        totalVnd: Number(order.total.toString()),
-        contact:
-          [order.address?.recipient, order.address?.phone].filter(Boolean).join(' · ') || undefined,
-        scheduledFor: order.scheduledFor?.toISOString(),
-      },
-    );
+    if (staffAlertNow) void this.notifications.notifyNewOrder(order.id);
 
     // For fresh guest users only: issue auth tokens AND echo the full user
     // view (matching /auth/register shape). The customer-facing app pipes
@@ -982,6 +979,49 @@ export class OrdersService {
     }
 
     return { order, payment: paymentInstructions, guestSession };
+  }
+
+  /**
+   * Reverses every consumable a PENDING order booked (stock, coupon, points,
+   * gift card, campaign caps), voids its open payments and flips it to
+   * CANCELLED — atomically. Used when the order can no longer be paid:
+   * payment initiation failed, or the customer abandoned the gateway page
+   * and the expiry cron is reaping it.
+   *
+   * Aborts (throws) if a payment turns out CAPTURED — money landed, so the
+   * order is real and must stay alive.
+   */
+  async cancelUnpayableOrder(orderId: string, note: string): Promise<void> {
+    await this.prisma.$transaction(
+      async (tx) => {
+        // Claim FIRST, status-guarded (same pattern as transition()): the row
+        // lock + count check make sure compensation runs at most once even if
+        // a customer cancel or a second cron replica races us — the raw stock
+        // and gift-card increments below are NOT idempotent.
+        const claimed = await tx.order.updateMany({
+          where: { id: orderId, status: 'PENDING' },
+          data: { status: 'CANCELLED' },
+        });
+        if (claimed.count === 0) {
+          throw new Error(`Order ${orderId} is no longer PENDING — not cancelling`);
+        }
+        await this.loyalty.refundRedemption(orderId, tx);
+        await this.restoreInventory(orderId, tx);
+        await this.restoreGiftCard(orderId, tx);
+        await this.coupons.reverseRedemption(orderId, tx);
+        await this.promotions.reverseUsage(orderId, tx);
+        const { capturedPayments } = await this.payments.onOrderCancelled(orderId, tx);
+        if (capturedPayments.length > 0) {
+          // Raced a concurrent capture — abort the whole rollback (the claim
+          // above rolls back too, so the order stays PENDING and alive).
+          throw new Error(`Order ${orderId} was paid meanwhile — not cancelling`);
+        }
+        await tx.orderStatusEvent.create({
+          data: { orderId, fromStatus: 'PENDING', toStatus: 'CANCELLED', actorId: null, note },
+        });
+      },
+      { timeout: 15_000 },
+    );
   }
 
   async findOne(
@@ -1043,6 +1083,8 @@ export class OrdersService {
       }),
       ...(opts.status && { status: opts.status }),
       ...(opts.source && { source: opts.source }),
+      // Unpaid online checkouts are invisible to staff (see the const's doc).
+      NOT: AWAITING_ONLINE_PAYMENT,
     };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({

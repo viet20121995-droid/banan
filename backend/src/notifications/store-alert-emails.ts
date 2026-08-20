@@ -16,6 +16,9 @@ export const STORE_ALERT_EMAILS: Record<string, string> = {
 
 export const OPS_ALERT_EMAILS = ['operationmanager@banancakes.com', 'ntyen104@gmail.com'];
 
+/** Recipients of the daily site-traffic report (MetricsService cron). */
+export const DAILY_REPORT_EMAILS = ['operationmanager@banancakes.com', 'ducnguyen@vestav.com'];
+
 /** Branch inbox (when mapped) + the always-on ops addresses. */
 export function storeAlertRecipients(storeSlug: string | null | undefined): string[] {
   const branch = storeSlug ? STORE_ALERT_EMAILS[storeSlug] : undefined;

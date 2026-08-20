@@ -1962,3 +1962,18 @@ model MfgQualityAlert {
 
   @@index([stage])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Site traffic
+
+/// One storefront page-load beacon — the customer web app fires it once per
+/// launch. `visitorId` is a client-generated random id kept in localStorage,
+/// so unique visitors are countable without accounts or tracking cookies.
+/// Feeds the daily traffic report email.
+model SiteVisit {
+  id        String   @id @default(uuid())
+  visitorId String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

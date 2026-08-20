@@ -99,7 +99,21 @@ export class PaymentsService {
         where: { id: payment.id, status: { in: ['INITIATED', 'AUTHORIZED'] } },
         data: { status: 'CAPTURED', rawPayload: args.payload },
       });
-      if (res.count === 0) return; // lost a race to a concurrent webhook
+      if (res.count === 0) {
+        // Our INITIATED snapshot is stale. A concurrent webhook capturing it
+        // is fine (idempotent) — but the expiry cron VOIDING it mid-flight is
+        // not: the money still landed at the provider, and returning here
+        // would drop the capture silently (no CAPTURED row, no Refund, no
+        // signal). Re-dispatch on the fresh status so the VOIDED rescue
+        // branch below runs instead. Bounded: the second pass hits a
+        // status-guarded updateMany, never this branch again.
+        const fresh = await this.prisma.payment.findUnique({
+          where: { id: payment.id },
+          select: { status: true },
+        });
+        if (fresh?.status === 'VOIDED') return this.applyCapture(args);
+        return;
+      }
 
       // A late webhook can capture a payment on an order the customer already
       // cancelled (the cancel ran first and saw no captured payment to refund).
@@ -268,9 +282,16 @@ export class PaymentsService {
         customerId: true,
         storeId: true,
         kitchenId: true,
+        status: true,
       },
     });
     if (!order) return;
+    // A gateway order alerts the store only NOW — creation stayed silent so
+    // an abandoned checkout never rings staff. PENDING guard: a replayed /
+    // late capture on an order staff already took must not re-alert.
+    if (order.status === 'PENDING') {
+      void this.notifications.notifyNewOrder(order.id);
+    }
     const rooms = [`order:${order.id}`, `user:${order.customerId}`, `store:${order.storeId}`];
     if (order.kitchenId) rooms.push(`kitchen:${order.kitchenId}`);
     this.realtime.emit(rooms, 'order.payment_captured', {

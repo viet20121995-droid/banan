@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:banan_core/banan_core.dart';
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
@@ -10,6 +12,7 @@ import 'app/app.dart';
 import 'app/locale_store.dart';
 import 'app/url_strategy.dart'
     if (dart.library.html) 'app/url_strategy_web.dart';
+import 'app/visit_beacon.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +48,10 @@ Future<void> main() async {
     ],
   );
   await container.read(authRepositoryProvider).bootstrap();
+
+  // Count this page load in the daily traffic report. Fire-and-forget —
+  // launch never waits on it and a failure is silent.
+  unawaited(sendVisitBeacon());
 
   runApp(
     UncontrolledProviderScope(

@@ -29,6 +29,7 @@ import { KitchenModule } from './kitchen/kitchen.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { ManufacturingModule } from './manufacturing/manufacturing.module';
 import { MarketingModule } from './marketing/marketing.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OrdersModule } from './orders/orders.module';
@@ -97,6 +98,7 @@ import { WishlistModule } from './wishlist/wishlist.module';
     PromotionsModule,
     MarketingModule,
     ManufacturingModule,
+    MetricsModule,
     NewsletterModule,
     NotificationsModule,
     OrdersModule,

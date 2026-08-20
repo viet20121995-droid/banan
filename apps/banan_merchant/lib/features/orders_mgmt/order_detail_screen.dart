@@ -18,7 +18,11 @@ final _orderProvider =
     next.whenData((event) {
       if (event.data['orderId'] == id &&
           (event.event == 'order.status_changed' ||
-              event.event == 'order.kitchen_status_changed')) {
+              event.event == 'order.kitchen_status_changed' ||
+              // Capture changes payment state, not order status — without
+              // this the payment badge stays "Chờ thanh toán" after the
+              // money lands.
+              event.event == 'order.payment_captured')) {
         ref.invalidateSelf();
       }
     });
@@ -290,6 +294,25 @@ class _Body extends ConsumerWidget {
                   style: theme.textTheme.bodySmall,
                 ),
                 const SizedBox(height: BananSpacing.sm),
+                // Payment state up-front: an unpaid online order must never
+                // be baked (one 9Pay payment once showed up as two "orders";
+                // the unpaid twin got made too).
+                if (order.currentPayment != null) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: StatusBadge(
+                      label: order.currentPayment!.status.label,
+                      intent: switch (order.currentPayment!.status) {
+                        PaymentStatus.captured => StatusIntent.success,
+                        PaymentStatus.authorized => StatusIntent.info,
+                        PaymentStatus.initiated => StatusIntent.warning,
+                        PaymentStatus.failed => StatusIntent.danger,
+                        _ => StatusIntent.neutral,
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: BananSpacing.sm),
+                ],
                 Wrap(
                   spacing: BananSpacing.sm,
                   children: [

@@ -844,3 +844,42 @@ describe('OrdersService.mapOrderCreateError', () => {
     expect(() => map(prismaErr('P2002'))).toThrow(Prisma.PrismaClientKnownRequestError);
   });
 });
+
+describe('OrdersService.cancelUnpayableOrder (claim-first guard)', () => {
+  it('aborts BEFORE any compensation when the order is no longer PENDING', async () => {
+    const loyalty = { refundRedemption: jest.fn() };
+    const tx = {
+      order: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      orderStatusEvent: { create: jest.fn() },
+    };
+    const prisma = {
+      $transaction: jest.fn((fn: (t: unknown) => Promise<void>) => fn(tx)),
+    };
+    const noop = {} as never;
+    const svc = new OrdersService(
+      prisma as never,
+      noop, // realtime
+      noop, // payments
+      noop, // refunds
+      loyalty as never,
+      noop, // coupons
+      noop, // notifications
+      noop, // auth
+      noop, // storeRouter
+      noop, // deliveryConfig
+      noop, // promotions
+      noop, // manufacturing
+    );
+
+    await expect(svc.cancelUnpayableOrder('o1', 'note')).rejects.toThrow('no longer PENDING');
+    // The claim is status-guarded and runs FIRST — a lost claim must mean
+    // zero compensation side-effects (stock/gift-card increments are not
+    // idempotent).
+    expect(tx.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', status: 'PENDING' },
+      data: { status: 'CANCELLED' },
+    });
+    expect(loyalty.refundRedemption).not.toHaveBeenCalled();
+    expect(tx.orderStatusEvent.create).not.toHaveBeenCalled();
+  });
+});

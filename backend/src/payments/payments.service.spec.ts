@@ -42,6 +42,11 @@ function makeService(opts: {
   order?: Record<string, unknown> | null;
 }) {
   const findFirst = jest.fn().mockResolvedValue(opts.payment ?? null);
+  // Fresh-status re-read on a lost capture race (count 0). Defaults to the
+  // same status as the snapshot — i.e. "plain lost race", no re-dispatch.
+  const paymentFindUnique = jest
+    .fn()
+    .mockResolvedValue(opts.payment ? { status: opts.payment.status } : null);
   const updateMany = jest.fn().mockResolvedValue({ count: opts.updateCount ?? 1 });
   const orderFindUnique = jest.fn().mockResolvedValue(
     opts.order === undefined
@@ -51,18 +56,22 @@ function makeService(opts: {
           customerId: 'c1',
           storeId: 's1',
           kitchenId: null,
+          status: 'PENDING',
         }
       : opts.order,
   );
   const refundFindFirst = jest.fn().mockResolvedValue(null);
   const refundCreate = jest.fn().mockResolvedValue({});
   const prisma = {
-    payment: { findFirst, updateMany },
+    payment: { findFirst, updateMany, findUnique: paymentFindUnique },
     order: { findUnique: orderFindUnique },
     refund: { findFirst: refundFindFirst, create: refundCreate },
   };
   const realtime = { emit: jest.fn() };
-  const notifications = { sendToUser: jest.fn().mockResolvedValue(undefined) };
+  const notifications = {
+    sendToUser: jest.fn().mockResolvedValue(undefined),
+    notifyNewOrder: jest.fn().mockResolvedValue(undefined),
+  };
   const noop = {} as never;
   // ctor: prisma, cash, stripe, momo, ninepay, realtime, notifications
   const svc = new PaymentsService(
@@ -78,6 +87,7 @@ function makeService(opts: {
     svc,
     findFirst,
     updateMany,
+    paymentFindUnique,
     orderFindUnique,
     realtime,
     notifications,
@@ -106,6 +116,44 @@ describe('PaymentsService.applyCapture', () => {
     expect(m.realtime.emit.mock.calls[0][1]).toBe('order.payment_captured');
     expect(m.notifications.sendToUser).toHaveBeenCalledTimes(1);
     expect(m.notifications.sendToUser.mock.calls[0][0]).toBe('c1');
+    // Gateway orders alert the store only at capture (creation is silent).
+    expect(m.notifications.notifyNewOrder).toHaveBeenCalledWith('o1');
+  });
+
+  it('capture racing the expiry cron VOID re-dispatches into the rescue branch (auto-refund)', async () => {
+    const m = makeService({ payment: payment('INITIATED') });
+    // Snapshot said INITIATED, but the cron voided it before our guarded
+    // update: count 0, fresh read VOIDED → second pass takes the VOIDED
+    // rescue branch (flip to CAPTURED + open auto-refund), NOT a silent drop.
+    m.updateMany
+      .mockResolvedValueOnce({ count: 0 }) // INITIATED-guarded write loses
+      .mockResolvedValueOnce({ count: 1 }); // VOIDED-guarded rescue wins
+    m.paymentFindUnique.mockResolvedValue({ status: 'VOIDED' });
+    m.findFirst
+      .mockResolvedValueOnce(payment('INITIATED')) // stale snapshot
+      .mockResolvedValueOnce(payment('VOIDED')); // re-dispatch sees fresh state
+    await capture(m.svc, 50000);
+
+    expect(m.refundCreate).toHaveBeenCalledTimes(1);
+    expect(m.refundCreate.mock.calls[0][0].data.status).toBe('REQUESTED');
+  });
+
+  it('capture on an already-ACCEPTED order does NOT re-alert the store', async () => {
+    const m = makeService({
+      payment: payment('INITIATED'),
+      order: {
+        id: 'o1',
+        code: 'BAN-1',
+        customerId: 'c1',
+        storeId: 's1',
+        kitchenId: null,
+        status: 'ACCEPTED',
+      },
+    });
+    await capture(m.svc, 50000);
+    expect(m.notifications.notifyNewOrder).not.toHaveBeenCalled();
+    // Customer still gets their "payment landed" ping.
+    expect(m.notifications.sendToUser).toHaveBeenCalledTimes(1);
   });
 
   it('AUTHORIZED + correct amount → CAPTURED', async () => {
