@@ -25,6 +25,7 @@ import { DisplayConfigModule } from './display-config/display-config.module';
 import { GeoModule } from './geo/geo.module';
 import { GiftCardsModule } from './gift-cards/gift-cards.module';
 import { HealthModule } from './health/health.module';
+import { InternalModule } from './internal/internal.module';
 import { KitchenModule } from './kitchen/kitchen.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { ManufacturingModule } from './manufacturing/manufacturing.module';
@@ -82,6 +83,7 @@ import { WishlistModule } from './wishlist/wishlist.module';
     GeoModule,
     GiftCardsModule,
     HealthModule,
+    InternalModule,
     CategoriesModule,
     CollectionsModule,
     ContactModule,

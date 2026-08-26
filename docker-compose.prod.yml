@@ -21,6 +21,7 @@ services:
       - ./web/customer:/srv/customer:ro
       - ./web/merchant:/srv/merchant:ro
       - ./web/kitchen:/srv/kitchen:ro
+      - ./web/internal:/srv/internal:ro
       - caddy_data:/data
       - caddy_config:/config
     networks: [banan]
@@ -37,6 +38,9 @@ services:
       redis: { condition: service_started }
     volumes:
       - uploads:/app/uploads
+      # Private evidence store for the internal ops app (QC/MS photos,
+      # receipts, training PDFs) — NOT served by the static /uploads mount.
+      - uploads-private:/app/uploads-private
       # Place the FCM service-account JSON here on the server (gitignored):
       #   backend/secrets/firebase-service-account.json
       - ./backend/secrets:/app/secrets:ro
@@ -73,6 +77,7 @@ volumes:
   pgdata:
   redisdata:
   uploads:
+  uploads-private:
 
 networks:
   banan:

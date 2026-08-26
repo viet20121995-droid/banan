@@ -109,8 +109,11 @@ AppFailure mapDioErrorToFailure(DioException e) {
       return ServerFailure(code: 'BAD_RESPONSE', message: e.message);
     case DioExceptionType.cancel:
       return UnknownFailure(message: 'Request cancelled', cause: e);
-    case DioExceptionType.badCertificate:
-    case DioExceptionType.unknown:
+    // Default (not exhaustive cases) so a NEW DioExceptionType value in a
+    // future dio (e.g. transformTimeout in ≥5.10) degrades to a generic
+    // failure instead of breaking every app's compile.
+    // ignore: no_default_cases
+    default:
       return UnknownFailure(message: e.message, cause: e);
   }
 }

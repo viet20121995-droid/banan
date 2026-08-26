@@ -1,10 +1,10 @@
 # Banan all-in-one on one server (BizFly). Caddy auto-provisions Let's Encrypt
 # certs for all 4 hostnames and:
 #   - proxies the API to the backend container
-#   - serves the 3 Flutter web builds as static SPAs
+#   - serves the 4 Flutter web builds as static SPAs
 #
 # Set BASE_DOMAIN in infra/.env.prod (e.g. banan.com). DNS: point @, www,
-# api, merchant, kitchen A-records at this server's public IP.
+# api, merchant, kitchen, internal A-records at this server's public IP.
 
 # ── Flutter SPA serving + cache policy ────────────────────────────────────────
 # Flutter web does NOT content-hash main.dart.js / the service worker, so without
@@ -42,5 +42,11 @@ merchant.{$BASE_DOMAIN} {
 # ── Kitchen web ───────────────────────────────────────────────────────────────
 kitchen.{$BASE_DOMAIN} {
 	root * /srv/kitchen
+	import flutter_spa
+}
+
+# ── Internal operations web ───────────────────────────────────────────────────
+internal.{$BASE_DOMAIN} {
+	root * /srv/internal
 	import flutter_spa
 }

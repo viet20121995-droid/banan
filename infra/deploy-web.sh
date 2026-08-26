@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the 3 Flutter web apps with production config and upload them to the
+# Build the 4 Flutter web apps with production config and upload them to the
 # BizFly server, where Caddy serves them statically. Run from the repo root
 # on your LOCAL machine (needs Flutter in PATH + ssh/scp/tar — all in Git Bash).
 #
@@ -64,5 +64,6 @@ build_and_upload() {
 build_and_upload banan_customer customer
 build_and_upload banan_merchant merchant
 build_and_upload banan_kitchen  kitchen
+build_and_upload banan_internal internal
 
 echo "✅ Done. Caddy on $SERVER now serves the updated web apps."

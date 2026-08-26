@@ -48,6 +48,9 @@ pubspec_overrides.yaml
 .tools/
 backend/uploads/*
 !backend/uploads/.gitkeep
+# Private evidence store (QC/MS photos, receipts, training PDFs) — never
+# publicly served, never committed.
+backend/uploads-private/
 backend/secrets/
 
 # Fly.io

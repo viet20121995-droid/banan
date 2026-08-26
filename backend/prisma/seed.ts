@@ -6,6 +6,8 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
+import { seedInternal } from './seed-internal';
+
 const prisma = new PrismaClient();
 
 async function main() {
@@ -63,8 +65,8 @@ async function main() {
       slug: 'banan-le-thanh-ton',
       address: '15B8 Lê Thánh Tôn, Bến Nghé Ward, HCMC',
       phone: '+84867540939',
-      lat: 10.7780,
-      lng: 106.7030,
+      lat: 10.778,
+      lng: 106.703,
       wardCode: 'sai-gon',
       defaultKitchenId: kitchen.id,
       openingHours: branchHours,
@@ -73,8 +75,8 @@ async function main() {
       name: 'Banan – Lê Thánh Tôn',
       address: '15B8 Lê Thánh Tôn, Bến Nghé Ward, HCMC',
       phone: '+84867540939',
-      lat: 10.7780,
-      lng: 106.7030,
+      lat: 10.778,
+      lng: 106.703,
       wardCode: 'sai-gon',
       openingHours: branchHours,
     },
@@ -110,8 +112,8 @@ async function main() {
       slug: 'banan-ngo-quang-huy',
       address: '34 Ngô Quang Huy, An Khánh Ward, HCMC',
       phone: '+84868897131',
-      lat: 10.7800,
-      lng: 106.7330,
+      lat: 10.78,
+      lng: 106.733,
       wardCode: 'an-khanh',
       defaultKitchenId: kitchen.id,
       openingHours: branchHours,
@@ -119,8 +121,8 @@ async function main() {
     update: {
       address: '34 Ngô Quang Huy, An Khánh Ward, HCMC',
       phone: '+84868897131',
-      lat: 10.7800,
-      lng: 106.7330,
+      lat: 10.78,
+      lng: 106.733,
       wardCode: 'an-khanh',
       openingHours: branchHours,
     },
@@ -133,8 +135,8 @@ async function main() {
       slug: 'banan-truong-sa',
       address: '360 Trường Sa, Cầu Kiệu Ward, HCMC',
       phone: '+84379555934',
-      lat: 10.7900,
-      lng: 106.6840,
+      lat: 10.79,
+      lng: 106.684,
       wardCode: 'cau-kieu',
       defaultKitchenId: kitchen.id,
       openingHours: branchHours,
@@ -142,8 +144,8 @@ async function main() {
     update: {
       address: '360 Trường Sa, Cầu Kiệu Ward, HCMC',
       phone: '+84379555934',
-      lat: 10.7900,
-      lng: 106.6840,
+      lat: 10.79,
+      lng: 106.684,
       wardCode: 'cau-kieu',
       openingHours: branchHours,
     },
@@ -239,8 +241,7 @@ async function main() {
       categoryId: mousse.id,
       name: 'Rose Lychee Mousse',
       slug: 'rose-lychee-mousse',
-      description:
-        'Silky white-chocolate mousse layered with rose gel and lychee compote.',
+      description: 'Silky white-chocolate mousse layered with rose gel and lychee compote.',
       basePrice: 380000,
       images: [],
       preparationMinutes: 90,
@@ -349,6 +350,9 @@ async function main() {
   console.log('  kitchen@banan.local / banan123');
   // eslint-disable-next-line no-console
   console.log('  customer@banan.local / banan123');
+  // Internal ops app defaults (QC + Mystery Shopper templates).
+  await seedInternal(prisma);
+
   // eslint-disable-next-line no-console
   console.log(`Admin id: ${admin.id}`);
 }

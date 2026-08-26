@@ -1,20 +1,21 @@
 # Deploy Banan
 
 Production is a single VPS running Docker Compose: NestJS backend, Postgres,
-Redis, and Caddy serving the three Flutter web apps as static files.
+Redis, and Caddy serving the four Flutter web apps as static files.
 
 | Piece | Where |
 | --- | --- |
 | Customer | `https://banancakes.vn` |
 | Merchant | `https://merchant.banancakes.vn` |
 | Kitchen | `https://kitchen.banancakes.vn` |
+| Internal ops | `https://internal.banancakes.vn` |
 | API | `https://api.banancakes.vn/api/v1` |
 | Server | `/opt/banan` (ssh alias `banan`) |
 | Env | `/opt/banan/infra/.env.prod` (see `infra/.env.prod.example`) |
 
 Caddy terminates TLS, proxies `api.*` to the backend container, and serves each
-app from `/opt/banan/web/{customer,merchant,kitchen}`, bind-mounted read-only as
-`/srv/*`. Container names carry a `-1` suffix (`banan-backend-1`, …).
+app from `/opt/banan/web/{customer,merchant,kitchen,internal}`, bind-mounted
+read-only as `/srv/*`. Container names carry a `-1` suffix (`banan-backend-1`, …).
 
 ---
 
@@ -32,11 +33,23 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://api.banancakes.vn/api/v1/healt
 
 Backend-only changes need nothing else — the web bundles are independent.
 
+First deploy of the internal ops app additionally needs the QC / Mystery
+Shopper templates seeded (idempotent — an existing (name, version) template is
+left untouched, so re-running is always safe):
+
+```bash
+docker compose --env-file infra/.env.prod -f docker-compose.prod.yml exec backend npx tsx prisma/seed-internal.ts
+```
+
+Report recipients and the email link base default correctly in code
+(`backend/src/internal/internal-config.ts`, `INTERNAL_APP_URL` falls back to
+`https://internal.<BASE_DOMAIN>`) — override via env only if the lists change.
+
 ---
 
 ## Web apps
 
-**Use the script.** It builds all three with the right defines, uploads, and
+**Use the script.** It builds all four with the right defines, uploads, and
 unpacks them:
 
 ```bash

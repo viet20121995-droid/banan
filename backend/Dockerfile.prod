@@ -25,10 +25,13 @@ RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
+# Vietnamese fonts + logo embedded into the internal QC/MS PDF reports.
+COPY --from=builder /app/assets ./assets
 COPY package.json pnpm-lock.yaml ./
 
-# uploads = user media volume; secrets = mounted at runtime (FCM service acct).
-RUN mkdir -p /app/uploads /app/secrets
+# uploads = public media volume; uploads-private = internal-ops evidence
+# (never statically served); secrets = mounted at runtime (FCM service acct).
+RUN mkdir -p /app/uploads /app/uploads-private /app/secrets
 
 EXPOSE 3000
 

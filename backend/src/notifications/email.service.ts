@@ -141,6 +141,60 @@ export class EmailService {
     }
   }
 
+  /**
+   * Internal ops report (QC / Mystery Shopper) — branded shell, summary
+   * lines, a CTA into the internal app and an optional PDF attachment.
+   * Returns true ONLY when the provider accepted the email — the delivery
+   * outbox uses this to flip PENDING → SENT and must not mark a dry-run or
+   * failure as sent.
+   */
+  async sendInternalReport(args: {
+    to: string[];
+    subject: string;
+    heading: string;
+    lines: string[];
+    ctaUrl?: string;
+    ctaLabel?: string;
+    attachment?: { filename: string; content: Buffer };
+  }): Promise<boolean> {
+    const to = [...new Set(args.to.filter(isRealEmail))];
+    if (to.length === 0) return false;
+    if (!this.client) {
+      this.logger.log(`[email dry-run] to=${to.join(',')} subject="${args.subject}"`);
+      return false;
+    }
+    const html = renderInternalReportEmail({
+      heading: args.heading,
+      lines: args.lines,
+      ctaUrl: args.ctaUrl,
+      ctaLabel: args.ctaLabel ?? 'Xem báo cáo',
+    });
+    try {
+      const result = await this.client.emails.send({
+        from: this.from,
+        to,
+        subject: args.subject,
+        html,
+        ...(args.attachment && {
+          attachments: [{ filename: args.attachment.filename, content: args.attachment.content }],
+        }),
+      });
+      if (result.error) {
+        this.logger.error(
+          `EMAIL SEND FAILED (internal-report) to ${to.join(',')}: ${result.error.message}`,
+        );
+        return false;
+      }
+      this.logger.log(`Internal report emailed to ${to.join(',')} — "${args.subject}"`);
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `EMAIL SEND FAILED (internal-report) to ${to.join(',')}: ${(err as Error).message}`,
+      );
+      return false;
+    }
+  }
+
   /// Send an arbitrary email — used by the newsletter module for the
   /// confirm + welcome message. Same dry-run / log fallback as
   /// [sendOrderStatusEmail] when no API key is configured.
@@ -365,6 +419,72 @@ function renderStaffAlertEmail(args: {
               <p style="margin:0;font-size:12px;color:#6B5A52;">
                 Email tự động cho nhân viên Banan — gửi khi có đơn hàng mới vì
                 bản web trên iPad không nhận được thông báo đẩy.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/// Internal ops report — staff-alert shell with a configurable CTA (links
+/// into the internal app instead of the merchant app).
+function renderInternalReportEmail(args: {
+  heading: string;
+  lines: string[];
+  ctaUrl?: string;
+  ctaLabel: string;
+}): string {
+  const lines = args.lines
+    .map(
+      (l) =>
+        `<p style="margin:0 0 8px 0;font-size:15px;line-height:1.6;color:#3B2A22;">${escapeHtml(l)}</p>`,
+    )
+    .join('\n');
+  const cta = args.ctaUrl
+    ? `<a href="${escapeHtml(args.ctaUrl)}"
+         style="display:inline-block;margin-top:16px;padding:12px 28px;background:#C9405C;
+                color:#ffffff;text-decoration:none;border-radius:24px;
+                font-weight:600;letter-spacing:0.3px;">
+        ${escapeHtml(args.ctaLabel)}
+      </a>`
+    : '';
+  return `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escapeHtml(args.heading)}</title>
+</head>
+<body style="margin:0;padding:0;background:#FAF6F1;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#3B2A22;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FAF6F1;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #E0D7CC;border-radius:12px;overflow:hidden;">
+          <tr>
+            <td style="padding:32px 32px 8px 32px;">
+              <div style="font-family:Georgia,serif;font-size:24px;color:#C9405C;font-weight:700;letter-spacing:-0.3px;">
+                Banan
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 32px 24px 32px;">
+              <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#3B2A22;">
+                ${escapeHtml(args.heading)}
+              </h1>
+              ${lines}
+              ${cta}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px 28px 32px;">
+              <hr style="border:none;border-top:1px solid #E0D7CC;margin:0 0 20px 0;" />
+              <p style="margin:0;font-size:12px;color:#6B5A52;">
+                Email tự động từ hệ thống vận hành nội bộ Banan.
               </p>
             </td>
           </tr>

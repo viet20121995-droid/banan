@@ -190,6 +190,12 @@ model Store {
   requestedTransfers Order[]             @relation("OrderRequestingStore")
   incomingTransfers  Order[]             @relation("OrderDestinationStore")
 
+  // Internal ops app (QC / Mystery Shopper / Training / Schedule).
+  qcInspections      QcInspection[]
+  msAssignments      MsAssignment[]
+  internalPeople     InternalPerson[]
+  scheduleShifts     WorkScheduleShift[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -1976,4 +1982,641 @@ model SiteVisit {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal ops app (internal.banancakes.vn) — ADMIN-only: QC, Mystery Shopper,
+// Training, weekly work schedule. Audit ids (createdById & friends) are plain
+// String? snapshots of User.id with no FK, matching the MES precedent — rows
+// must survive account deletion.
+
+enum QcInspectionStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum QcOutcome {
+  PASS
+  FAIL
+  CRITICAL_FAIL
+}
+
+enum QcAnswerValue {
+  PASS
+  FAIL
+  NOT_AVAILABLE
+}
+
+/// Delivery lifecycle for report emails (QC + MS). Rows double as the
+/// idempotency marker: unique (parent, revision) means one email per revision
+/// no matter how many times complete/approve is retried. PROCESSING is the
+/// dispatcher's exclusive claim — combined with `lockedUntil`/`claimToken`
+/// it stops a second worker from mailing the same row.
+enum InternalReportDeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+model QcTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  version   Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  sections    QcSection[]
+  inspections QcInspection[]
+
+  @@unique([name, version])
+}
+
+model QcSection {
+  id         String     @id @default(uuid())
+  templateId String
+  template   QcTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title      String
+  sortOrder  Int
+  /// RISK section: items are Có/Không, not scored; any "Có" → CRITICAL_FAIL.
+  isRisk     Boolean    @default(false)
+
+  items QcItem[]
+
+  @@unique([templateId, sortOrder])
+}
+
+model QcItem {
+  id        String    @id @default(uuid())
+  sectionId String
+  section   QcSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  text      String
+  sortOrder Int
+  /// STT as printed on the source PDF (Bar Area jumps 7 → 9). Display order
+  /// is `sortOrder`; this is only for tracing an item back to the paper form.
+  sourceRef String?
+
+  answers     QcInspectionAnswer[]
+  riskAnswers QcRiskAnswer[]
+
+  @@unique([sectionId, sortOrder])
+}
+
+model QcInspection {
+  id         String     @id @default(uuid())
+  templateId String
+  template   QcTemplate @relation(fields: [templateId], references: [id])
+  storeId    String
+  store      Store      @relation(fields: [storeId], references: [id])
+
+  inspectionDate DateTime
+  startedAt      DateTime?
+  endedAt        DateTime?
+  /// Free-text list of staff on shift, as written on the paper form.
+  staffOnShift   String?
+  inspectorName  String
+  generalNotes   String?
+
+  status      QcInspectionStatus @default(DRAFT)
+  completedAt DateTime?
+  /// Number of times this inspection has been completed. 0 = never.
+  /// Completing after a reopen produces revision 2, 3, … — each revision
+  /// gets exactly one report email (see QcReportDelivery).
+  revision    Int                @default(0)
+
+  // Snapshot of the computed result at the latest complete.
+  outcome        QcOutcome?
+  overallPercent Float?
+
+  createdById    String
+  updatedById    String?
+  completedById  String?
+  reopenedById   String?
+  reopenedAt     DateTime?
+
+  answers     QcInspectionAnswer[]
+  riskAnswers QcRiskAnswer[]
+  deliveries  QcReportDelivery[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, inspectionDate])
+  @@index([status])
+}
+
+model QcInspectionAnswer {
+  id           String        @id @default(uuid())
+  inspectionId String
+  inspection   QcInspection  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  itemId       String
+  item         QcItem        @relation(fields: [itemId], references: [id])
+  value        QcAnswerValue?
+  /// Required when value = FAIL.
+  failDetail   String?
+  /// Required when value = NOT_AVAILABLE.
+  naReason     String?
+
+  evidence QcEvidence[]
+
+  @@unique([inspectionId, itemId])
+}
+
+model QcRiskAnswer {
+  id           String       @id @default(uuid())
+  inspectionId String
+  inspection   QcInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  itemId       String
+  item         QcItem       @relation(fields: [itemId], references: [id])
+  /// null = not answered yet; true = the risk occurred (→ CRITICAL_FAIL).
+  occurred     Boolean?
+  detail       String?
+
+  evidence QcEvidence[]
+
+  @@unique([inspectionId, itemId])
+}
+
+model QcEvidence {
+  id           String              @id @default(uuid())
+  answerId     String?
+  answer       QcInspectionAnswer? @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  riskAnswerId String?
+  riskAnswer   QcRiskAnswer?       @relation(fields: [riskAnswerId], references: [id], onDelete: Cascade)
+  url          String
+  mimeType     String
+  sizeBytes    Int
+  createdAt    DateTime            @default(now())
+  createdById  String?
+}
+
+model QcReportDelivery {
+  id           String                       @id @default(uuid())
+  inspectionId String
+  inspection   QcInspection                 @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  revision     Int
+  recipients   String[]
+  status       InternalReportDeliveryStatus @default(PENDING)
+  attempts     Int                          @default(0)
+  /// While PROCESSING: when the claim expires and the retry cron may
+  /// re-claim (the claiming worker is presumed dead).
+  lockedUntil  DateTime?
+  /// Random per-claim token — markResult is guarded on it, so a worker whose
+  /// claim was expired+stolen can no longer write the outcome.
+  claimToken   String?
+  /// Immutable report bundle captured AT completion time. The dispatcher
+  /// renders email + PDF from THIS, never from the live inspection — so a
+  /// retried r1 email can never leak r2 data.
+  reportSnapshot Json
+  lastError    String?
+  sentAt       DateTime?
+  createdAt    DateTime                     @default(now())
+
+  @@unique([inspectionId, revision])
+  @@index([status])
+}
+
+// ── Mystery Shopper ──────────────────────────────────────────────────────────
+
+enum MsAssignmentStatus {
+  DRAFT
+  ASSIGNED
+  OPENED
+  SUBMITTED
+  NEEDS_REVISION
+  APPROVED
+  REVOKED
+  EXPIRED
+}
+
+enum MsAnswerValue {
+  YES
+  NO
+  NOT_AVAILABLE
+}
+
+/// SCORED sections carry a weight out of 100; CRITICAL is the unweighted
+/// "Critical Fail" section — any YES there overrides the score.
+enum MsSectionKind {
+  SCORED
+  CRITICAL
+}
+
+model MsTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  version   Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  sections    MsSection[]
+  assignments MsAssignment[]
+
+  @@unique([name, version])
+}
+
+model MsSection {
+  id         String        @id @default(uuid())
+  templateId String
+  template   MsTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  code       String
+  title      String
+  kind       MsSectionKind @default(SCORED)
+  /// Weight (points) out of the template total of 100. 0 for CRITICAL.
+  weight     Int
+  sortOrder  Int
+
+  questions MsQuestion[]
+
+  @@unique([templateId, sortOrder])
+}
+
+model MsQuestion {
+  id        String    @id @default(uuid())
+  sectionId String
+  section   MsSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  text      String
+  sortOrder Int
+  /// Whether NOT_AVAILABLE is a legal answer (e.g. the WC question).
+  allowNa   Boolean   @default(false)
+
+  answers MsAnswer[]
+
+  @@unique([sectionId, sortOrder])
+}
+
+model MsAssignment {
+  id         String     @id @default(uuid())
+  /// Human-readable code like MS-2026-A1B2C3.
+  code       String     @unique
+  templateId String
+  template   MsTemplate @relation(fields: [templateId], references: [id])
+  storeId    String
+  store      Store      @relation(fields: [storeId], references: [id])
+
+  windowStart   DateTime?
+  windowEnd     DateTime?
+  scenario      String?
+  productsToBuy String?
+  budgetVnd     Int?
+  brief         String?
+  deadline      DateTime?
+  /// Only ever shown to ADMIN — never in the public payload.
+  internalNotes String?
+
+  status           MsAssignmentStatus @default(DRAFT)
+  /// What the admin asked the shopper to add — shown on the public form
+  /// while status is NEEDS_REVISION.
+  revisionNote     String?
+  firstOpenedAt    DateTime?
+  /// Number of times this assignment has been APPROVED (re-approval after a
+  /// NEEDS_REVISION loop increments it). Each approval revision gets exactly
+  /// one report email.
+  approvedRevision Int                @default(0)
+  approvedAt       DateTime?
+  approvedById     String?
+
+  createdById String
+  updatedById String?
+
+  tokens     MsAccessToken[]
+  submission MsSubmission?
+  deliveries MsReportDelivery[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, status])
+  @@index([status])
+}
+
+model MsAccessToken {
+  id           String       @id @default(uuid())
+  assignmentId String
+  assignment   MsAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  /// sha256 hex of the raw token. The raw token exists only in the create/
+  /// regenerate response and in the link the CEO hands out — never stored.
+  tokenHash    String       @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime     @default(now())
+  createdById  String?
+
+  @@index([assignmentId])
+}
+
+model MsSubmission {
+  id           String       @id @default(uuid())
+  assignmentId String       @unique
+  assignment   MsAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  submittedAt DateTime?
+
+  // Timeline the shopper records on the day.
+  enteredAt    DateTime?
+  greetedAt    DateTime?
+  orderStartAt DateTime?
+  paidAt       DateTime?
+  receivedAt   DateTime?
+
+  productsBought String?
+  amountPaidVnd  Int?
+  /// Only if a name tag was visible — the shopper is never asked to guess.
+  staffName      String?
+  overallComment String?
+
+  // Result snapshot, computed at approval time.
+  criticalFail  Boolean @default(false)
+  totalScore    Float?
+  sectionScores Json?
+
+  answers  MsAnswer[]
+  evidence MsEvidence[]
+}
+
+model MsAnswer {
+  id           String        @id @default(uuid())
+  submissionId String
+  submission   MsSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     MsQuestion    @relation(fields: [questionId], references: [id])
+  value        MsAnswerValue?
+  note         String?
+
+  evidence MsEvidence[]
+
+  @@unique([submissionId, questionId])
+}
+
+enum MsEvidenceKind {
+  RECEIPT
+  PRODUCT
+  PACKAGING
+  ANSWER
+  OTHER
+}
+
+model MsEvidence {
+  id           String         @id @default(uuid())
+  submissionId String
+  submission   MsSubmission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  answerId     String?
+  answer       MsAnswer?      @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  kind         MsEvidenceKind @default(OTHER)
+  url          String
+  mimeType     String
+  sizeBytes    Int
+  createdAt    DateTime       @default(now())
+}
+
+model MsReportDelivery {
+  id           String                       @id @default(uuid())
+  assignmentId String
+  assignment   MsAssignment                 @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  revision     Int
+  recipients   String[]
+  status       InternalReportDeliveryStatus @default(PENDING)
+  attempts     Int                          @default(0)
+  lockedUntil  DateTime?
+  claimToken   String?
+  /// Immutable report bundle captured at approval time (see QcReportDelivery).
+  reportSnapshot Json
+  lastError    String?
+  sentAt       DateTime?
+  createdAt    DateTime                     @default(now())
+
+  @@unique([assignmentId, revision])
+  @@index([status])
+}
+
+// ── Training ────────────────────────────────────────────────────────────────
+
+/// Staff roster entry for training + scheduling. Deliberately NOT a User —
+/// most staff never log in anywhere. `userId` is an optional plain snapshot.
+model InternalPerson {
+  id        String    @id @default(uuid())
+  fullName  String
+  storeId   String
+  store     Store     @relation(fields: [storeId], references: [id])
+  position  String
+  startDate DateTime?
+  isActive  Boolean   @default(true)
+  notes     String?
+  userId    String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transfers           InternalPersonTransfer[]
+  trainingAssignments TrainingAssignment[]
+  shiftAssignments    WorkScheduleAssignment[]
+
+  @@index([storeId, isActive])
+}
+
+/// Append-only branch history: one row per store change, so "worked at SVH
+/// until March, then LTT" stays reconstructable.
+model InternalPersonTransfer {
+  id          String         @id @default(uuid())
+  personId    String
+  person      InternalPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
+  fromStoreId String?
+  toStoreId   String
+  changedAt   DateTime       @default(now())
+  changedById String?
+
+  @@index([personId, changedAt])
+}
+
+enum TrainingCategory {
+  PHA_CHE
+  CHE_BIEN
+  ATVSTP
+  QUY_DINH
+  DICH_VU_KHACH_HANG
+}
+
+enum TrainingMaterialKind {
+  FILE
+  VIDEO
+  LINK
+}
+
+model TrainingMaterial {
+  id               String               @id @default(uuid())
+  title            String
+  description      String?
+  category         TrainingCategory
+  kind             TrainingMaterialKind
+  /// Uploaded file URL (kind FILE — PDF) or external URL (VIDEO / LINK).
+  url              String?
+  version          Int                  @default(1)
+  isActive         Boolean              @default(true)
+  isRequired       Boolean              @default(false)
+  estimatedMinutes Int?
+  effectiveFrom    DateTime?
+  /// Set on the NEW row when a material is re-issued; the old row is kept
+  /// (isActive=false) so past completions still point at what was studied.
+  supersedesId     String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pathItems TrainingPathItem[]
+
+  @@index([category, isActive])
+}
+
+model TrainingPath {
+  id       String  @id @default(uuid())
+  name     String
+  /// Position this path applies to (free text, matches InternalPerson.position).
+  position String?
+  isActive Boolean @default(true)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items       TrainingPathItem[]
+  assignments TrainingAssignment[]
+}
+
+model TrainingPathItem {
+  id         String           @id @default(uuid())
+  pathId     String
+  path       TrainingPath     @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  materialId String
+  material   TrainingMaterial @relation(fields: [materialId], references: [id])
+  sortOrder  Int
+  isRequired Boolean          @default(true)
+  /// Deadline in days counted from TrainingAssignment.startDate.
+  dueDays    Int?
+
+  progress TrainingProgress[]
+
+  @@unique([pathId, sortOrder])
+}
+
+enum TrainingProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+}
+
+model TrainingAssignment {
+  id        String         @id @default(uuid())
+  personId  String
+  person    InternalPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
+  pathId    String
+  path      TrainingPath   @relation(fields: [pathId], references: [id])
+  /// Basis for every dueDays deadline in the path.
+  startDate DateTime
+  assignedById String?
+  createdAt DateTime       @default(now())
+
+  progress TrainingProgress[]
+
+  @@unique([personId, pathId])
+}
+
+model TrainingProgress {
+  id            String                 @id @default(uuid())
+  assignmentId  String
+  assignment    TrainingAssignment     @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  pathItemId    String
+  pathItem      TrainingPathItem       @relation(fields: [pathItemId], references: [id])
+  status        TrainingProgressStatus @default(NOT_STARTED)
+  completedAt   DateTime?
+  /// Admin who confirmed the practical/completion.
+  confirmedById String?
+  /// Manually recorded quiz score (no quiz engine yet).
+  quizScore     Int?
+  attempts      Int                    @default(0)
+  notes         String?
+  updatedAt     DateTime               @updatedAt
+
+  @@unique([assignmentId, pathItemId])
+}
+
+// ── Weekly work schedule ────────────────────────────────────────────────────
+
+enum WorkScheduleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model WorkSchedule {
+  id        String             @id @default(uuid())
+  /// Monday 00:00 UTC of the week. One live schedule per week; published
+  /// history lives in WorkSchedulePublish snapshots.
+  weekStart DateTime           @unique
+  status    WorkScheduleStatus @default(DRAFT)
+  /// Bumped on every publish; snapshots carry the published revisions.
+  revision  Int                @default(0)
+  notes     String?
+
+  publishedAt   DateTime?
+  publishedById String?
+  createdById   String
+  updatedById   String?
+
+  shifts    WorkScheduleShift[]
+  publishes WorkSchedulePublish[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkScheduleShift {
+  id         String       @id @default(uuid())
+  scheduleId String
+  schedule   WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  storeId    String
+  store      Store        @relation(fields: [storeId], references: [id])
+  label      String
+  /// "HH:mm" local (Asia/Ho_Chi_Minh) — matches how the paper/Excel sheet
+  /// reads; overlap warnings parse these.
+  startTime  String
+  endTime    String
+  sortOrder  Int
+
+  assignments WorkScheduleAssignment[]
+
+  @@index([scheduleId, storeId])
+}
+
+model WorkScheduleAssignment {
+  id        String            @id @default(uuid())
+  shiftId   String
+  shift     WorkScheduleShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  /// 0 = Monday … 6 = Sunday.
+  dayOfWeek Int
+  personId  String?
+  person    InternalPerson?   @relation(fields: [personId], references: [id])
+  /// Free-text name when the person has no roster entry. Never blocked.
+  freeName  String?
+  note      String?
+  sortOrder Int               @default(0)
+
+  @@index([shiftId, dayOfWeek])
+}
+
+/// Immutable snapshot of a schedule at each publish — the published sheet
+/// staff saw must stay reconstructable after further edits.
+model WorkSchedulePublish {
+  id            String       @id @default(uuid())
+  scheduleId    String
+  schedule      WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  revision      Int
+  snapshot      Json
+  publishedAt   DateTime     @default(now())
+  publishedById String?
+
+  @@unique([scheduleId, revision])
 }
