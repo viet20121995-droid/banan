@@ -6,7 +6,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
-import { seedInternal } from './seed-internal';
+import { seedInternal } from '../src/internal/internal-seed';
 
 const prisma = new PrismaClient();
 

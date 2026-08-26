@@ -6,21 +6,21 @@
  * COMPLETELY untouched — re-running never duplicates sections/items and
  * never overwrites production adjustments. A new wording is a NEW version.
  *
- * Standalone run: corepack pnpm tsx prisma/seed-internal.ts
+ * Lives in src/ (not prisma/) so `nest build` compiles it into dist and the
+ * production image — which ships no TypeScript sources — can run it:
+ *
+ *   dev:  pnpm tsx src/internal/internal-seed.ts   (also runs via prisma/seed.ts)
+ *   prod: node dist/src/internal/internal-seed.js
  */
 import { PrismaClient } from '@prisma/client';
 
-import {
-  QC_TEMPLATE_NAME,
-  QC_TEMPLATE_SECTIONS,
-  QC_TEMPLATE_VERSION,
-} from '../src/internal/qc/qc-template-data';
 import {
   MS_TEMPLATE_NAME,
   MS_TEMPLATE_SECTIONS,
   MS_TEMPLATE_VERSION,
   MS_TOTAL_WEIGHT,
-} from '../src/internal/ms/ms-template-data';
+} from './ms/ms-template-data';
+import { QC_TEMPLATE_NAME, QC_TEMPLATE_SECTIONS, QC_TEMPLATE_VERSION } from './qc/qc-template-data';
 
 export async function seedInternal(prisma: PrismaClient): Promise<void> {
   // ── QC template ──

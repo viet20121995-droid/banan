@@ -38,7 +38,7 @@ Shopper templates seeded (idempotent — an existing (name, version) template is
 left untouched, so re-running is always safe):
 
 ```bash
-docker compose --env-file infra/.env.prod -f docker-compose.prod.yml exec backend npx tsx prisma/seed-internal.ts
+docker compose --env-file infra/.env.prod -f docker-compose.prod.yml exec backend node dist/src/internal/internal-seed.js
 ```
 
 Report recipients and the email link base default correctly in code
