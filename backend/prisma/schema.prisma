@@ -2169,6 +2169,10 @@ model QcReportDelivery {
   /// renders email + PDF from THIS, never from the live inspection — so a
   /// retried r1 email can never leak r2 data.
   reportSnapshot Json
+  /// Private-store name of the PDF rendered AT completion time — the exact
+  /// bytes emailed and downloadable later, immune to evidence files being
+  /// deleted afterwards. Null = render from reportSnapshot (best effort).
+  pdfFile      String?
   lastError    String?
   sentAt       DateTime?
   createdAt    DateTime                     @default(now())
@@ -2382,6 +2386,8 @@ model MsReportDelivery {
   claimToken   String?
   /// Immutable report bundle captured at approval time (see QcReportDelivery).
   reportSnapshot Json
+  /// PDF rendered at approval time (see QcReportDelivery.pdfFile).
+  pdfFile      String?
   lastError    String?
   sentAt       DateTime?
   createdAt    DateTime                     @default(now())

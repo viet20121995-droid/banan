@@ -45,7 +45,7 @@ export class InternalFilesCleanupService {
     }
     if (candidates.length === 0) return 0;
 
-    const [qc, ms, training] = await Promise.all([
+    const [qc, ms, training, qcPdf, msPdf] = await Promise.all([
       this.prisma.qcEvidence.findMany({
         where: { url: { in: candidates } },
         select: { url: true },
@@ -58,9 +58,22 @@ export class InternalFilesCleanupService {
         where: { url: { in: candidates } },
         select: { url: true },
       }),
+      // Approval-time report PDFs — referenced for as long as their
+      // delivery row (= the audit trail) exists.
+      this.prisma.qcReportDelivery.findMany({
+        where: { pdfFile: { in: candidates } },
+        select: { pdfFile: true },
+      }),
+      this.prisma.msReportDelivery.findMany({
+        where: { pdfFile: { in: candidates } },
+        select: { pdfFile: true },
+      }),
     ]);
     const referenced = new Set(
-      [...qc, ...ms, ...training].map((r) => r.url).filter((u): u is string => u != null),
+      [
+        ...[...qc, ...ms, ...training].map((r) => r.url),
+        ...[...qcPdf, ...msPdf].map((r) => r.pdfFile),
+      ].filter((u): u is string => u != null),
     );
 
     let removed = 0;

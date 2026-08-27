@@ -30,6 +30,7 @@ function makeService(opts: {
     attempts: number;
     lockedUntil: Date | null;
     reportSnapshot: unknown;
+    pdfFile: string | null;
   }>;
   claimCount?: number;
   emailOk?: boolean;
@@ -43,6 +44,7 @@ function makeService(opts: {
     attempts: 0,
     lockedUntil: null as Date | null,
     reportSnapshot: QC_SNAPSHOT,
+    pdfFile: null as string | null,
     ...opts.delivery,
   };
   const qcUpdateMany = jest.fn().mockResolvedValue({ count: opts.claimCount ?? 1 });
@@ -65,6 +67,7 @@ function makeService(opts: {
   const pdf = {
     renderQcReport: jest.fn().mockResolvedValue(Buffer.from('pdf')),
     renderMsReport: jest.fn().mockResolvedValue(Buffer.from('pdf')),
+    readStoredPdf: jest.fn().mockReturnValue(null),
   };
   const config = { get: jest.fn().mockReturnValue(undefined) };
   const svc = new InternalReportDeliveryService(
@@ -109,6 +112,16 @@ describe('InternalReportDeliveryService QC dispatch', () => {
     const args = m.email.sendInternalReport.mock.calls[0][0];
     expect(args.subject).toContain('[QC] ĐẠT · LTT · 20/08/2026');
     expect(m.pdf.renderQcReport).toHaveBeenCalledWith(QC_SNAPSHOT.pdf);
+  });
+
+  it('attaches the approval-time stored PDF when present — no re-render, evidence deletions moot', async () => {
+    const m = makeService({ delivery: { pdfFile: 'cc.pdf' } });
+    m.pdf.readStoredPdf.mockReturnValue(Buffer.from('stored-bytes'));
+    await m.svc.dispatchQc('insp1', 1);
+    expect(m.pdf.readStoredPdf).toHaveBeenCalledWith('cc.pdf');
+    expect(m.pdf.renderQcReport).not.toHaveBeenCalled();
+    const args = m.email.sendInternalReport.mock.calls[0][0];
+    expect(args.attachment.content.toString()).toBe('stored-bytes');
   });
 
   it('a provider failure marks FAILED (never throws)', async () => {

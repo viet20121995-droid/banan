@@ -49,6 +49,14 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
   }
 
   Future<void> _load() async {
+    // No stashed token (fresh tab on /f, or storage blocked after the URL
+    // was stripped) — the link itself must be reopened.
+    if (widget.token.isEmpty) {
+      setState(
+        () => _state = const Result.failure(ServerFailure(code: 'INTERNAL_MS_LINK_INVALID')),
+      );
+      return;
+    }
     setState(() => _state = null);
     final res = await _api.view(widget.token);
     if (mounted) setState(() => _state = res);

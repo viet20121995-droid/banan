@@ -23,8 +23,10 @@ import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '../prisma/prisma.service';
 
+import { removePrivateFile } from './files/internal-files.util';
 import { InternalReportDeliveryService } from './internal-report-delivery.service';
 import { MsService } from './ms/ms.service';
+import { InternalPdfService } from './pdf/internal-pdf.service';
 import { QcService } from './qc/qc.service';
 import { scoreQc } from './qc/qc-scoring';
 
@@ -34,6 +36,9 @@ const ENABLED = process.env.RUN_DB_INTEGRATION_TESTS === '1';
 const describeIf = ENABLED ? describe : describe.skip;
 
 const config = { get: () => undefined } as unknown as ConfigService;
+// Real renderer: complete/approve also render + store the approval-time PDF
+// into uploads-private (cleaned up in afterAll).
+const pdfSvc = new InternalPdfService();
 const EVIDENCE_NAME = 'a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4.jpg';
 
 describeIf('internal races (real Postgres)', () => {
@@ -68,6 +73,21 @@ describeIf('internal races (real Postgres)', () => {
   afterAll(async () => {
     if (!prisma) return;
     try {
+      // Report PDFs stored on disk by complete/approve — unlink before the
+      // delivery rows (our only pointer to the names) cascade away.
+      const [qcPdfs, msPdfs] = await Promise.all([
+        prisma.qcReportDelivery.findMany({
+          where: { inspection: { template: { name: { startsWith: 'IT-RACE-' } } } },
+          select: { pdfFile: true },
+        }),
+        prisma.msReportDelivery.findMany({
+          where: { assignment: { template: { name: { startsWith: 'IT-MS-RACE-' } } } },
+          select: { pdfFile: true },
+        }),
+      ]);
+      for (const { pdfFile } of [...qcPdfs, ...msPdfs]) {
+        if (pdfFile) removePrivateFile(pdfFile);
+      }
       // Inspections/assignments first (their template FKs don't cascade);
       // deleting them cascades answers, evidence, tokens, and deliveries.
       await prisma.qcInspection.deleteMany({
@@ -121,9 +141,12 @@ describeIf('internal races (real Postgres)', () => {
 
   function deliveryHarness() {
     const email = { sendInternalReport: jest.fn().mockResolvedValue(true) };
+    // readStoredPdf → null forces the render-from-snapshot path, which is
+    // what these tests assert on (mock render calls).
     const pdf = {
       renderQcReport: jest.fn().mockResolvedValue(Buffer.from('p')),
       renderMsReport: jest.fn().mockResolvedValue(Buffer.from('p')),
+      readStoredPdf: jest.fn().mockReturnValue(null),
     };
     const mk = () =>
       new InternalReportDeliveryService(prisma, email as never, pdf as never, config);
@@ -133,7 +156,7 @@ describeIf('internal races (real Postgres)', () => {
   describe('outbox: two dispatchers, one delivery row', () => {
     it('exactly ONE email is sent when two workers race the same delivery', async () => {
       const { inspection } = await seedRaceFixture();
-      const svc = new QcService(prisma, config);
+      const svc = new QcService(prisma, config, pdfSvc);
       await svc.complete(inspection.id, 'race-test'); // creates the r1 delivery + snapshot
 
       const { email, mk } = deliveryHarness();
@@ -146,13 +169,17 @@ describeIf('internal races (real Postgres)', () => {
       });
       expect(row.status).toBe('SENT');
       expect(row.attempts).toBe(1);
+      // complete() also rendered + stored the approval-time PDF (real
+      // renderer, real disk write — cleaned up in afterAll).
+      expect(row.pdfFile).toMatch(/^[a-f0-9]{32}\.pdf$/);
+      expect(pdfSvc.readStoredPdf(row.pdfFile)?.subarray(0, 4).toString()).toBe('%PDF');
     });
   });
 
   describe('report snapshot immutability', () => {
     it('a retried r1 delivery carries r1 data even after r2 exists', async () => {
       const { inspection, item } = await seedRaceFixture();
-      const svc = new QcService(prisma, config);
+      const svc = new QcService(prisma, config, pdfSvc);
       await svc.complete(inspection.id, 'it'); // r1: PASS 100% — delivery stays PENDING
 
       // Admin reopens, flips the answer to FAIL, completes r2.
@@ -189,7 +216,7 @@ describeIf('internal races (real Postgres)', () => {
   describe('QC: concurrent completes and racing answer writes', () => {
     it('two parallel completes produce ONE revision and ONE delivery', async () => {
       const { inspection } = await seedRaceFixture();
-      const svc = new QcService(prisma, config);
+      const svc = new QcService(prisma, config, pdfSvc);
 
       const results = await Promise.allSettled([
         svc.complete(inspection.id, 'race-a'),
@@ -208,7 +235,7 @@ describeIf('internal races (real Postgres)', () => {
 
     it('an answer write racing complete never yields a stale stored outcome', async () => {
       const { inspection, item } = await seedRaceFixture();
-      const svc = new QcService(prisma, config);
+      const svc = new QcService(prisma, config, pdfSvc);
 
       // Make FAIL a valid final answer so both interleavings are legal.
       await prisma.qcInspectionAnswer.updateMany({
@@ -310,7 +337,7 @@ describeIf('internal races (real Postgres)', () => {
 
     it('two parallel approvals → one revision, one delivery, snapshot matches answers', async () => {
       const { assignment } = await seedMsFixture();
-      const svc = new MsService(prisma, config);
+      const svc = new MsService(prisma, config, pdfSvc);
 
       const results = await Promise.allSettled([
         svc.approve(assignment.id, 'race-a'),
@@ -332,7 +359,7 @@ describeIf('internal races (real Postgres)', () => {
 
     it('a shopper save racing approve is rejected — the approved snapshot stays consistent', async () => {
       const { assignment, q } = await seedMsFixture();
-      const svc = new MsService(prisma, config);
+      const svc = new MsService(prisma, config, pdfSvc);
       // Token path requires a live token; drive publicSave's tx body directly
       // via a second approve-vs-save interleave: SUBMITTED is not editable, so
       // any save (before or after the lock) must reject and can never mutate

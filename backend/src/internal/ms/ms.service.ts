@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { removePrivateFile } from '../files/internal-files.util';
 import { internalAppUrl, msReportRecipients } from '../internal-config';
+import { InternalPdfService } from '../pdf/internal-pdf.service';
 
 import type {
   CreateMsAssignmentDto,
@@ -16,7 +17,12 @@ import type {
   RequestRevisionDto,
   UpdateMsAssignmentDto,
 } from './dto';
-import { MS_DETAIL_INCLUDE, buildMsReportBundle, loadMsReportBundle } from './ms-report-data';
+import {
+  MS_DETAIL_INCLUDE,
+  buildMsReportBundle,
+  loadMsReportBundle,
+  type MsReportBundle,
+} from './ms-report-data';
 import { MS_TEMPLATE_NAME } from './ms-template-data';
 import { generateMsToken, hashMsToken } from './ms-token.util';
 
@@ -39,6 +45,7 @@ export class MsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly pdf: InternalPdfService,
   ) {}
 
   async activeTemplate() {
@@ -364,12 +371,17 @@ export class MsService {
         // revision, then freeze it as the delivery's immutable snapshot.
         bundle.revision = fresh.approvedRevision;
         bundle.pdf.revision = fresh.approvedRevision;
+        // Audit PDF inside the lock, same contract as QcService.complete:
+        // evidence removal needs this lock so every file is still on disk,
+        // and a storage failure rolls the approval back entirely.
+        const pdfFile = this.pdf.storeReportPdf(await this.pdf.renderMsReport(bundle.pdf));
         await tx.msReportDelivery.create({
           data: {
             assignmentId: id,
             revision: fresh.approvedRevision,
             recipients,
             reportSnapshot: bundle as unknown as Prisma.InputJsonValue,
+            pdfFile,
           },
         });
         return fresh.approvedRevision;
@@ -381,6 +393,40 @@ export class MsService {
 
   reportBundle(id: string) {
     return loadMsReportBundle(this.prisma, id);
+  }
+
+  /** PDF download — mirrors QcService.downloadPdf: approved revisions come
+   *  from the delivery row only; anything else is a watermarked draft. */
+  async downloadPdf(id: string, revision?: number): Promise<{ bytes: Buffer; filename: string }> {
+    const assignment = await this.prisma.msAssignment.findUnique({
+      where: { id },
+      select: { status: true, approvedRevision: true },
+    });
+    if (!assignment) this.notFound();
+    const approvedRevision =
+      revision ?? (assignment.status === 'APPROVED' ? assignment.approvedRevision : null);
+
+    if (approvedRevision != null) {
+      const delivery = await this.prisma.msReportDelivery.findUnique({
+        where: { assignmentId_revision: { assignmentId: id, revision: approvedRevision } },
+      });
+      if (!delivery) {
+        throw new NotFoundException({
+          code: 'INTERNAL_MS_REPORT_NOT_FOUND',
+          message: 'Không có báo cáo cho bản này.',
+        });
+      }
+      const bundle = delivery.reportSnapshot as unknown as MsReportBundle;
+      const bytes =
+        this.pdf.readStoredPdf(delivery.pdfFile) ?? (await this.pdf.renderMsReport(bundle.pdf));
+      return { bytes, filename: `${bundle.code}-r${delivery.revision}.pdf` };
+    }
+
+    const bundle = await this.reportBundle(id);
+    const bytes = await this.pdf.renderMsReport(bundle.pdf, {
+      watermark: 'BẢN NHÁP — CHƯA DUYỆT',
+    });
+    return { bytes, filename: `${bundle.code}-nhap.pdf` };
   }
 
   // ── public (token) ────────────────────────────────────────────────────────

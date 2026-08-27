@@ -75,7 +75,7 @@ function fixture(opts: {
 /** Mocks the full transactional shape: FOR UPDATE lock, tx reads, claim. */
 function makeService(insp: ReturnType<typeof fixture>, opts: { claimCount?: number } = {}) {
   const updateMany = jest.fn().mockResolvedValue({ count: opts.claimCount ?? 1 });
-  const deliveryCreate = jest.fn().mockResolvedValue({});
+  const deliveryCreate = jest.fn().mockResolvedValue({ id: 'del1' });
   const lock = jest
     .fn()
     .mockResolvedValue([{ id: insp.id, status: insp.status, templateId: insp.templateId }]);
@@ -99,8 +99,13 @@ function makeService(insp: ReturnType<typeof fixture>, opts: { claimCount?: numb
     $transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)),
   };
   const config = { get: jest.fn().mockReturnValue(undefined) };
-  const svc = new QcService(prisma as never, config as never);
-  return { svc, prisma, tx, lock, updateMany, deliveryCreate };
+  const pdf = {
+    renderQcReport: jest.fn().mockResolvedValue(Buffer.from('pdf')),
+    storeReportPdf: jest.fn().mockReturnValue('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf'),
+    readStoredPdf: jest.fn().mockReturnValue(null),
+  };
+  const svc = new QcService(prisma as never, config as never, pdf as never);
+  return { svc, prisma, tx, lock, updateMany, deliveryCreate, pdf };
 }
 
 const validAnswers = {
@@ -202,6 +207,19 @@ describe('QcService.complete transaction', () => {
       pdf: expect.objectContaining({ revision: 1 }),
       result: expect.objectContaining({ outcome: 'FAIL' }), // 1/2 PASS = 50%
     });
+    // Audit PDF rendered from the stamped bundle and stored IN the tx —
+    // the delivery row is born with its pdfFile.
+    expect(m.pdf.renderQcReport).toHaveBeenCalledWith(expect.objectContaining({ revision: 1 }));
+    expect(data.pdfFile).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf');
+  });
+
+  it('a failed PDF render/store FAILS the complete — no delivery, result not published', async () => {
+    const m = makeService(fixture(validAnswers));
+    m.pdf.renderQcReport.mockRejectedValueOnce(new Error('font missing'));
+    await expect(m.svc.complete('insp1', 'admin')).rejects.toThrow('font missing');
+    // The throw happens inside the tx: the delivery row is never created and
+    // the real transaction rolls the COMPLETED flip back.
+    expect(m.deliveryCreate).not.toHaveBeenCalled();
   });
 
   it('a lost complete race (claim count 0) throws and creates NO delivery', async () => {
@@ -217,9 +235,93 @@ describe('QcService.reopen', () => {
   it('only a COMPLETED inspection reopens (guarded updateMany)', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 0 });
     const prisma = { qcInspection: { updateMany } };
-    const svc = new QcService(prisma as never, { get: () => undefined } as never);
+    const svc = new QcService(prisma as never, { get: () => undefined } as never, {} as never);
     await expect(svc.reopen('insp1', 'admin')).rejects.toMatchObject({
       response: { code: 'INTERNAL_QC_NOT_COMPLETED' },
+    });
+  });
+});
+
+describe('QcService.downloadPdf', () => {
+  const SNAPSHOT = {
+    code: 'QC-20260820-ABC123',
+    revision: 1,
+    pdf: { code: 'QC-20260820-ABC123', revision: 1 },
+  };
+
+  function makeDownload(opts: {
+    status: string;
+    revision?: number;
+    delivery?: { pdfFile: string | null } | null;
+  }) {
+    const prisma = {
+      qcInspection: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ status: opts.status, revision: opts.revision ?? 1 }),
+      },
+      qcReportDelivery: {
+        findUnique: jest.fn().mockResolvedValue(
+          opts.delivery === null
+            ? null
+            : {
+                revision: opts.revision ?? 1,
+                pdfFile: opts.delivery?.pdfFile ?? null,
+                reportSnapshot: SNAPSHOT,
+              },
+        ),
+      },
+    };
+    const pdf = {
+      renderQcReport: jest.fn().mockResolvedValue(Buffer.from('rendered')),
+      storeReportPdf: jest.fn(),
+      readStoredPdf: jest.fn().mockReturnValue(null),
+    };
+    const svc = new QcService(prisma as never, { get: () => undefined } as never, pdf as never);
+    return { svc, prisma, pdf };
+  }
+
+  it('a COMPLETED inspection serves the STORED approval-time bytes under the r-N name', async () => {
+    const m = makeDownload({ status: 'COMPLETED', delivery: { pdfFile: 'ff.pdf' } });
+    m.pdf.readStoredPdf.mockReturnValue(Buffer.from('stored'));
+    const res = await m.svc.downloadPdf('insp1');
+    expect(res.filename).toBe('QC-20260820-ABC123-r1.pdf');
+    expect(res.bytes.toString()).toBe('stored');
+    // The stored file wins — no re-render at all.
+    expect(m.pdf.renderQcReport).not.toHaveBeenCalled();
+  });
+
+  it('falls back to rendering the delivery SNAPSHOT (never live data) when the file is gone', async () => {
+    const m = makeDownload({ status: 'COMPLETED', delivery: { pdfFile: null } });
+    const res = await m.svc.downloadPdf('insp1');
+    expect(res.filename).toBe('QC-20260820-ABC123-r1.pdf');
+    // Rendered from the snapshot's pdf data, without a watermark.
+    expect(m.pdf.renderQcReport).toHaveBeenCalledWith(SNAPSHOT.pdf);
+  });
+
+  it('a reopened (IN_PROGRESS) inspection downloads as a watermarked draft, not r-N', async () => {
+    const m = makeDownload({ status: 'IN_PROGRESS' });
+    // Draft path loads the LIVE bundle — stub it out.
+    jest
+      .spyOn(m.svc, 'reportBundle')
+      .mockResolvedValue({ code: 'QC-20260820-ABC123', pdf: SNAPSHOT.pdf } as never);
+    const res = await m.svc.downloadPdf('insp1');
+    expect(res.filename).toBe('QC-20260820-ABC123-nhap.pdf');
+    expect(m.pdf.renderQcReport).toHaveBeenCalledWith(SNAPSHOT.pdf, {
+      watermark: 'BẢN NHÁP — CHƯA HOÀN TẤT',
+    });
+    // The delivery row is never consulted for a draft.
+    expect(m.prisma.qcReportDelivery.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('an explicit ?revision serves that delivery even while reopened; missing revision 404s', async () => {
+    const m = makeDownload({ status: 'IN_PROGRESS', delivery: { pdfFile: null } });
+    const res = await m.svc.downloadPdf('insp1', 1);
+    expect(res.filename).toBe('QC-20260820-ABC123-r1.pdf');
+
+    const missing = makeDownload({ status: 'COMPLETED', delivery: null });
+    await expect(missing.svc.downloadPdf('insp1', 9)).rejects.toMatchObject({
+      response: { code: 'INTERNAL_QC_REPORT_NOT_FOUND' },
     });
   });
 });

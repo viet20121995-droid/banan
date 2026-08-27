@@ -4,3 +4,9 @@ import 'dart:typed_data';
 void saveBytesAsFile(Uint8List bytes, String filename, String mimeType) {}
 
 void printHtml(String html, String title) {}
+
+void writeSessionValue(String key, String value) {}
+
+String? readSessionValue(String key) => null;
+
+void openExternalUrl(String url) {}

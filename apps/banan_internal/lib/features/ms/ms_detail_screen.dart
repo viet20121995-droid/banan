@@ -179,8 +179,16 @@ class _MsDetailScreenState extends ConsumerState<MsDetailScreen> {
     setState(() => _busy = false);
     res.when(
       success: (bytes) {
-        saveBytesAsFile(bytes, '${d.code}-r${d.approvedRevision}.pdf', 'application/pdf');
-        showSnack(context, 'Đã tải PDF.');
+        // Mirrors the server: only an APPROVED assignment downloads as the
+        // approved r-N report; anything else is a watermarked draft.
+        final name = d.status == 'APPROVED'
+            ? '${d.code}-r${d.approvedRevision}.pdf'
+            : '${d.code}-nhap.pdf';
+        saveBytesAsFile(bytes, name, 'application/pdf');
+        showSnack(
+          context,
+          d.status == 'APPROVED' ? 'Đã tải PDF.' : 'Đã tải bản nháp (có watermark).',
+        );
       },
       failure: (f) => showFailure(context, f),
     );

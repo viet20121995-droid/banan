@@ -153,9 +153,12 @@ export class InternalReportDeliveryService {
       if (!token) return;
 
       // Immutable snapshot frozen at complete() — the live inspection may
-      // already be at a later revision.
+      // already be at a later revision. Attach the PDF stored at completion
+      // (immune to evidence files deleted since); re-render from the
+      // snapshot only when that file is missing.
       const bundle = delivery.reportSnapshot as unknown as QcReportBundle;
-      const pdfBytes = await this.pdf.renderQcReport(bundle.pdf);
+      const pdfBytes =
+        this.pdf.readStoredPdf(delivery.pdfFile) ?? (await this.pdf.renderQcReport(bundle.pdf));
       const outcomeLabel =
         bundle.result.outcome === 'PASS'
           ? 'ĐẠT'
@@ -231,8 +234,10 @@ export class InternalReportDeliveryService {
       if (!token) return;
 
       // Immutable snapshot frozen at approve() — never the live assignment.
+      // Stored approval-time PDF first, snapshot render as fallback.
       const bundle = delivery.reportSnapshot as unknown as MsReportBundle;
-      const pdfBytes = await this.pdf.renderMsReport(bundle.pdf);
+      const pdfBytes =
+        this.pdf.readStoredPdf(delivery.pdfFile) ?? (await this.pdf.renderMsReport(bundle.pdf));
       const outcomeLabel = bundle.result.criticalFail
         ? 'CRITICAL FAIL'
         : `${bundle.result.totalScore ?? 'N/A'}/100`;

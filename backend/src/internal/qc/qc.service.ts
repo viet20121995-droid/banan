@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertPrivateFileName, removePrivateFile } from '../files/internal-files.util';
 import { qcReportRecipients } from '../internal-config';
+import { InternalPdfService } from '../pdf/internal-pdf.service';
 
 import type {
   AttachEvidenceDto,
@@ -20,6 +21,7 @@ import {
   buildQcReportBundle,
   loadQcReportBundle,
   qcReportCode,
+  type QcReportBundle,
 } from './qc-report-data';
 import { QC_TEMPLATE_NAME } from './qc-template-data';
 
@@ -35,6 +37,7 @@ export class QcService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly pdf: InternalPdfService,
   ) {}
 
   /** Active template (latest active version) — the form the app renders. */
@@ -312,11 +315,11 @@ export class QcService {
 
   /**
    * Completes the inspection. The WHOLE flow — row lock, load answers,
-   * validate, score, status transition, delivery row — runs in ONE
-   * transaction, so a concurrent answer write either lands before the lock
-   * (and is scored) or blocks until after COMPLETED (and is rejected). The
-   * status-guarded updateMany + unique (inspectionId, revision) still stop
-   * a double-complete.
+   * validate, score, status transition, audit PDF, delivery row — runs in
+   * ONE transaction, so a concurrent answer write either lands before the
+   * lock (and is scored) or blocks until after COMPLETED (and is rejected).
+   * The status-guarded updateMany + unique (inspectionId, revision) still
+   * stop a double-complete.
    */
   async complete(id: string, actorId: string): Promise<{ inspectionId: string; revision: number }> {
     const recipients = qcReportRecipients(this.config);
@@ -393,12 +396,21 @@ export class QcService {
         // snapshot. The dispatcher renders from THIS, never from live data.
         bundle.revision = fresh.revision;
         bundle.pdf.revision = fresh.revision;
+        // Render + store the audit PDF INSIDE the lock: removeEvidence needs
+        // this same row lock, so every evidence file is still on disk here,
+        // and a storage failure rolls the whole complete back — a result is
+        // never published without its immutable PDF. (A file written before
+        // a rollback is orphaned; the daily sweep removes it.)
+        // ponytail: render holds the lock ~a second on photo-heavy reports —
+        // move to a FINALIZING state if completes ever need to be snappy.
+        const pdfFile = this.pdf.storeReportPdf(await this.pdf.renderQcReport(bundle.pdf));
         await tx.qcReportDelivery.create({
           data: {
             inspectionId: id,
             revision: fresh.revision,
             recipients,
             reportSnapshot: bundle as unknown as Prisma.InputJsonValue,
+            pdfFile,
           },
         });
         return fresh.revision;
@@ -424,9 +436,48 @@ export class QcService {
     return this.detail(id);
   }
 
-  /** Live score preview + report bundle (also used by the PDF endpoint). */
+  /** Live score preview + report bundle (result endpoint). */
   reportBundle(id: string) {
     return loadQcReportBundle(this.prisma, id);
+  }
+
+  /**
+   * PDF download. An approved revision (explicit `?revision=` or the latest
+   * of a COMPLETED inspection) is served from the delivery row — stored
+   * bytes first, snapshot render as fallback — NEVER from live data, so a
+   * reopened-and-edited inspection can't rewrite audit history under an r-N
+   * filename. Anything not completed is a watermarked draft preview.
+   */
+  async downloadPdf(id: string, revision?: number): Promise<{ bytes: Buffer; filename: string }> {
+    const inspection = await this.prisma.qcInspection.findUnique({
+      where: { id },
+      select: { status: true, revision: true },
+    });
+    if (!inspection) this.notFound();
+    const approvedRevision =
+      revision ?? (inspection.status === 'COMPLETED' ? inspection.revision : null);
+
+    if (approvedRevision != null) {
+      const delivery = await this.prisma.qcReportDelivery.findUnique({
+        where: { inspectionId_revision: { inspectionId: id, revision: approvedRevision } },
+      });
+      if (!delivery) {
+        throw new NotFoundException({
+          code: 'INTERNAL_QC_REPORT_NOT_FOUND',
+          message: 'Không có báo cáo cho bản này.',
+        });
+      }
+      const bundle = delivery.reportSnapshot as unknown as QcReportBundle;
+      const bytes =
+        this.pdf.readStoredPdf(delivery.pdfFile) ?? (await this.pdf.renderQcReport(bundle.pdf));
+      return { bytes, filename: `${bundle.code}-r${delivery.revision}.pdf` };
+    }
+
+    const bundle = await this.reportBundle(id);
+    const bytes = await this.pdf.renderQcReport(bundle.pdf, {
+      watermark: 'BẢN NHÁP — CHƯA HOÀN TẤT',
+    });
+    return { bytes, filename: `${bundle.code}-nhap.pdf` };
   }
 
   /** Per-store aggregates over completed inspections in a range. */

@@ -79,7 +79,7 @@ function makeService(opts: {
   const tokenCreate = jest.fn().mockResolvedValue({});
   const tokenUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
   const assignmentUpdateMany = jest.fn().mockResolvedValue({ count: opts.approveClaim ?? 1 });
-  const deliveryCreate = jest.fn().mockResolvedValue({});
+  const deliveryCreate = jest.fn().mockResolvedValue({ id: 'del1' });
   const submissionUpdate = jest.fn().mockResolvedValue({});
   const approvable = assignmentFixture('SUBMITTED', true);
   const tx = {
@@ -118,7 +118,12 @@ function makeService(opts: {
     }),
   };
   const config = { get: jest.fn().mockReturnValue(undefined) };
-  const svc = new MsService(prisma as never, config as never);
+  const pdf = {
+    renderMsReport: jest.fn().mockResolvedValue(Buffer.from('pdf')),
+    storeReportPdf: jest.fn().mockReturnValue('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.pdf'),
+    readStoredPdf: jest.fn().mockReturnValue(null),
+  };
+  const svc = new MsService(prisma as never, config as never, pdf as never);
   return {
     svc,
     prisma,
@@ -128,6 +133,7 @@ function makeService(opts: {
     deliveryCreate,
     submissionUpdate,
     assignment,
+    pdf,
   };
 }
 
@@ -233,6 +239,72 @@ describe('MsService.approve (all under the row lock)', () => {
       revision: 1,
       pdf: expect.objectContaining({ revision: 1 }),
     });
+  });
+
+  it('renders + stores the approval-time PDF INSIDE the tx — the delivery is born with it', async () => {
+    const m = makeService({});
+    await m.svc.approve('ms1', 'admin');
+    expect(m.pdf.renderMsReport).toHaveBeenCalledWith(expect.objectContaining({ revision: 1 }));
+    expect(m.deliveryCreate.mock.calls[0][0].data.pdfFile).toBe(
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.pdf',
+    );
+  });
+
+  it('a failed PDF render/store FAILS the approval — nothing is published without its PDF', async () => {
+    const m = makeService({});
+    m.pdf.renderMsReport.mockRejectedValueOnce(new Error('boom'));
+    await expect(m.svc.approve('ms1', 'admin')).rejects.toThrow('boom');
+    expect(m.deliveryCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('MsService.downloadPdf', () => {
+  const SNAPSHOT = { code: 'MS-0001', revision: 2, pdf: { code: 'MS-0001', revision: 2 } };
+
+  function makeDownload(opts: { status: string; delivery?: { pdfFile: string | null } | null }) {
+    const prisma = {
+      msAssignment: {
+        findUnique: jest.fn().mockResolvedValue({ status: opts.status, approvedRevision: 2 }),
+      },
+      msReportDelivery: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(
+            opts.delivery === null
+              ? null
+              : { revision: 2, pdfFile: opts.delivery?.pdfFile ?? null, reportSnapshot: SNAPSHOT },
+          ),
+      },
+    };
+    const pdf = {
+      renderMsReport: jest.fn().mockResolvedValue(Buffer.from('rendered')),
+      readStoredPdf: jest.fn().mockReturnValue(null),
+      storeReportPdf: jest.fn(),
+    };
+    const svc = new MsService(prisma as never, { get: () => undefined } as never, pdf as never);
+    return { svc, prisma, pdf };
+  }
+
+  it('APPROVED serves the stored bytes under the r-N name, never re-rendering', async () => {
+    const m = makeDownload({ status: 'APPROVED', delivery: { pdfFile: 'ff.pdf' } });
+    m.pdf.readStoredPdf.mockReturnValue(Buffer.from('stored'));
+    const res = await m.svc.downloadPdf('ms1');
+    expect(res.filename).toBe('MS-0001-r2.pdf');
+    expect(res.bytes.toString()).toBe('stored');
+    expect(m.pdf.renderMsReport).not.toHaveBeenCalled();
+  });
+
+  it('a SUBMITTED (not yet approved) assignment downloads as a watermarked draft', async () => {
+    const m = makeDownload({ status: 'SUBMITTED' });
+    jest
+      .spyOn(m.svc, 'reportBundle')
+      .mockResolvedValue({ code: 'MS-0001', pdf: SNAPSHOT.pdf } as never);
+    const res = await m.svc.downloadPdf('ms1');
+    expect(res.filename).toBe('MS-0001-nhap.pdf');
+    expect(m.pdf.renderMsReport).toHaveBeenCalledWith(SNAPSHOT.pdf, {
+      watermark: 'BẢN NHÁP — CHƯA DUYỆT',
+    });
+    expect(m.prisma.msReportDelivery.findUnique).not.toHaveBeenCalled();
   });
 });
 

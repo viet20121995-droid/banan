@@ -7,7 +7,7 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../../auth/types/jwt-payload';
 import { InternalReportDeliveryService } from '../internal-report-delivery.service';
-import { InternalPdfService } from '../pdf/internal-pdf.service';
+import { ReportPdfQueryDto } from '../qc/dto';
 
 import {
   CreateMsAssignmentDto,
@@ -25,7 +25,6 @@ import { MsService } from './ms.service';
 export class MsController {
   constructor(
     private readonly ms: MsService,
-    private readonly pdf: InternalPdfService,
     private readonly deliveries: InternalReportDeliveryService,
   ) {}
 
@@ -100,17 +99,19 @@ export class MsController {
     return this.ms.adminDetail(id);
   }
 
+  /** Approved revisions come from the immutable delivery snapshot; a
+   *  not-yet-approved assignment downloads as a watermarked draft. */
   @Get('assignments/:id/report.pdf')
-  async reportPdf(@Param('id') id: string, @Res() res: Response) {
-    const bundle = await this.ms.reportBundle(id);
-    const bytes = await this.pdf.renderMsReport(bundle.pdf);
+  async reportPdf(
+    @Param('id') id: string,
+    @Query() query: ReportPdfQueryDto,
+    @Res() res: Response,
+  ) {
+    const { bytes, filename } = await this.ms.downloadPdf(id, query.revision);
     res
       .status(200)
       .setHeader('Content-Type', 'application/pdf')
-      .setHeader(
-        'Content-Disposition',
-        `attachment; filename="${bundle.code}-r${bundle.revision}.pdf"`,
-      )
+      .setHeader('Content-Disposition', `attachment; filename="${filename}"`)
       .send(bytes);
   }
 }

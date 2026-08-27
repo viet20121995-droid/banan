@@ -11,6 +11,14 @@ import '../features/qc/qc_detail_screen.dart';
 import '../features/qc/qc_list_screen.dart';
 import '../features/schedule/schedule_screen.dart';
 import '../features/training/training_screen.dart';
+import '../shared/save_file.dart';
+
+/// The Mystery Shopper token never stays in the address bar: `/f/:token`
+/// stashes it (memory + per-tab sessionStorage for refresh) and replaces the
+/// URL with `/f`, so it can't leak via history, screenshots or referrers.
+/// Every API call already carries it in the POST body only.
+const _msTokenKey = 'banan_ms_token';
+String? _msTokenMemory;
 
 /// Router for the internal ops app.
 ///
@@ -30,7 +38,7 @@ final internalRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final loc = state.matchedLocation;
       // The Mystery Shopper fills the form via a secret link, no account.
-      if (loc.startsWith('/f/')) return null;
+      if (loc == '/f' || loc.startsWith('/f/')) return null;
       final session = repo.currentSession;
       if (session == null) return loc == '/login' ? null : '/login';
       if (!session.user.role.isAdmin) {
@@ -54,9 +62,20 @@ final internalRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/training', builder: (_, __) => const TrainingScreen()),
       GoRoute(path: '/schedule', builder: (_, __) => const ScheduleScreen()),
+      // Secret-link entry: stash the token, strip it from the URL.
       GoRoute(
         path: '/f/:token',
-        builder: (_, state) => MsFormScreen(token: state.pathParameters['token']!),
+        redirect: (_, state) {
+          final token = state.pathParameters['token']!;
+          _msTokenMemory = token;
+          writeSessionValue(_msTokenKey, token);
+          return '/f';
+        },
+      ),
+      GoRoute(
+        path: '/f',
+        builder: (_, __) =>
+            MsFormScreen(token: _msTokenMemory ?? readSessionValue(_msTokenKey) ?? ''),
       ),
       GoRoute(
         path: '/login',

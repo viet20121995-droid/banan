@@ -192,8 +192,16 @@ class _QcDetailScreenState extends ConsumerState<QcDetailScreen> {
     setState(() => _busy = false);
     res.when(
       success: (bytes) {
-        saveBytesAsFile(bytes, '${d.code}-r${d.revision}.pdf', 'application/pdf');
-        showSnack(context, 'Đã tải PDF.');
+        // Mirrors the server: only a COMPLETED inspection downloads as the
+        // approved r-N report; anything else is a watermarked draft.
+        final name = d.status == 'COMPLETED'
+            ? '${d.code}-r${d.revision}.pdf'
+            : '${d.code}-nhap.pdf';
+        saveBytesAsFile(bytes, name, 'application/pdf');
+        showSnack(
+          context,
+          d.status == 'COMPLETED' ? 'Đã tải PDF.' : 'Đã tải bản nháp (có watermark).',
+        );
       },
       failure: (f) => showFailure(context, f),
     );

@@ -446,6 +446,12 @@ class _TrainingScreenState extends ConsumerState<TrainingScreen>
                                       icon: const Icon(Icons.download_outlined, size: 20),
                                       onPressed: () => _downloadMaterial(m),
                                     ),
+                                  if (m.kind != 'FILE' && m.url != null)
+                                    IconButton(
+                                      tooltip: m.kind == 'VIDEO' ? 'Mở video' : 'Mở liên kết',
+                                      icon: const Icon(Icons.open_in_new, size: 20),
+                                      onPressed: () => _openMaterial(m),
+                                    ),
                                   IconButton(
                                     tooltip: 'Phát hành bản mới (giữ bản cũ để truy vết)',
                                     icon: const Icon(Icons.upgrade, size: 20),
@@ -463,6 +469,19 @@ class _TrainingScreenState extends ConsumerState<TrainingScreen>
         );
       },
     );
+  }
+
+  /// VIDEO / LINK materials open their external URL in a new tab.
+  void _openMaterial(MaterialView m) {
+    final url = m.url!.trim();
+    // Case-insensitive scheme check, mirroring openExternalUrl's guard —
+    // this copy exists only to give the admin feedback instead of a no-op.
+    final scheme = Uri.tryParse(url)?.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') {
+      showSnack(context, 'Đường dẫn không hợp lệ — cần bắt đầu bằng http(s)://');
+      return;
+    }
+    openExternalUrl(url);
   }
 
   Future<void> _downloadMaterial(MaterialView m) async {

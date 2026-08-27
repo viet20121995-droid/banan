@@ -21,7 +21,15 @@ const REFERENCED_OLD = `${'b'.repeat(32)}.png`;
 const ORPHAN_FRESH = `${'c'.repeat(32)}.webp`;
 const FOREIGN = 'not-a-private-file.txt';
 
-function makeService(referenced: { qc?: string[]; ms?: string[]; training?: string[] } = {}) {
+function makeService(
+  referenced: {
+    qc?: string[];
+    ms?: string[];
+    training?: string[];
+    qcPdf?: string[];
+    msPdf?: string[];
+  } = {},
+) {
   const prisma = {
     qcEvidence: {
       findMany: jest.fn().mockResolvedValue((referenced.qc ?? []).map((url) => ({ url }))),
@@ -31,6 +39,16 @@ function makeService(referenced: { qc?: string[]; ms?: string[]; training?: stri
     },
     trainingMaterial: {
       findMany: jest.fn().mockResolvedValue((referenced.training ?? []).map((url) => ({ url }))),
+    },
+    qcReportDelivery: {
+      findMany: jest
+        .fn()
+        .mockResolvedValue((referenced.qcPdf ?? []).map((pdfFile) => ({ pdfFile }))),
+    },
+    msReportDelivery: {
+      findMany: jest
+        .fn()
+        .mockResolvedValue((referenced.msPdf ?? []).map((pdfFile) => ({ pdfFile }))),
     },
   };
   return { svc: new InternalFilesCleanupService(prisma as never), prisma };
@@ -66,6 +84,13 @@ describe('InternalFilesCleanupService', () => {
 
   it('a file referenced by training materials is kept', async () => {
     const { svc } = makeService({ training: [ORPHAN_OLD, REFERENCED_OLD] });
+    const removed = await svc.removeOrphanFiles(NOW);
+    expect(removed).toBe(0);
+    expect(fs.unlink).not.toHaveBeenCalled();
+  });
+
+  it('an approval-time report PDF referenced by a delivery row is kept forever', async () => {
+    const { svc } = makeService({ qcPdf: [ORPHAN_OLD], msPdf: [REFERENCED_OLD] });
     const removed = await svc.removeOrphanFiles(NOW);
     expect(removed).toBe(0);
     expect(fs.unlink).not.toHaveBeenCalled();

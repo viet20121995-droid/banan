@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsIn,
@@ -132,4 +133,14 @@ export class QcCompareQueryDto {
 
   @IsISO8601()
   to!: string;
+}
+
+/** Shared by the QC and MS report.pdf endpoints: pick a specific approved
+ *  revision; omitted = latest approved, or a watermarked draft preview. */
+export class ReportPdfQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  revision?: number;
 }

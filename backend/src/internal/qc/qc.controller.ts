@@ -7,13 +7,13 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../../auth/types/jwt-payload';
 import { InternalReportDeliveryService } from '../internal-report-delivery.service';
-import { InternalPdfService } from '../pdf/internal-pdf.service';
 
 import {
   AttachEvidenceDto,
   CreateQcInspectionDto,
   QcCompareQueryDto,
   QcListQueryDto,
+  ReportPdfQueryDto,
   UpdateQcInspectionDto,
   UpsertQcAnswerDto,
   UpsertQcRiskDto,
@@ -27,7 +27,6 @@ import { QcService } from './qc.service';
 export class QcController {
   constructor(
     private readonly qc: QcService,
-    private readonly pdf: InternalPdfService,
     private readonly deliveries: InternalReportDeliveryService,
   ) {}
 
@@ -130,17 +129,19 @@ export class QcController {
     return this.qc.reopen(id, user.sub);
   }
 
+  /** Approved revisions come from the immutable delivery snapshot; a
+   *  not-yet-completed inspection downloads as a watermarked draft. */
   @Get('inspections/:id/report.pdf')
-  async reportPdf(@Param('id') id: string, @Res() res: Response) {
-    const bundle = await this.qc.reportBundle(id);
-    const bytes = await this.pdf.renderQcReport(bundle.pdf);
+  async reportPdf(
+    @Param('id') id: string,
+    @Query() query: ReportPdfQueryDto,
+    @Res() res: Response,
+  ) {
+    const { bytes, filename } = await this.qc.downloadPdf(id, query.revision);
     res
       .status(200)
       .setHeader('Content-Type', 'application/pdf')
-      .setHeader(
-        'Content-Disposition',
-        `attachment; filename="${bundle.code}-r${bundle.revision}.pdf"`,
-      )
+      .setHeader('Content-Disposition', `attachment; filename="${filename}"`)
       .send(bytes);
   }
 }
