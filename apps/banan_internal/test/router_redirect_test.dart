@@ -7,13 +7,42 @@ String? redirect(String location, {Role? role}) =>
 
 void main() {
   group('public routes', () {
-    for (final loc in ['/', '/ms/create', '/f', '/f/some-token']) {
+    for (final loc in ['/', '/ms/create', '/f', '/f/some-token', '/survey']) {
       test('$loc is reachable for guest, trainee and admin', () {
         expect(redirect(loc), isNull);
         expect(redirect(loc, role: Role.trainee), isNull);
         expect(redirect(loc, role: Role.admin), isNull);
       });
     }
+  });
+
+  group('survey admin area', () {
+    const adminPages = [
+      '/survey/reports',
+      '/survey/editor',
+      '/survey/link',
+      '/survey/rewards',
+      '/survey/cases',
+    ];
+
+    test('guest bounces to login WITH returnTo', () {
+      for (final loc in adminPages) {
+        expect(redirect(loc), '/login?returnTo=${Uri.encodeComponent(loc)}', reason: loc);
+      }
+    });
+
+    test('TRAINEE and other staff are blocked', () {
+      for (final loc in adminPages) {
+        expect(redirect(loc, role: Role.trainee), '/wrong-app', reason: loc);
+        expect(redirect(loc, role: Role.merchantOwner), '/wrong-app', reason: loc);
+      }
+    });
+
+    test('ADMIN passes everywhere', () {
+      for (final loc in adminPages) {
+        expect(redirect(loc, role: Role.admin), isNull, reason: loc);
+      }
+    });
   });
 
   group('guest', () {

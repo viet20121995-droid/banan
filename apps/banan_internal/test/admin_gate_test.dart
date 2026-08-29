@@ -33,7 +33,7 @@ Future<void> pumpApp(WidgetTester tester, AuthSession? session) async {
 }
 
 void main() {
-  testWidgets('guest sees the public home page with all 4 function cards', (tester) async {
+  testWidgets('guest sees the public home page with all 5 function cards', (tester) async {
     await pumpApp(tester, null);
     expect(find.byType(HomeScreen), findsOneWidget);
     expect(find.byType(LoginScreen), findsNothing);
@@ -41,9 +41,17 @@ void main() {
     expect(find.text('Mystery Shopper'), findsOneWidget);
     expect(find.text('Đào tạo'), findsOneWidget);
     expect(find.text('Lịch làm việc'), findsOneWidget);
+    expect(find.text('Khảo sát khách hàng'), findsOneWidget);
     // Role badges are visible so a non-tech employee knows what needs what.
     expect(find.text('Nhân viên có thể tạo link'), findsOneWidget);
     expect(find.text('Trainee / Admin'), findsOneWidget);
+  });
+
+  testWidgets('guest tapping Khảo sát khách hàng is sent to login (admin area)', (tester) async {
+    await pumpApp(tester, null);
+    await tester.tap(find.text('Khảo sát khách hàng'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginScreen), findsOneWidget);
   });
 
   testWidgets('guest tapping QC is sent to login (returnTo preserved)', (tester) async {
@@ -95,7 +103,7 @@ void main() {
     expect(find.byType(WrongAppScreen), findsOneWidget);
   });
 
-  testWidgets('ADMIN reaches QC with the 4-item sidebar', (tester) async {
+  testWidgets('ADMIN reaches QC with the 5-item sidebar (Khảo sát included)', (tester) async {
     await pumpApp(tester, testSession());
     await tester.tap(find.text('QC chi nhánh'));
     await tester.pumpAndSettle();
@@ -104,5 +112,6 @@ void main() {
     expect(find.text('Mystery Shopper'), findsOneWidget);
     expect(find.text('Training'), findsOneWidget);
     expect(find.text('Lịch làm'), findsOneWidget);
+    expect(find.text('Khảo sát'), findsOneWidget);
   });
 }

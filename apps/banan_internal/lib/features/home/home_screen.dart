@@ -152,6 +152,13 @@ const _cards = <HomeCardSpec>[
     description: 'Xếp lịch tuần cho 4 chi nhánh và xuất ảnh gửi nhóm.',
     path: '/schedule',
   ),
+  HomeCardSpec(
+    icon: Icons.reviews_outlined,
+    title: 'Khảo sát khách hàng',
+    badge: 'Admin',
+    description: 'Báo cáo trải nghiệm tại quán, xử lý case điểm thấp, link & QR khảo sát.',
+    path: '/survey/reports',
+  ),
 ];
 
 class _FunctionCard extends StatelessWidget {

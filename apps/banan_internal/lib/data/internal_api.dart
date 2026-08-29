@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'internal_models.dart';
+import 'survey_models.dart';
 
 /// Authed API client for the internal ops endpoints. Uses the shared Dio
 /// (Bearer + refresh interceptors from banan_data); the public MS form uses
@@ -552,6 +553,160 @@ class InternalApi {
         () => _dio.post<dynamic>('/internal/schedule/weeks/$scheduleId/unpublish'),
         (data) => ScheduleWeek.fromJson(data as Map<String, dynamic>),
       );
+
+  // ── Survey (admin) ──
+  Future<Result<SurveySummary, AppFailure>> surveySummary(Map<String, dynamic> query) => _run(
+        () => _dio.get<dynamic>('/internal/survey/reports/summary', queryParameters: query),
+        (data) => SurveySummary.fromJson(data as Map<String, dynamic>),
+      );
+
+  Future<Result<List<SurveyResponseRow>, AppFailure>> surveyResponses(
+    Map<String, dynamic> query,
+  ) =>
+      _run(
+        () => _dio.get<dynamic>('/internal/survey/responses', queryParameters: query),
+        (data) => (data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(SurveyResponseRow.fromJson)
+            .toList(),
+      );
+
+  /// CSV export bytes (UTF-8 with BOM) for a save dialog.
+  Future<Result<Uint8List, AppFailure>> surveyExportCsv(Map<String, dynamic> query) => _run(
+        () => _dio.get<List<int>>(
+          '/internal/survey/reports/export.csv',
+          queryParameters: query,
+          options: Options(responseType: ResponseType.bytes),
+        ),
+        (data) => Uint8List.fromList((data as List).cast<int>()),
+      );
+
+  Future<Result<List<SurveyCaseView>, AppFailure>> surveyCases({
+    String? status,
+    String? storeId,
+  }) =>
+      _run(
+        () => _dio.get<dynamic>('/internal/survey/cases', queryParameters: {
+          if (status != null) 'status': status,
+          if (storeId != null) 'storeId': storeId,
+        },),
+        (data) => (data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(SurveyCaseView.fromJson)
+            .toList(),
+      );
+
+  Future<Result<SurveyCaseView, AppFailure>> surveyUpdateCase(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _run(
+        () => _dio.patch<dynamic>('/internal/survey/cases/$id', data: body),
+        (data) => SurveyCaseView.fromJson(data as Map<String, dynamic>),
+      );
+
+  Future<Result<List<SurveyTemplateListItem>, AppFailure>> surveyTemplates() => _run(
+        () => _dio.get<dynamic>('/internal/survey/templates'),
+        (data) => (data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(SurveyTemplateListItem.fromJson)
+            .toList(),
+      );
+
+  Future<Result<SurveyTemplateView, AppFailure>> surveyTemplateDetail(String id) => _run(
+        () => _dio.get<dynamic>('/internal/survey/templates/$id'),
+        (data) => SurveyTemplateView.fromJson(data as Map<String, dynamic>),
+      );
+
+  Future<Result<SurveyTemplateView, AppFailure>> surveyCreateTemplate({
+    String? name,
+    String? cloneFromId,
+  }) =>
+      _run(
+        () => _dio.post<dynamic>('/internal/survey/templates', data: {
+          if (name != null && name.isNotEmpty) 'name': name,
+          if (cloneFromId != null) 'cloneFromId': cloneFromId,
+        },),
+        (data) => SurveyTemplateView.fromJson(data as Map<String, dynamic>),
+      );
+
+  Future<Result<SurveyTemplateView, AppFailure>> surveyReplaceQuestions(
+    String id,
+    List<Map<String, dynamic>> questions,
+  ) =>
+      _run(
+        () => _dio.put<dynamic>(
+          '/internal/survey/templates/$id/questions',
+          data: {'questions': questions},
+        ),
+        (data) => SurveyTemplateView.fromJson(data as Map<String, dynamic>),
+      );
+
+  Future<Result<SurveyTemplateView, AppFailure>> surveyPublishTemplate(String id) => _run(
+        () => _dio.post<dynamic>('/internal/survey/templates/$id/publish'),
+        (data) => SurveyTemplateView.fromJson(data as Map<String, dynamic>),
+      );
+
+  Future<Result<SurveyTemplateView, AppFailure>> surveyArchiveTemplate(String id) => _run(
+        () => _dio.post<dynamic>('/internal/survey/templates/$id/archive'),
+        (data) => SurveyTemplateView.fromJson(data as Map<String, dynamic>),
+      );
+
+  Future<Result<void, AppFailure>> surveyDeleteTemplate(String id) => _run(
+        () => _dio.delete<dynamic>('/internal/survey/templates/$id'),
+        (_) {},
+      );
+
+  Future<Result<List<SurveyCampaignView>, AppFailure>> surveyCampaigns() => _run(
+        () => _dio.get<dynamic>('/internal/survey/rewards'),
+        (data) => (data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(SurveyCampaignView.fromJson)
+            .toList(),
+      );
+
+  Future<Result<List<SurveyCampaignView>, AppFailure>> surveyCreateCampaign(
+    Map<String, dynamic> body,
+  ) =>
+      _run(
+        () => _dio.post<dynamic>('/internal/survey/rewards', data: body),
+        (data) => (data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(SurveyCampaignView.fromJson)
+            .toList(),
+      );
+
+  Future<Result<List<SurveyCampaignView>, AppFailure>> surveyUpdateCampaign(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _run(
+        () => _dio.patch<dynamic>('/internal/survey/rewards/$id', data: body),
+        (data) => (data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(SurveyCampaignView.fromJson)
+            .toList(),
+      );
+
+  Future<Result<SurveyRedeemResult, AppFailure>> surveyRedeem(String code) => _run(
+        () => _dio.post<dynamic>('/internal/survey/rewards/redeem', data: {'code': code}),
+        (data) => SurveyRedeemResult.fromJson(data as Map<String, dynamic>),
+      );
+
+  Future<Result<List<SurveyClaimView>, AppFailure>> surveyClaims({
+    String? campaignId,
+    String? status,
+  }) =>
+      _run(
+        () => _dio.get<dynamic>('/internal/survey/rewards/claims', queryParameters: {
+          if (campaignId != null) 'campaignId': campaignId,
+          if (status != null) 'status': status,
+        },),
+        (data) => (data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(SurveyClaimView.fromJson)
+            .toList(),
+      );
 }
 
 /// Token-based public API for the Mystery Shopper form. Plain Dio — no auth
@@ -626,6 +781,49 @@ class InternalPublicApi {
       }
     }
     return ServerFailure(code: code, message: message);
+  }
+
+  // ── Dine-in survey (fully public) ──
+
+  /// Published template + LIVE store list + reward teaser, one call.
+  Future<Result<SurveyPublicInfo, AppFailure>> surveyInfo() async {
+    try {
+      final res = await _dio.get<dynamic>('/internal/survey/public');
+      final status = res.statusCode ?? 0;
+      final body = res.data;
+      if (status >= 400) return Result.failure(_failureOf(status, body));
+      final data = body is Map<String, dynamic> ? body['data'] : body;
+      return Result.success(SurveyPublicInfo.fromJson(data as Map<String, dynamic>));
+    } on DioException catch (e) {
+      if (e.response != null) {
+        return Result.failure(_failureOf(e.response!.statusCode ?? 0, e.response!.data));
+      }
+      return Result.failure(NetworkFailure(cause: e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(message: e.toString(), cause: e));
+    }
+  }
+
+  /// Submit — idempotent on `clientRequestId` (retry returns the same
+  /// response + reward).
+  Future<Result<SurveySubmitResult, AppFailure>> surveySubmit(
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final res = await _dio.post<dynamic>('/internal/survey/public/responses', data: body);
+      final status = res.statusCode ?? 0;
+      final resBody = res.data;
+      if (status >= 400) return Result.failure(_failureOf(status, resBody));
+      final data = resBody is Map<String, dynamic> ? resBody['data'] : resBody;
+      return Result.success(SurveySubmitResult.fromJson(data as Map<String, dynamic>));
+    } on DioException catch (e) {
+      if (e.response != null) {
+        return Result.failure(_failureOf(e.response!.statusCode ?? 0, e.response!.data));
+      }
+      return Result.failure(NetworkFailure(cause: e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(message: e.toString(), cause: e));
+    }
   }
 
   Future<Result<MsPublicView, AppFailure>> view(String token) =>

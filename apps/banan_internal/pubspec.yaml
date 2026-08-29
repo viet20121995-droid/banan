@@ -34,6 +34,8 @@ dependencies:
   # QR render for the public MS link generator (pure-Dart painter, no
   # platform channels — safe on web).
   qr_flutter: ^4.1.0
+  # Print-ready QR PDF for the survey Link & QR admin page (pure Dart).
+  pdf: ^3.11.1
 
 dev_dependencies:
   flutter_test:

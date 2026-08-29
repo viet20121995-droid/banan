@@ -22,6 +22,11 @@ import {
   MS_TOTAL_WEIGHT,
 } from './ms/ms-template-data';
 import { QC_TEMPLATE_NAME, QC_TEMPLATE_SECTIONS, QC_TEMPLATE_VERSION } from './qc/qc-template-data';
+import {
+  SURVEY_TEMPLATE_NAME,
+  SURVEY_TEMPLATE_QUESTIONS,
+  SURVEY_TEMPLATE_VERSION,
+} from './survey/survey-template-data';
 
 export async function seedInternal(prisma: PrismaClient): Promise<void> {
   // ── QC template ──
@@ -91,7 +96,58 @@ export async function seedInternal(prisma: PrismaClient): Promise<void> {
     );
   }
 
+  await seedSurveyTemplate(prisma);
   await seedTraineeAccount(prisma);
+}
+
+/**
+ * Default dine-in survey template — created ONCE, on an empty Survey table
+ * only. Any existing template (seeded or editor-made) means production owns
+ * the data: the seed never touches it, never re-publishes, never overwrites
+ * a version. New wordings ship through the survey editor as new versions.
+ */
+export async function seedSurveyTemplate(prisma: PrismaClient): Promise<void> {
+  const existing = await prisma.surveyTemplate.count();
+  if (existing > 0) return;
+  await prisma.surveyTemplate.create({
+    data: {
+      name: SURVEY_TEMPLATE_NAME,
+      version: SURVEY_TEMPLATE_VERSION,
+      status: 'PUBLISHED',
+      isDefault: true,
+      publishedAt: new Date(),
+      questions: {
+        create: SURVEY_TEMPLATE_QUESTIONS.map((q, idx) => ({
+          code: q.code,
+          type: q.type,
+          textVi: q.textVi,
+          textEn: q.textEn,
+          required: q.required ?? false,
+          sortOrder: idx,
+          maxLength: q.maxLength ?? null,
+          showIfQuestionCode: q.showIfQuestionCode ?? null,
+          showIfOp: q.showIfOp ?? null,
+          showIfValue: q.showIfValue ?? null,
+          ...(q.options
+            ? {
+                options: {
+                  create: q.options.map((o, oIdx) => ({
+                    value: o.value,
+                    labelVi: o.labelVi,
+                    labelEn: o.labelEn,
+                    sortOrder: oIdx,
+                  })),
+                },
+              }
+            : {}),
+        })),
+      },
+    },
+  });
+  // eslint-disable-next-line no-console
+  console.log(
+    `Seeded survey template v${SURVEY_TEMPLATE_VERSION} (${SURVEY_TEMPLATE_QUESTIONS.length} questions)`,
+  );
 }
 
 /**

@@ -43,6 +43,32 @@ String? readSessionValue(String key) {
   }
 }
 
+void removeSessionValue(String key) {
+  if (!kIsWeb) return;
+  try {
+    _jsEval('sessionStorage.removeItem(${jsonEncode(key)})');
+  } catch (_) {/* storage blocked — nothing to remove */}
+}
+
+/// Per-BROWSER storage (survives the tab) — backs the survey's anonymous
+/// reward key. Same error-swallowing contract as the session variants.
+void writeLocalValue(String key, String value) {
+  if (!kIsWeb) return;
+  try {
+    _jsEval('localStorage.setItem(${jsonEncode(key)},${jsonEncode(value)})');
+  } catch (_) {/* storage blocked (private mode) — feature degrades gracefully */}
+}
+
+String? readLocalValue(String key) {
+  if (!kIsWeb) return null;
+  try {
+    final res = _jsEval('localStorage.getItem(${jsonEncode(key)})');
+    return (res as JSString?)?.toDart;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Opens an external http(s) link in a new tab (web-only). Any other scheme
 /// is refused — admin-entered URLs must never become javascript: execution.
 /// Scheme match is case-insensitive (HTTPS://… is a valid URL).

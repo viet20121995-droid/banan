@@ -28,6 +28,9 @@ class InternalShell extends ConsumerWidget {
     _NavSpec('/ms', Icons.visibility_outlined, 'Mystery Shopper'),
     _NavSpec('/training', Icons.school_outlined, 'Training'),
     _NavSpec('/schedule', Icons.calendar_month_outlined, 'Lịch làm'),
+    // Any /survey/* admin page highlights this item; /survey itself is the
+    // public guest form and never renders the shell.
+    _NavSpec('/survey/reports', Icons.reviews_outlined, 'Khảo sát', selectedPrefix: '/survey/'),
   ];
   static const _traineeItems = [
     _NavSpec('/training', Icons.school_outlined, 'Đào tạo của tôi'),
@@ -87,10 +90,14 @@ class InternalShell extends ConsumerWidget {
 }
 
 class _NavSpec {
-  const _NavSpec(this.path, this.icon, this.label);
+  const _NavSpec(this.path, this.icon, this.label, {this.selectedPrefix});
   final String path;
   final IconData icon;
   final String label;
+
+  /// Overrides the default "path or path/*" selected match — for items whose
+  /// section spans sibling routes (e.g. /survey/reports vs /survey/cases).
+  final String? selectedPrefix;
 }
 
 class _SidebarNav extends StatelessWidget {
@@ -125,7 +132,9 @@ class _SidebarNav extends StatelessWidget {
           ListTile(
             leading: Icon(item.icon, size: 20),
             title: Text(item.label),
-            selected: location == item.path || location.startsWith('${item.path}/'),
+            selected: item.selectedPrefix != null
+                ? location.startsWith(item.selectedPrefix!)
+                : location == item.path || location.startsWith('${item.path}/'),
             onTap: () {
               // Close the drawer first on mobile.
               if (Scaffold.maybeOf(context)?.isDrawerOpen ?? false) {

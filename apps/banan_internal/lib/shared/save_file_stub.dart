@@ -9,4 +9,10 @@ void writeSessionValue(String key, String value) {}
 
 String? readSessionValue(String key) => null;
 
+void removeSessionValue(String key) {}
+
+void writeLocalValue(String key, String value) {}
+
+String? readLocalValue(String key) => null;
+
 void openExternalUrl(String url) {}

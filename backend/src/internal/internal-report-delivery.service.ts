@@ -18,7 +18,8 @@ const CLAIM_TTL_MS = 10 * 60_000;
 
 interface DeliveryRow {
   id: string;
-  revision: number;
+  /** QC/MS report deliveries only — survey alerts have no revisions. */
+  revision?: number;
   recipients: string[];
   status: string;
   attempts: number;
@@ -73,12 +74,14 @@ export class InternalReportDeliveryService {
           { status: 'PROCESSING' as never, lockedUntil: { lt: now } },
         ],
       };
-      const [qc, ms] = await Promise.all([
+      const [qc, ms, survey] = await Promise.all([
         this.prisma.qcReportDelivery.findMany({ where, select: { id: true }, take: 20 }),
         this.prisma.msReportDelivery.findMany({ where, select: { id: true }, take: 20 }),
+        this.prisma.surveyAlertDelivery.findMany({ where, select: { id: true }, take: 20 }),
       ]);
       for (const d of qc) await this.dispatchQcById(d.id);
       for (const d of ms) await this.dispatchMsById(d.id);
+      for (const d of survey) await this.dispatchSurveyAlertById(d.id);
     } catch (err) {
       this.logger.error(`Delivery retry sweep failed: ${(err as Error).message}`);
     }
@@ -95,6 +98,20 @@ export class InternalReportDeliveryService {
       if (delivery) await this.dispatchQcById(delivery.id);
     } catch (err) {
       this.logger.error(`QC dispatch ${inspectionId} r${revision}: ${(err as Error).message}`);
+    }
+  }
+
+  /** Called (fire-and-forget) right after a low-score survey submit commits.
+   *  NEVER rejects — same contract as the QC/MS dispatchers. */
+  async dispatchSurveyAlert(caseId: string): Promise<void> {
+    try {
+      const delivery = await this.prisma.surveyAlertDelivery.findUnique({
+        where: { caseId },
+        select: { id: true },
+      });
+      if (delivery) await this.dispatchSurveyAlertById(delivery.id);
+    } catch (err) {
+      this.logger.error(`Survey alert dispatch ${caseId}: ${(err as Error).message}`);
     }
   }
 
@@ -288,6 +305,67 @@ export class InternalReportDeliveryService {
       } catch (markErr) {
         this.logger.error(
           `MS delivery ${deliveryId} FAILED-mark failed: ${(markErr as Error).message}`,
+        );
+      }
+    }
+  }
+
+  /** Low-score survey alert (no PDF). Rendered from the row's immutable
+   *  snapshot; guest contact appears ONLY when it was stored with consent. */
+  private async dispatchSurveyAlertById(deliveryId: string): Promise<void> {
+    let token: string | null = null;
+    try {
+      const delivery = await this.prisma.surveyAlertDelivery.findUnique({
+        where: { id: deliveryId },
+      });
+      if (!delivery || delivery.status === 'SENT' || delivery.attempts >= MAX_ATTEMPTS) return;
+      token = await this.claim(this.prisma.surveyAlertDelivery, delivery);
+      if (!token) return;
+
+      const snap = delivery.snapshot as {
+        storeName?: string;
+        overall?: number | null;
+        comment?: string | null;
+        contact?: { name?: string | null; phone?: string | null } | null;
+        submittedAt?: string;
+      };
+      const when = snap.submittedAt
+        ? new Date(snap.submittedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
+        : '?';
+      const lines = [
+        `Chi nhánh: ${snap.storeName ?? '?'}`,
+        `Điểm tổng thể: ${snap.overall ?? '?'}/5`,
+        `Thời gian: ${when}`,
+        ...(snap.comment ? [`Góp ý: ${snap.comment}`] : []),
+        snap.contact
+          ? `Khách đồng ý liên hệ: ${snap.contact.name ?? '—'} · ${snap.contact.phone ?? '—'}`
+          : 'Khách không để lại thông tin liên hệ.',
+        'Case đã được mở tự động — xử lý trong SLA.',
+      ];
+      const ok = await this.email.sendInternalReport({
+        to: delivery.recipients,
+        subject: `[Khảo sát] Điểm thấp ${snap.overall ?? '?'}/5 · ${snap.storeName ?? '?'}`,
+        heading: 'Cảnh báo khảo sát điểm thấp',
+        lines,
+        ctaUrl: `${internalAppUrl(this.config)}/survey/cases`,
+        ctaLabel: 'Xem case khảo sát',
+      });
+      await this.markResult(this.prisma.surveyAlertDelivery, deliveryId, token, ok);
+    } catch (err) {
+      this.logger.error(`Survey alert ${deliveryId} failed: ${(err as Error).message}`);
+      try {
+        if (token) {
+          await this.markResult(
+            this.prisma.surveyAlertDelivery,
+            deliveryId,
+            token,
+            false,
+            (err as Error).message,
+          );
+        }
+      } catch (markErr) {
+        this.logger.error(
+          `Survey alert ${deliveryId} FAILED-mark failed: ${(markErr as Error).message}`,
         );
       }
     }

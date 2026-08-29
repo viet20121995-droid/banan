@@ -193,11 +193,12 @@ model Store {
   requestedTransfers Order[]             @relation("OrderRequestingStore")
   incomingTransfers  Order[]             @relation("OrderDestinationStore")
 
-  // Internal ops app (QC / Mystery Shopper / Training / Schedule).
+  // Internal ops app (QC / Mystery Shopper / Training / Schedule / Survey).
   qcInspections      QcInspection[]
   msAssignments      MsAssignment[]
   internalPeople     InternalPerson[]
   scheduleShifts     WorkScheduleShift[]
+  surveyResponses    SurveyResponse[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2571,6 +2572,260 @@ model TrainingProgress {
   updatedAt     DateTime               @updatedAt
 
   @@unique([assignmentId, pathItemId])
+}
+
+// ── Dine-in Survey ──────────────────────────────────────────────────────────
+// Guest experience survey behind ONE fixed public link (/survey). No table
+// tokens, no per-branch QR — the guest picks the branch from the live Store
+// list. Templates are versioned (published versions immutable), low scores
+// open a closed-loop case, and the reward foundation ships DISABLED.
+
+enum SurveyTemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SurveyQuestionType {
+  EMOJI_SCALE // 1–5 cảm xúc (overall experience)
+  RATING // 1–5 sao
+  NPS // 0–10
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  TEXT
+  YES_NO
+}
+
+model SurveyTemplate {
+  id      String               @id @default(uuid())
+  name    String
+  version Int
+  status  SurveyTemplateStatus @default(DRAFT)
+  /// Exactly one PUBLISHED template is the live default served to guests.
+  /// Publishing a new version archives the previous default in the same tx.
+  isDefault   Boolean   @default(false)
+  publishedAt DateTime?
+  createdById String?
+
+  questions SurveyQuestion[]
+  responses SurveyResponse[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, version])
+  @@index([status, isDefault])
+}
+
+model SurveyQuestion {
+  id         String         @id @default(uuid())
+  templateId String
+  template   SurveyTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  /// Stable semantic key ('overall', 'nps', 'improve', …) — branching, case
+  /// creation and reporting key on it, so reports survive template edits.
+  code       String
+  type       SurveyQuestionType
+  textVi     String
+  textEn     String
+  required   Boolean        @default(false)
+  sortOrder  Int
+  /// Max characters for TEXT answers (default 1000 server-side).
+  maxLength  Int?
+
+  /// Conditional display: show only when the NUMERIC answer of the question
+  /// with `showIfQuestionCode` satisfies op/value (LTE | GTE | EQ). Answers
+  /// to hidden questions are rejected server-side.
+  showIfQuestionCode String?
+  showIfOp           String?
+  showIfValue        Int?
+
+  options SurveyOption[]
+  answers SurveyAnswer[]
+
+  @@unique([templateId, code])
+}
+
+model SurveyOption {
+  id         String         @id @default(uuid())
+  questionId String
+  question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  /// Stable choice code ('taste', 'freshness', …) — what SurveyAnswer stores.
+  value      String
+  labelVi    String
+  labelEn    String
+  sortOrder  Int
+
+  @@unique([questionId, value])
+}
+
+model SurveyResponse {
+  id         String         @id @default(uuid())
+  templateId String
+  template   SurveyTemplate @relation(fields: [templateId], references: [id])
+  storeId    String
+  store      Store          @relation(fields: [storeId], references: [id])
+  /// Name snapshot at submit time — renaming a branch later must not change
+  /// what old reports say.
+  storeName  String
+  /// Denormalized overall emoji score (1–5) — the case rule and every
+  /// dashboard aggregate key on it.
+  overall    Int?
+  nps        Int?
+  comment    String?
+  locale     String         @default("vi")
+
+  /// PII lives ONLY here and ONLY with explicit consent — never required to
+  /// submit feedback.
+  contactRequested Boolean   @default(false)
+  contactName      String?
+  contactPhone     String?
+  contactConsentAt DateTime?
+
+  /// Client dedup key — a retried submit returns the SAME response + reward
+  /// instead of creating a duplicate.
+  clientRequestId String  @unique
+  /// Anonymous per-browser key backing the 1-reward/browser/campaign/day cap.
+  /// Never an IP address.
+  browserKey      String?
+
+  answers     SurveyAnswer[]
+  case        SurveyCase?
+  rewardClaim SurveyRewardClaim?
+
+  createdAt DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([createdAt])
+}
+
+model SurveyAnswer {
+  id         String         @id @default(uuid())
+  responseId String
+  response   SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String
+  question   SurveyQuestion @relation(fields: [questionId], references: [id])
+  /// Question.code snapshot — reporting stays cheap and stable.
+  questionCode String
+  numberValue  Int?
+  textValue    String?
+  optionValues String[] @default([])
+
+  @@unique([responseId, questionId])
+  @@index([questionCode])
+}
+
+enum SurveyCaseStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  // OVERDUE is DERIVED (unresolved + older than the SLA) — never stored.
+}
+
+/// Closed-loop follow-up automatically opened for overall ≤ 2.
+model SurveyCase {
+  id           String           @id @default(uuid())
+  responseId   String           @unique
+  response     SurveyResponse   @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  status       SurveyCaseStatus @default(NEW)
+  /// Free-text assignee — internal staff mostly have no accounts.
+  assigneeName String?
+  note         String?
+  resolvedAt   DateTime?
+  resolvedById String?
+
+  alerts SurveyAlertDelivery[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+enum SurveyRewardMode {
+  NONE
+  MESSAGE_ONLY
+  VOUCHER_CODE
+}
+
+enum SurveyRewardClaimStatus {
+  ISSUED
+  REDEEMED
+  EXPIRED
+  VOID
+}
+
+/// Reward foundation — ships DISABLED (isEnabled=false). The gift is only
+/// revealed AFTER a successful submit.
+model SurveyRewardCampaign {
+  id           String           @id @default(uuid())
+  name         String
+  description  String?
+  /// Hướng dẫn nhận quà shown on the thank-you screen.
+  instructions String?
+  mode         SurveyRewardMode @default(NONE)
+  isEnabled    Boolean          @default(false)
+  startsAt     DateTime?
+  endsAt       DateTime?
+  /// Voucher validity in days from issue.
+  expiryDays   Int              @default(7)
+  /// % of qualifying responses that win (0–100).
+  probabilityPct Int            @default(100)
+  dailyCap     Int?
+  totalCap     Int?
+  /// Guarded counter — the total-cap check is a conditional UPDATE on this
+  /// row (also the row lock serializing concurrent claims).
+  issuedCount  Int              @default(0)
+
+  claims SurveyRewardClaim[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SurveyRewardClaim {
+  id         String               @id @default(uuid())
+  campaignId String
+  campaign   SurveyRewardCampaign @relation(fields: [campaignId], references: [id])
+  /// DB guard: one reward per response, ever.
+  responseId String               @unique
+  response   SurveyResponse       @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  /// null in MESSAGE_ONLY mode.
+  voucherCode String?             @unique
+  status      SurveyRewardClaimStatus @default(ISSUED)
+  /// yyyy-MM-dd in Asia/Ho_Chi_Minh — with browserKey, the DB guard for one
+  /// reward per browser per campaign per day.
+  dayKey     String
+  browserKey String?
+  expiresAt  DateTime?
+  redeemedAt   DateTime?
+  redeemedById String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([campaignId, browserKey, dayKey])
+  @@index([campaignId, status])
+}
+
+/// Outbox row for the low-score alert email — created inside the submit
+/// transaction (unique per case), dispatched fire-and-forget afterwards, so
+/// an SMTP failure can never roll back a saved response and a retry can
+/// never send two emails.
+model SurveyAlertDelivery {
+  id          String                       @id @default(uuid())
+  caseId      String                       @unique
+  case        SurveyCase                   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  recipients  String[]
+  status      InternalReportDeliveryStatus @default(PENDING)
+  attempts    Int                          @default(0)
+  lockedUntil DateTime?
+  claimToken  String?
+  /// Immutable alert bundle captured at submit time.
+  snapshot    Json
+  lastError   String?
+  sentAt      DateTime?
+  createdAt   DateTime                     @default(now())
+
+  @@index([status])
 }
 
 // ── Weekly work schedule ────────────────────────────────────────────────────

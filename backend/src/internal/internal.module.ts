@@ -13,15 +13,19 @@ import { QcController } from './qc/qc.controller';
 import { QcService } from './qc/qc.service';
 import { ScheduleController } from './schedule/schedule.controller';
 import { ScheduleService } from './schedule/schedule.service';
+import { SurveyPublicController } from './survey/survey-public.controller';
+import { SurveyController } from './survey/survey.controller';
+import { SurveyService } from './survey/survey.service';
 import { TraineeTrainingController } from './training/trainee-training.controller';
 import { TrainingController } from './training/training.controller';
 import { TrainingService } from './training/training.service';
 
 /**
  * Internal ops app (internal.banancakes.vn): QC, Mystery Shopper, Training,
- * weekly schedule. Management controllers are @Roles(ADMIN); the trainee
- * surface (TraineeTrainingController + training-file reads) also admits
- * TRAINEE, and MsPublicController is token/access-code gated, no account.
+ * weekly schedule, dine-in Survey. Management controllers are @Roles(ADMIN);
+ * the trainee surface (TraineeTrainingController + training-file reads) also
+ * admits TRAINEE; MsPublicController is token/access-code gated and
+ * SurveyPublicController is fully public (throttled), no account.
  */
 @Module({
   imports: [NotificationsModule],
@@ -32,6 +36,8 @@ import { TrainingService } from './training/training.service';
     TrainingController,
     TraineeTrainingController,
     ScheduleController,
+    SurveyController,
+    SurveyPublicController,
     InternalFilesController,
   ],
   providers: [
@@ -39,6 +45,7 @@ import { TrainingService } from './training/training.service';
     MsService,
     TrainingService,
     ScheduleService,
+    SurveyService,
     InternalPdfService,
     InternalReportDeliveryService,
     InternalFilesCleanupService,

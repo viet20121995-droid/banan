@@ -11,11 +11,15 @@ List<Map<String, dynamic>> _list(dynamic v) =>
     v is List ? v.whereType<Map<String, dynamic>>().toList() : const [];
 
 class StoreRef {
-  const StoreRef({required this.id, required this.name});
-  factory StoreRef.fromJson(Map<String, dynamic> json) =>
-      StoreRef(id: json['id'] as String, name: (json['name'] as String?) ?? '?');
+  const StoreRef({required this.id, required this.name, this.address});
+  factory StoreRef.fromJson(Map<String, dynamic> json) => StoreRef(
+        id: json['id'] as String,
+        name: (json['name'] as String?) ?? '?',
+        address: _s(json['address']),
+      );
   final String id;
   final String name;
+  final String? address;
 }
 
 class EvidenceRef {

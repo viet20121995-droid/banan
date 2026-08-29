@@ -51,6 +51,22 @@ export function internalAppUrl(config: ConfigService): string {
 }
 
 /**
+ * Low-score survey alert recipients (`SURVEY_ALERT_RECIPIENTS`, CSV).
+ * Deliberately NO built-in default: unset means no alert email is queued
+ * (the case is still created) — recipients are ops policy, not code.
+ */
+export function surveyAlertRecipients(config: ConfigService): string[] {
+  return parseCsv(config.get<string>('SURVEY_ALERT_RECIPIENTS'), []);
+}
+
+/** SLA (hours) after which an unresolved survey case shows as OVERDUE.
+ *  `SURVEY_CASE_SLA_HOURS`, default 48. */
+export function surveyCaseSlaHours(config: ConfigService): number {
+  const raw = Number(config.get<string>('SURVEY_CASE_SLA_HOURS'));
+  return Number.isFinite(raw) && raw > 0 ? raw : 48;
+}
+
+/**
  * Shared internal access code for the public MS link generator
  * (`INTERNAL_MS_CREATOR_CODE`). FAIL CLOSED: unset/blank disables the
  * generator everywhere — never a built-in default, never logged.
