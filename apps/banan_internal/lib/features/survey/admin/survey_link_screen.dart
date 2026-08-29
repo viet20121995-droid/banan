@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:banan_core/banan_core.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,14 +20,12 @@ const _qrCaption = 'Quét để chia sẻ trải nghiệm';
 class SurveyLinkScreen extends StatelessWidget {
   const SurveyLinkScreen({super.key});
 
-  /// The canonical public URL — current origin in the browser, the prod
-  /// domain anywhere else (tests, previews).
-  static String surveyUrl() {
-    final base = Uri.base;
-    if (base.scheme == 'http' || base.scheme == 'https') {
-      return '${base.origin}/survey';
-    }
-    return 'https://internal.banancakes.vn/survey';
+  /// The canonical public URL — the CUSTOMER app domain, never this admin
+  /// app's origin. Built from [Env.customerAppUrl] (trailing slashes
+  /// trimmed), so prod QRs encode `https://banancakes.vn/survey`.
+  static String surveyUrl({String? customerBase}) {
+    final base = (customerBase ?? Env.customerAppUrl).replaceAll(RegExp(r'/+$'), '');
+    return '$base/survey';
   }
 
   @override

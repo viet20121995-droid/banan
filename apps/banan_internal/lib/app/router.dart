@@ -18,7 +18,6 @@ import '../features/survey/admin/survey_editor_screen.dart';
 import '../features/survey/admin/survey_link_screen.dart';
 import '../features/survey/admin/survey_reports_screen.dart';
 import '../features/survey/admin/survey_rewards_screen.dart';
-import '../features/survey/survey_screen.dart';
 import '../features/training/trainee_training_screen.dart';
 import '../features/training/training_screen.dart';
 import '../shared/save_file.dart';
@@ -31,9 +30,12 @@ const _msTokenKey = 'banan_ms_token';
 String? _msTokenMemory;
 
 /// Per-GROUP access rules (deliberately not one "everything is ADMIN" rule):
-///   /qc, /schedule, /ms, /survey/* (admin area) → ADMIN
-///   /training                                   → ADMIN or TRAINEE
-///   /, /ms/create, /survey, /f, /f/:token       → public
+///   /qc, /schedule, /ms, /survey* (admin area) → ADMIN
+///   /training                                  → ADMIN or TRAINEE
+///   /, /ms/create, /f, /f/:token               → public
+/// The guest survey does NOT live here — it is served on the customer
+/// domain (`<customerAppUrl>/survey`); Caddy 308-redirects the old
+/// internal /survey link there. Every /survey* path in THIS app is admin.
 /// Pure so tests can exercise the whole matrix without a widget tree.
 /// Returns the location to redirect to, or null to stay.
 String? internalRedirect({required Uri uri, required Role? role}) {
@@ -42,8 +44,6 @@ String? internalRedirect({required Uri uri, required Role? role}) {
 
   if (loc == '/f' || loc.startsWith('/f/')) return null;
   if (loc == '/ms/create') return null;
-  // The guest survey — exactly this path; /survey/* stays admin.
-  if (loc == '/survey') return null;
   if (loc == '/' || loc == '') return null;
 
   if (loc == '/login') {
@@ -116,8 +116,10 @@ final internalRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(path: '/schedule', builder: (_, __) => const ScheduleScreen()),
-      // Public guest survey — the ONE fixed link every printed QR points at.
-      GoRoute(path: '/survey', builder: (_, __) => const SurveyScreen()),
+      // The guest survey moved to the customer domain; a bare /survey here
+      // (old bookmark that slipped past Caddy's 308) lands on the admin
+      // reports — the redirect above has already demanded an ADMIN session.
+      GoRoute(path: '/survey', redirect: (_, __) => '/survey/reports'),
       GoRoute(path: '/survey/reports', builder: (_, __) => const SurveyReportsScreen()),
       GoRoute(path: '/survey/editor', builder: (_, __) => const SurveyEditorScreen()),
       GoRoute(path: '/survey/link', builder: (_, __) => const SurveyLinkScreen()),

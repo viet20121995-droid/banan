@@ -7,7 +7,7 @@ String? redirect(String location, {Role? role}) =>
 
 void main() {
   group('public routes', () {
-    for (final loc in ['/', '/ms/create', '/f', '/f/some-token', '/survey']) {
+    for (final loc in ['/', '/ms/create', '/f', '/f/some-token']) {
       test('$loc is reachable for guest, trainee and admin', () {
         expect(redirect(loc), isNull);
         expect(redirect(loc, role: Role.trainee), isNull);
@@ -17,7 +17,10 @@ void main() {
   });
 
   group('survey admin area', () {
+    // /survey (exact) is no longer the public guest form — it moved to the
+    // customer domain; here it is just another admin path.
     const adminPages = [
+      '/survey',
       '/survey/reports',
       '/survey/editor',
       '/survey/link',

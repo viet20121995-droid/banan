@@ -48,5 +48,11 @@ kitchen.{$BASE_DOMAIN} {
 # ── Internal operations web ───────────────────────────────────────────────────
 internal.{$BASE_DOMAIN} {
 	root * /srv/internal
+	# The public dine-in survey moved to the customer domain. Old printed
+	# QRs/bookmarks pointed at internal /survey — send EXACTLY that path (and
+	# its trailing-slash twin) there permanently. Admin routes like
+	# /survey/reports must NOT match; they stay in this SPA behind ADMIN login.
+	@legacy_public_survey path /survey /survey/
+	redir @legacy_public_survey https://{$BASE_DOMAIN}/survey 308
 	import flutter_spa
 }

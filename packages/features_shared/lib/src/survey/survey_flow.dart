@@ -1,92 +1,15 @@
-import 'dart:convert';
-import 'dart:math';
-
 import 'package:banan_core/banan_core.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
-import '../../data/survey_models.dart';
-import '../../shared/widgets.dart';
-
-/// The guest's in-progress answers. Serializable so the public screen can
-/// keep it in sessionStorage across back/refresh in the same tab.
-class SurveyDraft {
-  SurveyDraft({
-    this.storeId,
-    Map<String, int>? numbers,
-    Map<String, List<String>>? choices,
-    Map<String, String>? texts,
-    this.contactName = '',
-    this.contactPhone = '',
-    this.contactConsent = false,
-    this.step = 0,
-    this.locale = 'vi',
-    String? clientRequestId,
-  })  : numbers = numbers ?? {},
-        choices = choices ?? {},
-        texts = texts ?? {},
-        clientRequestId = clientRequestId ?? newSurveyKey();
-
-  factory SurveyDraft.fromJsonString(String raw) {
-    try {
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      return SurveyDraft(
-        storeId: json['storeId'] as String?,
-        numbers: (json['numbers'] as Map<String, dynamic>? ?? {})
-            .map((k, v) => MapEntry(k, (v as num).toInt())),
-        choices: (json['choices'] as Map<String, dynamic>? ?? {})
-            .map((k, v) => MapEntry(k, (v as List).cast<String>())),
-        texts: (json['texts'] as Map<String, dynamic>? ?? {})
-            .map((k, v) => MapEntry(k, v as String)),
-        contactName: (json['contactName'] as String?) ?? '',
-        contactPhone: (json['contactPhone'] as String?) ?? '',
-        contactConsent: json['contactConsent'] == true,
-        step: (json['step'] as num?)?.toInt() ?? 0,
-        locale: (json['locale'] as String?) == 'en' ? 'en' : 'vi',
-        clientRequestId: json['clientRequestId'] as String?,
-      );
-    } catch (_) {
-      return SurveyDraft();
-    }
-  }
-
-  String? storeId;
-
-  /// By question CODE — codes are stable across template loads, ids are not.
-  final Map<String, int> numbers;
-  final Map<String, List<String>> choices;
-  final Map<String, String> texts;
-  String contactName;
-  String contactPhone;
-  bool contactConsent;
-  int step;
-  /// 'vi' | 'en' — what the guest actually answered in.
-  String locale;
-  final String clientRequestId;
-
-  String toJsonString() => jsonEncode({
-        'storeId': storeId,
-        'numbers': numbers,
-        'choices': choices,
-        'texts': texts,
-        'contactName': contactName,
-        'contactPhone': contactPhone,
-        'contactConsent': contactConsent,
-        'step': step,
-        'locale': locale,
-        'clientRequestId': clientRequestId,
-      });
-}
-
-/// Random url-safe key (idempotency + anonymous browser key).
-String newSurveyKey() {
-  final rng = Random.secure();
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  return List.generate(32, (_) => chars[rng.nextInt(chars.length)]).join();
-}
+import 'survey_draft.dart';
+import 'survey_public_models.dart';
 
 String _t(String locale, String vi, String en) => locale == 'en' ? en : vi;
+
+final _vnDate = DateFormat('dd/MM/yyyy');
 
 const _emojiIcons = [
   Icons.sentiment_very_dissatisfied,
@@ -110,9 +33,9 @@ class _Step {
   final List<SurveyQuestionView> questions;
 }
 
-/// The guest survey flow — also embedded as the editor's mobile preview
-/// (`preview: true` disables the real submit), so what admins preview IS
-/// what guests get.
+/// The guest survey flow — served on the CUSTOMER domain and also embedded
+/// as the internal editor's mobile preview (`preview: true` disables the
+/// real submit), so what admins preview IS what guests get.
 class SurveyFlow extends StatefulWidget {
   const SurveyFlow({
     required this.template,
@@ -164,9 +87,8 @@ class _SurveyFlowState extends State<SurveyFlow> {
 
   Map<String, int> get _numericByCode => _draft.numbers;
 
-  List<SurveyQuestionView> get _visibleQuestions => widget.template.questions
-      .where((q) => q.visibleFor(_numericByCode))
-      .toList();
+  List<SurveyQuestionView> get _visibleQuestions =>
+      widget.template.questions.where((q) => q.visibleFor(_numericByCode)).toList();
 
   /// Store first, then one question per step — consecutive RATINGs grouped
   /// into one short block so the flow stays 45–60s.
@@ -279,8 +201,13 @@ class _SurveyFlowState extends State<SurveyFlow> {
       }
     }
     if (widget.preview) {
-      showSnack(context,
-          _t(_locale, 'Bản xem thử — không gửi thật.', 'Preview only — nothing was sent.'),);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(
+          content: Text(
+            _t(_locale, 'Bản xem thử — không gửi thật.', 'Preview only — nothing was sent.'),
+          ),
+        ),);
       return;
     }
     setState(() {
@@ -829,7 +756,7 @@ class _ThankYouView extends StatelessWidget {
                   if (reward.expiresAt != null)
                     Text(
                       _t(locale, 'Hạn dùng: ', 'Valid until: ') +
-                          vnDate.format(reward.expiresAt!.toLocal()),
+                          _vnDate.format(reward.expiresAt!.toLocal()),
                       style: theme.textTheme.labelSmall,
                     ),
                   if (reward.instructions != null)

@@ -30,102 +30,24 @@ import '../features/profile/profile_screen.dart';
 import '../features/vouchers/voucher_wallet_screen.dart';
 import '../features/wholesale/wholesale_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
-
-const _login = '/login';
-const _register = '/register';
-const _forgotPassword = '/forgot-password';
-const _resetPassword = '/reset-password';
-const _changePassword = '/change-password';
-const _changeEmail = '/change-email';
-const _wrongApp = '/wrong-app';
-const _home = '/';
-
-/// Routes a guest (unauthenticated) shopper is allowed to access. Browsing,
-/// product detail, cart, checkout (with guest fields), payment return, and
-/// the auth screens themselves. Everything else (orders history, membership,
-/// notifications) is gated to logged-in customers.
-const _guestAllowed = <String>{
-  _home,
-  '/cart',
-  '/checkout',
-  '/locations',
-  // Public trust / legal / help pages (P3) — browsable without an account.
-  '/privacy',
-  '/terms',
-  '/faq',
-  '/about',
-  '/contact',
-  '/shipping',
-  '/payment-policy',
-  '/refund-policy',
-  // P2 marketing surfaces — browsable; the pages themselves gate on the
-  // admin toggle + prompt login where needed (referral / rewards).
-  '/referral',
-  '/gift-cards',
-  '/subscription',
-  '/catering',
-  '/rewards',
-  _login,
-  _register,
-  // Account recovery — reachable without a session (the user is locked out).
-  _forgotPassword,
-  _resetPassword,
-  // Email-change confirmation — opened from the link emailed to the new
-  // address; the change logs the user out, so it must be guest-allowed.
-  _changeEmail,
-};
-
-bool _isGuestAllowed(String loc) {
-  if (_guestAllowed.contains(loc)) return true;
-  // Path-prefix matches (these accept :id segments). Browsing surfaces —
-  // products, bundles/combos, and the payment-return bridge — are all
-  // open to guests so they can shop before signing in.
-  if (loc.startsWith('/product/')) return true;
-  if (loc.startsWith('/bundles/')) return true;
-  if (loc.startsWith('/payments/return/')) return true;
-  // Public order tracking — the merchant-shared link + post-payment redirect.
-  // The order id in the path is the capability; no session required.
-  if (loc.startsWith('/track/')) return true;
-  return false;
-}
+import 'customer_redirect.dart';
 
 /// Customer app router. Guests can browse + check out; signed-in customers
-/// get the full surface. Non-customer accounts land on /wrong-app.
+/// get the full surface. Non-customer accounts land on /wrong-app. The
+/// access rules themselves live in `customer_redirect.dart` (pure, VM-test
+/// friendly).
 final customerRouterProvider = Provider<GoRouter>((ref) {
   final repo = ref.watch(authRepositoryProvider);
   final refresh = GoRouterRefreshStream(repo.watchSession());
   ref.onDispose(refresh.dispose);
 
   return GoRouter(
-    initialLocation: _home,
+    initialLocation: homePath,
     refreshListenable: refresh,
-    redirect: (context, state) {
-      final session = repo.currentSession;
-      final loc = state.matchedLocation;
-      final atAuthPage = loc == _login || loc == _register;
-
-      if (session == null) {
-        if (_isGuestAllowed(loc)) return null;
-        // Stash where the user wanted to go so we can send them back there
-        // after sign-in. Example: protected /orders → /login?next=/orders.
-        final next = Uri.encodeComponent(loc);
-        return '$_login?next=$next';
-      }
-      if (!session.user.role.isCustomer) {
-        return loc == _wrongApp ? null : _wrongApp;
-      }
-      if (atAuthPage || loc == _wrongApp) {
-        // Just signed in — honour ?next= if the caller set it, else home.
-        final next = state.uri.queryParameters['next'];
-        if (next != null && next.isNotEmpty && next.startsWith('/')) {
-          return next;
-        }
-        return _home;
-      }
-      return null;
-    },
+    redirect: (context, state) =>
+        customerRedirect(uri: state.uri, role: repo.currentSession?.user.role),
     routes: [
-      GoRoute(path: _home, builder: (_, __) => const MenuScreen()),
+      GoRoute(path: homePath, builder: (_, __) => const MenuScreen()),
       GoRoute(
         path: '/product/:id',
         builder: (context, state) => ProductDetailScreen(
@@ -145,6 +67,9 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
         path: '/locations',
         builder: (_, __) => const LocationsScreen(),
       ),
+      // Public dine-in survey — the ONE fixed link/QR printed at every table
+      // (guest picks the branch on the form; list comes live from the API).
+      GoRoute(path: '/survey', builder: (_, __) => const PublicSurveyScreen()),
       // P3 — trust / legal / help content pages.
       GoRoute(path: '/privacy', builder: (_, __) => const PrivacyScreen()),
       GoRoute(path: '/terms', builder: (_, __) => const TermsScreen()),
@@ -197,7 +122,7 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const ProfileScreen(),
       ),
       GoRoute(
-        path: _changePassword,
+        path: changePasswordPath,
         builder: (_, __) => const ChangePasswordScreen(),
       ),
       GoRoute(
@@ -231,31 +156,31 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       // is still honoured by the redirect once the session updates. The
       // "Quên mật khẩu?" link lives inside the sign-in panel.
       GoRoute(
-        path: _login,
+        path: loginPath,
         builder: (_, __) => const AuthSliderScreen(),
       ),
       GoRoute(
-        path: _register,
+        path: registerPath,
         builder: (_, __) => const AuthSliderScreen(initialSignUp: true),
       ),
       GoRoute(
-        path: _forgotPassword,
+        path: forgotPasswordPath,
         builder: (_, __) => const ForgotPasswordScreen(),
       ),
       GoRoute(
-        path: _resetPassword,
+        path: resetPasswordPath,
         builder: (context, state) => ResetPasswordScreen(
           token: state.uri.queryParameters['token'] ?? '',
         ),
       ),
       GoRoute(
-        path: _changeEmail,
+        path: changeEmailPath,
         builder: (context, state) => ChangeEmailConfirmScreen(
           token: state.uri.queryParameters['token'] ?? '',
         ),
       ),
       GoRoute(
-        path: _wrongApp,
+        path: wrongAppPath,
         builder: (_, __) => const WrongAppScreen(
           expected: 'khách hàng',
           actual: 'tài khoản nhân sự',

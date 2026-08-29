@@ -1,5 +1,6 @@
 import 'package:banan_core/banan_core.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart' show SurveyFlow;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,7 +8,6 @@ import '../../../data/internal_api.dart';
 import '../../../data/survey_models.dart';
 import '../../../shared/internal_shell.dart';
 import '../../../shared/widgets.dart';
-import '../survey_flow.dart';
 
 /// Survey template editor: versioned templates (DRAFT → PUBLISHED →
 /// ARCHIVED), published versions immutable (clone to edit), mobile preview

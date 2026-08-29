@@ -783,48 +783,8 @@ class InternalPublicApi {
     return ServerFailure(code: code, message: message);
   }
 
-  // ── Dine-in survey (fully public) ──
-
-  /// Published template + LIVE store list + reward teaser, one call.
-  Future<Result<SurveyPublicInfo, AppFailure>> surveyInfo() async {
-    try {
-      final res = await _dio.get<dynamic>('/internal/survey/public');
-      final status = res.statusCode ?? 0;
-      final body = res.data;
-      if (status >= 400) return Result.failure(_failureOf(status, body));
-      final data = body is Map<String, dynamic> ? body['data'] : body;
-      return Result.success(SurveyPublicInfo.fromJson(data as Map<String, dynamic>));
-    } on DioException catch (e) {
-      if (e.response != null) {
-        return Result.failure(_failureOf(e.response!.statusCode ?? 0, e.response!.data));
-      }
-      return Result.failure(NetworkFailure(cause: e));
-    } catch (e) {
-      return Result.failure(UnknownFailure(message: e.toString(), cause: e));
-    }
-  }
-
-  /// Submit — idempotent on `clientRequestId` (retry returns the same
-  /// response + reward).
-  Future<Result<SurveySubmitResult, AppFailure>> surveySubmit(
-    Map<String, dynamic> body,
-  ) async {
-    try {
-      final res = await _dio.post<dynamic>('/internal/survey/public/responses', data: body);
-      final status = res.statusCode ?? 0;
-      final resBody = res.data;
-      if (status >= 400) return Result.failure(_failureOf(status, resBody));
-      final data = resBody is Map<String, dynamic> ? resBody['data'] : resBody;
-      return Result.success(SurveySubmitResult.fromJson(data as Map<String, dynamic>));
-    } on DioException catch (e) {
-      if (e.response != null) {
-        return Result.failure(_failureOf(e.response!.statusCode ?? 0, e.response!.data));
-      }
-      return Result.failure(NetworkFailure(cause: e));
-    } catch (e) {
-      return Result.failure(UnknownFailure(message: e.toString(), cause: e));
-    }
-  }
+  // The public dine-in survey client lives in `banan_features_shared`
+  // (`SurveyPublicApi`) — the guest form is served on the CUSTOMER domain.
 
   Future<Result<MsPublicView, AppFailure>> view(String token) =>
       _post('/internal/ms/public/view', {'token': token});

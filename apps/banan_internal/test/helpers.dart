@@ -192,32 +192,8 @@ class FakeInternalApi extends InternalApi {
 
 /// Public MS API stub with scripted responses per call.
 class FakePublicApi extends InternalPublicApi {
-  FakePublicApi(
-    this.viewResult, {
-    Result<SurveyPublicInfo, AppFailure>? surveyInfoResult,
-    Result<SurveySubmitResult, AppFailure>? surveySubmitResult,
-  })  : surveyInfoResult = surveyInfoResult ??
-            Result.success(SurveyPublicInfo.fromJson(surveyPublicInfoJson())),
-        surveySubmitResult = surveySubmitResult ??
-            const Result.success(SurveySubmitResult(id: 'resp1')),
-        super(Dio());
+  FakePublicApi(this.viewResult) : super(Dio());
   final Result<MsPublicView, AppFailure> viewResult;
-  final Result<SurveyPublicInfo, AppFailure> surveyInfoResult;
-  final Result<SurveySubmitResult, AppFailure> surveySubmitResult;
-
-  /// Every survey submit body lands here — tests assert on the wire shape.
-  final surveySubmits = <Map<String, dynamic>>[];
-
-  @override
-  Future<Result<SurveyPublicInfo, AppFailure>> surveyInfo() async => surveyInfoResult;
-
-  @override
-  Future<Result<SurveySubmitResult, AppFailure>> surveySubmit(
-    Map<String, dynamic> body,
-  ) async {
-    surveySubmits.add(body);
-    return surveySubmitResult;
-  }
 
   @override
   Future<Result<List<StoreRef>, AppFailure>> stores() async => const Result.success([
@@ -462,15 +438,6 @@ Map<String, dynamic> surveyTemplateJson() => {
           'showIfValue': 2,
         },
       ],
-    };
-
-Map<String, dynamic> surveyPublicInfoJson() => {
-      'template': surveyTemplateJson(),
-      'stores': [
-        {'id': 's1', 'name': 'Banan – Lê Thánh Tôn', 'address': '15 Lê Thánh Tôn, Q1'},
-        {'id': 's2', 'name': 'Banan – Sư Vạn Hạnh', 'address': '830 Sư Vạn Hạnh, Q10'},
-      ],
-      'reward': null,
     };
 
 Map<String, dynamic> surveySummaryJson() => {

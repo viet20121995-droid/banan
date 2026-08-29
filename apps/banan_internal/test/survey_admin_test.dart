@@ -111,10 +111,27 @@ void main() {
   });
 
   group('link & QR', () {
-    testWidgets('shows the ONE fixed /survey link with copy + QR + PNG/PDF buttons',
+    test('surveyUrl targets the CUSTOMER domain and trims trailing slashes', () {
+      expect(
+        SurveyLinkScreen.surveyUrl(customerBase: 'https://banancakes.vn'),
+        'https://banancakes.vn/survey',
+      );
+      expect(
+        SurveyLinkScreen.surveyUrl(customerBase: 'https://banancakes.vn/'),
+        'https://banancakes.vn/survey',
+      );
+      // Whatever Env.customerAppUrl is, the link NEVER points at this app.
+      expect(SurveyLinkScreen.surveyUrl(), isNot(contains('internal.')));
+      expect(SurveyLinkScreen.surveyUrl(), endsWith('/survey'));
+    });
+
+    testWidgets('shows the ONE fixed customer /survey link with copy + QR + PNG/PDF buttons',
         (tester) async {
       await pumpAdmin(tester, const SurveyLinkScreen(), '/survey/link');
-      expect(find.text('https://internal.banancakes.vn/survey'), findsOneWidget);
+      // Rendered link = the customer-domain URL, never internal (the QR
+      // encodes the same `url` variable the text renders).
+      expect(find.text(SurveyLinkScreen.surveyUrl()), findsOneWidget);
+      expect(find.text('https://internal.banancakes.vn/survey'), findsNothing);
       expect(find.byType(QrImageView), findsOneWidget);
       expect(find.text('Quét để chia sẻ trải nghiệm'), findsOneWidget);
       expect(find.text('Tải QR PNG'), findsOneWidget);

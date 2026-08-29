@@ -1,29 +1,26 @@
 import 'package:banan_core/banan_core.dart';
-import 'package:banan_internal/data/internal_api.dart';
-import 'package:banan_internal/data/survey_models.dart';
-import 'package:banan_internal/features/survey/survey_screen.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'helpers.dart';
+import 'survey_helpers.dart';
 
-Future<FakePublicApi> pumpSurvey(
+Future<FakeSurveyPublicApi> pumpSurvey(
   WidgetTester tester, {
-  FakePublicApi? api,
+  FakeSurveyPublicApi? api,
   SurveyDraftStore? draftStore,
   Size size = const Size(390, 844),
 }) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
-  final publicApi = api ??
-      FakePublicApi(const Result.failure(ServerFailure(code: 'INTERNAL_MS_LINK_INVALID')));
+  final publicApi = api ?? FakeSurveyPublicApi();
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [internalPublicApiProvider.overrideWithValue(publicApi)],
+      overrides: [surveyPublicApiProvider.overrideWithValue(publicApi)],
       child: MaterialApp(
-        home: SurveyScreen(draftStore: draftStore ?? MemoryDraftStore()),
+        home: PublicSurveyScreen(draftStore: draftStore ?? MemorySurveyDraftStore()),
       ),
     ),
   );
@@ -67,8 +64,7 @@ void main() {
 
   testWidgets('POSITIVE branch: overall 5 shows praise (not improve), submits, thanks + reward',
       (tester) async {
-    final api = FakePublicApi(
-      const Result.failure(ServerFailure(code: 'INTERNAL_MS_LINK_INVALID')),
+    final api = FakeSurveyPublicApi(
       surveySubmitResult: Result.success(
         SurveySubmitResult.fromJson(const {
           'id': 'resp1',
@@ -107,6 +103,8 @@ void main() {
     expect(api.surveySubmits, hasLength(1));
     final body = api.surveySubmits.single;
     expect(body['storeId'], 's1');
+    // Idempotency key rides along — a retried submit reuses the same one.
+    expect((body['clientRequestId'] as String).length, greaterThanOrEqualTo(16));
     final answers = (body['answers'] as List).cast<Map<String, dynamic>>();
     expect(
       answers.any((a) => a['questionId'] == 'q-overall' && a['numberValue'] == 5),
@@ -193,7 +191,7 @@ void main() {
 
   testWidgets('answers survive a "refresh" (new widget tree, same draft store)',
       (tester) async {
-    final store = MemoryDraftStore();
+    final store = MemorySurveyDraftStore();
     await pumpSurvey(tester, draftStore: store);
     await tester.tap(find.text('Banan – Lê Thánh Tôn'));
     await tester.pumpAndSettle();
@@ -210,8 +208,7 @@ void main() {
   });
 
   testWidgets('no published template → friendly holding message, no crash', (tester) async {
-    final api = FakePublicApi(
-      const Result.failure(ServerFailure(code: 'INTERNAL_MS_LINK_INVALID')),
+    final api = FakeSurveyPublicApi(
       surveyInfoResult: Result.success(
         SurveyPublicInfo.fromJson(const {'template': null, 'stores': <Object>[], 'reward': null}),
       ),

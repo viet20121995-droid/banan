@@ -28,8 +28,8 @@ class InternalShell extends ConsumerWidget {
     _NavSpec('/ms', Icons.visibility_outlined, 'Mystery Shopper'),
     _NavSpec('/training', Icons.school_outlined, 'Training'),
     _NavSpec('/schedule', Icons.calendar_month_outlined, 'Lịch làm'),
-    // Any /survey/* admin page highlights this item; /survey itself is the
-    // public guest form and never renders the shell.
+    // Any /survey/* admin page highlights this item; the public guest form
+    // lives on the customer domain, not in this app.
     _NavSpec('/survey/reports', Icons.reviews_outlined, 'Khảo sát', selectedPrefix: '/survey/'),
   ];
   static const _traineeItems = [
