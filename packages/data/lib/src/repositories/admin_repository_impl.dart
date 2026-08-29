@@ -43,4 +43,8 @@ class AdminRepositoryImpl implements AdminRepository {
 
   @override
   Future<Result<List<OrgOption>, AppFailure>> kitchens() => _api.kitchens();
+
+  @override
+  Future<Result<List<OrgOption>, AppFailure>> unlinkedPeople() =>
+      _api.unlinkedPeople();
 }

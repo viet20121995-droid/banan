@@ -75,22 +75,66 @@ export class AdminService {
         throw new BadRequestException({ code: 'KITCHEN_NOT_FOUND' });
       }
     }
+    const isTrainee = dto.role === ProvisionableRole.TRAINEE;
+    if (isTrainee) {
+      // A TRAINEE login is useless without its InternalPerson link —
+      // /training/me resolves through it. Refuse to create orphans.
+      if (!dto.personId) {
+        throw new BadRequestException({
+          code: 'PERSON_REQUIRED',
+          message: 'Tài khoản Trainee phải gắn với một hồ sơ nhân sự.',
+        });
+      }
+      const person = await this.prisma.internalPerson.findUnique({
+        where: { id: dto.personId },
+        select: { id: true, userId: true },
+      });
+      if (!person) {
+        throw new BadRequestException({
+          code: 'PERSON_NOT_FOUND',
+          message: 'Không tìm thấy hồ sơ nhân sự.',
+        });
+      }
+      if (person.userId) {
+        throw new BadRequestException({
+          code: 'PERSON_ALREADY_LINKED',
+          message: 'Hồ sơ này đã gắn với một tài khoản khác.',
+        });
+      }
+    }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
     try {
-      const user = await this.prisma.user.create({
-        data: {
-          email: dto.email.toLowerCase(),
-          phone: dto.phone || null,
-          passwordHash,
-          fullName: dto.fullName.trim(),
-          role: dto.role as Role,
-          storeId: isMerchant ? dto.storeId : null,
-          kitchenId: isKitchen ? dto.kitchenId : null,
-          // Admin-provisioned, login-capable account → owner-controlled, so it
-          // must never be silently reused as a guest-checkout target.
-          claimed: true,
-        },
+      const user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            email: dto.email.toLowerCase(),
+            phone: dto.phone || null,
+            passwordHash,
+            fullName: dto.fullName.trim(),
+            role: dto.role as Role,
+            storeId: isMerchant ? dto.storeId : null,
+            kitchenId: isKitchen ? dto.kitchenId : null,
+            // Admin-provisioned, login-capable account → owner-controlled, so it
+            // must never be silently reused as a guest-checkout target.
+            claimed: true,
+          },
+        });
+        if (isTrainee) {
+          // Guarded on userId still being null — a concurrent create for the
+          // same person loses here and the whole account rolls back.
+          const linked = await tx.internalPerson.updateMany({
+            where: { id: dto.personId!, userId: null },
+            data: { userId: created.id },
+          });
+          if (linked.count === 0) {
+            throw new BadRequestException({
+              code: 'PERSON_ALREADY_LINKED',
+              message: 'Hồ sơ này đã gắn với một tài khoản khác.',
+            });
+          }
+        }
+        return created;
       });
       return AdminService.view(user);
     } catch (e) {

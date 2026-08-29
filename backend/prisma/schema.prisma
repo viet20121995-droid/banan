@@ -21,6 +21,9 @@ enum Role {
   KITCHEN_MANAGER
   KITCHEN_STAFF
   ADMIN
+  /// Internal-ops learner: may use the Training module (own materials +
+  /// own progress) and nothing else in the internal app.
+  TRAINEE
 }
 
 enum MembershipTier {
@@ -2250,6 +2253,12 @@ model MsQuestion {
   @@unique([sectionId, sortOrder])
 }
 
+/// Who created an MS assignment. Pre-existing rows default to ADMIN.
+enum MsAssignmentSource {
+  ADMIN
+  EMPLOYEE_SELF_SERVICE
+}
+
 model MsAssignment {
   id         String     @id @default(uuid())
   /// Human-readable code like MS-2026-A1B2C3.
@@ -2258,6 +2267,16 @@ model MsAssignment {
   template   MsTemplate @relation(fields: [templateId], references: [id])
   storeId    String
   store      Store      @relation(fields: [storeId], references: [id])
+
+  /// EMPLOYEE_SELF_SERVICE rows were created through the public generator
+  /// (shared internal access code) — requester fields below say by whom.
+  source                MsAssignmentSource @default(ADMIN)
+  requesterName         String?
+  requesterEmployeeCode String?
+  requesterNote         String?
+  /// Idempotency key of the public generator submission — a double-click
+  /// hits the unique constraint instead of minting a second mission.
+  selfServiceKey        String?            @unique
 
   windowStart   DateTime?
   windowEnd     DateTime?
@@ -2409,7 +2428,9 @@ model InternalPerson {
   startDate DateTime?
   isActive  Boolean   @default(true)
   notes     String?
-  userId    String?
+  /// Optional link to a login account (e.g. a TRAINEE user) so "my training"
+  /// can resolve the person from the JWT. Most staff have no account.
+  userId    String?   @unique
 
   createdById String?
   createdAt   DateTime @default(now())
@@ -2510,6 +2531,9 @@ model TrainingPathItem {
 enum TrainingProgressStatus {
   NOT_STARTED
   IN_PROGRESS
+  /// Trainee says they're done — waiting for an ADMIN to confirm. Only the
+  /// admin confirmation (updateProgress) moves it to COMPLETED.
+  PENDING_CONFIRMATION
   COMPLETED
   EXPIRED
 }

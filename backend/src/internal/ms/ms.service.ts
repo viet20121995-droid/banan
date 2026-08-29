@@ -1,12 +1,17 @@
 import { randomBytes } from 'node:crypto';
 
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { removePrivateFile } from '../files/internal-files.util';
-import { internalAppUrl, msReportRecipients } from '../internal-config';
+import { internalAppUrl, msCreatorCode, msReportRecipients } from '../internal-config';
 import { InternalPdfService } from '../pdf/internal-pdf.service';
 
 import type {
@@ -15,6 +20,7 @@ import type {
   MsListQueryDto,
   PublicSaveDto,
   RequestRevisionDto,
+  SelfServiceCreateDto,
   UpdateMsAssignmentDto,
 } from './dto';
 import {
@@ -24,7 +30,7 @@ import {
   type MsReportBundle,
 } from './ms-report-data';
 import { MS_TEMPLATE_NAME } from './ms-template-data';
-import { generateMsToken, hashMsToken } from './ms-token.util';
+import { generateMsToken, hashMsToken, msTokenHashEquals } from './ms-token.util';
 
 const DEFAULT_TOKEN_TTL_DAYS = 14;
 const MAX_TOKEN_TTL_DAYS = 60;
@@ -159,6 +165,7 @@ export class MsService {
   async list(query: MsListQueryDto, page = 1, perPage = 30) {
     const where: Prisma.MsAssignmentWhereInput = {
       ...(query.storeId && { storeId: query.storeId }),
+      ...(query.source && { source: query.source as never }),
       ...(query.status && { status: query.status as never }),
       ...(query.outcome === 'CRITICAL_FAIL' && { submission: { is: { criticalFail: true } } }),
       ...(query.outcome === 'PASS' && {
@@ -197,6 +204,10 @@ export class MsService {
         code: a.code,
         store: a.store,
         status: this.effectiveStatus(a.status, a.tokens[0]?.expiresAt ?? null),
+        source: a.source,
+        requesterName: a.requesterName,
+        requesterEmployeeCode: a.requesterEmployeeCode,
+        tokenExpiresAt: a.tokens[0]?.expiresAt?.toISOString() ?? null,
         windowStart: a.windowStart?.toISOString() ?? null,
         windowEnd: a.windowEnd?.toISOString() ?? null,
         deadline: a.deadline?.toISOString() ?? null,
@@ -264,6 +275,151 @@ export class MsService {
     return {
       url: `${internalAppUrl(this.config)}/f/${raw}`,
       token: raw,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  // ── public self-service generator ────────────────────────────────────────
+
+  /**
+   * Public employee MS link generator. Guarded by the SHARED internal access
+   * code (`INTERNAL_MS_CREATOR_CODE`, fail-closed) — no account involved.
+   *
+   * The server decides everything sensitive: active template, ASSIGNED
+   * status, token, TTL clamp. The client's `idempotencyKey` is unique on the
+   * assignment row, so a double-click mints exactly one mission. The RAW
+   * link is returned exactly once; the creator can never read the
+   * submission, answers, photos, score or PDF afterwards.
+   */
+  async selfServiceCreate(dto: SelfServiceCreateDto) {
+    const expected = msCreatorCode(this.config); // throws 503 when unset
+    // Constant-time compare of sha256s — never the raw strings, never logged.
+    if (!msTokenHashEquals(hashMsToken(dto.accessCode), hashMsToken(expected))) {
+      throw new ForbiddenException({
+        code: 'INTERNAL_MS_CODE_INVALID',
+        message: 'Mã truy cập nội bộ không đúng.',
+      });
+    }
+
+    // Retry after a LOST response (tx committed, browser never got the
+    // link): the key lives only in that creator's browser session, so
+    // re-issuing a fresh link for the same UNTOUCHED mission returns them a
+    // working result instead of a dead-end duplicate error.
+    const existing = await this.prisma.msAssignment.findUnique({
+      where: { selfServiceKey: dto.idempotencyKey },
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        firstOpenedAt: true,
+        deadline: true,
+        store: { select: { name: true } },
+      },
+    });
+    if (existing) return this.reissueSelfService(existing);
+
+    const store = await this.prisma.store.findUnique({ where: { id: dto.storeId } });
+    if (!store) {
+      throw new BadRequestException({
+        code: 'INTERNAL_MS_STORE_NOT_FOUND',
+        message: 'Chi nhánh không tồn tại.',
+      });
+    }
+
+    const ttlDays = Math.min(Math.max(dto.ttlDays ?? 7, 1), 7);
+    const { raw, hash } = generateMsToken();
+    const expiresAt = new Date(Date.now() + ttlDays * 86_400_000);
+    const code = await this.freshCode();
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const template = await tx.msTemplate.findFirst({
+          where: { name: MS_TEMPLATE_NAME, isActive: true },
+          orderBy: { version: 'desc' },
+          select: { id: true },
+        });
+        if (!template) {
+          throw new BadRequestException({
+            code: 'INTERNAL_MS_NO_TEMPLATE',
+            message: 'Chưa có mẫu Mystery Shopper. Liên hệ quản trị viên.',
+          });
+        }
+        const assignment = await tx.msAssignment.create({
+          data: {
+            code,
+            templateId: template.id,
+            storeId: store.id,
+            status: 'ASSIGNED',
+            source: 'EMPLOYEE_SELF_SERVICE',
+            requesterName: dto.requesterName.trim(),
+            requesterEmployeeCode: dto.employeeCode?.trim() || null,
+            requesterNote: dto.note?.trim() || null,
+            selfServiceKey: dto.idempotencyKey,
+            deadline: expiresAt,
+            createdById: 'EMPLOYEE_SELF_SERVICE',
+          },
+          select: { id: true },
+        });
+        await tx.msAccessToken.create({
+          data: { assignmentId: assignment.id, tokenHash: hash, expiresAt },
+        });
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        // Two SIMULTANEOUS requests with the same key — the other one made
+        // the mission. A sequential retry lands in reissueSelfService above
+        // and gets a working link.
+        throw new BadRequestException({
+          code: 'INTERNAL_MS_DUPLICATE_REQUEST',
+          message: 'Yêu cầu bị trùng — bấm "Tạo link" một lần nữa để nhận link.',
+        });
+      }
+      throw e;
+    }
+
+    return {
+      code,
+      storeName: store.name,
+      url: `${internalAppUrl(this.config)}/f/${raw}`,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  /** Same-key retry: mint a REPLACEMENT link (old tokens revoked) while the
+   *  mission is still ASSIGNED and never opened; anything past that point is
+   *  a hard duplicate — the link is out in the world. Raw tokens are never
+   *  stored, so replacing is the only honest way to "return the same
+   *  result". */
+  private async reissueSelfService(existing: {
+    id: string;
+    code: string;
+    status: string;
+    firstOpenedAt: Date | null;
+    deadline: Date | null;
+    store: { name: string };
+  }) {
+    if (existing.status !== 'ASSIGNED' || existing.firstOpenedAt) {
+      throw new BadRequestException({
+        code: 'INTERNAL_MS_DUPLICATE_REQUEST',
+        message: 'Link của yêu cầu này đã được mở hoặc kết thúc — bấm "Tạo nhiệm vụ khác".',
+      });
+    }
+    const { raw, hash } = generateMsToken();
+    // Keep the ORIGINAL expiry window — a retry must not extend the mission.
+    const expiresAt = existing.deadline ?? new Date(Date.now() + 7 * 86_400_000);
+    await this.prisma.$transaction([
+      this.prisma.msAccessToken.updateMany({
+        where: { assignmentId: existing.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+      this.prisma.msAccessToken.create({
+        data: { assignmentId: existing.id, tokenHash: hash, expiresAt },
+      }),
+    ]);
+    return {
+      code: existing.code,
+      storeName: existing.store.name,
+      url: `${internalAppUrl(this.config)}/f/${raw}`,
       expiresAt: expiresAt.toISOString(),
     };
   }
@@ -796,6 +952,10 @@ export class MsService {
       code: a.code,
       store: a.store,
       status: a.status,
+      source: a.source,
+      requesterName: a.requesterName,
+      requesterEmployeeCode: a.requesterEmployeeCode,
+      requesterNote: a.requesterNote,
       windowStart: a.windowStart?.toISOString() ?? null,
       windowEnd: a.windowEnd?.toISOString() ?? null,
       scenario: a.scenario,

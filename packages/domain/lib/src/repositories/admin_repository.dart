@@ -13,12 +13,17 @@ class NewUserDraft {
     this.phone,
     this.storeId,
     this.kitchenId,
+    this.personId,
   });
 
   final String email;
   final String password;
   final String fullName;
   final String? phone;
+
+  /// Required when [role] is [Role.trainee]: the staff record (InternalPerson)
+  /// this login belongs to — training data resolves through that link.
+  final String? personId;
   final Role role;
   final String? storeId;
   final String? kitchenId;
@@ -30,6 +35,7 @@ class NewUserDraft {
         Role.kitchenManager => 'KITCHEN_MANAGER',
         Role.kitchenStaff => 'KITCHEN_STAFF',
         Role.admin => 'ADMIN',
+        Role.trainee => 'TRAINEE',
       };
 
   Map<String, dynamic> toJson() => {
@@ -40,6 +46,7 @@ class NewUserDraft {
         if (phone != null && phone!.isNotEmpty) 'phone': phone,
         if (storeId != null) 'storeId': storeId,
         if (kitchenId != null) 'kitchenId': kitchenId,
+        if (personId != null) 'personId': personId,
       };
 }
 
@@ -70,6 +77,7 @@ class EditUserDraft {
         Role.kitchenManager => 'KITCHEN_MANAGER',
         Role.kitchenStaff => 'KITCHEN_STAFF',
         Role.admin => 'ADMIN',
+        Role.trainee => 'TRAINEE',
       };
 
   Map<String, dynamic> toJson() => {
@@ -93,6 +101,10 @@ abstract class AdminRepository {
   });
 
   Future<Result<AdminUser, AppFailure>> createUser(NewUserDraft draft);
+
+  /// Staff records with no login yet — the options offered when a new
+  /// TRAINEE account must be linked to its InternalPerson.
+  Future<Result<List<OrgOption>, AppFailure>> unlinkedPeople();
 
   /// Edit an existing account (name/email/phone/role/linkage/active).
   Future<Result<AdminUser, AppFailure>> updateUser(

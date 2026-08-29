@@ -28,6 +28,7 @@ class _TrainingScreenState extends ConsumerState<TrainingScreen>
   Result<List<PathView>, AppFailure>? _paths;
   Result<List<TrainingOverviewRow>, AppFailure>? _progress;
   bool _overdueOnly = false;
+  bool _pendingOnly = false;
   String? _storeFilter;
 
   InternalApi get _api => ref.read(internalApiProvider);
@@ -68,7 +69,11 @@ class _TrainingScreenState extends ConsumerState<TrainingScreen>
 
   Future<void> _loadProgress() async {
     setState(() => _progress = null);
-    final res = await _api.trainingProgress(storeId: _storeFilter, overdueOnly: _overdueOnly);
+    final res = await _api.trainingProgress(
+      storeId: _storeFilter,
+      overdueOnly: _overdueOnly,
+      status: _pendingOnly ? 'PENDING_CONFIRMATION' : null,
+    );
     if (mounted) setState(() => _progress = res);
   }
 
@@ -847,6 +852,15 @@ class _TrainingScreenState extends ConsumerState<TrainingScreen>
                   selected: _overdueOnly,
                   onSelected: (v) {
                     setState(() => _overdueOnly = v);
+                    _loadProgress();
+                  },
+                ),
+                const SizedBox(width: BananSpacing.sm),
+                FilterChip(
+                  label: const Text('Chờ xác nhận'),
+                  selected: _pendingOnly,
+                  onSelected: (v) {
+                    setState(() => _pendingOnly = v);
                     _loadProgress();
                   },
                 ),

@@ -193,8 +193,8 @@ export class AssignPathDto {
 
 export class UpdateProgressDto {
   @IsOptional()
-  @IsIn(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'])
-  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+  @IsIn(['NOT_STARTED', 'IN_PROGRESS', 'PENDING_CONFIRMATION', 'COMPLETED'])
+  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'PENDING_CONFIRMATION' | 'COMPLETED';
 
   @IsOptional()
   @IsInt()
@@ -237,10 +237,17 @@ export class ProgressQueryDto {
   personId?: string;
 
   @IsOptional()
-  @IsIn(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'EXPIRED'])
+  @IsIn(['NOT_STARTED', 'IN_PROGRESS', 'PENDING_CONFIRMATION', 'COMPLETED', 'EXPIRED'])
   status?: string;
 
   @IsOptional()
   @IsIn(['true'])
   overdue?: string;
+}
+
+/** Trainee self-service: own progress only, status only — quiz scores and
+ *  notes stay admin-recorded. */
+export class UpdateOwnProgressDto {
+  @IsIn(['IN_PROGRESS', 'COMPLETED'])
+  status!: 'IN_PROGRESS' | 'COMPLETED';
 }

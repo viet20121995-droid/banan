@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /**
@@ -47,4 +48,20 @@ export function internalAppUrl(config: ConfigService): string {
   if (explicit) return explicit.replace(/\/$/, '');
   const domain = config.get<string>('BASE_DOMAIN');
   return domain ? `https://internal.${domain}` : 'http://localhost:8084';
+}
+
+/**
+ * Shared internal access code for the public MS link generator
+ * (`INTERNAL_MS_CREATOR_CODE`). FAIL CLOSED: unset/blank disables the
+ * generator everywhere — never a built-in default, never logged.
+ */
+export function msCreatorCode(config: ConfigService): string {
+  const code = config.get<string>('INTERNAL_MS_CREATOR_CODE')?.trim();
+  if (!code) {
+    throw new ServiceUnavailableException({
+      code: 'INTERNAL_MS_CREATOR_DISABLED',
+      message: 'Chức năng tạo link chưa được kích hoạt — liên hệ quản trị viên.',
+    });
+  }
+  return code;
 }

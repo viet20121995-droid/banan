@@ -5,7 +5,9 @@ enum Role {
   merchantStaff,
   kitchenManager,
   kitchenStaff,
-  admin;
+  admin,
+  /// Internal-ops learner — Training module only.
+  trainee;
 
   /// Parse from the wire format the backend sends (`MERCHANT_OWNER`, etc.).
   static Role fromWire(String value) {
@@ -22,6 +24,8 @@ enum Role {
         return Role.kitchenStaff;
       case 'ADMIN':
         return Role.admin;
+      case 'TRAINEE':
+        return Role.trainee;
       default:
         throw FormatException('Unknown role: $value');
     }
@@ -33,6 +37,7 @@ enum Role {
       this == Role.kitchenManager || this == Role.kitchenStaff;
   bool get isCustomer => this == Role.customer;
   bool get isAdmin => this == Role.admin;
+  bool get isTrainee => this == Role.trainee;
 }
 
 /// Loyalty membership tiers, lowest → highest. `bronze` is the base tier

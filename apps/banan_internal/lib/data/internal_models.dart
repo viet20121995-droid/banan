@@ -486,6 +486,10 @@ class MsListItem {
     required this.status,
     required this.approvedRevision,
     required this.criticalFail,
+    required this.source,
+    this.requesterName,
+    this.requesterEmployeeCode,
+    this.tokenExpiresAt,
     this.totalScore,
     this.deadline,
     this.createdAt,
@@ -499,6 +503,11 @@ class MsListItem {
         totalScore: _d(json['totalScore']),
         criticalFail: (json['criticalFail'] as bool?) ?? false,
         approvedRevision: _i(json['approvedRevision']),
+        // Older payloads carry no source — those rows are admin-created.
+        source: (json['source'] as String?) ?? 'ADMIN',
+        requesterName: _s(json['requesterName']),
+        requesterEmployeeCode: _s(json['requesterEmployeeCode']),
+        tokenExpiresAt: _date(json['tokenExpiresAt']),
         deadline: _date(json['deadline']),
         createdAt: _date(json['createdAt']),
       );
@@ -510,8 +519,35 @@ class MsListItem {
   final double? totalScore;
   final bool criticalFail;
   final int approvedRevision;
+  final String source;
+  final String? requesterName;
+  final String? requesterEmployeeCode;
+  final DateTime? tokenExpiresAt;
   final DateTime? deadline;
   final DateTime? createdAt;
+}
+
+/// One-shot result of the public MS link generator — the only place the
+/// raw link ever exists client-side.
+class MsCreateResult {
+  const MsCreateResult({
+    required this.code,
+    required this.storeName,
+    required this.url,
+    required this.expiresAt,
+  });
+
+  factory MsCreateResult.fromJson(Map<String, dynamic> json) => MsCreateResult(
+        code: (json['code'] as String?) ?? '',
+        storeName: (json['storeName'] as String?) ?? '',
+        url: (json['url'] as String?) ?? '',
+        expiresAt: _date(json['expiresAt']) ?? DateTime.now(),
+      );
+
+  final String code;
+  final String storeName;
+  final String url;
+  final DateTime expiresAt;
 }
 
 class MsPublicView {
@@ -799,6 +835,22 @@ class TrainingOverviewRow {
   final int percentDone;
   final int overdueCount;
   final List<ProgressView> progress;
+}
+
+/// Trainee "my training" payload: the caller's linked person (null when the
+/// admin has not linked one yet) + their own assignments.
+class MyTraining {
+  const MyTraining({required this.person, required this.assignments});
+
+  factory MyTraining.fromJson(Map<String, dynamic> json) => MyTraining(
+        person: json['person'] is Map<String, dynamic>
+            ? PersonView.fromJson(json['person'] as Map<String, dynamic>)
+            : null,
+        assignments: _list(json['assignments']).map(TrainingOverviewRow.fromJson).toList(),
+      );
+
+  final PersonView? person;
+  final List<TrainingOverviewRow> assignments;
 }
 
 // ── Schedule ────────────────────────────────────────────────────────────────

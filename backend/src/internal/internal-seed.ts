@@ -13,6 +13,7 @@
  *   prod: node dist/src/internal/internal-seed.js
  */
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcrypt';
 
 import {
   MS_TEMPLATE_NAME,
@@ -88,6 +89,69 @@ export async function seedInternal(prisma: PrismaClient): Promise<void> {
     console.log(
       `Seeded MS template v${MS_TEMPLATE_VERSION} (${MS_TEMPLATE_SECTIONS.length} sections)`,
     );
+  }
+
+  await seedTraineeAccount(prisma);
+}
+
+/**
+ * Idempotent TRAINEE account: trainee@banan.local, linked to its own
+ * InternalPerson so "my training" resolves. Re-runs never duplicate and
+ * never reset a changed password (upsert update leaves credentials alone).
+ * Password policy for further trainees: admins create them individually.
+ */
+export async function seedTraineeAccount(prisma: PrismaClient): Promise<void> {
+  const existing = await prisma.user.findUnique({ where: { email: 'trainee@banan.local' } });
+  if (existing && existing.role !== 'TRAINEE') {
+    // Someone else owns this email — linking training data to it would hand
+    // a foreign account the trainee surface. Fail LOUDLY, touch nothing.
+    throw new Error(
+      `trainee@banan.local already exists with role ${existing.role} — refusing to convert or ` +
+        'link it. Rename/remove that account, then re-run the seed.',
+    );
+  }
+  if (existing && !existing.isActive) {
+    // Deliberate normalisation: the canonical trainee account is required to
+    // be active. Password stays whatever it was changed to.
+    await prisma.user.update({ where: { id: existing.id }, data: { isActive: true } });
+    // eslint-disable-next-line no-console
+    console.log('Re-activated trainee@banan.local');
+  }
+  const user =
+    existing ??
+    (await prisma.user.create({
+      data: {
+        email: 'trainee@banan.local',
+        passwordHash: await bcrypt.hash('Vietnam123', 10),
+        fullName: 'Trainee',
+        role: 'TRAINEE',
+        isActive: true,
+      },
+    }));
+  if (!existing) {
+    // eslint-disable-next-line no-console
+    console.log('Seeded TRAINEE account trainee@banan.local');
+  }
+
+  const person = await prisma.internalPerson.findUnique({ where: { userId: user.id } });
+  if (!person) {
+    const store = await prisma.store.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!store) {
+      // eslint-disable-next-line no-console
+      console.warn('No store yet — trainee InternalPerson skipped (re-run after store seed)');
+      return;
+    }
+    await prisma.internalPerson.create({
+      data: {
+        fullName: 'Trainee',
+        storeId: store.id,
+        position: 'Trainee',
+        userId: user.id,
+        createdById: 'seed',
+      },
+    });
+    // eslint-disable-next-line no-console
+    console.log('Linked trainee@banan.local to a new InternalPerson');
   }
 }
 

@@ -29,12 +29,20 @@ final _kitchensProvider =
   return res.when(success: (l) => l, failure: (_) => const []);
 });
 
+/// Staff records without a login — a new TRAINEE must be linked to one.
+final _unlinkedPeopleProvider =
+    FutureProvider.autoDispose<List<OrgOption>>((ref) async {
+  final res = await ref.watch(adminRepositoryProvider).unlinkedPeople();
+  return res.when(success: (l) => l, failure: (_) => const []);
+});
+
 const _provisionable = <Role>[
   Role.customer,
   Role.merchantOwner,
   Role.merchantStaff,
   Role.kitchenManager,
   Role.kitchenStaff,
+  Role.trainee,
 ];
 
 String _roleLabel(Role r) => switch (r) {
@@ -44,6 +52,7 @@ String _roleLabel(Role r) => switch (r) {
       Role.kitchenManager => 'Quản lý bếp',
       Role.kitchenStaff => 'Nhân viên bếp',
       Role.admin => 'Admin',
+      Role.trainee => 'Trainee (đào tạo nội bộ)',
     };
 
 class AccountsScreen extends ConsumerWidget {
@@ -416,6 +425,7 @@ class _CreateUserSheetState extends ConsumerState<_CreateUserSheet> {
   Role _role = Role.customer;
   String? _storeId;
   String? _kitchenId;
+  String? _personId;
   bool _saving = false;
   String? _error;
 
@@ -423,6 +433,7 @@ class _CreateUserSheetState extends ConsumerState<_CreateUserSheet> {
       _role == Role.merchantOwner || _role == Role.merchantStaff;
   bool get _needsKitchen =>
       _role == Role.kitchenManager || _role == Role.kitchenStaff;
+  bool get _needsPerson => _role == Role.trainee;
 
   @override
   void dispose() {
@@ -443,6 +454,10 @@ class _CreateUserSheetState extends ConsumerState<_CreateUserSheet> {
       setState(() => _error = 'Chọn bếp cho tài khoản bếp.');
       return;
     }
+    if (_needsPerson && _personId == null) {
+      setState(() => _error = 'Chọn hồ sơ nhân sự để gắn tài khoản Trainee.');
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -456,6 +471,7 @@ class _CreateUserSheetState extends ConsumerState<_CreateUserSheet> {
             role: _role,
             storeId: _needsStore ? _storeId : null,
             kitchenId: _needsKitchen ? _kitchenId : null,
+            personId: _needsPerson ? _personId : null,
           ),
         );
     if (!mounted) return;
@@ -472,6 +488,7 @@ class _CreateUserSheetState extends ConsumerState<_CreateUserSheet> {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     final stores = ref.watch(_storesProvider).valueOrNull ?? const [];
     final kitchens = ref.watch(_kitchensProvider).valueOrNull ?? const [];
+    final people = ref.watch(_unlinkedPeopleProvider).valueOrNull ?? const [];
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -505,9 +522,36 @@ class _CreateUserSheetState extends ConsumerState<_CreateUserSheet> {
                 _role = r ?? Role.customer;
                 _storeId = null;
                 _kitchenId = null;
+                _personId = null;
               }),
             ),
             const SizedBox(height: BananSpacing.sm),
+            if (_needsPerson)
+              people.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.only(bottom: BananSpacing.sm),
+                      child: Text(
+                        'Không còn hồ sơ nhân sự nào chưa gắn tài khoản — '
+                        'tạo hồ sơ ở app Nội bộ (Training → Nhân sự) trước.',
+                      ),
+                    )
+                  : DropdownButtonFormField<String>(
+                      initialValue: _personId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Hồ sơ nhân sự (bắt buộc cho Trainee)',
+                      ),
+                      items: [
+                        for (final o in people)
+                          DropdownMenuItem(
+                            value: o.id,
+                            child: Text(o.name,
+                                overflow: TextOverflow.ellipsis,),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _personId = v),
+                    ),
+            if (_needsPerson) const SizedBox(height: BananSpacing.sm),
             if (_needsStore)
               DropdownButtonFormField<String>(
                 initialValue: _storeId,

@@ -17,6 +17,7 @@ export enum ProvisionableRole {
   MERCHANT_STAFF = 'MERCHANT_STAFF',
   KITCHEN_MANAGER = 'KITCHEN_MANAGER',
   KITCHEN_STAFF = 'KITCHEN_STAFF',
+  TRAINEE = 'TRAINEE',
 }
 
 export class CreateUserDto {
@@ -50,4 +51,11 @@ export class CreateUserDto {
   @IsOptional()
   @IsUUID()
   kitchenId?: string;
+
+  /** Required for TRAINEE: the InternalPerson this login belongs to —
+   *  /training/me resolves through that link, so an unlinked trainee would
+   *  log in to an empty screen. Ignored for every other role. */
+  @IsOptional()
+  @IsUUID()
+  personId?: string;
 }

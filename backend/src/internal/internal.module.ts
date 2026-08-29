@@ -13,13 +13,15 @@ import { QcController } from './qc/qc.controller';
 import { QcService } from './qc/qc.service';
 import { ScheduleController } from './schedule/schedule.controller';
 import { ScheduleService } from './schedule/schedule.service';
+import { TraineeTrainingController } from './training/trainee-training.controller';
 import { TrainingController } from './training/training.controller';
 import { TrainingService } from './training/training.service';
 
 /**
  * Internal ops app (internal.banancakes.vn): QC, Mystery Shopper, Training,
- * weekly schedule. Every controller here is @Roles(ADMIN) except the
- * token-gated MsPublicController.
+ * weekly schedule. Management controllers are @Roles(ADMIN); the trainee
+ * surface (TraineeTrainingController + training-file reads) also admits
+ * TRAINEE, and MsPublicController is token/access-code gated, no account.
  */
 @Module({
   imports: [NotificationsModule],
@@ -28,6 +30,7 @@ import { TrainingService } from './training/training.service';
     MsController,
     MsPublicController,
     TrainingController,
+    TraineeTrainingController,
     ScheduleController,
     InternalFilesController,
   ],

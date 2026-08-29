@@ -135,6 +135,7 @@ String trainingCategoryLabel(String category) => switch (category) {
 String progressStatusLabel(String status) => switch (status) {
       'NOT_STARTED' => 'Chưa học',
       'IN_PROGRESS' => 'Đang học',
+      'PENDING_CONFIRMATION' => 'Chờ xác nhận',
       'COMPLETED' => 'Hoàn thành',
       'EXPIRED' => 'Quá hạn',
       _ => status,
@@ -143,6 +144,7 @@ String progressStatusLabel(String status) => switch (status) {
 StatusIntent progressStatusIntent(String status) => switch (status) {
       'COMPLETED' => StatusIntent.success,
       'IN_PROGRESS' => StatusIntent.progress,
+      'PENDING_CONFIRMATION' => StatusIntent.warning,
       'EXPIRED' => StatusIntent.danger,
       _ => StatusIntent.neutral,
     };

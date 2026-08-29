@@ -1,13 +1,14 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_domain/banan_domain.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// App chrome for the internal ops app: 4-item sidebar (persistent ≥ md,
-/// drawer below), a quiet header with screen title + optional context line +
-/// account/logout. No marketing, no decoration.
+/// App chrome for the internal ops app: role-filtered sidebar (persistent
+/// ≥ md, drawer below), a quiet header with screen title + optional context
+/// line + account/logout. No marketing, no decoration.
 class InternalShell extends ConsumerWidget {
   const InternalShell({
     required this.title,
@@ -22,21 +23,32 @@ class InternalShell extends ConsumerWidget {
   final List<Widget> actions;
   final Widget body;
 
-  static const _items = [
+  static const _adminItems = [
     _NavSpec('/qc', Icons.fact_check_outlined, 'QC'),
     _NavSpec('/ms', Icons.visibility_outlined, 'Mystery Shopper'),
     _NavSpec('/training', Icons.school_outlined, 'Training'),
     _NavSpec('/schedule', Icons.calendar_month_outlined, 'Lịch làm'),
+  ];
+  static const _traineeItems = [
+    _NavSpec('/training', Icons.school_outlined, 'Đào tạo của tôi'),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bp = Breakpoint.fromWidth(MediaQuery.sizeOf(context).width);
     final wide = bp.isAtLeastMd;
-    const nav = _SidebarNav(items: _items);
+    final role = ref.watch(authSessionProvider).valueOrNull?.user.role;
+    final nav = _SidebarNav(items: role == Role.trainee ? _traineeItems : _adminItems);
 
     return Scaffold(
       appBar: AppBar(
+        leading: wide
+            ? IconButton(
+                tooltip: 'Trang chủ',
+                icon: const Icon(Icons.home_outlined),
+                onPressed: () => context.go('/'),
+              )
+            : null,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -52,7 +64,7 @@ class InternalShell extends ConsumerWidget {
         ),
         actions: [...actions, const _AccountMenu(), const SizedBox(width: BananSpacing.sm)],
       ),
-      drawer: wide ? null : const Drawer(child: SafeArea(child: nav)),
+      drawer: wide ? null : Drawer(child: SafeArea(child: nav)),
       body: SafeArea(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -98,12 +110,15 @@ class _SidebarNav extends StatelessWidget {
             BananSpacing.lg,
             BananSpacing.lg,
           ),
-          child: Text(
-            'Banan · Nội bộ',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(color: BananColors.primary, fontWeight: FontWeight.w700),
+          child: InkWell(
+            onTap: () => context.go('/'),
+            child: Text(
+              'Banan · Nội bộ',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(color: BananColors.primary, fontWeight: FontWeight.w700),
+            ),
           ),
         ),
         for (final item in items)

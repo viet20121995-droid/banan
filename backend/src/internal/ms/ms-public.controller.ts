@@ -29,7 +29,13 @@ import {
   privateFilePath,
 } from '../files/internal-files.util';
 
-import { PublicFileDto, PublicRemoveEvidenceDto, PublicSaveDto, PublicTokenDto } from './dto';
+import {
+  PublicFileDto,
+  PublicRemoveEvidenceDto,
+  PublicSaveDto,
+  PublicTokenDto,
+  SelfServiceCreateDto,
+} from './dto';
 import { MsService } from './ms.service';
 
 /**
@@ -48,6 +54,19 @@ import { MsService } from './ms.service';
 export class MsPublicController {
   constructor(private readonly ms: MsService) {
     ensurePrivateDir();
+  }
+
+  /**
+   * Employee self-service link generator — guarded by the shared internal
+   * access code, NOT by an account. Tight throttle: this is the only public
+   * endpoint that can create rows.
+   */
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('create-assignment')
+  @HttpCode(HttpStatus.OK)
+  createAssignment(@Body() dto: SelfServiceCreateDto) {
+    return this.ms.selfServiceCreate(dto);
   }
 
   @Public()

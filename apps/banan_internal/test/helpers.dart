@@ -95,12 +95,34 @@ class FakeInternalApi extends InternalApi {
   @override
   Future<Result<List<PersonView>, AppFailure>> people({String? storeId, String? q}) async =>
       const Result.success([]);
+
+  @override
+  Future<Result<MyTraining, AppFailure>> myTraining() async =>
+      const Result.success(MyTraining(person: null, assignments: []));
+
+  @override
+  Future<Result<List<MaterialView>, AppFailure>> myMaterials() async =>
+      const Result.success([]);
+
+  @override
+  Future<Result<List<MsListItem>, AppFailure>> msList({
+    String? storeId,
+    String? status,
+    String? source,
+  }) async =>
+      const Result.success([]);
 }
 
 /// Public MS API stub with scripted responses per call.
 class FakePublicApi extends InternalPublicApi {
   FakePublicApi(this.viewResult) : super(Dio());
   final Result<MsPublicView, AppFailure> viewResult;
+
+  @override
+  Future<Result<List<StoreRef>, AppFailure>> stores() async => const Result.success([
+        StoreRef(id: 's1', name: 'Banan – Lê Thánh Tôn'),
+        StoreRef(id: 's2', name: 'Banan – Sư Vạn Hạnh'),
+      ]);
 
   @override
   Future<Result<MsPublicView, AppFailure>> view(String token) async => viewResult;

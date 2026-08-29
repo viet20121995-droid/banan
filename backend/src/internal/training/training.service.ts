@@ -356,6 +356,82 @@ export class TrainingService {
     return rows;
   }
 
+  // ── trainee self-service (scoped to the caller's own InternalPerson) ─────
+
+  /** The caller's linked person + their own assignments/progress. A user
+   *  with no linked InternalPerson gets an explicit empty state, never an
+   *  error — admin may not have linked them yet. */
+  async meOverview(userId: string) {
+    const person = await this.prisma.internalPerson.findUnique({
+      where: { userId },
+      include: { store: { select: { id: true, name: true } } },
+    });
+    if (!person) return { person: null, assignments: [] };
+    const assignments = await this.prisma.trainingAssignment.findMany({
+      where: { personId: person.id },
+      include: {
+        path: { select: { id: true, name: true } },
+        progress: { include: { pathItem: { include: { material: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return {
+      person: {
+        id: person.id,
+        fullName: person.fullName,
+        position: person.position,
+        store: person.store,
+      },
+      assignments: assignments.map((a) => this.assignmentView(a)),
+    };
+  }
+
+  /**
+   * Own-progress update, status only. IDOR-proof: the progress row is
+   * looked up THROUGH the caller's person link — someone else's id simply
+   * doesn't match the where clause and 404s.
+   *
+   * A trainee saying "COMPLETED" only means "I'm done" — it lands as
+   * PENDING_CONFIRMATION. COMPLETED (with completedAt + confirmedById) is
+   * exclusively the ADMIN confirmation via updateProgress.
+   */
+  async updateOwnProgress(progressId: string, status: 'IN_PROGRESS' | 'COMPLETED', userId: string) {
+    // ONE guarded write: ownership (through the person link) AND
+    // not-yet-confirmed, both enforced atomically — an admin confirmation
+    // landing between a read and a write can never be wiped back.
+    const claimed = await this.prisma.trainingProgress.updateMany({
+      where: {
+        id: progressId,
+        status: { not: 'COMPLETED' },
+        assignment: { person: { userId } },
+      },
+      data: {
+        status: status === 'COMPLETED' ? 'PENDING_CONFIRMATION' : 'IN_PROGRESS',
+        completedAt: null,
+        confirmedById: null,
+      },
+    });
+    if (claimed.count === 0) {
+      // Distinguish "not yours / doesn't exist" from "admin already
+      // confirmed" — still through the ownership filter.
+      const mine = await this.prisma.trainingProgress.findFirst({
+        where: { id: progressId, assignment: { person: { userId } } },
+        select: { status: true },
+      });
+      if (!mine) {
+        this.notFound('INTERNAL_TRAINING_PROGRESS_NOT_FOUND', 'Không tìm thấy tiến độ.');
+      }
+      throw new BadRequestException({
+        code: 'INTERNAL_TRAINING_ALREADY_CONFIRMED',
+        message: 'Mục này đã được xác nhận hoàn thành.',
+      });
+    }
+    return this.prisma.trainingProgress.findUniqueOrThrow({
+      where: { id: progressId },
+      include: { pathItem: { include: { material: true } } },
+    });
+  }
+
   // ── helpers ───────────────────────────────────────────────────────────────
 
   private assignmentView(a: {
@@ -400,7 +476,12 @@ export class TrainingService {
           p.pathItem.dueDays != null
             ? new Date(a.startDate.getTime() + p.pathItem.dueDays * DAY_MS)
             : null;
-        const overdue = p.status !== 'COMPLETED' && dueAt != null && dueAt.getTime() < now;
+        // PENDING_CONFIRMATION is the trainee having finished — only the
+        // admin sign-off is missing, so it never counts as overdue.
+        const overdue =
+          !['COMPLETED', 'PENDING_CONFIRMATION'].includes(p.status) &&
+          dueAt != null &&
+          dueAt.getTime() < now;
         return {
           id: p.id,
           status: p.status,

@@ -10,6 +10,7 @@ void main() {
       expect(Role.fromWire('KITCHEN_MANAGER'), Role.kitchenManager);
       expect(Role.fromWire('KITCHEN_STAFF'), Role.kitchenStaff);
       expect(Role.fromWire('ADMIN'), Role.admin);
+      expect(Role.fromWire('TRAINEE'), Role.trainee);
     });
 
     test('isMerchant / isKitchen / isCustomer / isAdmin partitions cleanly', () {
@@ -18,6 +19,9 @@ void main() {
       expect(Role.kitchenStaff.isKitchen, isTrue);
       expect(Role.customer.isCustomer, isTrue);
       expect(Role.admin.isAdmin, isTrue);
+      expect(Role.trainee.isTrainee, isTrue);
+      expect(Role.trainee.isAdmin, isFalse);
+      expect(Role.trainee.isMerchant, isFalse);
     });
 
     test('throws on unknown wire value', () {

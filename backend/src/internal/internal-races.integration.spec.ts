@@ -29,6 +29,7 @@ import { MsService } from './ms/ms.service';
 import { InternalPdfService } from './pdf/internal-pdf.service';
 import { QcService } from './qc/qc.service';
 import { scoreQc } from './qc/qc-scoring';
+import { TrainingService } from './training/training.service';
 
 jest.setTimeout(60_000);
 
@@ -98,6 +99,20 @@ describeIf('internal races (real Postgres)', () => {
         where: { template: { name: { startsWith: 'IT-MS-RACE-' } } },
       });
       await prisma.msTemplate.deleteMany({ where: { name: { startsWith: 'IT-MS-RACE-' } } });
+      // Training race fixtures (assignment cascades its progress rows).
+      await prisma.trainingAssignment.deleteMany({
+        where: { person: { userId: { startsWith: 'it-race-user-' } } },
+      });
+      await prisma.trainingPathItem.deleteMany({
+        where: { path: { name: { startsWith: 'IT-RACE-path-' } } },
+      });
+      await prisma.trainingPath.deleteMany({ where: { name: { startsWith: 'IT-RACE-path-' } } });
+      await prisma.trainingMaterial.deleteMany({
+        where: { title: { startsWith: 'IT-RACE-mat-' } },
+      });
+      await prisma.internalPerson.deleteMany({
+        where: { userId: { startsWith: 'it-race-user-' } },
+      });
       await prisma.store.deleteMany({ where: { slug: { startsWith: 'it-race-' } } });
     } finally {
       await prisma.$disconnect();
@@ -388,6 +403,71 @@ describeIf('internal races (real Postgres)', () => {
       // The scored snapshot matches the answers in the DB (still YES).
       expect(fresh.submission?.answers[0]?.value).toBe('YES');
       expect(fresh.submission?.totalScore).toBe(100);
+    });
+  });
+
+  describe('Training: trainee mark racing admin confirmation', () => {
+    it("an admin training confirmation is never wiped by the trainee's racing mark", async () => {
+      const training = new TrainingService(prisma);
+      const userId = `it-race-user-${Date.now()}`;
+      const person = await prisma.internalPerson.create({
+        data: { fullName: 'IT-RACE trainee', storeId, position: 'IT', userId },
+      });
+      const material = await prisma.trainingMaterial.create({
+        data: {
+          title: `IT-RACE-mat-${Date.now()}`,
+          category: 'QUY_DINH',
+          kind: 'LINK',
+          url: 'https://banancakes.vn/it-race',
+          isActive: false, // never surfaces in the published library
+        },
+      });
+      const path = await prisma.trainingPath.create({
+        data: {
+          name: `IT-RACE-path-${Date.now()}`,
+          items: { create: [{ materialId: material.id, sortOrder: 0 }] },
+        },
+        include: { items: true },
+      });
+
+      for (let round = 0; round < 5; round++) {
+        const assignment = await prisma.trainingAssignment.create({
+          data: {
+            personId: person.id,
+            pathId: path.id,
+            startDate: new Date(),
+            progress: { create: [{ pathItemId: path.items[0].id }] },
+          },
+          include: { progress: true },
+        });
+        const pid = assignment.progress[0].id;
+
+        // Both writers at once — every interleaving must be safe.
+        await Promise.allSettled([
+          training.updateProgress(pid, { status: 'COMPLETED' } as never, 'it-admin'),
+          training.updateOwnProgress(pid, 'COMPLETED', userId),
+        ]);
+        const fresh = await prisma.trainingProgress.findUniqueOrThrow({ where: { id: pid } });
+        if (fresh.status === 'COMPLETED') {
+          // Confirmation survived intact — the old read-then-write bug wiped
+          // completedAt/confirmedById here.
+          expect(fresh.completedAt).not.toBeNull();
+          expect(fresh.confirmedById).toBe('it-admin');
+        } else {
+          expect(fresh.status).toBe('PENDING_CONFIRMATION');
+          await training.updateProgress(pid, { status: 'COMPLETED' } as never, 'it-admin');
+        }
+
+        // Once confirmed, the trainee can never unwind it.
+        await expect(training.updateOwnProgress(pid, 'IN_PROGRESS', userId)).rejects.toMatchObject({
+          response: { code: 'INTERNAL_TRAINING_ALREADY_CONFIRMED' },
+        });
+        const final = await prisma.trainingProgress.findUniqueOrThrow({ where: { id: pid } });
+        expect(final.status).toBe('COMPLETED');
+        expect(final.completedAt).not.toBeNull();
+
+        await prisma.trainingAssignment.delete({ where: { id: assignment.id } });
+      }
     });
   });
 });

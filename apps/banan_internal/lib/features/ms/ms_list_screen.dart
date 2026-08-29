@@ -21,6 +21,7 @@ class _MsListScreenState extends ConsumerState<MsListScreen> {
   Result<List<MsListItem>, AppFailure>? _state;
   String? _storeId;
   String? _status;
+  String? _source;
 
   @override
   void initState() {
@@ -30,8 +31,29 @@ class _MsListScreenState extends ConsumerState<MsListScreen> {
 
   Future<void> _load() async {
     setState(() => _state = null);
-    final res = await ref.read(internalApiProvider).msList(storeId: _storeId, status: _status);
+    final res = await ref
+        .read(internalApiProvider)
+        .msList(storeId: _storeId, status: _status, source: _source);
     if (mounted) setState(() => _state = res);
+  }
+
+  Future<void> _revoke(MsListItem it) async {
+    final ok = await confirmDialog(
+      context,
+      title: 'Thu hồi ${it.code}?',
+      message: 'Link bí mật sẽ ngừng hoạt động ngay và nhiệm vụ chuyển sang trạng thái thu hồi.',
+      confirmLabel: 'Thu hồi',
+    );
+    if (!ok || !mounted) return;
+    final res = await ref.read(internalApiProvider).msRevoke(it.id);
+    if (!mounted) return;
+    res.when(
+      success: (_) {
+        showSnack(context, 'Đã thu hồi.');
+        _load();
+      },
+      failure: (f) => showFailure(context, f),
+    );
   }
 
   Future<void> _create() async {
@@ -133,6 +155,27 @@ class _MsListScreenState extends ConsumerState<MsListScreen> {
                     },
                   ),
                 ),
+                SizedBox(
+                  width: 180,
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: _source,
+                    isDense: true,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Nguồn tạo', isDense: true),
+                    items: const [
+                      DropdownMenuItem<String?>(child: Text('Tất cả')),
+                      DropdownMenuItem<String?>(value: 'ADMIN', child: Text('Admin')),
+                      DropdownMenuItem<String?>(
+                        value: 'EMPLOYEE_SELF_SERVICE',
+                        child: Text('Nhân viên tự tạo'),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _source = v);
+                      _load();
+                    },
+                  ),
+                ),
                 PrimaryButton(label: 'Tạo nhiệm vụ', icon: Icons.add, onPressed: _create),
               ],
             ),
@@ -158,6 +201,9 @@ class _MsListScreenState extends ConsumerState<MsListScreen> {
                     separatorBuilder: (_, __) => const SizedBox(height: BananSpacing.sm),
                     itemBuilder: (context, i) {
                       final it = items[i];
+                      final selfService = it.source == 'EMPLOYEE_SELF_SERVICE';
+                      final revocable =
+                          !const ['APPROVED', 'REVOKED'].contains(it.status);
                       return ListTile(
                         shape: const RoundedRectangleBorder(borderRadius: BananRadii.rmd),
                         tileColor: Theme.of(context).colorScheme.surface,
@@ -165,14 +211,29 @@ class _MsListScreenState extends ConsumerState<MsListScreen> {
                         title: Text('${it.code} · ${it.store.name}'),
                         subtitle: Text(
                           [
+                            if (selfService)
+                              'Nhân viên tự tạo: ${it.requesterName ?? '?'}'
+                                  '${it.requesterEmployeeCode != null ? ' (${it.requesterEmployeeCode})' : ''}'
+                            else
+                              'Admin tạo',
                             if (it.createdAt != null) 'Tạo ${vnDate.format(it.createdAt!.toLocal())}',
+                            if (it.tokenExpiresAt != null)
+                              'Link hết hạn ${vnDate.format(it.tokenExpiresAt!.toLocal())}',
                             if (it.deadline != null) 'Hạn nộp ${vnDate.format(it.deadline!.toLocal())}',
                           ].join(' · '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         trailing: Wrap(
                           spacing: BananSpacing.sm,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            if (selfService)
+                              const StatusBadge(
+                                label: 'Tự tạo',
+                                intent: StatusIntent.info,
+                                dense: true,
+                              ),
                             if (it.criticalFail)
                               const StatusBadge(label: 'CRITICAL', intent: StatusIntent.danger, dense: true),
                             if (it.totalScore != null)
@@ -183,6 +244,12 @@ class _MsListScreenState extends ConsumerState<MsListScreen> {
                               intent: msStatusIntent(it.status),
                               dense: true,
                             ),
+                            if (revocable)
+                              IconButton(
+                                tooltip: 'Thu hồi link',
+                                icon: const Icon(Icons.block, size: 20),
+                                onPressed: () => _revoke(it),
+                              ),
                           ],
                         ),
                       );

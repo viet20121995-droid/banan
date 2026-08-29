@@ -8,6 +8,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -71,6 +72,10 @@ export class MsListQueryDto extends PaginationDto {
   storeId?: string;
 
   @IsOptional()
+  @IsIn(['ADMIN', 'EMPLOYEE_SELF_SERVICE'])
+  source?: string;
+
+  @IsOptional()
   @IsIn([
     'DRAFT',
     'ASSIGNED',
@@ -106,11 +111,56 @@ export class IssueTokenDto {
 
 export class RequestRevisionDto {
   @IsString()
+  @Matches(/\S/, { message: 'note không được để trống' })
   @MaxLength(2000)
   note!: string;
 }
 
 // ── public (token in BODY — URLs are logged, bodies are not) ────────────────
+
+/**
+ * Public MS link generator. Deliberately tiny: NO templateId, NO status, NO
+ * report/recipient fields — the server chooses everything sensitive
+ * (forbidNonWhitelisted rejects any extra key outright).
+ */
+export class SelfServiceCreateDto {
+  /** \S: whitespace-only names would erase the audit trail after trim(). */
+  @IsString()
+  @Matches(/\S/, { message: 'requesterName không được để trống' })
+  @MaxLength(200)
+  requesterName!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  employeeCode?: string;
+
+  /** Shared internal access code — compared server-side, never stored. */
+  @IsString()
+  @Matches(/\S/, { message: 'accessCode không được để trống' })
+  @MaxLength(200)
+  accessCode!: string;
+
+  @IsUUID()
+  storeId!: string;
+
+  /** Link lifetime; server clamps to 1–7 days (default 7). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(7)
+  ttlDays?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
+
+  /** Client-generated per-submission key — double-click safe. */
+  @IsString()
+  @Matches(/^[\w-]{16,64}$/)
+  idempotencyKey!: string;
+}
 
 export class PublicTokenDto {
   @IsString()

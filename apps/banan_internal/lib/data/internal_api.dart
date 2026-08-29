@@ -263,10 +263,16 @@ class InternalApi {
       );
 
   // ── MS (admin) ──
-  Future<Result<List<MsListItem>, AppFailure>> msList({String? storeId, String? status}) => _run(
+  Future<Result<List<MsListItem>, AppFailure>> msList({
+    String? storeId,
+    String? status,
+    String? source,
+  }) =>
+      _run(
         () => _dio.get<dynamic>('/internal/ms/assignments', queryParameters: {
           if (storeId != null) 'storeId': storeId,
           if (status != null) 'status': status,
+          if (source != null) 'source': source,
           'perPage': 100,
         },),
         (data) => (data as List)
@@ -338,6 +344,29 @@ class InternalApi {
         (data) => Uint8List.fromList((data as List).cast<int>()),
       );
 
+  // ── Training (trainee self-service) ──
+  Future<Result<MyTraining, AppFailure>> myTraining() => _run(
+        () => _dio.get<dynamic>('/internal/training/me'),
+        (data) => MyTraining.fromJson(data as Map<String, dynamic>),
+      );
+
+  Future<Result<List<MaterialView>, AppFailure>> myMaterials() => _run(
+        () => _dio.get<dynamic>('/internal/training/me/materials'),
+        (data) => (data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(MaterialView.fromJson)
+            .toList(),
+      );
+
+  /// Screen reloads myTraining after this — the raw row isn't re-parsed.
+  Future<Result<void, AppFailure>> updateOwnProgress(String id, String status) => _run(
+        () => _dio.patch<dynamic>(
+          '/internal/training/me/progress/$id',
+          data: {'status': status},
+        ),
+        (_) {},
+      );
+
   // ── Training ──
   Future<Result<List<PersonView>, AppFailure>> people({String? storeId, String? q}) => _run(
         () => _dio.get<dynamic>('/internal/training/people', queryParameters: {
@@ -406,12 +435,14 @@ class InternalApi {
     String? storeId,
     String? personId,
     bool overdueOnly = false,
+    String? status,
   }) =>
       _run(
         () => _dio.get<dynamic>('/internal/training/progress', queryParameters: {
           if (storeId != null) 'storeId': storeId,
           if (personId != null) 'personId': personId,
           if (overdueOnly) 'overdue': 'true',
+          if (status != null) 'status': status,
         },),
         (data) => (data as List)
             .whereType<Map<String, dynamic>>()
@@ -528,6 +559,74 @@ class InternalApi {
 class InternalPublicApi {
   InternalPublicApi(this._dio);
   final Dio _dio;
+
+  /// Branch list for the public generator form — same public endpoint the
+  /// customer app uses; no auth involved.
+  Future<Result<List<StoreRef>, AppFailure>> stores() async {
+    try {
+      final res = await _dio.get<dynamic>('/stores');
+      final status = res.statusCode ?? 0;
+      final body = res.data;
+      if (status >= 400) return Result.failure(_failureOf(status, body));
+      final data = body is Map<String, dynamic> ? body['data'] : body;
+      return Result.success(
+        (data as List).whereType<Map<String, dynamic>>().map(StoreRef.fromJson).toList(),
+      );
+    } on DioException catch (e) {
+      return Result.failure(NetworkFailure(cause: e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(message: e.toString(), cause: e));
+    }
+  }
+
+  /// Employee self-service link generator. The access code travels in the
+  /// POST body only; the returned raw link exists exactly once.
+  Future<Result<MsCreateResult, AppFailure>> createAssignment({
+    required String requesterName,
+    required String accessCode,
+    required String storeId,
+    required String idempotencyKey,
+    String? employeeCode,
+    int? ttlDays,
+    String? note,
+  }) async {
+    try {
+      final res = await _dio.post<dynamic>('/internal/ms/public/create-assignment', data: {
+        'requesterName': requesterName,
+        'accessCode': accessCode,
+        'storeId': storeId,
+        'idempotencyKey': idempotencyKey,
+        if (employeeCode != null && employeeCode.isNotEmpty) 'employeeCode': employeeCode,
+        if (ttlDays != null) 'ttlDays': ttlDays,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },);
+      final status = res.statusCode ?? 0;
+      final body = res.data;
+      if (status >= 400) return Result.failure(_failureOf(status, body));
+      final data = body is Map<String, dynamic> ? body['data'] : body;
+      return Result.success(MsCreateResult.fromJson(data as Map<String, dynamic>));
+    } on DioException catch (e) {
+      if (e.response != null) {
+        return Result.failure(_failureOf(e.response!.statusCode ?? 0, e.response!.data));
+      }
+      return Result.failure(NetworkFailure(cause: e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(message: e.toString(), cause: e));
+    }
+  }
+
+  AppFailure _failureOf(int status, dynamic body) {
+    var code = 'HTTP_$status';
+    String? message;
+    if (body is Map<String, dynamic>) {
+      final err = body['error'];
+      if (err is Map<String, dynamic>) {
+        code = (err['code'] as String?) ?? code;
+        message = err['message'] as String?;
+      }
+    }
+    return ServerFailure(code: code, message: message);
+  }
 
   Future<Result<MsPublicView, AppFailure>> view(String token) =>
       _post('/internal/ms/public/view', {'token': token});

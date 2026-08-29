@@ -19,7 +19,10 @@ import { Role } from '@prisma/client';
 import type { Response } from 'express';
 import { diskStorage } from 'multer';
 
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
+import type { AuthPrincipal } from '../../auth/types/jwt-payload';
+import { PrismaService } from '../../prisma/prisma.service';
 import { ACCEPTED_IMAGE_MIMES, fileLooksLikeImage } from '../../uploads/image-validation';
 
 import {
@@ -56,7 +59,7 @@ function fileLooksLikePdf(absPath: string): boolean {
 @Controller({ path: 'internal/files', version: '1' })
 @Roles(Role.ADMIN)
 export class InternalFilesController {
-  constructor() {
+  constructor(private readonly prisma: PrismaService) {
     ensurePrivateDir();
   }
 
@@ -122,15 +125,34 @@ export class InternalFilesController {
     return { name: file.filename, size: file.size, mimeType: 'application/pdf' };
   }
 
-  /** Streams a private file to an ADMIN (Bearer-authenticated fetch — the
-   *  apps render the bytes; nothing here is linkable publicly). */
+  /** Streams a private file back. ADMIN reads anything; a TRAINEE reads
+   *  ONLY files that back a PUBLISHED training material — evidence photos
+   *  and every other private file stay invisible (404, not 403, so the
+   *  namespace leaks nothing). */
+  @Roles(Role.ADMIN, Role.TRAINEE)
   @Get(':name')
-  read(@Param('name') name: string, @Res() res: Response) {
+  async read(
+    @Param('name') name: string,
+    @CurrentUser() user: AuthPrincipal,
+    @Res() res: Response,
+  ) {
     if (!isPrivateFileName(name)) {
       throw new NotFoundException({
         code: 'INTERNAL_FILE_NOT_FOUND',
         message: 'Không tìm thấy tệp.',
       });
+    }
+    if (user.role !== Role.ADMIN) {
+      const material = await this.prisma.trainingMaterial.findFirst({
+        where: { url: name, kind: 'FILE', isActive: true },
+        select: { id: true },
+      });
+      if (!material) {
+        throw new NotFoundException({
+          code: 'INTERNAL_FILE_NOT_FOUND',
+          message: 'Không tìm thấy tệp.',
+        });
+      }
     }
     const path = privateFilePath(name);
     if (!existsSync(path)) {

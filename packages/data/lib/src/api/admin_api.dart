@@ -144,4 +144,32 @@ class AdminApi {
 
   Future<Result<List<OrgOption>, AppFailure>> kitchens() =>
       _options('/admin/kitchens');
+
+  /// Active staff records without a login yet, for linking a new TRAINEE
+  /// account. Reuses the internal-ops people endpoint (ADMIN-only).
+  Future<Result<List<OrgOption>, AppFailure>> unlinkedPeople() async {
+    try {
+      final res =
+          await _dio.get<Map<String, dynamic>>('/internal/training/people');
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
+      final raw = res.data?['data'] as List? ?? const [];
+      return Result.success([
+        for (final e in raw.whereType<Map<String, dynamic>>())
+          if (e['userId'] == null && (e['isActive'] as bool? ?? true))
+            OrgOption(
+              id: e['id'] as String,
+              name: [
+                (e['fullName'] as String?) ?? '?',
+                if (e['position'] is String) e['position'] as String,
+                if ((e['store'] as Map<String, dynamic>?)?['name'] is String)
+                  (e['store'] as Map<String, dynamic>)['name'] as String,
+              ].join(' · '),
+            ),
+      ]);
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
 }

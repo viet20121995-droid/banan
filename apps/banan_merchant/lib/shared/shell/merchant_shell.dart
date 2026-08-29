@@ -192,6 +192,7 @@ class _AccountMenu extends ConsumerWidget {
         Role.kitchenManager => 'Quản lý bếp',
         Role.kitchenStaff => 'Nhân viên bếp',
         Role.customer => 'Khách hàng',
+        Role.trainee => 'Trainee',
       };
 }
 
@@ -758,6 +759,7 @@ class _SidebarUserFooter extends ConsumerWidget {
         Role.kitchenManager => 'Quản lý bếp',
         Role.kitchenStaff => 'Nhân viên bếp',
         Role.customer => 'Khách hàng',
+        Role.trainee => 'Trainee',
       };
 
   @override
