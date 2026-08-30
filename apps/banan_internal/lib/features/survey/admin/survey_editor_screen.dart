@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/internal_api.dart';
 import '../../../data/survey_models.dart';
-import '../../../shared/internal_shell.dart';
 import '../../../shared/widgets.dart';
+import 'survey_shell.dart';
 
 /// Survey template editor: versioned templates (DRAFT → PUBLISHED →
 /// ARCHIVED), published versions immutable (clone to edit), mobile preview
@@ -167,7 +167,7 @@ class _SurveyEditorScreenState extends ConsumerState<SurveyEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return InternalShell(
+    return SurveyShell(
       title: 'Trình soạn khảo sát',
       subtitle: 'Phiên bản, câu hỏi và điều kiện hiển thị',
       body: FetchBody<List<SurveyTemplateListItem>>(

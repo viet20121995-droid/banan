@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/internal_api.dart';
 import '../../../data/survey_models.dart';
-import '../../../shared/internal_shell.dart';
 import '../../../shared/widgets.dart';
+import 'survey_shell.dart';
 
 /// Closed-loop follow-up for overall <= 2: NEW → IN_PROGRESS → RESOLVED,
 /// OVERDUE derived from the SLA. Guest contact appears ONLY when the guest
@@ -95,7 +95,7 @@ class _SurveyCasesScreenState extends ConsumerState<SurveyCasesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return InternalShell(
+    return SurveyShell(
       title: 'Case khảo sát',
       subtitle: 'Phản hồi điểm thấp cần xử lý',
       body: Column(

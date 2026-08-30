@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/internal_api.dart';
 import '../../../data/internal_models.dart';
 import '../../../data/survey_models.dart';
-import '../../../shared/internal_shell.dart';
 import '../../../shared/save_file.dart';
 import '../../../shared/widgets.dart';
+import 'survey_shell.dart';
 
 /// Survey dashboard: totals, NPS, trend, per-branch compare, category
 /// breakdown, top issues/likes, recent comments + CSV export.
@@ -102,7 +102,7 @@ class _SurveyReportsScreenState extends ConsumerState<SurveyReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return InternalShell(
+    return SurveyShell(
       title: 'Khảo sát khách hàng',
       subtitle: 'Báo cáo trải nghiệm tại quán',
       actions: [

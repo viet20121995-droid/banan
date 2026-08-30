@@ -163,6 +163,76 @@ void main() {
     });
   });
 
+  group('survey sub-menu', () {
+    const tabLabels = [
+      'Báo cáo',
+      'Phản hồi cần xử lý',
+      'Điều chỉnh khảo sát',
+      'Link & QR',
+      'Quà tặng',
+    ];
+
+    for (final (screen, path) in <(Widget, String)>[
+      (const SurveyReportsScreen(), '/survey/reports'),
+      (const SurveyCasesScreen(), '/survey/cases'),
+      (const SurveyEditorScreen(), '/survey/editor'),
+      (const SurveyLinkScreen(), '/survey/link'),
+      (const SurveyRewardsScreen(), '/survey/rewards'),
+    ]) {
+      testWidgets('$path shows all five section tabs', (tester) async {
+        await pumpAdmin(tester, screen, path);
+        for (final label in tabLabels) {
+          expect(find.text(label), findsOneWidget, reason: label);
+        }
+      });
+    }
+
+    testWidgets('tapping a tab navigates within the survey area', (tester) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1280, 800);
+      addTearDown(tester.view.reset);
+      final router = GoRouter(
+        initialLocation: '/survey/reports',
+        routes: [
+          GoRoute(path: '/survey/reports', builder: (_, __) => const SurveyReportsScreen()),
+          GoRoute(path: '/survey/cases', builder: (_, __) => const SurveyCasesScreen()),
+          GoRoute(path: '/survey/editor', builder: (_, __) => const SurveyEditorScreen()),
+          GoRoute(path: '/survey/link', builder: (_, __) => const SurveyLinkScreen()),
+          GoRoute(path: '/survey/rewards', builder: (_, __) => const SurveyRewardsScreen()),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(FakeAuthRepository(testSession())),
+            internalApiProvider.overrideWithValue(FakeInternalApi()),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Tổng phản hồi'), findsOneWidget); // on reports
+
+      // The tab bar scrolls horizontally — bring each tab into view first.
+      Future<void> tapTab(String label) async {
+        await tester.ensureVisible(find.text(label));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+      }
+
+      await tapTab('Quà tặng');
+      expect(find.text('Đổi quà tại quầy'), findsOneWidget); // on rewards
+
+      await tapTab('Link & QR');
+      expect(find.text('Tải QR PNG'), findsOneWidget); // on link & QR
+
+      await tapTab('Điều chỉnh khảo sát');
+      expect(find.text('Bản nháp mới từ bản đang chọn'), findsOneWidget); // on editor
+    });
+  });
+
   group('overflow', () {
     for (final size in [const Size(390, 844), const Size(820, 1180), const Size(1440, 900)]) {
       testWidgets('admin survey screens survive ${size.width.toInt()}px', (tester) async {

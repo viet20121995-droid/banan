@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/internal_api.dart';
 import '../../../data/survey_models.dart';
-import '../../../shared/internal_shell.dart';
 import '../../../shared/widgets.dart';
+import 'survey_shell.dart';
 
 /// Reward foundation — campaigns ship DISABLED; the counter screen redeems
 /// voucher codes and shows the claim history.
@@ -89,7 +89,7 @@ class _SurveyRewardsScreenState extends ConsumerState<SurveyRewardsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InternalShell(
+    return SurveyShell(
       title: 'Quà tặng khảo sát',
       subtitle: 'Mặc định TẮT — bật khi sẵn sàng tặng quà',
       body: FetchBody<List<SurveyCampaignView>>(

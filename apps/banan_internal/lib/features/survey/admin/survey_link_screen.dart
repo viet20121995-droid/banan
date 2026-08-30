@@ -8,9 +8,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../../shared/internal_shell.dart';
 import '../../../shared/save_file.dart';
 import '../../../shared/widgets.dart';
+import 'survey_shell.dart';
 
 const _qrCaption = 'Quét để chia sẻ trải nghiệm';
 
@@ -32,7 +32,7 @@ class SurveyLinkScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final url = surveyUrl();
-    return InternalShell(
+    return SurveyShell(
       title: 'Link & QR khảo sát',
       subtitle: 'Một link duy nhất cho mọi bàn, mọi chi nhánh',
       body: SingleChildScrollView(
