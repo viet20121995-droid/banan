@@ -29,6 +29,10 @@ import 'promo_popup_dialog.dart';
 import 'pwa_install.dart';
 import 'section_header.dart';
 
+// Keep the seasonal treatment isolated so it can be removed after the
+// campaign without touching the ordering experience below it.
+const _nationalDayCampaignEnabled = true;
+
 final _wholesaleAccessProvider = FutureProvider.autoDispose<bool>((ref) async {
   final result = await ref.watch(wholesaleApiProvider).access();
   return result.when(success: (enabled) => enabled, failure: (_) => false);
@@ -110,6 +114,12 @@ class MenuScreen extends ConsumerWidget {
                 isGuest: isGuest,
                 unread: unread,
               ),
+        bottom: _nationalDayCampaignEnabled
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(30),
+                child: _NationalDayAnnouncement(),
+              )
+            : null,
       ),
       // Floating "View cart" button — shows up the moment the cart isn't
       // empty, so the customer can jump straight to checkout without
@@ -397,6 +407,45 @@ class MenuScreen extends ConsumerWidget {
         ],
       ),
     ];
+  }
+}
+
+class _NationalDayAnnouncement extends StatelessWidget {
+  const _NationalDayAnnouncement();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 30,
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [BananColors.accentDark, BananColors.accent],
+        ),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.star_rounded, size: 12, color: BananColors.goldLight),
+          SizedBox(width: BananSpacing.sm),
+          Flexible(
+            child: Text(
+              'MỪNG QUỐC KHÁNH 2/9 · NGỌT NGÀO GẮN KẾT',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.4,
+              ),
+            ),
+          ),
+          SizedBox(width: BananSpacing.sm),
+          Icon(Icons.star_rounded, size: 12, color: BananColors.goldLight),
+        ],
+      ),
+    );
   }
 }
 
@@ -1401,82 +1450,120 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                   );
                 },
               ),
-              // Dark scrim so the white CTA + title always read well.
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.black26, Colors.black54],
+              // Seasonal overlay keeps merchant-managed photography visible
+              // while giving every carousel slide one coherent 2/9 identity.
+              if (_nationalDayCampaignEnabled) ...[
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      stops: [0, 0.48, 1],
+                      colors: [
+                        BananColors.accentDark,
+                        Color(0xE6B51F2E),
+                        Color(0x33000000),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+                const CustomPaint(painter: _NationalDayPatternPainter()),
+                const Positioned(
+                  left: BananSpacing.xl,
+                  top: BananSpacing.lg,
+                  child: Icon(
+                    Icons.star_rounded,
+                    size: 38,
+                    color: BananColors.goldLight,
+                  ),
+                ),
+              ] else
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.black26, Colors.black54],
+                    ),
+                  ),
+                ),
               // Decorative wave + kanji accents removed for a cleaner
               // banner — peach-cream theme reads softer without them.
-              Padding(
-                // Hug the top edge so the CTA sits high on the banner rather
-                // than centred (small top inset keeps it off the very edge).
-                padding: const EdgeInsets.fromLTRB(
-                  BananSpacing.xl,
-                  BananSpacing.md,
-                  BananSpacing.xl,
-                  BananSpacing.xl,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    if (title.isNotEmpty) ...[
-                      Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        // Lora ships weights 400–700 only. Requesting w800 here
-                        // made Flutter web synthesize a faux-bold, which dropped
-                        // Vietnamese diacritics ("Khuyến mãi" → "Khuyen mai").
-                        // w700 is Lora's real heaviest face — full VN subset.
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          shadows: const [
-                            Shadow(blurRadius: 8, color: Colors.black54),
-                          ],
+              if (_nationalDayCampaignEnabled)
+                _NationalDayHeroContent(
+                  compact: width < 700,
+                  ctaDismissed: ctaDismissed,
+                  onOrderTap: () {
+                    ref.read(heroCtaDismissedProvider.notifier).state = true;
+                    widget.onOrderTap();
+                  },
+                )
+              else
+                Padding(
+                  // Hug the top edge so the CTA sits high on the banner rather
+                  // than centred (small top inset keeps it off the very edge).
+                  padding: const EdgeInsets.fromLTRB(
+                    BananSpacing.xl,
+                    BananSpacing.md,
+                    BananSpacing.xl,
+                    BananSpacing.xl,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      if (title.isNotEmpty) ...[
+                        Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          // Lora ships weights 400–700 only. Requesting w800 here
+                          // made Flutter web synthesize a faux-bold, which dropped
+                          // Vietnamese diacritics ("Khuyến mãi" → "Khuyen mai").
+                          // w700 is Lora's real heaviest face — full VN subset.
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            shadows: const [
+                              Shadow(blurRadius: 8, color: Colors.black54),
+                            ],
+                          ),
                         ),
-                      ),
+                        if (!ctaDismissed)
+                          const SizedBox(height: BananSpacing.md),
+                      ],
                       if (!ctaDismissed)
-                        const SizedBox(height: BananSpacing.md),
+                        FilledButton.icon(
+                          onPressed: () {
+                            ref.read(heroCtaDismissedProvider.notifier).state =
+                                true;
+                            widget.onOrderTap();
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: theme.colorScheme.primary,
+                            // ~30% larger than the default CTA (padding + text).
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: BananSpacing.xl * 1.3,
+                              vertical: BananSpacing.md * 1.3,
+                            ),
+                            textStyle: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              fontSize:
+                                  (theme.textTheme.titleMedium?.fontSize ??
+                                          16) *
+                                      1.3,
+                            ),
+                          ),
+                          icon: const Icon(
+                            Icons.expand_more_rounded,
+                            size: 31,
+                          ),
+                          label: Text(s.orderNow),
+                        ),
                     ],
-                    if (!ctaDismissed)
-                      FilledButton.icon(
-                        onPressed: () {
-                          ref.read(heroCtaDismissedProvider.notifier).state =
-                              true;
-                          widget.onOrderTap();
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: theme.colorScheme.primary,
-                          // ~30% larger than the default CTA (padding + text).
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: BananSpacing.xl * 1.3,
-                            vertical: BananSpacing.md * 1.3,
-                          ),
-                          textStyle: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            fontSize:
-                                (theme.textTheme.titleMedium?.fontSize ?? 16) *
-                                    1.3,
-                          ),
-                        ),
-                        icon: const Icon(
-                          Icons.expand_more_rounded,
-                          size: 31,
-                        ),
-                        label: Text(s.orderNow),
-                      ),
-                  ],
+                  ),
                 ),
-              ),
               if (slides.length > 1) ...[
                 // Prev / next arrows — visible only when there's more
                 // than one slide. Translucent circle so they sit on top
@@ -1577,6 +1664,139 @@ class _CarouselArrow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NationalDayHeroContent extends StatelessWidget {
+  const _NationalDayHeroContent({
+    required this.compact,
+    required this.ctaDismissed,
+    required this.onOrderTap,
+  });
+
+  final bool compact;
+  final bool ctaDismissed;
+  final VoidCallback onOrderTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final horizontal = compact ? BananSpacing.lg : BananSpacing.xl * 2;
+    return Align(
+      alignment: compact ? Alignment.center : Alignment.centerLeft,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontal),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: compact ? 520 : 610),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment:
+                compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: BananSpacing.md,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  borderRadius: BananRadii.rPill,
+                  border: Border.all(
+                    color: BananColors.goldLight.withValues(alpha: 0.7),
+                  ),
+                ),
+                child: const Text(
+                  'BANAN · VIETNAM NATIONAL DAY',
+                  style: TextStyle(
+                    color: BananColors.goldLight,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.6,
+                  ),
+                ),
+              ),
+              SizedBox(height: compact ? BananSpacing.sm : BananSpacing.md),
+              Text(
+                'MỪNG QUỐC KHÁNH 2/9',
+                textAlign: compact ? TextAlign.center : TextAlign.left,
+                style: (compact
+                        ? theme.textTheme.headlineSmall
+                        : theme.textTheme.headlineLarge)
+                    ?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  height: 1.05,
+                  shadows: const [
+                    Shadow(blurRadius: 12, color: Color(0x66000000)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: BananSpacing.sm),
+              Text(
+                'Vị ngọt Việt Nam, trọn niềm sum vầy',
+                textAlign: compact ? TextAlign.center : TextAlign.left,
+                style: (compact
+                        ? theme.textTheme.bodyMedium
+                        : theme.textTheme.titleMedium)
+                    ?.copyWith(
+                  color: const Color(0xFFFFF4DC),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (!ctaDismissed) ...[
+                SizedBox(height: compact ? BananSpacing.md : BananSpacing.lg),
+                FilledButton.icon(
+                  onPressed: onOrderTap,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: BananColors.primary,
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: BananColors.goldLight),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? BananSpacing.lg : BananSpacing.xl,
+                      vertical: compact ? 10 : BananSpacing.md,
+                    ),
+                  ),
+                  icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                  label: const Text('Khám phá bộ sưu tập'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NationalDayPatternPainter extends CustomPainter {
+  const _NationalDayPatternPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gold = Paint()
+      ..color = BananColors.goldLight.withValues(alpha: 0.34)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    final center = Offset(size.width * 0.79, size.height * 0.48);
+    final baseRadius = size.shortestSide * 0.23;
+    for (var i = 0; i < 4; i++) {
+      canvas.drawCircle(center, baseRadius + i * 13, gold);
+    }
+
+    final wave = Path()
+      ..moveTo(0, size.height * 0.82)
+      ..cubicTo(
+        size.width * 0.24,
+        size.height * 0.64,
+        size.width * 0.40,
+        size.height,
+        size.width * 0.64,
+        size.height * 0.78,
+      );
+    canvas.drawPath(wave, gold..strokeWidth = 2);
+  }
+
+  @override
+  bool shouldRepaint(_NationalDayPatternPainter oldDelegate) => false;
 }
 
 /// Instagram-style bakery feed. Hidden if there are no published threads
