@@ -1469,10 +1469,22 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                               // left stays clear for the headline.
                               ? Align(
                                   alignment: Alignment.centerRight,
-                                  child: Image.asset(
-                                    slide.image!,
-                                    fit: BoxFit.fitHeight,
-                                    height: double.infinity,
+                                  // Left third of the art dissolves into the
+                                  // plum ground — no hard seam at any width.
+                                  child: ShaderMask(
+                                    blendMode: BlendMode.dstIn,
+                                    shaderCallback: (r) => const LinearGradient(
+                                      stops: [0, 0.38],
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.white,
+                                      ],
+                                    ).createShader(r),
+                                    child: Image.asset(
+                                      slide.image!,
+                                      fit: BoxFit.fitHeight,
+                                      height: double.infinity,
+                                    ),
                                   ),
                                 )
                               : Image.network(
