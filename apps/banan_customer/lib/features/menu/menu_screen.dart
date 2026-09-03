@@ -31,6 +31,8 @@ import 'section_header.dart';
 
 const _fullmoonAutumnBannerAsset =
     'assets/campaigns/fullmoon-autumn-golden-kiwi.jpg';
+const _fullmoonAutumnParadeAsset =
+    'assets/campaigns/fullmoon-autumn-lantern-parade.png';
 
 // 2026 Mid-Autumn treatment: explicit VN-time window, so the campaign
 // retires automatically after the festival period.
@@ -1474,9 +1476,10 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                                   child: ShaderMask(
                                     blendMode: BlendMode.dstIn,
                                     shaderCallback: (r) => const LinearGradient(
-                                      stops: [0, 0.38],
+                                      stops: [0, 0.22, 0.62],
                                       colors: [
                                         Colors.transparent,
+                                        Color(0x40FFFFFF),
                                         Colors.white,
                                       ],
                                     ).createShader(r),
@@ -1516,6 +1519,23 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                   ),
                 ),
                 const CustomPaint(painter: _FullmoonAutumnPatternPainter()),
+                // Children's lantern parade walking the wave toward the
+                // daifuku. Needs the wide layout: on phones it would be a
+                // smudge under the headline.
+                if (width >= 700)
+                  const Align(
+                    alignment: Alignment(0.2, 1),
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: BananSpacing.sm),
+                      child: FractionallySizedBox(
+                        widthFactor: 0.34,
+                        child: Image(
+                          image: AssetImage(_fullmoonAutumnParadeAsset),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
                 const Positioned(
                   left: BananSpacing.xl,
                   top: BananSpacing.lg,
