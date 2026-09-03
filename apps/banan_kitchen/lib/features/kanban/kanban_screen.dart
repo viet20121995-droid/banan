@@ -424,6 +424,24 @@ class _BoardToolbar extends StatelessWidget {
             ],
           );
         }
+        // Day + search + every source chip need ~1400px to share a line;
+        // below that the chips get their own row instead of scrolling off.
+        if (constraints.maxWidth < 1400) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  dayBar,
+                  const SizedBox(width: BananSpacing.md),
+                  Expanded(child: search),
+                ],
+              ),
+              const SizedBox(height: BananSpacing.sm),
+              filters,
+            ],
+          );
+        }
         return Row(
           children: [
             dayBar,

@@ -8,11 +8,12 @@ import 'package:intl/intl.dart';
 /// Board tabs: every order of the day, then the three live kitchen stages
 /// (`kitchenStatus`), then [done] — dispatched that day.
 enum KitchenBoardTab {
-  all('Tất cả', 'Mọi trạng thái trong ngày', Icons.view_agenda_outlined, BananColors.primary),
-  pending('Chờ nhận', 'Đơn mới, chờ bếp nhận', Icons.notifications_active_outlined, BananColors.warning),
+  // Subtitles stay short — five tabs share one line on a 1280px desktop.
+  all('Tất cả', 'Mọi trạng thái', Icons.view_agenda_outlined, BananColors.primary),
+  pending('Chờ nhận', 'Đơn mới chờ nhận', Icons.notifications_active_outlined, BananColors.warning),
   preparing('Đang làm', 'Đang trong bếp', Icons.cake_outlined, BananColors.info),
-  ready('Sẵn sàng giao', 'Chờ giao đi / khách lấy', Icons.local_shipping_outlined, BananColors.success),
-  done('Đã xong', 'Đã xuất khỏi bếp trong ngày', Icons.task_alt, BananColors.outline);
+  ready('Sẵn sàng giao', 'Chờ giao / khách lấy', Icons.local_shipping_outlined, BananColors.success),
+  done('Đã xong', 'Đã xuất khỏi bếp', Icons.task_alt, BananColors.outline);
 
   const KitchenBoardTab(this.label, this.subtitle, this.icon, this.accent);
 
