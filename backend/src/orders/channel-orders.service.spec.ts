@@ -328,6 +328,20 @@ describe('createInternalTransfer (INTERNAL_TRANSFER)', () => {
     expect(orderCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('skips the online lead-time rule — a 36h cake can be requested for tomorrow', async () => {
+    const orderCreate = jest
+      .fn()
+      .mockResolvedValue(orderRowFixture({ source: 'INTERNAL_TRANSFER' }));
+    const prisma = transferPrisma(orderCreate);
+    prisma.product.findMany.mockResolvedValue([{ ...productFixture(), leadTimeHours: 36 }]);
+    const { svc } = makeService(prisma);
+    await svc.createInternalTransfer(staff, {
+      ...transferDto,
+      scheduledFor: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
+    });
+    expect(orderCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('staff cannot request for another store', async () => {
     const { svc } = makeService(transferPrisma(jest.fn()));
     await expect(

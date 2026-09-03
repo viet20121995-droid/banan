@@ -678,6 +678,9 @@ class _SheetRow {
 class _InternalTransferScreenState
     extends ConsumerState<InternalTransferScreen> {
   List<_SheetRow> _rows = const [];
+  // Every qty cell merged — the counters listen here, so typing in one cell
+  // repaints only that row and the two small totals, not ~600 rows.
+  Listenable _sheet = Listenable.merge(const []);
   bool _loading = true;
   String _filter = '';
   // Packaging / other supplies are long lists — folded until needed.
@@ -696,7 +699,7 @@ class _InternalTransferScreenState
   /// Bar restock is keyed on Sunday and Thursday only (the backend enforces
   /// the same rule on the Vietnam calendar; this just greys the cells).
   bool get _drinkOrderDay => const {DateTime.sunday, DateTime.thursday}
-      .contains(DateTime.now().weekday);
+      .contains(DateTime.now().toUtc().add(const Duration(hours: 7)).weekday);
 
   @override
   void initState() {
@@ -757,6 +760,7 @@ class _InternalTransferScreenState
         for (final m in others)
           if (!drinkIds.contains(m.id)) _SheetRow.mfg(m, _Section.other),
       ];
+      _sheet = Listenable.merge([for (final r in _rows) r.qty]);
       _loading = false;
     });
   }
@@ -847,8 +851,6 @@ class _InternalTransferScreenState
     final theme = Theme.of(context);
     final isAdmin = _isAdmin;
     final q = _filter.trim().toLowerCase();
-    final picked = _picked;
-    final pickedQty = picked.fold<double>(0, (a, r) => a + r.quantity);
     return MerchantShell(
       title: 'Đặt hàng nội bộ',
       body: ListView(
@@ -918,11 +920,18 @@ class _InternalTransferScreenState
             decoration: const InputDecoration(labelText: 'Ghi chú'),
           ),
           const SizedBox(height: BananSpacing.md),
-          Text(
-            picked.isEmpty
-                ? 'Chưa điền dòng nào.'
-                : '${picked.length} dòng · tổng ${_fmtQty(pickedQty)}',
-            style: theme.textTheme.titleSmall,
+          ListenableBuilder(
+            listenable: _sheet,
+            builder: (_, __) {
+              final picked = _picked;
+              final qty = picked.fold<double>(0, (a, r) => a + r.quantity);
+              return Text(
+                picked.isEmpty
+                    ? 'Chưa điền dòng nào.'
+                    : '${picked.length} dòng · tổng ${_fmtQty(qty)}',
+                style: theme.textTheme.titleSmall,
+              );
+            },
           ),
           const SizedBox(height: BananSpacing.sm),
           PrimaryButton(
@@ -949,7 +958,6 @@ class _InternalTransferScreenState
     // A search always opens the section it matched in.
     final open = q.isNotEmpty || _open.contains(section);
     final enabled = section != _Section.drink || _drinkOrderDay;
-    final pickedHere = rows.where((r) => r.quantity > 0).length;
     return [
       InkWell(
         onTap: () => setState(() {
@@ -969,11 +977,17 @@ class _InternalTransferScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${_titles[section]}  ·  ${rows.length} dòng'
-                      '${pickedHere > 0 ? '  ·  đã điền $pickedHere' : ''}',
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ListenableBuilder(
+                      listenable: _sheet,
+                      builder: (_, __) {
+                        final n = rows.where((r) => r.quantity > 0).length;
+                        return Text(
+                          '${_titles[section]}  ·  ${rows.length} dòng'
+                          '${n > 0 ? '  ·  đã điền $n' : ''}',
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        );
+                      },
                     ),
                     Text(
                       _hint(section),
@@ -1006,12 +1020,7 @@ class _InternalTransferScreenState
                     ?.copyWith(color: theme.colorScheme.primary),
               ),
             ),
-          _SheetLine(
-            index: i + 1,
-            row: rows[i],
-            enabled: enabled,
-            onChanged: () => setState(() {}),
-          ),
+          _SheetLine(index: i + 1, row: rows[i], enabled: enabled),
         ],
       ],
       const SizedBox(height: BananSpacing.md),
@@ -1054,71 +1063,73 @@ class _SheetLine extends StatelessWidget {
     required this.index,
     required this.row,
     required this.enabled,
-    required this.onChanged,
   });
 
   final int index;
   final _SheetRow row;
   final bool enabled;
-  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final picked = row.quantity > 0;
-    return Container(
-      color: picked
-          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
-          : null,
-      padding: const EdgeInsets.symmetric(
-        horizontal: BananSpacing.md,
-        vertical: 2,
+    return ListenableBuilder(
+      listenable: row.qty,
+      builder: (context, child) => ColoredBox(
+        color: row.quantity > 0
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
+            : Colors.transparent,
+        child: child,
       ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 32,
-            child: Text('$index', style: theme.textTheme.bodySmall),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(row.name, overflow: TextOverflow.ellipsis),
-                if (row.code.isNotEmpty)
-                  Text(
-                    row.code,
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: theme.colorScheme.outline),
-                  ),
-              ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: BananSpacing.md,
+          vertical: 2,
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 32,
+              child: Text('$index', style: theme.textTheme.bodySmall),
             ),
-          ),
-          SizedBox(
-            width: 48,
-            child: Text(row.unit, style: theme.textTheme.bodySmall),
-          ),
-          SizedBox(
-            width: 84,
-            child: TextField(
-              controller: row.qty,
-              enabled: enabled,
-              keyboardType: TextInputType.numberWithOptions(
-                decimal: row.mfg != null,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(row.name, overflow: TextOverflow.ellipsis),
+                  if (row.code.isNotEmpty)
+                    Text(
+                      row.code,
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: theme.colorScheme.outline),
+                    ),
+                ],
               ),
-              textAlign: TextAlign.center,
-              decoration: const InputDecoration(
-                isDense: true,
-                hintText: '–',
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 8,
+            ),
+            SizedBox(
+              width: 48,
+              child: Text(row.unit, style: theme.textTheme.bodySmall),
+            ),
+            SizedBox(
+              width: 84,
+              child: TextField(
+                controller: row.qty,
+                enabled: enabled,
+                keyboardType: TextInputType.numberWithOptions(
+                  decimal: row.mfg != null,
+                ),
+                textAlign: TextAlign.center,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  hintText: '–',
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 8,
+                  ),
                 ),
               ),
-              onChanged: (_) => onChanged(),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

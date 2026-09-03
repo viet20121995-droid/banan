@@ -2394,7 +2394,12 @@ export class OrdersService {
       enforceLimitedStock: false,
       allowUnavailable: true,
     });
-    await this.assertProductsAcceptingOrder(products, targetAt, placedAt, scheduledFor != null);
+    // Same footing as counter orders: the branch and the kitchen agree the
+    // day between themselves, so the online "order N hours ahead" rule does
+    // not apply (day-of-week availability still does).
+    await this.assertProductsAcceptingOrder(products, targetAt, placedAt, scheduledFor != null, {
+      skipLeadTime: true,
+    });
 
     const orderCode = generateOrderCode();
     const kitchenId = sendToKitchen ? requesting.defaultKitchenId : null;
