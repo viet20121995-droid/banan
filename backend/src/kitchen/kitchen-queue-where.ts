@@ -2,14 +2,8 @@ import type { KitchenStatus, OrderStatus, Prisma } from '@prisma/client';
 
 const DAY_MS = 86_400_000;
 
-/** Statuses an order can hold once it has been routed to a kitchen. */
-const KITCHEN_VISIBLE: OrderStatus[] = [
-  'SENT_TO_KITCHEN',
-  'READY_FOR_PICKUP',
-  'DELIVERING',
-  'COMPLETED',
-];
 const DISPATCHED: OrderStatus[] = ['READY_FOR_PICKUP', 'DELIVERING', 'COMPLETED'];
+const DISPATCH_EVENTS: OrderStatus[] = ['READY_FOR_PICKUP', 'DELIVERING'];
 
 /** yyyy-MM-dd of `d` in Asia/Ho_Chi_Minh — the kitchen's calendar day. */
 export function vnDayKey(d: Date): string {
@@ -22,6 +16,13 @@ export function vnDayStart(day: string): Date {
 }
 
 export const KITCHEN_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Strict calendar validation; JS otherwise rolls 2026-02-31 into March. */
+export function isKitchenDate(value: string): boolean {
+  if (!KITCHEN_DATE_RE.test(value)) return false;
+  const parsed = vnDayStart(value);
+  return !Number.isNaN(parsed.getTime()) && vnDayKey(parsed) === value;
+}
 
 export interface KitchenQueueOpts {
   status?: KitchenStatus | null;
@@ -40,7 +41,7 @@ export interface KitchenQueueOpts {
  * Without any day: the classic live queue (+ today's dispatched ones when
  * `includeDoneToday`). With a day / range, the board is keyed on the day the
  * order has to be READY (ngày nhận), never the day it was placed:
- *   - orders scheduled inside the range (whatever their status),
+ *   - live orders scheduled inside the range,
  *   - unscheduled orders placed inside the range (walk-ins are made now),
  *   - orders dispatched from the kitchen inside the range ("Đã xong"),
  *   - and, only when the range covers today, live orders that are overdue
@@ -56,6 +57,16 @@ export function kitchenQueueWhere(
     status: 'SENT_TO_KITCHEN',
     ...(opts.status !== undefined && { kitchenStatus: opts.status }),
   };
+
+  const dispatchedIn = (range: { gte: Date; lt?: Date }): Prisma.OrderWhereInput => ({
+    status: { in: DISPATCHED },
+    statusEvents: {
+      some: {
+        toStatus: { in: DISPATCH_EVENTS },
+        createdAt: range,
+      },
+    },
+  });
 
   const from = opts.from ?? opts.date;
   const to = opts.to ?? opts.date ?? from;
@@ -77,9 +88,9 @@ export function kitchenQueueWhere(
               },
             ]
           : []),
-        { status: { in: KITCHEN_VISIBLE }, scheduledFor: range },
-        { status: { in: KITCHEN_VISIBLE }, scheduledFor: null, createdAt: range },
-        { status: { in: DISPATCHED }, updatedAt: range },
+        { ...live, scheduledFor: range },
+        { ...live, scheduledFor: null, createdAt: range },
+        ...(opts.status === undefined ? [dispatchedIn(range)] : []),
       ],
     };
   }
@@ -87,8 +98,12 @@ export function kitchenQueueWhere(
   if (!opts.includeDoneToday) return { kitchenId, ...live };
 
   const startOfToday = vnDayStart(vnDayKey(now));
+  const endOfToday = new Date(startOfToday.getTime() + DAY_MS);
   return {
     kitchenId,
-    OR: [live, { status: { in: DISPATCHED }, updatedAt: { gte: startOfToday } }],
+    OR: [
+      live,
+      ...(opts.status === undefined ? [dispatchedIn({ gte: startOfToday, lt: endOfToday })] : []),
+    ],
   };
 }

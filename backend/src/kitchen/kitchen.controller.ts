@@ -31,7 +31,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { OrdersService } from '../orders/orders.service';
 
-import { KITCHEN_DATE_RE } from './kitchen-queue-where';
+import { isKitchenDate } from './kitchen-queue-where';
 
 class KitchenTransitionDto {
   @IsEnum(KitchenStatus)
@@ -109,7 +109,7 @@ export class KitchenController {
       ['from', from],
       ['to', to],
     ] as const) {
-      if (value !== undefined && !KITCHEN_DATE_RE.test(value)) {
+      if (value !== undefined && !isKitchenDate(value)) {
         throw new BadRequestException({
           code: 'INVALID_DATE',
           message: `${name} phải là yyyy-MM-dd`,

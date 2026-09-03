@@ -15,25 +15,29 @@ export 'analytics_queue.dart';
 class Analytics {
   Analytics._();
 
-  static final AnalyticsQueue _queue = AnalyticsQueue(
-    send: (batch) => createDioClient().post<void>('/metrics/events', data: batch),
-    visitorId: env.visitorId(),
-  );
+  static AnalyticsQueue? _queue;
 
   /// Call once at launch (web only): records the session start with device
   /// class + traffic source, and starts the periodic flush.
   static void start() {
-    if (!kIsWeb) return;
-    _queue.start(
+    if (!kIsWeb || _queue != null) return;
+    final queue = AnalyticsQueue(
+      send: (batch) =>
+          createDioClient().post<void>('/metrics/events', data: batch),
+      visitorId: env.visitorId(),
+    );
+    _queue = queue;
+    queue.start(
       device: env.deviceClass(),
       referrer: env.trafficSource(),
     );
   }
 
-  static void pageView(String path) => _queue.pageView(path);
-  static void scroll(double fraction) => _queue.scroll(fraction);
-  static void click() => _queue.click();
-  static void addToCart(String label) => _queue.event('add_to_cart', label: label);
-  static void checkout() => _queue.event('checkout');
-  static void orderPlaced() => _queue.event('order_placed');
+  static void pageView(String path) => _queue?.pageView(path);
+  static void scroll(double fraction) => _queue?.scroll(fraction);
+  static void click() => _queue?.click();
+  static void addToCart(String label) =>
+      _queue?.event('add_to_cart', label: label);
+  static void checkout() => _queue?.event('checkout');
+  static void orderPlaced() => _queue?.event('order_placed');
 }

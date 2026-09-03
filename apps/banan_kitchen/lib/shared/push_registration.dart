@@ -1,22 +1,14 @@
-import 'dart:js_interop';
-
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_domain/banan_domain.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Browser glue (web/index.html): asks for notification permission, registers
-/// the FCM service worker, returns a token ('' if denied/unsupported).
-@JS('__bananGetPushToken')
-external JSPromise<JSString> _bananGetPushToken();
+import 'push_token.dart';
 
 Future<void> _fetchAndRegister(WidgetRef ref) async {
-  if (!kIsWeb) return;
   try {
-    final jsToken = await _bananGetPushToken().toDart;
-    final token = jsToken.toDart;
-    if (token.isEmpty) return;
+    final token = await getWebPushToken();
+    if (token == null || token.isEmpty) return;
     await ref.read(devicesApiProvider).register(platform: 'WEB', token: token);
   } catch (_) {
     // Push is optional — never surface errors to staff.

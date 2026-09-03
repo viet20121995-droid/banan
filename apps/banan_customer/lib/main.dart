@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:banan_core/banan_core.dart';
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
@@ -8,12 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 
-import 'app/analytics.dart';
 import 'app/app.dart';
 import 'app/locale_store.dart';
 import 'app/url_strategy.dart'
     if (dart.library.html) 'app/url_strategy_web.dart';
-import 'app/visit_beacon.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,13 +45,6 @@ Future<void> main() async {
     ],
   );
   await container.read(authRepositoryProvider).bootstrap();
-
-  // Count this page load in the daily traffic report. Fire-and-forget —
-  // launch never waits on it and a failure is silent.
-  unawaited(sendVisitBeacon());
-  // Behaviour beacon (Hotjar-lite) — page views, scroll depth, clicks and
-  // the shopping funnel for the daily report. Web-only, fire-and-forget.
-  Analytics.start();
 
   runApp(
     UncontrolledProviderScope(

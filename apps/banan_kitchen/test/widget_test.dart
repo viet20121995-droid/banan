@@ -25,7 +25,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Banan · Kitchen'), findsOneWidget);
-    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Banan · Bếp'), findsOneWidget);
+    expect(find.text('Đăng nhập'), findsOneWidget);
   });
 }

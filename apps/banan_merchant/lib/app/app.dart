@@ -1,3 +1,4 @@
+import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -13,8 +14,11 @@ class BananMerchantApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(merchantRouterProvider);
-    // New-order chime on every screen, for the whole session.
-    ref.watch(merchantAlertsProvider);
+    // Staff rooms only exist after authentication. Avoid opening an anonymous
+    // socket on the login screen just to listen for merchant orders.
+    if (ref.watch(authSessionProvider).valueOrNull != null) {
+      ref.watch(merchantAlertsProvider);
+    }
     return MaterialApp.router(
       title: 'Banan Merchant',
       debugShowCheckedModeBanner: false,

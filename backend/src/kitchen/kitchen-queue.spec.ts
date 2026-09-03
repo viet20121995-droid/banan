@@ -1,14 +1,17 @@
 import type { Prisma } from '@prisma/client';
 
-import { kitchenQueueWhere, vnDayKey } from './kitchen-queue-where';
+import { isKitchenDate, kitchenQueueWhere, vnDayKey } from './kitchen-queue-where';
 
 // 2026-08-30 09:00 VN == 02:00 UTC.
 const NOW = new Date('2026-08-30T02:00:00Z');
 
 type Range = { gte?: Date; lt?: Date };
 const clausesOf = (w: Prisma.OrderWhereInput) => w.OR as Prisma.OrderWhereInput[];
-const range = (c: Prisma.OrderWhereInput, key: 'scheduledFor' | 'createdAt' | 'updatedAt') =>
+const range = (c: Prisma.OrderWhereInput, key: 'scheduledFor' | 'createdAt') =>
   c[key] as unknown as Range;
+
+const dispatchedRange = (c: Prisma.OrderWhereInput) =>
+  (c.statusEvents as unknown as { some: { createdAt: Range } }).some;
 
 describe('kitchenQueueWhere', () => {
   it('without a day keeps the classic live queue (+ today done when asked)', () => {
@@ -21,13 +24,18 @@ describe('kitchenQueueWhere', () => {
     const clauses = clausesOf(withDone);
     expect(clauses).toHaveLength(2);
     // "Today" starts at VN midnight, not server midnight.
-    expect(range(clauses[1], 'updatedAt').gte?.toISOString()).toBe('2026-08-29T17:00:00.000Z');
+    expect(dispatchedRange(clauses[1]).createdAt.gte?.toISOString()).toBe(
+      '2026-08-29T17:00:00.000Z',
+    );
+    expect(dispatchedRange(clauses[1]).createdAt.lt?.toISOString()).toBe(
+      '2026-08-30T17:00:00.000Z',
+    );
   });
 
-  it('a past day: that day only — nothing live leaks in', () => {
+  it('a past day: only live work due that day plus orders dispatched that day', () => {
     const clauses = clausesOf(kitchenQueueWhere('k1', { date: '2026-08-28' }, NOW));
-    expect(clauses.some((c) => c.status === 'SENT_TO_KITCHEN')).toBe(false);
     expect(clauses).toHaveLength(3);
+    expect(clauses[0].status).toBe('SENT_TO_KITCHEN');
     expect(range(clauses[0], 'scheduledFor').gte?.toISOString()).toBe('2026-08-27T17:00:00.000Z');
     expect(range(clauses[0], 'scheduledFor').lt?.toISOString()).toBe('2026-08-28T17:00:00.000Z');
   });
@@ -64,6 +72,23 @@ describe('kitchenQueueWhere', () => {
       kitchenQueueWhere('k1', { from: '2026-09-01', to: '2026-09-07' }, NOW),
     );
     expect(clauses).toHaveLength(3);
+  });
+
+  it('a kitchen-status filter still narrows a dated board and excludes done orders', () => {
+    const clauses = clausesOf(
+      kitchenQueueWhere('k1', { date: '2026-09-02', status: 'PREPARING' }, NOW),
+    );
+    expect(clauses).toHaveLength(2);
+    for (const finalClause of clauses) {
+      expect(finalClause.status).toBe('SENT_TO_KITCHEN');
+      expect(finalClause.kitchenStatus).toBe('PREPARING');
+    }
+  });
+
+  it('validates real calendar dates instead of accepting rolled JS dates', () => {
+    expect(isKitchenDate('2026-02-28')).toBe(true);
+    expect(isKitchenDate('2026-02-31')).toBe(false);
+    expect(isKitchenDate('2026-13-01')).toBe(false);
   });
 
   it('vnDayKey rolls at VN midnight', () => {

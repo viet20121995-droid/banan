@@ -7,16 +7,24 @@ const ok = {
 };
 
 describe('parseEventBatch', () => {
-  it('accepts a well-formed batch and strips query/hash from the path', () => {
+  it('accepts a well-formed batch and strips query/hash + dynamic ids from the path', () => {
     const parsed = parseEventBatch(ok);
     expect(parsed?.events[0]).toEqual({
       type: 'page_view',
-      path: '/product/abc',
+      path: '/product/:id',
       label: undefined,
       value: undefined,
       device: undefined,
       referrer: undefined,
     });
+  });
+
+  it('never persists the capability id from a public tracking URL', () => {
+    const parsed = parseEventBatch({
+      ...ok,
+      events: [{ type: 'page_view', path: '/track/secret-order-capability?utm=x' }],
+    });
+    expect(parsed?.events[0].path).toBe('/track/:id');
   });
 
   it('rejects the whole batch on any bad field (unauthenticated input)', () => {

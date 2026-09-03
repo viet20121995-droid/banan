@@ -1,3 +1,4 @@
+import 'package:banan_data/banan_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,8 +14,11 @@ class BananKitchenApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(kitchenRouterProvider);
-    // New-ticket chime on every screen, for the whole session.
-    ref.watch(kitchenAlertsProvider);
+    // Staff rooms only exist after authentication. Avoid opening an anonymous
+    // socket on the login screen just to listen for kitchen tickets.
+    if (ref.watch(authSessionProvider).valueOrNull != null) {
+      ref.watch(kitchenAlertsProvider);
+    }
     return MaterialApp.router(
       title: 'Banan Kitchen',
       debugShowCheckedModeBanner: false,

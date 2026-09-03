@@ -207,6 +207,26 @@ describe('createCounterOrder (STAFF_COUNTER)', () => {
     expect(orderCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects a current ward outside the configured delivery zone', async () => {
+    const prisma = basePrisma(jest.fn(), jest.fn());
+    const { svc } = makeService(prisma);
+
+    await expect(
+      svc.createCounterOrder(staff, {
+        ...counterDto,
+        fulfillmentType: 'DELIVERY',
+        address: {
+          recipient: 'Chị Mai',
+          phone: '0909111222',
+          line1: '1 đường thử',
+          city: 'TP.HCM',
+          wardCode: 'an-phu-thuan-an',
+        },
+      }),
+    ).rejects.toMatchObject({ response: { code: 'DELIVERY_WARD_REQUIRED' } });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('staff cannot create for another store', async () => {
     const { svc } = makeService(basePrisma(jest.fn(), jest.fn()));
     await expect(

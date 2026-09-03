@@ -2116,10 +2116,10 @@ export class OrdersService {
     }
     // Post-2025 geography only: the ward must be a current catalog unit and
     // the legacy `district` is never stored for staff-keyed orders.
-    if (fulfillmentType === 'DELIVERY' && !findWard(dto.address?.wardCode)) {
+    if (fulfillmentType === 'DELIVERY' && !isWardServiceable(findWard(dto.address?.wardCode))) {
       throw new BadRequestException({
         code: 'DELIVERY_WARD_REQUIRED',
-        message: 'Chọn phường/xã (địa giới mới) cho địa chỉ giao.',
+        message: 'Chọn phường/xã trong khu vực Banan hỗ trợ giao hàng.',
       });
     }
     const deliveryFee = new Prisma.Decimal(

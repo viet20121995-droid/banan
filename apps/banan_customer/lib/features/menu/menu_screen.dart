@@ -29,9 +29,14 @@ import 'promo_popup_dialog.dart';
 import 'pwa_install.dart';
 import 'section_header.dart';
 
-// Keep the seasonal treatment isolated so it can be removed after the
-// campaign without touching the ordering experience below it.
-const _nationalDayCampaignEnabled = true;
+// 2026 National Day treatment: explicit VN-time window, so an old campaign
+// can never remain on the storefront indefinitely after 2 September.
+bool get _nationalDayCampaignEnabled {
+  final vnNow = DateTime.now().toUtc().add(const Duration(hours: 7));
+  final day = DateTime.utc(vnNow.year, vnNow.month, vnNow.day);
+  return !day.isBefore(DateTime.utc(2026, 8, 31)) &&
+      day.isBefore(DateTime.utc(2026, 9, 3));
+}
 
 final _wholesaleAccessProvider = FutureProvider.autoDispose<bool>((ref) async {
   final result = await ref.watch(wholesaleApiProvider).access();
@@ -2765,8 +2770,7 @@ class _ProductCardSkeleton extends StatelessWidget {
     Widget block(double width, double height) => Container(
           width: width,
           height: height,
-          decoration:
-              BoxDecoration(color: ghost, borderRadius: BananRadii.rsm),
+          decoration: BoxDecoration(color: ghost, borderRadius: BananRadii.rsm),
         );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

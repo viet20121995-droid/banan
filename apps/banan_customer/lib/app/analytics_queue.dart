@@ -1,6 +1,16 @@
 import 'dart:async';
 import 'dart:math';
 
+/// Keep reports useful without persisting order-tracking capabilities or
+/// producing one top-page row per product/order id.
+String normalizeAnalyticsPath(String raw) {
+  final path = raw.split('?').first.split('#').first;
+  for (final prefix in ['track', 'orders', 'product', 'bundles']) {
+    if (RegExp('^/$prefix/[^/]+').hasMatch(path)) return '/$prefix/:id';
+  }
+  return path;
+}
+
 /// The pure part — batching, scroll-depth max, flush cadence — kept free of
 /// Flutter/Dio so it can be unit tested with a fake sender and clock.
 class AnalyticsQueue {
@@ -49,13 +59,17 @@ class AnalyticsQueue {
   /// A route change: close the previous page (its max scroll depth) and
   /// open the new one. Same path twice in a row is not a new view.
   void pageView(String path) {
+    final normalizedPath = normalizeAnalyticsPath(path);
     // GoRouter reports an empty uri before its first navigation — not a page.
-    if (path.isEmpty) return;
-    if (path == _path && _pending.any((e) => e['type'] == 'page_view')) return;
+    if (normalizedPath.isEmpty) return;
+    if (normalizedPath == _path &&
+        _pending.any((e) => e['type'] == 'page_view')) {
+      return;
+    }
     _closeScroll();
-    _path = path;
+    _path = normalizedPath;
     _maxScrollPct = 0;
-    _push({'type': 'page_view', 'path': path});
+    _push({'type': 'page_view', 'path': normalizedPath});
   }
 
   /// [fraction] 0..1 of the page reached; only the max per page is reported.

@@ -32,6 +32,15 @@ function str(v: unknown, max: number): string | undefined {
   return typeof v === 'string' && v.length > 0 && v.length <= max ? v : undefined;
 }
 
+/** Collapse dynamic IDs, especially the capability in public `/track/:id`. */
+export function normalizeAnalyticsPath(raw: string): string {
+  const path = raw.split('?')[0].split('#')[0];
+  for (const prefix of ['track', 'orders', 'product', 'bundles']) {
+    if (new RegExp(`^/${prefix}/[^/]+`).test(path)) return `/${prefix}/:id`;
+  }
+  return path.slice(0, 200);
+}
+
 /**
  * Pure, dependency-free validation of a beacon batch. Returns null on ANY
  * violation — an unauthenticated endpoint never guesses at intent. Paths are
@@ -52,7 +61,8 @@ export function parseEventBatch(body: unknown): SiteEventBatch | null {
     if (!raw || typeof raw !== 'object') return null;
     const e = raw as Record<string, unknown>;
     const type = SITE_EVENT_TYPES.find((t) => t === e.type);
-    const path = str(e.path, 300)?.split('?')[0].split('#')[0];
+    const rawPath = str(e.path, 300);
+    const path = rawPath ? normalizeAnalyticsPath(rawPath) : undefined;
     if (!type || !path || !path.startsWith('/')) return null;
     const label = e.label === undefined ? undefined : str(e.label, 120);
     if (e.label !== undefined && label === undefined) return null;
@@ -75,7 +85,7 @@ export function parseEventBatch(body: unknown): SiteEventBatch | null {
     }
     const referrer = e.referrer === undefined ? undefined : str(e.referrer, 200);
     if (e.referrer !== undefined && referrer === undefined) return null;
-    events.push({ type, path: path.slice(0, 200), label, value, device, referrer });
+    events.push({ type, path, label, value, device, referrer });
   }
   return { visitorId, sessionId, events };
 }

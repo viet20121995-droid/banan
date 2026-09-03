@@ -17,7 +17,8 @@ void main() {
 
   tearDown(() => q.dispose());
 
-  test('session start + page views + funnel events queue with the current path', () async {
+  test('session start + page views + funnel events queue with the current path',
+      () async {
     q
       ..start(device: 'mobile', referrer: 'facebook.com')
       ..pageView('/')
@@ -27,23 +28,42 @@ void main() {
     expect(sent, hasLength(1));
     expect(sent.single['visitorId'], 'visitor-1234567890');
     final events = (sent.single['events'] as List).cast<Map<String, dynamic>>();
-    expect(events.map((e) => e['type']), ['session_start', 'page_view', 'page_view', 'add_to_cart']);
+    expect(
+      events.map((e) => e['type']),
+      ['session_start', 'page_view', 'page_view', 'add_to_cart'],
+    );
     expect(events[0]['device'], 'mobile');
     expect(events[0]['referrer'], 'facebook.com');
-    expect(events.last['path'], '/product/abc');
+    expect(events.last['path'], '/product/:id');
     expect(events.last['label'], 'Mousse');
   });
 
-  test('an empty path (router before first navigation) is not a page view', () async {
+  test(
+    'an empty path (router before first navigation) is not a page view',
+    () async {
+      q
+        ..pageView('')
+        ..pageView('/');
+      await q.flush();
+      final events =
+          (sent.single['events'] as List).cast<Map<String, dynamic>>();
+      expect(events.map((e) => e['path']), ['/']);
+    },
+  );
+
+  test(
+      'dynamic route ids, including public tracking capabilities, are never queued',
+      () async {
     q
-      ..pageView('')
-      ..pageView('/');
+      ..pageView('/track/secret-order-id?utm=x')
+      ..pageView('/product/product-uuid');
     await q.flush();
     final events = (sent.single['events'] as List).cast<Map<String, dynamic>>();
-    expect(events.map((e) => e['path']), ['/']);
+    expect(events.map((e) => e['path']), ['/track/:id', '/product/:id']);
   });
 
-  test('only the max scroll depth of a page is reported, when the page closes', () async {
+  test('only the max scroll depth of a page is reported, when the page closes',
+      () async {
     q
       ..pageView('/')
       ..scroll(0.3)
@@ -58,13 +78,17 @@ void main() {
     expect(scrolls.single['value'], 80);
   });
 
-  test('flush(closingPage) reports the open page before a tab closes', () async {
+  test('flush(closingPage) reports the open page before a tab closes',
+      () async {
     q
       ..pageView('/product/x')
       ..scroll(1);
     await q.flush(closingPage: true);
     final events = (sent.single['events'] as List).cast<Map<String, dynamic>>();
-    expect(events.last, {'type': 'scroll', 'path': '/product/x', 'value': 100});
+    expect(
+      events.last,
+      {'type': 'scroll', 'path': '/product/:id', 'value': 100},
+    );
   });
 
   test('batches are capped and a failed send never throws', () async {
