@@ -95,6 +95,10 @@ class OrdersApi {
     String? notes,
     String? storeId,
     String? clientRequestId,
+    // Phone/Zalo orders the shop delivers: address + the fee agreed with
+    // the customer. Omit both for a walk-in pickup.
+    Map<String, dynamic>? deliveryAddress,
+    int? deliveryFeeVnd,
   }) =>
       _postOrder('/merchant/orders/counter', {
         'items': items,
@@ -108,6 +112,11 @@ class OrdersApi {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         if (storeId != null) 'storeId': storeId,
         if (clientRequestId != null) 'clientRequestId': clientRequestId,
+        if (deliveryAddress != null) ...{
+          'fulfillmentType': 'DELIVERY',
+          'address': deliveryAddress,
+          'deliveryFee': deliveryFeeVnd ?? 0,
+        },
       });
 
   /// A branch requests goods from the kitchen for itself (internal transfer).

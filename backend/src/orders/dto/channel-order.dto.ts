@@ -12,13 +12,14 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
 
-import { OrderItemInputDto } from './create-order.dto';
+import { OrderAddressInputDto, OrderItemInputDto } from './create-order.dto';
 
 /**
  * Staff keys in an order for a walk-in customer at the shop counter.
@@ -59,6 +60,24 @@ export class CounterOrderDto {
   /** Did the customer already pay at the till? */
   @IsIn(['PAID_AT_COUNTER', 'UNPAID_AT_COUNTER'])
   payment!: 'PAID_AT_COUNTER' | 'UNPAID_AT_COUNTER';
+
+  /** Walk-in pickup (default) or a phone/Zalo order the shop delivers. */
+  @IsOptional()
+  @IsIn(['PICKUP', 'DELIVERY'])
+  fulfillmentType?: 'PICKUP' | 'DELIVERY';
+
+  /** Required for DELIVERY — where the shipper goes. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OrderAddressInputDto)
+  address?: OrderAddressInputDto;
+
+  /** Delivery fee agreed with the customer (VND). DELIVERY only, default 0. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2_000_000)
+  deliveryFee?: number;
 
   /** Push straight onto the kitchen board. Default true. */
   @IsOptional()

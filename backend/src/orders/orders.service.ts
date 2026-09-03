@@ -2091,6 +2091,9 @@ export class OrdersService {
       scheduledFor?: string;
       notes?: string;
       payment: 'PAID_AT_COUNTER' | 'UNPAID_AT_COUNTER';
+      fulfillmentType?: 'PICKUP' | 'DELIVERY';
+      address?: CreateOrderDto['address'];
+      deliveryFee?: number;
       sendToKitchen?: boolean;
       storeId?: string;
       clientRequestId?: string;
@@ -2099,6 +2102,19 @@ export class OrdersService {
     const storeId = this.resolveActorStore(principal, dto.storeId);
     const replay = await this.findByClientRequestId(principal.sub, dto.clientRequestId);
     if (replay) return replay;
+
+    // Phone/Zalo orders the shop delivers itself: same rails as pickup, plus
+    // the address for the shipper and the fee agreed with the customer.
+    const fulfillmentType = dto.fulfillmentType ?? 'PICKUP';
+    if (fulfillmentType === 'DELIVERY' && !dto.address) {
+      throw new BadRequestException({
+        code: 'DELIVERY_ADDRESS_REQUIRED',
+        message: 'Đơn giao hàng cần địa chỉ giao.',
+      });
+    }
+    const deliveryFee = new Prisma.Decimal(
+      fulfillmentType === 'DELIVERY' ? (dto.deliveryFee ?? 0) : 0,
+    );
 
     const sendToKitchen = dto.sendToKitchen ?? true;
     const store = await this.prisma.store.findUnique({
@@ -2121,7 +2137,13 @@ export class OrdersService {
 
     const placedAt = new Date();
     const targetAt = dto.scheduledFor ? new Date(dto.scheduledFor) : placedAt;
-    await this.assertStoreAcceptingOrder(storeId, 'PICKUP', targetAt, placedAt, !!dto.scheduledFor);
+    await this.assertStoreAcceptingOrder(
+      storeId,
+      fulfillmentType,
+      targetAt,
+      placedAt,
+      !!dto.scheduledFor,
+    );
     const { products, lineCreates, subtotal } = await this.buildChannelLines(dto.items);
     await this.assertProductsAcceptingOrder(products, targetAt, placedAt, !!dto.scheduledFor);
 
@@ -2131,12 +2153,30 @@ export class OrdersService {
     try {
       created = await this.prisma.$transaction(async (tx) => {
         await this.reserveChannelStock(tx, products, lineCreates, targetAt);
+        let addressId: string | undefined;
+        if (fulfillmentType === 'DELIVERY' && dto.address) {
+          const addr = await tx.address.create({
+            data: {
+              userId: customerId,
+              label: 'Delivery',
+              recipient: dto.address.recipient,
+              phone: dto.address.phone,
+              line1: dto.address.line1,
+              line2: dto.address.line2,
+              city: dto.address.city,
+              district: dto.address.district,
+              wardCode: dto.address.wardCode,
+            },
+          });
+          addressId = addr.id;
+        }
         const order = await tx.order.create({
           data: {
             code: orderCode,
             customerId,
             storeId,
-            fulfillmentType: 'PICKUP',
+            fulfillmentType,
+            addressId,
             scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
             status: sendToKitchen ? 'SENT_TO_KITCHEN' : 'PENDING',
             ...(sendToKitchen && { kitchenStatus: 'PENDING_ACK' as const, kitchenId }),
@@ -2145,7 +2185,8 @@ export class OrdersService {
             createdById: principal.sub,
             clientRequestId: dto.clientRequestId ?? null,
             subtotal,
-            total: subtotal,
+            deliveryFee,
+            total: subtotal.plus(deliveryFee),
             notes: dto.notes,
             items: { createMany: { data: lineCreates } },
             statusEvents: {
@@ -2155,7 +2196,8 @@ export class OrdersService {
                     fromStatus: null,
                     toStatus: 'PENDING',
                     actorId: principal.sub,
-                    note: 'Đơn tại quầy',
+                    note:
+                      fulfillmentType === 'DELIVERY' ? 'Đơn tại quầy (giao hàng)' : 'Đơn tại quầy',
                   },
                   ...(sendToKitchen
                     ? [

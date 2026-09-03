@@ -1988,6 +1988,30 @@ model SiteVisit {
   @@index([createdAt])
 }
 
+/// Storefront behaviour beacon ("Hotjar-lite"): page views, max scroll depth
+/// per page, clicks and funnel steps (add_to_cart / checkout / order_placed),
+/// batched from the customer web app. No account, no cookie — the visitor id
+/// is the same random string SiteVisit uses. Pruned by the daily report cron.
+model SiteEvent {
+  id        String   @id @default(uuid())
+  visitorId String
+  sessionId String
+  /// page_view | scroll | click | add_to_cart | checkout | order_placed | session_start
+  type      String
+  path      String
+  label     String?
+  /// scroll: max depth 0–100 (% of the page reached)
+  value     Int?
+  /// mobile | tablet | desktop
+  device    String?
+  /// session_start: referrer host or utm_source, "direct" when none
+  referrer  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type, createdAt])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal ops app (internal.banancakes.vn) — ADMIN-only: QC, Mystery Shopper,
 // Training, weekly work schedule. Audit ids (createdById & friends) are plain

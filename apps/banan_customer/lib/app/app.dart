@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/content/cookie_consent.dart';
 import '../features/push/push_registration.dart';
 import '../shared/realtime_sync.dart';
+import 'analytics.dart';
 import 'locale_store.dart';
 import 'router.dart';
 
@@ -43,12 +44,31 @@ class BananCustomerApp extends ConsumerWidget {
       builder: (context, child) => RealtimeCatalogSync(
         child: PushRegistrar(
           child: BananPageBackground(
-            child: Stack(
-              children: [
-                child ?? const SizedBox.shrink(),
-                // App-wide cookie-consent bar (renders nothing once chosen).
-                const CookieConsentBanner(),
-              ],
+            // Behaviour beacon: every scroll notification feeds the page's
+            // max depth, every pointer-up counts as a click on the current
+            // page. Translucent listeners — nothing about input changes.
+            child: NotificationListener<ScrollUpdateNotification>(
+              onNotification: (n) {
+                final m = n.metrics;
+                if (m.axis == Axis.vertical && m.hasContentDimensions) {
+                  final total = m.maxScrollExtent + m.viewportDimension;
+                  if (total > 0) {
+                    Analytics.scroll((m.pixels + m.viewportDimension) / total);
+                  }
+                }
+                return false;
+              },
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerUp: (_) => Analytics.click(),
+                child: Stack(
+                  children: [
+                    child ?? const SizedBox.shrink(),
+                    // App-wide cookie-consent bar (renders nothing once chosen).
+                    const CookieConsentBanner(),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

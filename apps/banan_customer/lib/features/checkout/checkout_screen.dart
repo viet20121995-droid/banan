@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/analytics.dart';
 import '../../shared/ward_picker.dart';
 import '../addresses/addresses_screen.dart' show myAddressesProvider;
 import '../cart/cart_controller.dart';
@@ -601,6 +602,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     result.when(
       success: (placed) async {
+        Analytics.orderPlaced();
         ref.read(cartControllerProvider.notifier).clear();
 
         // Guest checkout for a NEW phone gets fresh tokens from the backend —

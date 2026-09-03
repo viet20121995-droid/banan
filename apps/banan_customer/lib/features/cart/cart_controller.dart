@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/analytics.dart';
+
 @immutable
 class CartItem {
   const CartItem({
@@ -193,6 +195,7 @@ class CartController extends StateNotifier<CartState> {
   CartController() : super(const CartState());
 
   void add(CartItem item) {
+    Analytics.addToCart(item.productName);
     final idx = state.items.indexWhere((i) => i.key == item.key);
     if (idx >= 0) {
       final updated = [...state.items];

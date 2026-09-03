@@ -14,8 +14,9 @@ final _validId = RegExp(r'^[\w-]{8,64}$');
 
 /// Random visitor id persisted to localStorage, so repeat visits by the same
 /// browser count as one unique in the daily traffic report. No account, no
-/// cookie — just a meaningless random string.
-String _visitorId() {
+/// cookie — just a meaningless random string. Shared with the behaviour
+/// beacon so visits and events line up on the same anonymous id.
+String currentVisitorId() {
   final saved = storage.read('banan_visitor');
   if (saved != null && _validId.hasMatch(saved)) return saved;
   final rnd = Random();
@@ -32,7 +33,7 @@ Future<void> sendVisitBeacon() async {
   try {
     await createDioClient().post<void>(
       '/metrics/visit',
-      data: {'visitorId': _visitorId()},
+      data: {'visitorId': currentVisitorId()},
     );
   } catch (_) {}
 }

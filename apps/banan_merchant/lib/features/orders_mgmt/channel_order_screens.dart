@@ -23,6 +23,10 @@ class _CartLine {
   final ProductVariant variant;
   int qty;
 
+  /// Cake name tag / message piped ("Happy Birthday Mẹ") — the kitchen
+  /// reads it on the order row.
+  String customMessage = '';
+
   double get unitPrice => product.basePrice + variant.priceDelta;
   double get lineTotal => unitPrice * qty;
 }
@@ -217,7 +221,7 @@ class _CartSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final line in cart)
+        for (final line in cart) ...[
           Row(
             children: [
               Expanded(
@@ -254,6 +258,21 @@ class _CartSection extends StatelessWidget {
               ),
             ],
           ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: BananSpacing.sm),
+            child: TextFormField(
+              key: ValueKey('tag-${line.product.id}-${line.variant.id}'),
+              initialValue: line.customMessage,
+              maxLength: 140,
+              decoration: const InputDecoration(
+                labelText: 'Name tag / lời nhắn trên bánh (tuỳ chọn)',
+                isDense: true,
+                counterText: '',
+              ),
+              onChanged: (v) => line.customMessage = v,
+            ),
+          ),
+        ],
         const Divider(),
         Row(
           children: [
@@ -336,10 +355,14 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
   final _phone = TextEditingController();
   final _email = TextEditingController();
   final _notes = TextEditingController();
+  final _addressLine = TextEditingController();
+  final _addressArea = TextEditingController();
+  final _deliveryFee = TextEditingController(text: '0');
   DateTime? _scheduledFor;
   String? _storeId;
   List<Store> _stores = const [];
   bool _paid = true;
+  bool _delivery = false;
   bool _saving = false;
   // One key per screen visit: a double-tap or retry re-sends the SAME key and
   // the backend returns the first order instead of creating a duplicate.
@@ -373,6 +396,9 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
     _phone.dispose();
     _email.dispose();
     _notes.dispose();
+    _addressLine.dispose();
+    _addressArea.dispose();
+    _deliveryFee.dispose();
     super.dispose();
   }
 
@@ -401,6 +427,16 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
       _snack('Admin cần chọn cửa hàng nhận đơn tại quầy.');
       return;
     }
+    final fee =
+        int.tryParse(_deliveryFee.text.replaceAll(RegExp('[^0-9]'), ''));
+    if (_delivery && _addressLine.text.trim().isEmpty) {
+      _snack('Đơn giao hàng cần địa chỉ giao.');
+      return;
+    }
+    if (_delivery && (fee == null || fee < 0)) {
+      _snack('Phí giao hàng không hợp lệ.');
+      return;
+    }
     setState(() => _saving = true);
     final res = await ref.read(ordersApiProvider).createCounterOrder(
       items: [
@@ -409,6 +445,8 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
             'productId': l.product.id,
             'variantId': l.variant.id,
             'quantity': l.qty,
+            if (l.customMessage.trim().isNotEmpty)
+              'customMessage': l.customMessage.trim(),
           },
       ],
       customerName: _name.text.trim(),
@@ -419,6 +457,17 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
       notes: _notes.text.trim(),
       storeId: _storeId,
       clientRequestId: _requestKey,
+      deliveryAddress: _delivery
+          ? {
+              'recipient': _name.text.trim(),
+              'phone': _phone.text.trim(),
+              'line1': _addressLine.text.trim(),
+              if (_addressArea.text.trim().isNotEmpty)
+                'line2': _addressArea.text.trim(),
+              'city': 'TP. Hồ Chí Minh',
+            }
+          : null,
+      deliveryFeeVnd: _delivery ? fee : null,
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -486,6 +535,43 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
             value: _scheduledFor,
             onChanged: (v) => setState(() => _scheduledFor = v),
           ),
+          // Phone/Zalo orders the shop delivers itself.
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Giao hàng tận nơi'),
+            subtitle: Text(
+              _delivery
+                  ? 'Shipper giao theo địa chỉ dưới đây'
+                  : 'Khách đến lấy tại quầy',
+            ),
+            value: _delivery,
+            onChanged: (v) => setState(() => _delivery = v),
+          ),
+          if (_delivery) ...[
+            TextField(
+              controller: _addressLine,
+              decoration: const InputDecoration(
+                labelText: 'Địa chỉ giao (số nhà, đường)',
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            TextField(
+              controller: _addressArea,
+              decoration: const InputDecoration(
+                labelText: 'Phường / quận / khu (tuỳ chọn)',
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+            TextField(
+              controller: _deliveryFee,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Phí giao hàng (đ)',
+                helperText: 'Phí đã thoả thuận với khách — cộng vào tổng đơn.',
+              ),
+            ),
+            const SizedBox(height: BananSpacing.sm),
+          ],
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Đã thu tiền tại quầy'),

@@ -30,6 +30,7 @@ import '../features/profile/profile_screen.dart';
 import '../features/vouchers/voucher_wallet_screen.dart';
 import '../features/wholesale/wholesale_screen.dart';
 import '../features/wishlist/wishlist_screen.dart';
+import 'analytics.dart';
 import 'customer_redirect.dart';
 
 /// Customer app router. Guests can browse + check out; signed-in customers
@@ -41,7 +42,7 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
   final refresh = GoRouterRefreshStream(repo.watchSession());
   ref.onDispose(refresh.dispose);
 
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: homePath,
     refreshListenable: refresh,
     redirect: (context, state) =>
@@ -188,4 +189,12 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+  // Behaviour beacon: one page_view per route change (path only — never the
+  // query string). The delegate notifies after every navigation.
+  Analytics.pageView(router.routerDelegate.currentConfiguration.uri.path);
+  router.routerDelegate.addListener(() {
+    Analytics.pageView(router.routerDelegate.currentConfiguration.uri.path);
+  });
+  ref.onDispose(router.dispose);
+  return router;
 });

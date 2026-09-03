@@ -4,6 +4,7 @@ import { Throttle } from '@nestjs/throttler';
 
 import { Public } from '../auth/decorators/public.decorator';
 
+import { parseEventBatch } from './event-batch';
 import { MetricsService } from './metrics.service';
 
 /** Public beacon endpoint — the storefront fires it once per page load. */
@@ -25,5 +26,21 @@ export class MetricsController {
       throw new BadRequestException({ code: 'INVALID_VISITOR_ID' });
     }
     await this.metrics.recordVisit(id);
+  }
+
+  /**
+   * Behaviour beacon ("Hotjar-lite") — the storefront batches page views,
+   * scroll depth, clicks and funnel steps and posts them every few seconds.
+   * Unauthenticated, so every field is shape-checked hard and the batch is
+   * capped; a malformed batch is dropped whole (400), never partially kept.
+   */
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Public()
+  @Post('events')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async events(@Body() body: unknown): Promise<void> {
+    const parsed = parseEventBatch(body);
+    if (!parsed) throw new BadRequestException({ code: 'INVALID_EVENT_BATCH' });
+    await this.metrics.recordEvents(parsed.visitorId, parsed.sessionId, parsed.events);
   }
 }
