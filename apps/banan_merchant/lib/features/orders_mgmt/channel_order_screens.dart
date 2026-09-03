@@ -686,7 +686,10 @@ class _InternalTransferScreenState
   // Packaging / other supplies are long lists — folded until needed.
   final _open = <_Section>{_Section.cake, _Section.drink};
   final _notes = TextEditingController();
-  DateTime? _scheduledFor;
+  // Delivery day only — the kitchen drops every internal order in the
+  // 06:30 morning run, so the form never asks for a time. Defaults to
+  // tomorrow; one sheet = one day, another day is another sheet.
+  DateTime _deliveryDate = _vnToday().add(const Duration(days: 1));
   String? _requestingStoreId; // admin only
   String? _destinationStoreId;
   List<Store> _stores = const [];
@@ -698,8 +701,23 @@ class _InternalTransferScreenState
 
   /// Bar restock is keyed on Sunday and Thursday only (the backend enforces
   /// the same rule on the Vietnam calendar; this just greys the cells).
-  bool get _drinkOrderDay => const {DateTime.sunday, DateTime.thursday}
-      .contains(DateTime.now().toUtc().add(const Duration(hours: 7)).weekday);
+  bool get _drinkOrderDay =>
+      const {DateTime.sunday, DateTime.thursday}.contains(_vnToday().weekday);
+
+  /// Today's date on the Vietnam calendar (as a local-zone midnight).
+  static DateTime _vnToday() {
+    final vn = DateTime.now().toUtc().add(const Duration(hours: 7));
+    return DateTime(vn.year, vn.month, vn.day);
+  }
+
+  /// 06:30 Vietnam time on [_deliveryDate], sent as UTC.
+  DateTime get _scheduledFor => DateTime.utc(
+        _deliveryDate.year,
+        _deliveryDate.month,
+        _deliveryDate.day,
+        6,
+        30,
+      ).subtract(const Duration(hours: 7));
 
   @override
   void initState() {
@@ -891,9 +909,33 @@ class _InternalTransferScreenState
             onChanged: (v) => setState(() => _destinationStoreId = v),
           ),
           const SizedBox(height: BananSpacing.md),
-          _SchedulePicker(
-            value: _scheduledFor,
-            onChanged: (v) => setState(() => _scheduledFor = v),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Ngày nhận: ${DateFormat('EEEE dd/MM', 'vi_VN').format(_deliveryDate)}',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                label: const Text('Đổi ngày'),
+                onPressed: () async {
+                  final today = _vnToday();
+                  final d = await showDatePicker(
+                    context: context,
+                    initialDate: _deliveryDate,
+                    firstDate: today,
+                    lastDate: today.add(const Duration(days: 60)),
+                  );
+                  if (d != null) setState(() => _deliveryDate = d);
+                },
+              ),
+            ],
+          ),
+          Text(
+            'Mặc định ngày mai. Món cần ngày khác thì tạo phiếu riêng.',
+            style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: BananSpacing.md),
           TextField(
