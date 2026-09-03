@@ -1768,7 +1768,7 @@ class _FullmoonAutumnHeroContent extends StatelessWidget {
               ),
               const SizedBox(height: BananSpacing.sm),
               Text(
-                'Trăng vàng sum họp · Daifuku trao nhau',
+                'Gói trọn Đại Phúc – Đong đầy đoàn viên',
                 textAlign: compact ? TextAlign.center : TextAlign.left,
                 style: (compact
                         ? theme.textTheme.bodyMedium
