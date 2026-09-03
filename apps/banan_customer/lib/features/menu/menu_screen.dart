@@ -29,13 +29,16 @@ import 'promo_popup_dialog.dart';
 import 'pwa_install.dart';
 import 'section_header.dart';
 
-// 2026 National Day treatment: explicit VN-time window, so an old campaign
-// can never remain on the storefront indefinitely after 2 September.
-bool get _nationalDayCampaignEnabled {
+const _fullmoonAutumnBannerAsset =
+    'assets/campaigns/fullmoon-autumn-golden-kiwi.jpg';
+
+// 2026 Mid-Autumn treatment: explicit VN-time window, so the campaign
+// retires automatically after the festival period.
+bool get _fullmoonAutumnCampaignEnabled {
   final vnNow = DateTime.now().toUtc().add(const Duration(hours: 7));
   final day = DateTime.utc(vnNow.year, vnNow.month, vnNow.day);
-  return !day.isBefore(DateTime.utc(2026, 8, 31)) &&
-      day.isBefore(DateTime.utc(2026, 9, 3));
+  return !day.isBefore(DateTime.utc(2026, 9, 3)) &&
+      day.isBefore(DateTime.utc(2026, 10, 1));
 }
 
 final _wholesaleAccessProvider = FutureProvider.autoDispose<bool>((ref) async {
@@ -119,10 +122,10 @@ class MenuScreen extends ConsumerWidget {
                 isGuest: isGuest,
                 unread: unread,
               ),
-        bottom: _nationalDayCampaignEnabled
+        bottom: _fullmoonAutumnCampaignEnabled
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(30),
-                child: _NationalDayAnnouncement(),
+                child: _FullmoonAutumnAnnouncement(),
               )
             : null,
       ),
@@ -415,8 +418,8 @@ class MenuScreen extends ConsumerWidget {
   }
 }
 
-class _NationalDayAnnouncement extends StatelessWidget {
-  const _NationalDayAnnouncement();
+class _FullmoonAutumnAnnouncement extends StatelessWidget {
+  const _FullmoonAutumnAnnouncement();
 
   @override
   Widget build(BuildContext context) {
@@ -425,17 +428,17 @@ class _NationalDayAnnouncement extends StatelessWidget {
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [BananColors.accentDark, BananColors.accent],
+          colors: [Color(0xFF4A1727), Color(0xFF8A3A3C), Color(0xFFC88A32)],
         ),
       ),
       child: const Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.star_rounded, size: 12, color: BananColors.goldLight),
+          Icon(Icons.circle, size: 10, color: Color(0xFFFFE9A6)),
           SizedBox(width: BananSpacing.sm),
           Flexible(
             child: Text(
-              'MỪNG QUỐC KHÁNH 2/9 · NGỌT NGÀO GẮN KẾT',
+              'FULLMOON AUTUMN · TRĂNG TRÒN, VỊ NGỌT ĐOÀN VIÊN',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -447,7 +450,7 @@ class _NationalDayAnnouncement extends StatelessWidget {
             ),
           ),
           SizedBox(width: BananSpacing.sm),
-          Icon(Icons.star_rounded, size: 12, color: BananColors.goldLight),
+          Icon(Icons.circle, size: 10, color: Color(0xFFFFE9A6)),
         ],
       ),
     );
@@ -1390,16 +1393,26 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
     // finally a branded slide so the hero is never empty.
     final banners = ref.watch(homeBannersProvider).valueOrNull ?? const [];
     final threads = ref.watch(homeThreadsProvider).valueOrNull ?? const [];
-    final slides = <({String? image, String title})>[
+    final slides = <({String? image, bool isAsset, String title})>[
+      if (_fullmoonAutumnCampaignEnabled)
+        (
+          image: _fullmoonAutumnBannerAsset,
+          isAsset: true,
+          title: 'Fullmoon Autumn',
+        ),
       if (banners.isNotEmpty)
-        for (final b in banners) (image: b.imageUrl, title: b.title ?? '')
+        for (final b in banners)
+          (image: b.imageUrl, isAsset: false, title: b.title ?? '')
       else ...[
         for (final t in threads)
-          if (t.gallery.isNotEmpty) (image: t.gallery.first, title: t.title),
+          if (t.gallery.isNotEmpty)
+            (image: t.gallery.first, isAsset: false, title: t.title),
       ],
     ];
     if (slides.isEmpty) {
-      slides.add((image: null, title: 'Banan Fukuoka Saigon'));
+      slides.add(
+        (image: null, isAsset: false, title: 'Banan Fukuoka Saigon'),
+      );
     }
     _ensureTimer(slides.length);
     final title = slides[_page.clamp(0, slides.length - 1)].title;
@@ -1445,41 +1458,44 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                       ),
                       child: slide.image == null
                           ? const SizedBox.expand()
-                          : Image.network(
-                              slide.image!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const SizedBox.expand(),
-                            ),
+                          : slide.isAsset
+                              ? Image.asset(slide.image!, fit: BoxFit.cover)
+                              : Image.network(
+                                  slide.image!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      const SizedBox.expand(),
+                                ),
                     ),
                   );
                 },
               ),
-              // Seasonal overlay keeps merchant-managed photography visible
-              // while giving every carousel slide one coherent 2/9 identity.
-              if (_nationalDayCampaignEnabled) ...[
+              // Seasonal overlay keeps every carousel slide coherent with the
+              // warm moonlight, washi-paper Fullmoon Autumn art direction.
+              if (_fullmoonAutumnCampaignEnabled) ...[
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
-                      stops: [0, 0.48, 1],
+                      stops: [0, 0.42, 0.76, 1],
                       colors: [
-                        BananColors.accentDark,
-                        Color(0xE6B51F2E),
-                        Color(0x33000000),
+                        Color(0xF24A1727),
+                        Color(0xD96F2833),
+                        Color(0x335B261D),
+                        Color(0x00000000),
                       ],
                     ),
                   ),
                 ),
-                const CustomPaint(painter: _NationalDayPatternPainter()),
+                const CustomPaint(painter: _FullmoonAutumnPatternPainter()),
                 const Positioned(
                   left: BananSpacing.xl,
                   top: BananSpacing.lg,
                   child: Icon(
-                    Icons.star_rounded,
-                    size: 38,
-                    color: BananColors.goldLight,
+                    Icons.auto_awesome_rounded,
+                    size: 28,
+                    color: Color(0xFFFFD875),
                   ),
                 ),
               ] else
@@ -1494,8 +1510,8 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                 ),
               // Decorative wave + kanji accents removed for a cleaner
               // banner — peach-cream theme reads softer without them.
-              if (_nationalDayCampaignEnabled)
-                _NationalDayHeroContent(
+              if (_fullmoonAutumnCampaignEnabled)
+                _FullmoonAutumnHeroContent(
                   compact: width < 700,
                   ctaDismissed: ctaDismissed,
                   onOrderTap: () {
@@ -1671,8 +1687,8 @@ class _CarouselArrow extends StatelessWidget {
   }
 }
 
-class _NationalDayHeroContent extends StatelessWidget {
-  const _NationalDayHeroContent({
+class _FullmoonAutumnHeroContent extends StatelessWidget {
+  const _FullmoonAutumnHeroContent({
     required this.compact,
     required this.ctaDismissed,
     required this.onOrderTap,
@@ -1710,9 +1726,9 @@ class _NationalDayHeroContent extends StatelessWidget {
                   ),
                 ),
                 child: const Text(
-                  'BANAN · VIETNAM NATIONAL DAY',
+                  'BANAN · FULLMOON AUTUMN',
                   style: TextStyle(
-                    color: BananColors.goldLight,
+                    color: Color(0xFFFFE9A6),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.6,
@@ -1721,7 +1737,7 @@ class _NationalDayHeroContent extends StatelessWidget {
               ),
               SizedBox(height: compact ? BananSpacing.sm : BananSpacing.md),
               Text(
-                'MỪNG QUỐC KHÁNH 2/9',
+                'TRUNG THU TRỌN VỊ',
                 textAlign: compact ? TextAlign.center : TextAlign.left,
                 style: (compact
                         ? theme.textTheme.headlineSmall
@@ -1737,7 +1753,7 @@ class _NationalDayHeroContent extends StatelessWidget {
               ),
               const SizedBox(height: BananSpacing.sm),
               Text(
-                'Vị ngọt Việt Nam, trọn niềm sum vầy',
+                'Trăng vàng sum họp · Daifuku trao nhau',
                 textAlign: compact ? TextAlign.center : TextAlign.left,
                 style: (compact
                         ? theme.textTheme.bodyMedium
@@ -1752,16 +1768,16 @@ class _NationalDayHeroContent extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onOrderTap,
                   style: FilledButton.styleFrom(
-                    backgroundColor: BananColors.primary,
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: BananColors.goldLight),
+                    backgroundColor: const Color(0xFFFFD875),
+                    foregroundColor: const Color(0xFF4A1727),
+                    side: const BorderSide(color: Color(0xFFFFE9A6)),
                     padding: EdgeInsets.symmetric(
                       horizontal: compact ? BananSpacing.lg : BananSpacing.xl,
                       vertical: compact ? 10 : BananSpacing.md,
                     ),
                   ),
                   icon: const Icon(Icons.arrow_downward_rounded, size: 18),
-                  label: const Text('Khám phá bộ sưu tập'),
+                  label: const Text('Khám phá vị trăng'),
                 ),
               ],
             ],
@@ -1772,36 +1788,44 @@ class _NationalDayHeroContent extends StatelessWidget {
   }
 }
 
-class _NationalDayPatternPainter extends CustomPainter {
-  const _NationalDayPatternPainter();
+class _FullmoonAutumnPatternPainter extends CustomPainter {
+  const _FullmoonAutumnPatternPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final gold = Paint()
-      ..color = BananColors.goldLight.withValues(alpha: 0.34)
+    final moonGold = Paint()
+      ..color = const Color(0xFFFFD875).withValues(alpha: 0.28)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
-    final center = Offset(size.width * 0.79, size.height * 0.48);
-    final baseRadius = size.shortestSide * 0.23;
-    for (var i = 0; i < 4; i++) {
-      canvas.drawCircle(center, baseRadius + i * 13, gold);
+    final center = Offset(size.width * 0.77, size.height * 0.36);
+    final baseRadius = size.shortestSide * 0.22;
+    for (var i = 0; i < 3; i++) {
+      canvas.drawCircle(center, baseRadius + i * 14, moonGold);
     }
 
-    final wave = Path()
-      ..moveTo(0, size.height * 0.82)
+    final cloud = Path()
+      ..moveTo(0, size.height * 0.84)
       ..cubicTo(
-        size.width * 0.24,
-        size.height * 0.64,
-        size.width * 0.40,
-        size.height,
+        size.width * 0.16,
+        size.height * 0.68,
+        size.width * 0.30,
+        size.height * 0.94,
+        size.width * 0.46,
+        size.height * 0.80,
+      )
+      ..cubicTo(
+        size.width * 0.56,
+        size.height * 0.71,
         size.width * 0.64,
+        size.height * 0.88,
+        size.width * 0.72,
         size.height * 0.78,
       );
-    canvas.drawPath(wave, gold..strokeWidth = 2);
+    canvas.drawPath(cloud, moonGold..strokeWidth = 2);
   }
 
   @override
-  bool shouldRepaint(_NationalDayPatternPainter oldDelegate) => false;
+  bool shouldRepaint(_FullmoonAutumnPatternPainter oldDelegate) => false;
 }
 
 /// Instagram-style bakery feed. Hidden if there are no published threads
