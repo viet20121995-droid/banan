@@ -1511,11 +1511,11 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                 // smudge under the headline.
                 if (width >= 700)
                   const Align(
-                    alignment: Alignment(0.2, 1),
+                    alignment: Alignment.bottomCenter,
                     child: Padding(
                       padding: EdgeInsets.only(bottom: BananSpacing.sm),
                       child: FractionallySizedBox(
-                        widthFactor: 0.34,
+                        widthFactor: 0.39,
                         child: Image(
                           image: AssetImage(fullmoonAutumnParadeAsset),
                           fit: BoxFit.contain,
