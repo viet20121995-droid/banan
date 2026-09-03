@@ -251,13 +251,15 @@ abstract class OrderRepository {
 
   // Kitchen-side
 
-  /// The kitchen board. `day` selects a calendar day (past, or scheduled
-  /// ahead); today keeps every order still live whatever its date. Null =
-  /// the live queue (+ today's done with `includeDoneToday`).
+  /// The kitchen board for an inclusive calendar-day range, keyed on the day
+  /// each order has to be READY (past, or scheduled ahead); a range covering
+  /// today also keeps overdue / unscheduled live work. Null = the live queue
+  /// (+ today's done with `includeDoneToday`).
   Future<Result<List<Order>, AppFailure>> kitchenQueue({
     KitchenStatus? status,
     bool includeDoneToday,
-    DateTime? day,
+    DateTime? from,
+    DateTime? to,
   });
   Future<Result<Order, AppFailure>> transitionKitchen(
     String id,

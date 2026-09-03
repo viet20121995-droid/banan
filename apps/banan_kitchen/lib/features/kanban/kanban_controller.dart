@@ -11,26 +11,34 @@ DateTime _today() {
   return DateTime(n.year, n.month, n.day);
 }
 
+DateTime _dayOf(DateTime d) => DateTime(d.year, d.month, d.day);
+
 @immutable
 class KanbanState {
   KanbanState({
     this.orders = const [],
     this.loading = false,
     this.failure,
-    DateTime? day,
-  }) : day = day ?? _today();
+    DateTime? from,
+    DateTime? to,
+  })  : from = from ?? _today(),
+        to = to ?? from ?? _today();
 
-  /// The board for [day]: orders live in the kitchen (today) or belonging to
-  /// that day, mixed with the ones dispatched that day. Use [activeByColumn]
+  /// The board for [from]…[to] (inclusive calendar days), keyed on the day
+  /// each order has to be READY: orders scheduled in the range, walk-ins
+  /// placed in it, orders dispatched in it — and, when the range covers
+  /// today, live work that is overdue or unscheduled. Use [activeByColumn]
   /// for the 3 kitchen-owned stages and [done] for the dispatched ones.
   final List<Order> orders;
   final bool loading;
   final AppFailure? failure;
 
-  /// Calendar day the board shows — defaults to today on sign-in.
-  final DateTime day;
+  /// Calendar-day range the board shows — today → today on sign-in.
+  final DateTime from;
+  final DateTime to;
 
-  bool get isToday => day == _today();
+  bool get isToday => from == _today() && to == from;
+  bool get isSingleDay => from == to;
 
   /// Group active kitchen orders by their `kitchenStatus`.
   Map<KitchenStatus, List<Order>> get activeByColumn {
@@ -53,13 +61,15 @@ class KanbanState {
     List<Order>? orders,
     bool? loading,
     Object? failure = _sentinel,
-    DateTime? day,
+    DateTime? from,
+    DateTime? to,
   }) =>
       KanbanState(
         orders: orders ?? this.orders,
         loading: loading ?? this.loading,
         failure: failure == _sentinel ? this.failure : failure as AppFailure?,
-        day: day ?? this.day,
+        from: from ?? this.from,
+        to: to ?? this.to,
       );
 }
 
@@ -73,12 +83,13 @@ class KanbanController extends StateNotifier<KanbanState> {
   final OrderRepository _repo;
 
   Future<void> refresh() async {
-    final day = state.day;
+    final from = state.from;
+    final to = state.to;
     state = state.copyWith(loading: true, failure: null);
-    final res = await _repo.kitchenQueue(includeDoneToday: true, day: day);
-    // A day switch may have raced this fetch — never paint another day's
-    // orders under the current one.
-    if (state.day != day) return;
+    final res = await _repo.kitchenQueue(includeDoneToday: true, from: from, to: to);
+    // A range switch may have raced this fetch — never paint another
+    // range's orders under the current one.
+    if (state.from != from || state.to != to) return;
     res.when(
       success: (list) =>
           state = state.copyWith(orders: list, loading: false),
@@ -86,14 +97,21 @@ class KanbanController extends StateNotifier<KanbanState> {
     );
   }
 
-  /// Show another calendar day (past, or scheduled ahead).
-  Future<void> setDay(DateTime day) {
-    state = state.copyWith(
-      day: DateTime(day.year, day.month, day.day),
-      orders: const [],
-    );
+  /// Show another calendar-day range (past, or scheduled ahead). A single
+  /// day is `from == to`; `to` before `from` is swapped, never rejected.
+  Future<void> setRange(DateTime from, DateTime to) {
+    var a = _dayOf(from);
+    var b = _dayOf(to);
+    if (b.isBefore(a)) {
+      final t = a;
+      a = b;
+      b = t;
+    }
+    state = state.copyWith(from: a, to: b, orders: const []);
     return refresh();
   }
+
+  Future<void> setDay(DateTime day) => setRange(day, day);
 
   /// Accept an incoming order (PENDING_ACK → PREPARING).
   Future<bool> accept(String orderId) =>

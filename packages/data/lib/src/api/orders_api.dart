@@ -238,12 +238,13 @@ class OrdersApi {
     }
   }
 
-  /// `date` (yyyy-MM-dd, VN calendar day) asks for that day's board instead
-  /// of the live queue — past days or orders scheduled ahead.
+  /// `from`/`to` (yyyy-MM-dd, VN calendar days, inclusive) ask for the board
+  /// keyed on the day orders must be ready — past days or scheduled ahead.
   Future<Result<List<OrderDto>, AppFailure>> kitchenQueue({
     String? kitchenStatus,
     bool includeDoneToday = false,
-    String? date,
+    String? from,
+    String? to,
   }) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(
@@ -251,7 +252,8 @@ class OrdersApi {
         queryParameters: {
           if (kitchenStatus != null) 'kitchenStatus': kitchenStatus,
           if (includeDoneToday) 'includeDoneToday': '1',
-          if (date != null) 'date': date,
+          if (from != null) 'from': from,
+          if (to != null) 'to': to,
         },
       );
       if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));

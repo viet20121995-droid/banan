@@ -1648,7 +1648,9 @@ export class OrdersService {
     return this.prisma.order.findMany({
       where: kitchenQueueWhere(kitchenId, opts),
       include: ORDER_INCLUDE,
-      orderBy: { updatedAt: 'asc' },
+      // Work order: unscheduled (make now) first, then by the time the order
+      // has to be ready, then arrival.
+      orderBy: [{ scheduledFor: { sort: 'asc', nulls: 'first' } }, { updatedAt: 'asc' }],
     });
   }
 
@@ -2112,6 +2114,14 @@ export class OrdersService {
         message: 'Đơn giao hàng cần địa chỉ giao.',
       });
     }
+    // Post-2025 geography only: the ward must be a current catalog unit and
+    // the legacy `district` is never stored for staff-keyed orders.
+    if (fulfillmentType === 'DELIVERY' && !findWard(dto.address?.wardCode)) {
+      throw new BadRequestException({
+        code: 'DELIVERY_WARD_REQUIRED',
+        message: 'Chọn phường/xã (địa giới mới) cho địa chỉ giao.',
+      });
+    }
     const deliveryFee = new Prisma.Decimal(
       fulfillmentType === 'DELIVERY' ? (dto.deliveryFee ?? 0) : 0,
     );
@@ -2164,7 +2174,6 @@ export class OrdersService {
               line1: dto.address.line1,
               line2: dto.address.line2,
               city: dto.address.city,
-              district: dto.address.district,
               wardCode: dto.address.wardCode,
             },
           });

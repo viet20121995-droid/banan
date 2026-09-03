@@ -5,7 +5,6 @@ import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shared/ward_picker.dart';
 
 /// The signed-in customer's saved delivery addresses.
 final myAddressesProvider =

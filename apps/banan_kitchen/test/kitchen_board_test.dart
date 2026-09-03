@@ -289,36 +289,54 @@ void main() {
   });
 
   group('KitchenDayBar', () {
-    test('label: today is called out, other days carry the year', () {
+    test('labels: today called out, other days carry the year, ranges show both ends', () {
       final today = DateTime(2026, 8, 30); // Sunday
       expect(kitchenDayLabel(today, today: today), 'Hôm nay · CN 30/08');
       expect(kitchenDayLabel(DateTime(2026, 9, 1), today: today), 'T3 01/09/2026');
+      expect(
+        kitchenRangeLabel(DateTime(2026, 9, 3), DateTime(2026, 9, 7), today: today),
+        'T5 03/09 → T2 07/09/2026',
+      );
+      expect(kitchenRangeLabel(today, today, today: today), 'Hôm nay · CN 30/08');
     });
 
-    testWidgets('arrows step one day; "Hôm nay" only shows off today and resets',
+    testWidgets('arrows step by the window length; "Hôm nay" only shows off today and resets',
         (tester) async {
       final today = DateTime(2026, 8, 30);
-      DateTime? changed;
+      DateTime? from;
+      DateTime? to;
+      void onChanged(DateTime f, DateTime t) {
+        from = f;
+        to = t;
+      }
+
       await _pump(
         tester,
-        KitchenDayBar(day: today, today: today, onChanged: (d) => changed = d),
+        KitchenDayBar(from: today, to: today, today: today, onChanged: onChanged),
       );
       expect(find.text('Hôm nay · CN 30/08'), findsOneWidget);
       expect(find.text('Hôm nay'), findsNothing);
       await tester.tap(find.byIcon(Icons.chevron_right));
-      expect(changed, DateTime(2026, 8, 31));
+      expect(from, DateTime(2026, 8, 31));
+      expect(to, DateTime(2026, 8, 31));
 
+      // A 3-day window steps 3 days at a time.
       await _pump(
         tester,
         KitchenDayBar(
-          day: DateTime(2026, 8, 28),
+          from: DateTime(2026, 9, 1),
+          to: DateTime(2026, 9, 3),
           today: today,
-          onChanged: (d) => changed = d,
+          onChanged: onChanged,
         ),
       );
-      expect(find.text('T6 28/08/2026'), findsOneWidget);
+      expect(find.text('T3 01/09 → T5 03/09/2026'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      expect(from, DateTime(2026, 8, 29));
+      expect(to, DateTime(2026, 8, 31));
       await tester.tap(find.text('Hôm nay'));
-      expect(changed, today);
+      expect(from, today);
+      expect(to, today);
       expect(tester.takeException(), isNull);
     });
   });

@@ -6,7 +6,6 @@ import 'package:banan_customer/features/checkout/checkout_screen.dart';
 import 'package:banan_customer/features/checkout/fulfillment_preference.dart';
 import 'package:banan_customer/features/locations/locations_screen.dart'
     show storesListProvider;
-import 'package:banan_customer/shared/ward_picker.dart';
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';

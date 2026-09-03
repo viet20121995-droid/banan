@@ -124,12 +124,14 @@ class OrderRepositoryImpl implements OrderRepository {
   Future<Result<List<Order>, AppFailure>> kitchenQueue({
     KitchenStatus? status,
     bool includeDoneToday = false,
-    DateTime? day,
+    DateTime? from,
+    DateTime? to,
   }) async {
     final res = await _api.kitchenQueue(
       kitchenStatus: status?.wire,
       includeDoneToday: includeDoneToday,
-      date: day == null ? null : _dayKey(day),
+      from: from == null ? null : _dayKey(from),
+      to: from == null ? null : _dayKey(to ?? from),
     );
     return res.map(_safeOrders);
   }

@@ -1,12 +1,15 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
-import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Single ward picker shared by the address book and the checkout form —
-/// one implementation so search/sort/labels never drift between the two.
+import '../i18n/app_strings.dart';
+
+/// Single ward picker shared by the customer address book / checkout AND the
+/// merchant counter form — one implementation so search/sort/labels never
+/// drift, and every app records the post-2025 ward catalog, never the old
+/// district geography.
 ///
 /// Renders an [InputDecorator] that opens a searchable bottom sheet over the
 /// 102-unit former-HCMC delivery catalog (post-01/07/2025). The backend

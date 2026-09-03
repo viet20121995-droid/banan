@@ -1,6 +1,8 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart'
+    show WardPickerField;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -356,8 +358,8 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
   final _email = TextEditingController();
   final _notes = TextEditingController();
   final _addressLine = TextEditingController();
-  final _addressArea = TextEditingController();
-  final _deliveryFee = TextEditingController(text: '0');
+  final _deliveryFee = TextEditingController();
+  String? _wardCode;
   DateTime? _scheduledFor;
   String? _storeId;
   List<Store> _stores = const [];
@@ -397,7 +399,6 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
     _email.dispose();
     _notes.dispose();
     _addressLine.dispose();
-    _addressArea.dispose();
     _deliveryFee.dispose();
     super.dispose();
   }
@@ -433,8 +434,12 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
       _snack('Đơn giao hàng cần địa chỉ giao.');
       return;
     }
+    if (_delivery && _wardCode == null) {
+      _snack('Chọn phường/xã (địa giới mới) cho địa chỉ giao.');
+      return;
+    }
     if (_delivery && (fee == null || fee < 0)) {
-      _snack('Phí giao hàng không hợp lệ.');
+      _snack('Nhập phí giao hàng (0 nếu miễn phí).');
       return;
     }
     setState(() => _saving = true);
@@ -462,8 +467,7 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
               'recipient': _name.text.trim(),
               'phone': _phone.text.trim(),
               'line1': _addressLine.text.trim(),
-              if (_addressArea.text.trim().isNotEmpty)
-                'line2': _addressArea.text.trim(),
+              'wardCode': _wardCode,
               'city': 'TP. Hồ Chí Minh',
             }
           : null,
@@ -551,15 +555,15 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
             TextField(
               controller: _addressLine,
               decoration: const InputDecoration(
-                labelText: 'Địa chỉ giao (số nhà, đường)',
+                labelText: 'Địa chỉ giao (số nhà, đường, khu phố)',
               ),
             ),
             const SizedBox(height: BananSpacing.sm),
-            TextField(
-              controller: _addressArea,
-              decoration: const InputDecoration(
-                labelText: 'Phường / quận / khu (tuỳ chọn)',
-              ),
+            // Post-2025 ward catalog only — no district, no free-text area.
+            WardPickerField(
+              selectedCode: _wardCode,
+              onChanged: (code) => setState(() => _wardCode = code),
+              helperText: 'Phường/xã theo địa giới mới từ 01/07/2025.',
             ),
             const SizedBox(height: BananSpacing.sm),
             TextField(
@@ -567,7 +571,8 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'Phí giao hàng (đ)',
-                helperText: 'Phí đã thoả thuận với khách — cộng vào tổng đơn.',
+                helperText:
+                    'Nhân viên tự chốt với khách — không áp bảng phí website. Cộng vào tổng đơn.',
               ),
             ),
             const SizedBox(height: BananSpacing.sm),

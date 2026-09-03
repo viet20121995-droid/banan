@@ -133,7 +133,7 @@ class _KanbanScreenState extends ConsumerState<KanbanScreen> {
                   controller: controller,
                   tab: _tab,
                   onTabChanged: (tab) => setState(() => _tab = tab),
-                  onDayChanged: controller.setDay,
+                  onRangeChanged: controller.setRange,
                   searchController: _searchController,
                   source: _source,
                   urgentOnly: _urgentOnly,
@@ -186,7 +186,7 @@ class _Board extends StatelessWidget {
     required this.controller,
     required this.tab,
     required this.onTabChanged,
-    required this.onDayChanged,
+    required this.onRangeChanged,
     required this.searchController,
     required this.source,
     required this.urgentOnly,
@@ -199,7 +199,7 @@ class _Board extends StatelessWidget {
   final KanbanController controller;
   final KitchenBoardTab tab;
   final ValueChanged<KitchenBoardTab> onTabChanged;
-  final ValueChanged<DateTime> onDayChanged;
+  final void Function(DateTime from, DateTime to) onRangeChanged;
   final TextEditingController searchController;
   final String source;
   final bool urgentOnly;
@@ -207,16 +207,24 @@ class _Board extends StatelessWidget {
   final ValueChanged<String> onSourceChanged;
   final ValueChanged<bool> onUrgentChanged;
 
+  /// The day an order belongs to on the board — when it has to be READY
+  /// (scheduled slot), else the day it was placed (walk-in: make now).
+  static DateTime _boardDay(Order o) {
+    final d = (o.scheduledFor ?? o.createdAt).toLocal();
+    return DateTime(d.year, d.month, d.day);
+  }
+
   List<Order> _ordersFor(KitchenBoardTab t) {
     switch (t) {
       case KitchenBoardTab.all:
-        // Work first: pending, preparing, ready, then what's done.
+        // Work first: pending, preparing, ready, then what's done; inside a
+        // stage the backend order holds (earliest ready-time first).
         final sorted = List.of(state.orders)
-          ..sort((a, b) {
-            final byStage = KitchenBoardTab.stageOf(a).index
-                .compareTo(KitchenBoardTab.stageOf(b).index);
-            return byStage != 0 ? byStage : a.updatedAt.compareTo(b.updatedAt);
-          });
+          ..sort(
+            (a, b) => KitchenBoardTab.stageOf(a)
+                .index
+                .compareTo(KitchenBoardTab.stageOf(b).index),
+          );
         return sorted;
       case KitchenBoardTab.done:
         return state.done;
@@ -225,6 +233,50 @@ class _Board extends StatelessWidget {
       case KitchenBoardTab.ready:
         return state.activeByColumn[t.kitchenStatus] ?? const [];
     }
+  }
+
+  /// Rows, with one day divider per calendar day when the range spans more
+  /// than a day — so "next week" reads as a schedule, not a pile.
+  List<Widget> _rows(BuildContext context, List<Order> orders) {
+    final byDay = state.isSingleDay
+        ? orders
+        : (List.of(orders)
+          ..sort((a, b) => _boardDay(a).compareTo(_boardDay(b))));
+    final widgets = <Widget>[];
+    DateTime? current;
+    for (final order in byDay) {
+      if (!state.isSingleDay) {
+        final day = _boardDay(order);
+        if (current == null || day != current) {
+          current = day;
+          final count = byDay.where((o) => _boardDay(o) == day).length;
+          widgets.add(_DayDivider(day: day, count: count));
+        }
+      }
+      final stage =
+          tab == KitchenBoardTab.all ? KitchenBoardTab.stageOf(order) : tab;
+      widgets.add(
+        KitchenOrderRow(
+          key: ValueKey(order.id),
+          order: order,
+          stage: stage,
+          showStage: tab == KitchenBoardTab.all,
+          onAccept: () => controller.accept(order.id),
+          onReady: () => controller.markReady(order.id),
+          onDispatch: () => controller.dispatch(order.id),
+          onAdjust: order.source == 'INTERNAL_TRANSFER'
+              ? () => showDialog<void>(
+                    context: context,
+                    builder: (_) => _AdjustTransferDialog(
+                      order: order,
+                      controller: controller,
+                    ),
+                  )
+              : null,
+        ),
+      );
+    }
+    return widgets;
   }
 
   @override
@@ -244,8 +296,9 @@ class _Board extends StatelessWidget {
           ),
           const SizedBox(height: BananSpacing.md),
           _BoardToolbar(
-            day: state.day,
-            onDayChanged: onDayChanged,
+            from: state.from,
+            to: state.to,
+            onRangeChanged: onRangeChanged,
             searchController: searchController,
             source: source,
             urgentOnly: urgentOnly,
@@ -256,34 +309,16 @@ class _Board extends StatelessWidget {
           const SizedBox(height: BananSpacing.md),
           Expanded(
             child: orders.isEmpty
-                ? _EmptyStage(tab: tab, day: state.day)
-                : ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: orders.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: BananSpacing.sm),
-                    itemBuilder: (context, index) {
-                      final order = orders[index];
-                      final stage = tab == KitchenBoardTab.all
-                          ? KitchenBoardTab.stageOf(order)
-                          : tab;
-                      return KitchenOrderRow(
-                        key: ValueKey(order.id),
-                        order: order,
-                        stage: stage,
-                        showStage: tab == KitchenBoardTab.all,
-                        onAccept: () => controller.accept(order.id),
-                        onReady: () => controller.markReady(order.id),
-                        onDispatch: () => controller.dispatch(order.id),
-                        onAdjust: order.source == 'INTERNAL_TRANSFER'
-                            ? () => showDialog<void>(
-                                  context: context,
-                                  builder: (_) => _AdjustTransferDialog(
-                                    order: order,
-                                    controller: controller,
-                                  ),
-                                )
-                            : null,
+                ? _EmptyStage(tab: tab, from: state.from, to: state.to)
+                : Builder(
+                    builder: (context) {
+                      final rows = _rows(context, orders);
+                      return ListView.separated(
+                        padding: EdgeInsets.zero,
+                        itemCount: rows.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: BananSpacing.sm),
+                        itemBuilder: (_, index) => rows[index],
                       );
                     },
                   ),
@@ -294,10 +329,38 @@ class _Board extends StatelessWidget {
   }
 }
 
-class _EmptyStage extends StatelessWidget {
-  const _EmptyStage({required this.tab, required this.day});
-  final KitchenBoardTab tab;
+class _DayDivider extends StatelessWidget {
+  const _DayDivider({required this.day, required this.count});
   final DateTime day;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: BananSpacing.sm),
+      child: Row(
+        children: [
+          Text(
+            kitchenDayLabel(day),
+            style: theme.textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(width: BananSpacing.sm),
+          Text('$count đơn', style: theme.textTheme.bodySmall),
+          const SizedBox(width: BananSpacing.sm),
+          const Expanded(child: Divider()),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyStage extends StatelessWidget {
+  const _EmptyStage({required this.tab, required this.from, required this.to});
+  final KitchenBoardTab tab;
+  final DateTime from;
+  final DateTime to;
 
   @override
   Widget build(BuildContext context) {
@@ -313,7 +376,7 @@ class _EmptyStage extends StatelessWidget {
           ),
           const SizedBox(height: BananSpacing.sm),
           Text(
-            'Không có đơn nào ở "${tab.label}" · ${kitchenDayLabel(day)}',
+            'Không có đơn nào ở "${tab.label}" · ${kitchenRangeLabel(from, to)}',
             style: theme.textTheme.titleSmall,
             textAlign: TextAlign.center,
           ),
@@ -327,8 +390,9 @@ class _EmptyStage extends StatelessWidget {
 
 class _BoardToolbar extends StatelessWidget {
   const _BoardToolbar({
-    required this.day,
-    required this.onDayChanged,
+    required this.from,
+    required this.to,
+    required this.onRangeChanged,
     required this.searchController,
     required this.source,
     required this.urgentOnly,
@@ -337,8 +401,9 @@ class _BoardToolbar extends StatelessWidget {
     required this.onUrgentChanged,
   });
 
-  final DateTime day;
-  final ValueChanged<DateTime> onDayChanged;
+  final DateTime from;
+  final DateTime to;
+  final void Function(DateTime from, DateTime to) onRangeChanged;
   final TextEditingController searchController;
   final String source;
   final bool urgentOnly;
@@ -358,7 +423,8 @@ class _BoardToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final dayBar = KitchenDayBar(day: day, onChanged: onDayChanged);
+        final dayBar =
+            KitchenDayBar(from: from, to: to, onChanged: onRangeChanged);
         final search = SizedBox(
           width: constraints.maxWidth < 720 ? constraints.maxWidth : 280,
           child: TextField(

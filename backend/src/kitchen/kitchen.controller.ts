@@ -89,9 +89,10 @@ export class KitchenController {
    * Kitchen board list. Default: orders routed to this kitchen and not yet
    * dispatched; `?kitchenStatus=PREPARING` narrows to one stage;
    * `?includeDoneToday=1` also surfaces today's dispatched orders.
-   * `?date=yyyy-MM-dd` (VN calendar day) returns that day's board instead —
-   * past days or orders scheduled ahead; today additionally keeps every
-   * live order whatever its date.
+   * `?date=yyyy-MM-dd` or `?from=&to=` (VN calendar days, inclusive) returns
+   * the board keyed on the day orders have to be READY — past days or
+   * orders scheduled ahead; a range covering today also keeps overdue /
+   * unscheduled live work. See `kitchenQueueWhere`.
    */
   @Get()
   list(
@@ -100,9 +101,23 @@ export class KitchenController {
     @Query('includeDoneToday') includeDoneToday?: string,
     @Query('kitchenId') kitchenIdParam?: string,
     @Query('date') date?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
-    if (date !== undefined && !KITCHEN_DATE_RE.test(date)) {
-      throw new BadRequestException({ code: 'INVALID_DATE', message: 'date phải là yyyy-MM-dd' });
+    for (const [name, value] of [
+      ['date', date],
+      ['from', from],
+      ['to', to],
+    ] as const) {
+      if (value !== undefined && !KITCHEN_DATE_RE.test(value)) {
+        throw new BadRequestException({
+          code: 'INVALID_DATE',
+          message: `${name} phải là yyyy-MM-dd`,
+        });
+      }
+    }
+    if (from && to && from > to) {
+      throw new BadRequestException({ code: 'INVALID_DATE', message: 'from phải ≤ to' });
     }
     // KITCHEN_* users are scoped to their own kitchen (from the JWT) and cannot
     // override it. An ADMIN has no kitchen, so they MUST pass ?kitchenId= to
@@ -117,6 +132,8 @@ export class KitchenController {
       status: kitchenStatus,
       includeDoneToday: includeDoneToday === '1' || includeDoneToday === 'true',
       date,
+      from,
+      to,
     });
   }
 

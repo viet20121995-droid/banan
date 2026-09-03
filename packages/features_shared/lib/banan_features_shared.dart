@@ -2,6 +2,7 @@
 /// kitchen apps.
 library;
 
+export 'src/address/ward_picker.dart';
 export 'src/auth/auth_controller.dart';
 export 'src/auth/auth_failure_message.dart';
 export 'src/auth/go_router_refresh.dart';
