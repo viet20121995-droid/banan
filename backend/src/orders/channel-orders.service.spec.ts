@@ -317,6 +317,17 @@ describe('createInternalTransfer (INTERNAL_TRANSFER)', () => {
     expect(notifications.notifyKitchenStaff).toHaveBeenCalled();
   });
 
+  it('may order a menu-hidden product (isAvailable=false) — the kitchen still makes it', async () => {
+    const orderCreate = jest
+      .fn()
+      .mockResolvedValue(orderRowFixture({ source: 'INTERNAL_TRANSFER' }));
+    const prisma = transferPrisma(orderCreate);
+    prisma.product.findMany.mockResolvedValue([{ ...productFixture(), isAvailable: false }]);
+    const { svc } = makeService(prisma);
+    await svc.createInternalTransfer(staff, transferDto);
+    expect(orderCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('staff cannot request for another store', async () => {
     const { svc } = makeService(transferPrisma(jest.fn()));
     await expect(

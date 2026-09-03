@@ -1913,7 +1913,7 @@ export class OrdersService {
    */
   private async buildChannelLines(
     items: CreateOrderDto['items'],
-    opts: { enforceLimitedStock?: boolean } = {},
+    opts: { enforceLimitedStock?: boolean; allowUnavailable?: boolean } = {},
   ) {
     const requestedIds = [...new Set(items.map((i) => i.productId))];
     const products = await this.prisma.product.findMany({
@@ -1942,7 +1942,10 @@ export class OrdersService {
     const lineCreates: Prisma.OrderItemCreateManyOrderInput[] = [];
     for (const input of items) {
       const product = productById.get(input.productId)!;
-      if (!product.isAvailable) {
+      // `isAvailable` is the customer-menu switch. A branch restocking from
+      // the kitchen may still order a menu-hidden item (seasonal slice,
+      // counter-only size), so internal transfers skip the gate.
+      if (!product.isAvailable && !opts.allowUnavailable) {
         throw new BadRequestException({
           code: 'PRODUCT_UNAVAILABLE',
           message: `${product.name} is no longer available.`,
@@ -1951,7 +1954,7 @@ export class OrdersService {
       const variant = input.variantId
         ? product.variants.find((v) => v.id === input.variantId)
         : product.variants[0];
-      if (!variant || !variant.isAvailable) {
+      if (!variant || (!variant.isAvailable && !opts.allowUnavailable)) {
         throw new BadRequestException({
           code: 'VARIANT_UNAVAILABLE',
           message: `Selected option for ${product.name} is unavailable.`,
@@ -2389,6 +2392,7 @@ export class OrdersService {
     const targetAt = scheduledFor ?? placedAt;
     const { products, lineCreates, subtotal } = await this.buildChannelLines(dto.items, {
       enforceLimitedStock: false,
+      allowUnavailable: true,
     });
     await this.assertProductsAcceptingOrder(products, targetAt, placedAt, scheduledFor != null);
 

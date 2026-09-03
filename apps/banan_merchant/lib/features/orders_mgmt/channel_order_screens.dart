@@ -34,9 +34,14 @@ class _CartLine {
 }
 
 /// Product search + result list; taps add to the cart via [onAdd].
+///
+/// [includeUnavailable] lists menu-hidden products (isAvailable=false) as
+/// well — the internal-transfer form needs them, the counter must not sell
+/// them.
 class _ProductPicker extends ConsumerStatefulWidget {
-  const _ProductPicker({required this.onAdd});
+  const _ProductPicker({required this.onAdd, this.includeUnavailable = false});
   final void Function(Product, ProductVariant) onAdd;
+  final bool includeUnavailable;
 
   @override
   ConsumerState<_ProductPicker> createState() => _ProductPickerState();
@@ -73,8 +78,9 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
     setState(() {
       _loading = false;
       res.when(
-        success: (page) =>
-            _all = page.items.where((p) => p.isAvailable).toList(),
+        success: (page) => _all = page.items
+            .where((p) => widget.includeUnavailable || p.isAvailable)
+            .toList(),
         failure: (_) {},
       );
     });
@@ -100,7 +106,9 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
   }
 
   Future<void> _pick(Product p) async {
-    final variants = p.variants.where((v) => v.isAvailable).toList();
+    final variants = p.variants
+        .where((v) => widget.includeUnavailable || v.isAvailable)
+        .toList();
     if (variants.isEmpty) return;
     if (variants.length == 1) {
       widget.onAdd(p, variants.first);
@@ -842,7 +850,7 @@ class _InternalTransferScreenState
                 ?.copyWith(color: theme.colorScheme.outline),
           ),
           const SizedBox(height: BananSpacing.md),
-          _ProductPicker(onAdd: _addToCart),
+          _ProductPicker(onAdd: _addToCart, includeUnavailable: true),
           const SizedBox(height: BananSpacing.md),
           Text('Danh sách cần làm', style: theme.textTheme.titleMedium),
           _CartSection(cart: cart, onChanged: () => setState(() {})),
