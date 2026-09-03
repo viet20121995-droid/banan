@@ -1447,19 +1447,34 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                     child: DecoratedBox(
                       key: ValueKey(slide.image ?? 'slide-$i'),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            theme.colorScheme.primary,
-                            theme.colorScheme.primary.withValues(alpha: 0.65),
-                          ],
-                        ),
+                        // Campaign art is pinned right at full height, so
+                        // the plum ground has to be solid behind it.
+                        color: slide.isAsset ? const Color(0xFF4A1727) : null,
+                        gradient: slide.isAsset
+                            ? null
+                            : LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  theme.colorScheme.primary,
+                                  theme.colorScheme.primary
+                                      .withValues(alpha: 0.65),
+                                ],
+                              ),
                       ),
                       child: slide.image == null
                           ? const SizedBox.expand()
                           : slide.isAsset
-                              ? Image.asset(slide.image!, fit: BoxFit.cover)
+                              // Product sits on the right of the art; the
+                              // left stays clear for the headline.
+                              ? Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Image.asset(
+                                    slide.image!,
+                                    fit: BoxFit.fitHeight,
+                                    height: double.infinity,
+                                  ),
+                                )
                               : Image.network(
                                   slide.image!,
                                   fit: BoxFit.cover,
@@ -1478,11 +1493,11 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                     gradient: LinearGradient(
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
-                      stops: [0, 0.42, 0.76, 1],
+                      stops: [0, 0.34, 0.6, 1],
                       colors: [
                         Color(0xF24A1727),
-                        Color(0xD96F2833),
-                        Color(0x335B261D),
+                        Color(0xB86F2833),
+                        Color(0x1F5B261D),
                         Color(0x00000000),
                       ],
                     ),
