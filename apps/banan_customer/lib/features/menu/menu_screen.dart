@@ -24,24 +24,11 @@ import '../product_detail/cake_wizard.dart';
 import '../wishlist/wishlist_controller.dart';
 import 'banan_brand.dart';
 import 'contact_fab.dart';
+import 'fullmoon_autumn.dart';
 import 'menu_controller.dart';
 import 'promo_popup_dialog.dart';
 import 'pwa_install.dart';
 import 'section_header.dart';
-
-const _fullmoonAutumnBannerAsset =
-    'assets/campaigns/fullmoon-autumn-golden-kiwi.jpg';
-const _fullmoonAutumnParadeAsset =
-    'assets/campaigns/fullmoon-autumn-lantern-parade.png';
-
-// 2026 Mid-Autumn treatment: explicit VN-time window, so the campaign
-// retires automatically after the festival period.
-bool get _fullmoonAutumnCampaignEnabled {
-  final vnNow = DateTime.now().toUtc().add(const Duration(hours: 7));
-  final day = DateTime.utc(vnNow.year, vnNow.month, vnNow.day);
-  return !day.isBefore(DateTime.utc(2026, 9, 3)) &&
-      day.isBefore(DateTime.utc(2026, 10, 1));
-}
 
 final _wholesaleAccessProvider = FutureProvider.autoDispose<bool>((ref) async {
   final result = await ref.watch(wholesaleApiProvider).access();
@@ -124,7 +111,7 @@ class MenuScreen extends ConsumerWidget {
                 isGuest: isGuest,
                 unread: unread,
               ),
-        bottom: _fullmoonAutumnCampaignEnabled
+        bottom: fullmoonAutumnCampaignEnabled
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(30),
                 child: _FullmoonAutumnAnnouncement(),
@@ -1396,9 +1383,9 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
     final banners = ref.watch(homeBannersProvider).valueOrNull ?? const [];
     final threads = ref.watch(homeThreadsProvider).valueOrNull ?? const [];
     final slides = <({String? image, bool isAsset, String title})>[
-      if (_fullmoonAutumnCampaignEnabled)
+      if (fullmoonAutumnCampaignEnabled)
         (
-          image: _fullmoonAutumnBannerAsset,
+          image: fullmoonAutumnBannerAsset,
           isAsset: true,
           title: 'Fullmoon Autumn',
         ),
@@ -1502,7 +1489,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
               ),
               // Seasonal overlay keeps every carousel slide coherent with the
               // warm moonlight, washi-paper Fullmoon Autumn art direction.
-              if (_fullmoonAutumnCampaignEnabled) ...[
+              if (fullmoonAutumnCampaignEnabled) ...[
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -1530,7 +1517,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                       child: FractionallySizedBox(
                         widthFactor: 0.34,
                         child: Image(
-                          image: AssetImage(_fullmoonAutumnParadeAsset),
+                          image: AssetImage(fullmoonAutumnParadeAsset),
                           fit: BoxFit.contain,
                         ),
                       ),
@@ -1557,7 +1544,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                 ),
               // Decorative wave + kanji accents removed for a cleaner
               // banner — peach-cream theme reads softer without them.
-              if (_fullmoonAutumnCampaignEnabled)
+              if (fullmoonAutumnCampaignEnabled)
                 _FullmoonAutumnHeroContent(
                   compact: width < 700,
                   ctaDismissed: ctaDismissed,

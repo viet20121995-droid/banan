@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/content/cookie_consent.dart';
+import '../features/menu/fullmoon_autumn.dart';
 import '../features/push/push_registration.dart';
 import '../shared/realtime_sync.dart';
 import 'analytics.dart';
@@ -55,31 +56,33 @@ class BananCustomerApp extends ConsumerWidget {
         child: RealtimeCatalogSync(
           child: PushRegistrar(
             child: BananPageBackground(
-              // Behaviour beacon: every scroll notification feeds the page's
-              // max depth, every pointer-up counts as a click on the current
-              // page. Translucent listeners — nothing about input changes.
-              child: NotificationListener<ScrollUpdateNotification>(
-                onNotification: (n) {
-                  final m = n.metrics;
-                  if (m.axis == Axis.vertical && m.hasContentDimensions) {
-                    final total = m.maxScrollExtent + m.viewportDimension;
-                    if (total > 0) {
-                      Analytics.scroll(
-                        (m.pixels + m.viewportDimension) / total,
-                      );
+              child: _CampaignPageBackground(
+                // Behaviour beacon: every scroll notification feeds the page's
+                // max depth, every pointer-up counts as a click on the current
+                // page. Translucent listeners — nothing about input changes.
+                child: NotificationListener<ScrollUpdateNotification>(
+                  onNotification: (n) {
+                    final m = n.metrics;
+                    if (m.axis == Axis.vertical && m.hasContentDimensions) {
+                      final total = m.maxScrollExtent + m.viewportDimension;
+                      if (total > 0) {
+                        Analytics.scroll(
+                          (m.pixels + m.viewportDimension) / total,
+                        );
+                      }
                     }
-                  }
-                  return false;
-                },
-                child: Listener(
-                  behavior: HitTestBehavior.translucent,
-                  onPointerUp: (_) => Analytics.click(),
-                  child: Stack(
-                    children: [
-                      child ?? const SizedBox.shrink(),
-                      // App-wide cookie-consent bar (renders nothing once chosen).
-                      const CookieConsentBanner(),
-                    ],
+                    return false;
+                  },
+                  child: Listener(
+                    behavior: HitTestBehavior.translucent,
+                    onPointerUp: (_) => Analytics.click(),
+                    child: Stack(
+                      children: [
+                        child ?? const SizedBox.shrink(),
+                        // App-wide cookie-consent bar (renders nothing once chosen).
+                        const CookieConsentBanner(),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -88,6 +91,37 @@ class BananCustomerApp extends ConsumerWidget {
         ),
       ),
       routerConfig: router,
+    );
+  }
+}
+
+/// Seasonal line-art across the top of every route while the Fullmoon
+/// Autumn campaign runs; plain page colour otherwise.
+class _CampaignPageBackground extends StatelessWidget {
+  const _CampaignPageBackground({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!fullmoonAutumnCampaignEnabled) return child;
+    return Stack(
+      children: [
+        const Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: Image(
+              image: AssetImage(fullmoonAutumnPageBackgroundAsset),
+              fit: BoxFit.fitWidth,
+              alignment: Alignment.topCenter,
+              excludeFromSemantics: true,
+            ),
+          ),
+        ),
+        child,
+      ],
     );
   }
 }
