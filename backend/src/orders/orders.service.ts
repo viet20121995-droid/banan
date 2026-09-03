@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { AuthService } from '../auth/auth.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DeliveryConfigService } from '../geo/delivery-config.service';
+import { kitchenQueueWhere, type KitchenQueueOpts } from '../kitchen/kitchen-queue-where';
 import {
   findWard,
   isAmbiguousLegacyWard,
@@ -1639,40 +1640,13 @@ export class OrdersService {
   }
 
   /**
-   * Kanban view: orders that are currently routed to a kitchen and not
-   * dispatched yet. With `includeDoneToday`, also returns orders dispatched
-   * back to the store today — for the "Completed" column on the kanban.
+   * Kitchen board. Default: orders currently routed to the kitchen (+ today's
+   * dispatched ones with `includeDoneToday`). With `date`, the board for that
+   * VN calendar day — past or scheduled ahead; see `kitchenQueueWhere`.
    */
-  async listForKitchen(
-    kitchenId: string,
-    opts: { status?: KitchenStatus | null; includeDoneToday?: boolean } = {},
-  ) {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    const where: Prisma.OrderWhereInput = opts.includeDoneToday
-      ? {
-          kitchenId,
-          OR: [
-            // Still routed to the kitchen.
-            {
-              status: 'SENT_TO_KITCHEN',
-              ...(opts.status !== undefined && { kitchenStatus: opts.status }),
-            },
-            // Dispatched back today — the "Completed" column.
-            {
-              status: { in: ['READY_FOR_PICKUP', 'DELIVERING', 'COMPLETED'] },
-              updatedAt: { gte: startOfToday },
-            },
-          ],
-        }
-      : {
-          kitchenId,
-          status: 'SENT_TO_KITCHEN',
-          ...(opts.status !== undefined && { kitchenStatus: opts.status }),
-        };
+  async listForKitchen(kitchenId: string, opts: KitchenQueueOpts = {}) {
     return this.prisma.order.findMany({
-      where,
+      where: kitchenQueueWhere(kitchenId, opts),
       include: ORDER_INCLUDE,
       orderBy: { updatedAt: 'asc' },
     });

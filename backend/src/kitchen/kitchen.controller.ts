@@ -31,6 +31,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { OrdersService } from '../orders/orders.service';
 
+import { KITCHEN_DATE_RE } from './kitchen-queue-where';
+
 class KitchenTransitionDto {
   @IsEnum(KitchenStatus)
   toKitchenStatus!: KitchenStatus;
@@ -84,10 +86,12 @@ export class KitchenController {
   constructor(private readonly orders: OrdersService) {}
 
   /**
-   * Kanban list of orders routed to this kitchen and not yet dispatched.
-   * Optional `?kitchenStatus=PREPARING` filter for column-specific polling.
-   * Pass `?includeDoneToday=1` to also surface today's dispatched orders
-   * so the kanban can show a "Completed" column.
+   * Kitchen board list. Default: orders routed to this kitchen and not yet
+   * dispatched; `?kitchenStatus=PREPARING` narrows to one stage;
+   * `?includeDoneToday=1` also surfaces today's dispatched orders.
+   * `?date=yyyy-MM-dd` (VN calendar day) returns that day's board instead —
+   * past days or orders scheduled ahead; today additionally keeps every
+   * live order whatever its date.
    */
   @Get()
   list(
@@ -95,7 +99,11 @@ export class KitchenController {
     @Query('kitchenStatus') kitchenStatus?: KitchenStatus,
     @Query('includeDoneToday') includeDoneToday?: string,
     @Query('kitchenId') kitchenIdParam?: string,
+    @Query('date') date?: string,
   ) {
+    if (date !== undefined && !KITCHEN_DATE_RE.test(date)) {
+      throw new BadRequestException({ code: 'INVALID_DATE', message: 'date phải là yyyy-MM-dd' });
+    }
     // KITCHEN_* users are scoped to their own kitchen (from the JWT) and cannot
     // override it. An ADMIN has no kitchen, so they MUST pass ?kitchenId= to
     // pick a queue — otherwise listForKitchen(null) would query
@@ -108,6 +116,7 @@ export class KitchenController {
     return this.orders.listForKitchen(kitchenId, {
       status: kitchenStatus,
       includeDoneToday: includeDoneToday === '1' || includeDoneToday === 'true',
+      date,
     });
   }
 

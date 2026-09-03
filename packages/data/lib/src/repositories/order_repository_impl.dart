@@ -124,13 +124,20 @@ class OrderRepositoryImpl implements OrderRepository {
   Future<Result<List<Order>, AppFailure>> kitchenQueue({
     KitchenStatus? status,
     bool includeDoneToday = false,
+    DateTime? day,
   }) async {
     final res = await _api.kitchenQueue(
       kitchenStatus: status?.wire,
       includeDoneToday: includeDoneToday,
+      date: day == null ? null : _dayKey(day),
     );
     return res.map(_safeOrders);
   }
+
+  /// Local calendar day as yyyy-MM-dd — the kitchen runs on VN time and the
+  /// backend interprets the key in Asia/Ho_Chi_Minh.
+  static String _dayKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   Future<Result<Order, AppFailure>> transitionKitchen(

@@ -1,4 +1,5 @@
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_kitchen/features/kanban/day_bar.dart';
 import 'package:banan_kitchen/features/kanban/order_row.dart';
 import 'package:banan_kitchen/shared/theme/kitchen_theme.dart';
 import 'package:flutter/material.dart';
@@ -89,7 +90,7 @@ void main() {
         tester,
         KitchenOrderRow(
           order: _order(notes: 'Giao trước 10h'),
-          tab: KitchenBoardTab.pending,
+          stage: KitchenBoardTab.pending,
           clock: _now,
           onAccept: () async {
             accepted++;
@@ -121,7 +122,7 @@ void main() {
           children: [
             KitchenOrderRow(
               order: _order(code: 'PREP', kitchenStatus: KitchenStatus.preparing),
-              tab: KitchenBoardTab.preparing,
+              stage: KitchenBoardTab.preparing,
               clock: _now,
               onReady: () async => true,
             ),
@@ -141,7 +142,7 @@ void main() {
                   ),
                 ],
               ),
-              tab: KitchenBoardTab.ready,
+              stage: KitchenBoardTab.ready,
               clock: _now,
               onDispatch: () async => true,
               onAdjust: () {},
@@ -163,7 +164,7 @@ void main() {
         tester,
         KitchenOrderRow(
           order: _order(kitchenStatus: null, status: OrderStatus.completed),
-          tab: KitchenBoardTab.done,
+          stage: KitchenBoardTab.done,
           clock: _now,
         ),
       );
@@ -177,7 +178,7 @@ void main() {
         tester,
         KitchenOrderRow(
           order: _order(),
-          tab: KitchenBoardTab.pending,
+          stage: KitchenBoardTab.pending,
           clock: _now,
           onAccept: () async => false,
         ),
@@ -199,7 +200,7 @@ void main() {
               scheduledFor: _now.add(const Duration(minutes: 30)),
               notes: 'Khách yêu cầu gói riêng từng hộp, giao trước 10 giờ sáng.',
             ),
-            tab: KitchenBoardTab.ready,
+            stage: KitchenBoardTab.ready,
             clock: _now,
             onDispatch: () async => true,
           ),
@@ -227,13 +228,15 @@ void main() {
           onSelected: (t) => picked = t,
         ),
       );
-      for (final label in ['Chờ nhận', 'Đang làm', 'Sẵn sàng giao', 'Xong hôm nay']) {
+      for (final label in ['Tất cả', 'Chờ nhận', 'Đang làm', 'Sẵn sàng giao', 'Đã xong']) {
         expect(find.text(label), findsOneWidget);
       }
       expect(find.text('3'), findsOneWidget);
       expect(find.text('12'), findsOneWidget);
       await tester.tap(find.text('Đang làm'));
       expect(picked, KitchenBoardTab.preparing);
+      await tester.tap(find.text('Tất cả'));
+      expect(picked, KitchenBoardTab.all);
     });
 
     testWidgets('fits a phone without overflow', (tester) async {
@@ -246,6 +249,76 @@ void main() {
         ),
         width: 390,
       );
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('"Tất cả" tab', () {
+    test('stageOf maps every order to the stage its row must show', () {
+      expect(KitchenBoardTab.stageOf(_order()), KitchenBoardTab.pending);
+      expect(
+        KitchenBoardTab.stageOf(_order(kitchenStatus: KitchenStatus.preparing)),
+        KitchenBoardTab.preparing,
+      );
+      expect(
+        KitchenBoardTab.stageOf(_order(kitchenStatus: KitchenStatus.readyDispatch)),
+        KitchenBoardTab.ready,
+      );
+      expect(
+        KitchenBoardTab.stageOf(_order(kitchenStatus: null, status: OrderStatus.completed)),
+        KitchenBoardTab.done,
+      );
+    });
+
+    testWidgets('a row on the mixed tab names its stage and keeps its own action',
+        (tester) async {
+      await _pump(
+        tester,
+        KitchenOrderRow(
+          order: _order(kitchenStatus: KitchenStatus.preparing),
+          stage: KitchenBoardTab.preparing,
+          showStage: true,
+          clock: _now,
+          onReady: () async => true,
+        ),
+      );
+      expect(find.text('Đang làm'), findsOneWidget); // stage pill
+      expect(find.text('Làm xong'), findsOneWidget);
+      expect(find.text('Nhận đơn'), findsNothing);
+    });
+  });
+
+  group('KitchenDayBar', () {
+    test('label: today is called out, other days carry the year', () {
+      final today = DateTime(2026, 8, 30); // Sunday
+      expect(kitchenDayLabel(today, today: today), 'Hôm nay · CN 30/08');
+      expect(kitchenDayLabel(DateTime(2026, 9, 1), today: today), 'T3 01/09/2026');
+    });
+
+    testWidgets('arrows step one day; "Hôm nay" only shows off today and resets',
+        (tester) async {
+      final today = DateTime(2026, 8, 30);
+      DateTime? changed;
+      await _pump(
+        tester,
+        KitchenDayBar(day: today, today: today, onChanged: (d) => changed = d),
+      );
+      expect(find.text('Hôm nay · CN 30/08'), findsOneWidget);
+      expect(find.text('Hôm nay'), findsNothing);
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      expect(changed, DateTime(2026, 8, 31));
+
+      await _pump(
+        tester,
+        KitchenDayBar(
+          day: DateTime(2026, 8, 28),
+          today: today,
+          onChanged: (d) => changed = d,
+        ),
+      );
+      expect(find.text('T6 28/08/2026'), findsOneWidget);
+      await tester.tap(find.text('Hôm nay'));
+      expect(changed, today);
       expect(tester.takeException(), isNull);
     });
   });

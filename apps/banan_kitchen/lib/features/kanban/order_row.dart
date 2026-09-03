@@ -5,13 +5,14 @@ import 'package:intl/intl.dart';
 
 // ── board tabs ──────────────────────────────────────────────────────────────
 
-/// The four stages a kitchen order moves through. The first three are the
-/// live kitchen workflow (`kitchenStatus`); [done] is "dispatched today".
+/// Board tabs: every order of the day, then the three live kitchen stages
+/// (`kitchenStatus`), then [done] — dispatched that day.
 enum KitchenBoardTab {
+  all('Tất cả', 'Mọi trạng thái trong ngày', Icons.view_agenda_outlined, BananColors.primary),
   pending('Chờ nhận', 'Đơn mới, chờ bếp nhận', Icons.notifications_active_outlined, BananColors.warning),
   preparing('Đang làm', 'Đang trong bếp', Icons.cake_outlined, BananColors.info),
   ready('Sẵn sàng giao', 'Chờ giao đi / khách lấy', Icons.local_shipping_outlined, BananColors.success),
-  done('Xong hôm nay', 'Đã xuất khỏi bếp trong ngày', Icons.task_alt, BananColors.outline);
+  done('Đã xong', 'Đã xuất khỏi bếp trong ngày', Icons.task_alt, BananColors.outline);
 
   const KitchenBoardTab(this.label, this.subtitle, this.icon, this.accent);
 
@@ -20,13 +21,23 @@ enum KitchenBoardTab {
   final IconData icon;
   final Color accent;
 
-  /// Kitchen-owned stage for this tab, null for the virtual "done" tab.
+  /// Kitchen-owned stage for this tab, null for the virtual all/done tabs.
   KitchenStatus? get kitchenStatus => switch (this) {
         KitchenBoardTab.pending => KitchenStatus.pendingAck,
         KitchenBoardTab.preparing => KitchenStatus.preparing,
         KitchenBoardTab.ready => KitchenStatus.readyDispatch,
-        KitchenBoardTab.done => null,
+        KitchenBoardTab.all || KitchenBoardTab.done => null,
       };
+
+  /// The stage an order is actually in — what its row shows on the "all" tab.
+  static KitchenBoardTab stageOf(Order order) {
+    if (order.status != OrderStatus.sentToKitchen) return KitchenBoardTab.done;
+    return switch (order.kitchenStatus) {
+      KitchenStatus.preparing => KitchenBoardTab.preparing,
+      KitchenStatus.readyDispatch => KitchenBoardTab.ready,
+      _ => KitchenBoardTab.pending,
+    };
+  }
 }
 
 /// Top status bar: one tab per stage with its live count. Replaces the old
@@ -64,7 +75,7 @@ class KitchenStatusTabs extends StatelessWidget {
                 onTap: () => onSelected(tab),
               ),
           ];
-          if (constraints.maxWidth >= 760) {
+          if (constraints.maxWidth >= 900) {
             return Row(
               children: [for (final t in tabs) Expanded(child: t)],
             );
@@ -219,8 +230,9 @@ String shortDuration(Duration duration) {
 class KitchenOrderRow extends StatefulWidget {
   const KitchenOrderRow({
     required this.order,
-    required this.tab,
+    required this.stage,
     super.key,
+    this.showStage = false,
     this.onAccept,
     this.onReady,
     this.onDispatch,
@@ -229,7 +241,12 @@ class KitchenOrderRow extends StatefulWidget {
   });
 
   final Order order;
-  final KitchenBoardTab tab;
+
+  /// The order's own stage — drives the color strip and the action.
+  final KitchenBoardTab stage;
+
+  /// Name the stage on the row (the "all" tab mixes stages).
+  final bool showStage;
 
   /// Stage actions; each returns whether the server accepted the change.
   final Future<bool> Function()? onAccept;
@@ -262,7 +279,7 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = widget.tab.accent;
+    final accent = widget.stage.accent;
     final border = theme.dividerTheme.color ?? Colors.black12;
 
     return Container(
@@ -326,14 +343,14 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
           height: 36,
           decoration: BoxDecoration(
             borderRadius: BananRadii.rmd,
-            color: widget.tab.accent.withValues(alpha: 0.12),
+            color: widget.stage.accent.withValues(alpha: 0.12),
           ),
           child: Icon(
             order.fulfillmentType == FulfillmentType.delivery
                 ? Icons.delivery_dining_outlined
                 : Icons.storefront_outlined,
             size: 20,
-            color: widget.tab.accent,
+            color: widget.stage.accent,
           ),
         ),
         const SizedBox(width: BananSpacing.md),
@@ -434,6 +451,13 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
       runSpacing: 4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
+        if (widget.showStage)
+          _Pill(
+            icon: widget.stage.icon,
+            label: widget.stage.label,
+            color: widget.stage.accent,
+            strong: true,
+          ),
         _Pill(icon: sourceIcon, label: sourceLabel, color: sourceColor),
         if (order.storeName != null)
           _Pill(icon: Icons.storefront_outlined, label: order.storeName!, color: BananColors.info),
@@ -463,7 +487,9 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
   /// The stage action(s) — null on the done tab, where a status label shows.
   Widget? _actions(ThemeData theme) {
     final order = widget.order;
-    switch (widget.tab) {
+    switch (widget.stage) {
+      case KitchenBoardTab.all:
+        return null; // never a row's own stage — rows on "all" carry stageOf()
       case KitchenBoardTab.pending:
         final accept = widget.onAccept;
         if (accept == null) return null;
