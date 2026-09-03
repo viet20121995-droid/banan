@@ -294,6 +294,16 @@ class _Body extends ConsumerWidget {
                   style: theme.textTheme.bodySmall,
                 ),
                 const SizedBox(height: BananSpacing.sm),
+                // When the customer gets it — the one thing staff look for
+                // first, so it gets its own line, not a footnote.
+                _ReadyTimeLine(order: order),
+                const SizedBox(height: BananSpacing.sm),
+                Wrap(
+                  spacing: BananSpacing.xs,
+                  runSpacing: BananSpacing.xs,
+                  children: _metaChips(order),
+                ),
+                const SizedBox(height: BananSpacing.sm),
                 // Payment state up-front: an unpaid online order must never
                 // be baked (one 9Pay payment once showed up as two "orders";
                 // the unpaid twin got made too).
@@ -487,16 +497,36 @@ class _Body extends ConsumerWidget {
                     label: 'Khuyến mãi',
                     value: '−${fmt.format(order.campaignDiscount)}',
                   ),
-                _Line(
-                  label: 'Phí giao hàng',
-                  value: fmt.format(order.deliveryFee),
-                ),
+                if (order.couponDiscount > 0)
+                  _Line(
+                    label: 'Mã giảm giá',
+                    value: '−${fmt.format(order.couponDiscount)}',
+                  ),
+                if (order.pointsDiscount > 0)
+                  _Line(
+                    label: 'Điểm thưởng (${order.pointsRedeemed} điểm)',
+                    value: '−${fmt.format(order.pointsDiscount)}',
+                  ),
+                if (order.giftCardAmountVnd > 0)
+                  _Line(
+                    label: 'Thẻ quà tặng',
+                    value: '−${fmt.format(order.giftCardAmountVnd)}',
+                  ),
+                if (order.fulfillmentType == FulfillmentType.delivery)
+                  _Line(
+                    label: 'Phí giao hàng',
+                    value: fmt.format(order.deliveryFee),
+                  ),
                 const SizedBox(height: BananSpacing.xs),
                 _Line(
                   label: 'Tổng cộng',
                   value: fmt.format(order.total),
                   bold: true,
                 ),
+                if (order.statusEvents.isNotEmpty) ...[
+                  const SizedBox(height: BananSpacing.xl),
+                  _TimelineBlock(order: order),
+                ],
                 const SizedBox(height: BananSpacing.xxl),
                 if (order.source == 'STAFF_COUNTER' &&
                     order.settlementMode == 'COUNTER_UNPAID' &&
@@ -642,6 +672,143 @@ class _Body extends ConsumerWidget {
       case OrderStatus.refunded:
         return const [];
     }
+  }
+}
+
+const _weekdays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+
+String _vnDateTime(DateTime d) {
+  final l = d.toLocal();
+  return '${DateFormat('HH:mm').format(l)} · ${_weekdays[l.weekday - 1]} '
+      '${DateFormat('dd/MM/yyyy').format(l)}';
+}
+
+/// Channel, settlement and kitchen stage — the facts the header used to hide.
+List<Widget> _metaChips(Order order) {
+  final kitchen = order.kitchenStatus;
+  return [
+    StatusBadge(
+      label: switch (order.source) {
+        'STAFF_COUNTER' => 'Đơn tại quầy',
+        'WHOLESALE' => 'Wholesale',
+        'INTERNAL_TRANSFER' => 'Đặt hàng nội bộ',
+        _ => 'Đặt qua website',
+      },
+      intent: StatusIntent.neutral,
+    ),
+    if (order.settlementMode == 'COUNTER_PAID')
+      const StatusBadge(label: 'Đã thu tại quầy', intent: StatusIntent.success),
+    if (order.settlementMode == 'COUNTER_UNPAID')
+      StatusBadge(
+        label: order.fulfillmentType == FulfillmentType.delivery
+            ? 'Chưa thu — thu khi giao'
+            : 'Chưa thu — thu khi khách nhận',
+        intent: StatusIntent.warning,
+      ),
+    if (order.settlementMode == 'ON_ACCOUNT')
+      const StatusBadge(label: 'Công nợ', intent: StatusIntent.info),
+    if (order.status == OrderStatus.sentToKitchen && kitchen != null)
+      StatusBadge(
+        label: 'Bếp: ${kitchen.label}',
+        intent: switch (kitchen) {
+          KitchenStatus.readyDispatch => StatusIntent.success,
+          KitchenStatus.preparing => StatusIntent.info,
+          _ => StatusIntent.warning,
+        },
+      ),
+  ];
+}
+
+/// "Nhận lúc 10:30 · T4 09/09/2026" — red when overdue, amber when today.
+class _ReadyTimeLine extends StatelessWidget {
+  const _ReadyTimeLine({required this.order});
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final at = order.scheduledFor?.toLocal();
+    final delivery = order.fulfillmentType == FulfillmentType.delivery;
+    final closed = order.status == OrderStatus.completed ||
+        order.status == OrderStatus.cancelled ||
+        order.status == OrderStatus.refunded;
+    final now = DateTime.now();
+    final overdue = at != null && !closed && at.isBefore(now);
+    final today = at != null &&
+        at.year == now.year &&
+        at.month == now.month &&
+        at.day == now.day;
+    final color = overdue
+        ? theme.colorScheme.error
+        : today
+            ? const Color(0xFFB07B10)
+            : theme.colorScheme.primary;
+    return Row(
+      children: [
+        Icon(
+          delivery ? Icons.local_shipping_outlined : Icons.storefront_outlined,
+          size: 18,
+          color: color,
+        ),
+        const SizedBox(width: BananSpacing.xs),
+        Expanded(
+          child: Text(
+            at == null
+                ? '${delivery ? 'Giao' : 'Khách lấy'}: chưa hẹn giờ — làm ngay khi nhận đơn'
+                : '${delivery ? 'Giao lúc' : 'Khách lấy lúc'} ${_vnDateTime(at)}'
+                    '${overdue ? ' · QUÁ GIỜ' : today ? ' · hôm nay' : ''}',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Every status change with its time and note — what happened, when.
+class _TimelineBlock extends StatelessWidget {
+  const _TimelineBlock({required this.order});
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final events = List.of(order.statusEvents)
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Lịch sử đơn', style: theme.textTheme.titleMedium),
+        const SizedBox(height: BananSpacing.xs),
+        for (final e in events)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 150,
+                  child: Text(
+                    _vnDateTime(e.createdAt),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    e.note == null || e.note!.isEmpty
+                        ? e.toStatus.label
+                        : '${e.toStatus.label} — ${e.note}',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/orders_mgmt/merchant_alerts.dart';
 import '../shared/push_registration.dart';
 import 'router.dart';
 
@@ -12,6 +13,8 @@ class BananMerchantApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(merchantRouterProvider);
+    // New-order chime on every screen, for the whole session.
+    ref.watch(merchantAlertsProvider);
     return MaterialApp.router(
       title: 'Banan Merchant',
       debugShowCheckedModeBanner: false,

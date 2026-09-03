@@ -53,7 +53,7 @@
         if (ctx && ctx.state === 'suspended') ctx.resume();
         return ctx;
       }
-      ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+      ['pointerdown', 'keydown', 'touchstart', 'touchend', 'click'].forEach(function (ev) {
         window.addEventListener(ev, ensureCtx, { passive: true });
       });
       window.__bananChime = function () {

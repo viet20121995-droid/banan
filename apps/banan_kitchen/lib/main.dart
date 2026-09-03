@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import 'app/app.dart';
 import 'app/url_strategy.dart'
     if (dart.library.html) 'app/url_strategy_web.dart';
+import 'features/kanban/alert_sound.dart';
+import 'features/kanban/kitchen_alerts.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +20,10 @@ Future<void> main() async {
   Intl.defaultLocale = 'vi_VN';
   await initializeDateFormatting('vi_VN', null);
 
-  final container = ProviderContainer();
+  // The WebAudio chime is web-only; the alert rule itself stays pure.
+  final container = ProviderContainer(
+    overrides: [kitchenChimeProvider.overrideWithValue(playNewTicketChime)],
+  );
   await container.read(authRepositoryProvider).bootstrap();
 
   runApp(

@@ -58,7 +58,7 @@
       }
       // Unlock on the first user interaction of the session.
       function unlock() { ensureCtx(); }
-      ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+      ['pointerdown', 'keydown', 'touchstart', 'touchend', 'click'].forEach(function (ev) {
         window.addEventListener(ev, unlock, { once: false, passive: true });
       });
       window.__bananChime = function () {

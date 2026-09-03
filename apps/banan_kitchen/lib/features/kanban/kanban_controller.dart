@@ -4,7 +4,7 @@ import 'package:banan_domain/banan_domain.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'alert_sound.dart';
+import 'kitchen_alerts.dart';
 
 DateTime _today() {
   final n = DateTime.now();
@@ -147,16 +147,12 @@ class KanbanController extends StateNotifier<KanbanState> {
 final kanbanControllerProvider =
     StateNotifierProvider.autoDispose<KanbanController, KanbanState>((ref) {
   final controller = KanbanController(ref.watch(orderRepositoryProvider));
+  // The chime lives in kitchenAlertsProvider (app-wide); here only refetch —
+  // including counter / internal-transfer orders that arrive as
+  // `order.created` already on the board.
   ref.listen<AsyncValue<RealtimeEvent>>(realtimeEventsProvider, (_, next) {
     next.whenData((event) {
-      if (event.event == 'order.status_changed' ||
-          event.event == 'order.kitchen_status_changed') {
-        // A fresh order just landed in this kitchen → audible chime.
-        if (event.data['toStatus'] == 'SENT_TO_KITCHEN') {
-          playNewTicketChime();
-        }
-        controller.refresh();
-      }
+      if (isKitchenBoardEvent(event)) controller.refresh();
     });
   });
   return controller;

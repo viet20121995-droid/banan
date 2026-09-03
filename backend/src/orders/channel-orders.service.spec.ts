@@ -188,6 +188,25 @@ describe('createCounterOrder (STAFF_COUNTER)', () => {
     expect(paymentCreate).not.toHaveBeenCalled();
   });
 
+  it('skips the online lead-time rules — staff agreed the time with the customer', async () => {
+    const orderCreate = jest.fn().mockResolvedValue(orderRowFixture());
+    const prisma = basePrisma(orderCreate, jest.fn());
+    // A 36h cake, wanted in 2 hours: the web checkout rejects this
+    // (ORDER_ITEMS_TIMELINE); the counter must not.
+    prisma.product.findMany = jest
+      .fn()
+      .mockResolvedValue([{ ...productFixture(), leadTimeHours: 36 }]);
+    const { svc } = makeService(prisma);
+
+    await expect(
+      svc.createCounterOrder(staff, {
+        ...counterDto,
+        scheduledFor: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
+      }),
+    ).resolves.toBeDefined();
+    expect(orderCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('staff cannot create for another store', async () => {
     const { svc } = makeService(basePrisma(jest.fn(), jest.fn()));
     await expect(

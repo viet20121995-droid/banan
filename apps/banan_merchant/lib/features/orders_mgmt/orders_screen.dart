@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/shell/merchant_shell.dart';
-import 'alert_sound.dart';
+import 'merchant_alerts.dart';
 import 'order_status_visuals.dart';
 
 @immutable
@@ -143,13 +143,11 @@ final storeOrdersControllerProvider =
   final controller = StoreOrdersController(ref.watch(orderRepositoryProvider));
   ref.listen<AsyncValue<RealtimeEvent>>(realtimeEventsProvider, (_, next) {
     next.whenData((event) {
-      if (event.event == 'order.created' ||
-          event.event == 'order.payment_captured') {
+      if (isNewMerchantOrderEvent(event)) {
         // A new order, OR an online (9Pay) order that just got paid — both are
-        // freshly actionable for staff, so chime + bump the attention counter,
-        // then refresh. (Capture does not change order status, so without this
-        // a paid online order would only appear on the next manual refresh.)
-        playNewOrderChime();
+        // freshly actionable for staff: bump the attention counter and
+        // refresh. The chime itself rings app-wide (merchantAlertsProvider),
+        // so it is not repeated here.
         controller.onNewOrder();
         controller.refresh();
       } else if (event.event == 'order.status_changed' ||

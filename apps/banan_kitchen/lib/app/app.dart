@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/kanban/kitchen_alerts.dart';
 import '../shared/push_registration.dart';
 import '../shared/theme/kitchen_theme.dart';
 import 'router.dart';
@@ -12,6 +13,8 @@ class BananKitchenApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(kitchenRouterProvider);
+    // New-ticket chime on every screen, for the whole session.
+    ref.watch(kitchenAlertsProvider);
     return MaterialApp.router(
       title: 'Banan Kitchen',
       debugShowCheckedModeBanner: false,

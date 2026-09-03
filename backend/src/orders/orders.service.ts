@@ -2147,15 +2147,21 @@ export class OrdersService {
 
     const placedAt = new Date();
     const targetAt = dto.scheduledFor ? new Date(dto.scheduledFor) : placedAt;
+    // Staff keying a phone/counter order have already agreed the time with
+    // the customer — the online "order N hours ahead" rules do not apply.
+    // Pauses, blackout days and day-of-week availability still do.
     await this.assertStoreAcceptingOrder(
       storeId,
       fulfillmentType,
       targetAt,
       placedAt,
       !!dto.scheduledFor,
+      { skipLeadTime: true },
     );
     const { products, lineCreates, subtotal } = await this.buildChannelLines(dto.items);
-    await this.assertProductsAcceptingOrder(products, targetAt, placedAt, !!dto.scheduledFor);
+    await this.assertProductsAcceptingOrder(products, targetAt, placedAt, !!dto.scheduledFor, {
+      skipLeadTime: true,
+    });
 
     const orderCode = generateOrderCode();
     const kitchenId = sendToKitchen ? store.defaultKitchenId : null;
@@ -2937,6 +2943,7 @@ export class OrdersService {
     at: Date,
     placedAt: Date,
     scheduled: boolean,
+    opts: { skipLeadTime?: boolean } = {},
   ): Promise<void> {
     const store = await this.prisma.store.findUnique({
       where: { id: storeId },
@@ -3003,8 +3010,9 @@ export class OrdersService {
     }
 
     // 3) Store-wide minimum lead time (in hours) — gives staff time to bake.
-    //    Skipped when defaultLeadHours = 0 (default).
-    if (store.defaultLeadHours > 0) {
+    //    Skipped when defaultLeadHours = 0 (default), and for staff-keyed
+    //    orders: the counter decides what it can make in time.
+    if (!opts.skipLeadTime && store.defaultLeadHours > 0) {
       const minMs = store.defaultLeadHours * 3600 * 1000;
       if (at.getTime() - placedAt.getTime() < minMs) {
         throw new BadRequestException({
@@ -3168,6 +3176,7 @@ export class OrdersService {
     at: Date,
     placedAt: Date,
     scheduled: boolean,
+    opts: { skipLeadTime?: boolean } = {},
   ): Promise<void> {
     // VN local weekday for day-of-week comparison.
     const vn = new Date(at.getTime() + 7 * 3600 * 1000);
@@ -3200,7 +3209,7 @@ export class OrdersService {
         continue;
       }
 
-      if (p.leadTimeHours && p.leadTimeHours > 0) {
+      if (!opts.skipLeadTime && p.leadTimeHours && p.leadTimeHours > 0) {
         const minMs = p.leadTimeHours * 3600 * 1000;
         if (at.getTime() - placedAt.getTime() < minMs) {
           violations.push({
