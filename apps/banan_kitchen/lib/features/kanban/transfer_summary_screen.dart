@@ -94,9 +94,16 @@ class TransferSummaryScreen extends ConsumerWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (r.isSupply) ...[
-                                    const Icon(
-                                      Icons.inventory_2_outlined,
-                                      size: 14,
+                                    Tooltip(
+                                      message: r.isDrinkIngredient
+                                          ? 'Nguyên liệu pha chế'
+                                          : 'Vật tư kho',
+                                      child: Icon(
+                                        r.isDrinkIngredient
+                                            ? Icons.local_cafe_outlined
+                                            : Icons.inventory_2_outlined,
+                                        size: 14,
+                                      ),
                                     ),
                                     const SizedBox(width: 4),
                                   ],

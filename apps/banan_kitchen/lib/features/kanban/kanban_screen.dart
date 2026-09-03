@@ -661,7 +661,7 @@ class _AdjustTransferDialogState extends ConsumerState<_AdjustTransferDialog> {
                     children: [
                       Expanded(
                         child: Text(
-                          '${m.name} (vật tư)',
+                          '${m.name} (${m.isDrinkIngredient ? 'pha chế' : 'vật tư'})',
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),

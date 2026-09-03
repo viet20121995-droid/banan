@@ -166,6 +166,11 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  /** Bar restock item — orderable by branches as "Nguyên liệu pha chế". */
+  @IsOptional()
+  @IsBoolean()
+  drinkIngredient?: boolean;
 }
 
 export class CreateMaintenanceDto {

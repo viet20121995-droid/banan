@@ -19,6 +19,7 @@ type PrismaMock = {
   store: { findUnique: jest.Mock };
   user: { findUnique: jest.Mock; create: jest.Mock };
   product: { findMany: jest.Mock };
+  mfgProduct?: { findMany: jest.Mock };
   storeBlackoutDate?: { findUnique: jest.Mock };
   $transaction: jest.Mock;
 };
@@ -321,6 +322,49 @@ describe('createInternalTransfer (INTERNAL_TRANSFER)', () => {
     await expect(
       svc.createInternalTransfer(staff, { ...transferDto, requestingStoreId: 'OTHER' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  describe('drink ingredients (Nguyên liệu pha chế)', () => {
+    const drinkDto = { items: [], mfgItems: [{ mfgProductId: 'm1', qty: 2 }] };
+    function drinkPrisma(orderCreate: jest.Mock): PrismaMock {
+      const prisma = transferPrisma(orderCreate);
+      prisma.mfgProduct = {
+        findMany: jest.fn().mockResolvedValue([{ id: 'm1', drinkIngredient: true }]),
+      };
+      return prisma;
+    }
+    afterEach(() => jest.useRealTimers());
+
+    it('refused on an off day (Wednesday in Vietnam)', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-09-02T03:00:00Z'));
+      const { svc } = makeService(drinkPrisma(jest.fn()));
+      await expect(svc.createInternalTransfer(staff, drinkDto)).rejects.toMatchObject({
+        response: { code: 'DRINK_INGREDIENT_ORDER_DAY' },
+      });
+    });
+
+    it('Thursday order is accepted and scheduled for 06:30 the next morning', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-09-03T03:00:00Z'));
+      const orderCreate = jest
+        .fn()
+        .mockResolvedValue(orderRowFixture({ source: 'INTERNAL_TRANSFER' }));
+      const { svc } = makeService(drinkPrisma(orderCreate));
+      await svc.createInternalTransfer(staff, drinkDto);
+      const data = orderCreate.mock.calls[0][0].data;
+      expect(data.scheduledFor.toISOString()).toBe('2026-09-03T23:30:00.000Z');
+    });
+
+    it('plain supplies are not day-gated', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-09-02T03:00:00Z'));
+      const orderCreate = jest
+        .fn()
+        .mockResolvedValue(orderRowFixture({ source: 'INTERNAL_TRANSFER' }));
+      const prisma = drinkPrisma(orderCreate);
+      prisma.mfgProduct!.findMany.mockResolvedValue([{ id: 'm1', drinkIngredient: false }]);
+      const { svc } = makeService(prisma);
+      await svc.createInternalTransfer(staff, drinkDto);
+      expect(orderCreate.mock.calls[0][0].data.scheduledFor).toBeNull();
+    });
   });
 
   it('admin may request for any store (explicit requestingStoreId)', async () => {

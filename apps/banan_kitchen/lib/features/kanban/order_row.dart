@@ -565,7 +565,7 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
         _ItemLine(
           qty: '${m.qty == m.qty.roundToDouble() ? m.qty.round() : m.qty} ${m.uomCode}',
           name: m.name,
-          detail: 'vật tư',
+          detail: m.isDrinkIngredient ? 'nguyên liệu pha chế' : 'vật tư',
           muted: true,
         ),
     ];

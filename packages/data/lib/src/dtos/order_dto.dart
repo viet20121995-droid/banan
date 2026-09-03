@@ -153,6 +153,7 @@ class TransferSummaryRow {
     required this.isSupply,
     required this.byStore,
     required this.total,
+    this.isDrinkIngredient = false,
   });
 
   factory TransferSummaryRow.fromJson(Map<String, dynamic> json) =>
@@ -160,6 +161,7 @@ class TransferSummaryRow {
         label: json['label'] as String? ?? '',
         unit: json['unit'] as String? ?? '',
         isSupply: json['isSupply'] as bool? ?? false,
+        isDrinkIngredient: json['isDrinkIngredient'] as bool? ?? false,
         byStore: ((json['byStore'] as Map?) ?? const {})
             .map((k, v) => MapEntry('$k', _toDouble(v))),
         total: _toDouble(json['total']),
@@ -168,6 +170,7 @@ class TransferSummaryRow {
   final String label;
   final String unit;
   final bool isSupply;
+  final bool isDrinkIngredient;
   final Map<String, double> byStore;
   final double total;
 }
@@ -182,6 +185,7 @@ class TransferMfgItemDto {
     required this.uomCode,
     required this.qty,
     this.receivedQty,
+    this.isDrinkIngredient = false,
   });
 
   factory TransferMfgItemDto.fromJson(Map<String, dynamic> json) {
@@ -195,6 +199,7 @@ class TransferMfgItemDto {
       qty: _toDouble(json['qty']),
       receivedQty:
           json['receivedQty'] == null ? null : _toDouble(json['receivedQty']),
+      isDrinkIngredient: product?['drinkIngredient'] as bool? ?? false,
     );
   }
 
@@ -205,6 +210,7 @@ class TransferMfgItemDto {
   final String uomCode;
   final double qty;
   final double? receivedQty;
+  final bool isDrinkIngredient;
 
   TransferMfgItem toDomain() => TransferMfgItem(
         id: id,
@@ -214,6 +220,7 @@ class TransferMfgItemDto {
         uomCode: uomCode,
         qty: qty,
         receivedQty: receivedQty,
+        isDrinkIngredient: isDrinkIngredient,
       );
 }
 

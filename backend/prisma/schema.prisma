@@ -194,11 +194,11 @@ model Store {
   incomingTransfers  Order[]             @relation("OrderDestinationStore")
 
   // Internal ops app (QC / Mystery Shopper / Training / Schedule / Survey).
-  qcInspections      QcInspection[]
-  msAssignments      MsAssignment[]
-  internalPeople     InternalPerson[]
-  scheduleShifts     WorkScheduleShift[]
-  surveyResponses    SurveyResponse[]
+  qcInspections   QcInspection[]
+  msAssignments   MsAssignment[]
+  internalPeople  InternalPerson[]
+  scheduleShifts  WorkScheduleShift[]
+  surveyResponses SurveyResponse[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -602,25 +602,25 @@ model Order {
   kitchenStatus     KitchenStatus?
 
   // ── channel + settlement (operational flows reuse this same pipeline) ──
-  source              OrderSource          @default(WEB)
-  settlementMode      SettlementMode       @default(ONLINE)
+  source              OrderSource               @default(WEB)
+  settlementMode      SettlementMode            @default(ONLINE)
   // Staff/admin who keyed the order in (counter / internal transfer). Null
   // for self-service WEB/WHOLESALE orders.
   createdById         String?
-  createdBy           User?                @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  createdBy           User?                     @relation("OrderCreatedBy", fields: [createdById], references: [id])
   /// Client-generated dedup key for staff-entered orders: a retried POST with
   /// the same (creator, key) returns the FIRST order instead of a duplicate.
   clientRequestId     String?
   // WHOLESALE only — the account + contract the prices were snapshot from.
   wholesaleAccountId  String?
-  wholesaleAccount    WholesaleAccount?    @relation(fields: [wholesaleAccountId], references: [id])
+  wholesaleAccount    WholesaleAccount?         @relation(fields: [wholesaleAccountId], references: [id])
   wholesaleContractId String?
-  wholesaleContract   WholesaleContract?   @relation(fields: [wholesaleContractId], references: [id])
+  wholesaleContract   WholesaleContract?        @relation(fields: [wholesaleContractId], references: [id])
   // INTERNAL_TRANSFER only — which branch asked, which branch receives.
   requestingStoreId   String?
-  requestingStore     Store?               @relation("OrderRequestingStore", fields: [requestingStoreId], references: [id])
+  requestingStore     Store?                    @relation("OrderRequestingStore", fields: [requestingStoreId], references: [id])
   destinationStoreId  String?
-  destinationStore    Store?               @relation("OrderDestinationStore", fields: [destinationStoreId], references: [id])
+  destinationStore    Store?                    @relation("OrderDestinationStore", fields: [destinationStoreId], references: [id])
   receivable          WholesaleReceivable?
   transferReceipt     InternalTransferReceipt?
   // INTERNAL_TRANSFER only — kitchen-warehouse goods (milk, fruit, cups…)
@@ -732,26 +732,26 @@ model WholesaleAccount {
 }
 
 model WholesaleContract {
-  id                 String           @id @default(uuid())
-  wholesaleAccountId String
-  account            WholesaleAccount @relation(fields: [wholesaleAccountId], references: [id])
-  name               String
-  startsAt           DateTime
-  endsAt             DateTime?
-  active             Boolean          @default(true)
-  minOrderVnd        Int?
+  id                   String           @id @default(uuid())
+  wholesaleAccountId   String
+  account              WholesaleAccount @relation(fields: [wholesaleAccountId], references: [id])
+  name                 String
+  startsAt             DateTime
+  endsAt               DateTime?
+  active               Boolean          @default(true)
+  minOrderVnd          Int?
   /// Fallback % off the retail price for lines without a fixedPriceVnd.
-  defaultDiscountPct Decimal?         @db.Decimal(5, 2)
+  defaultDiscountPct   Decimal?         @db.Decimal(5, 2)
   /// Overrides the account's paymentTermDays when set.
-  paymentTermDays    Int?
+  paymentTermDays      Int?
   /// Minutes from midnight VN time (UTC+7). Orders placed BEFORE this cutoff
   /// may be delivered tomorrow; after it the earliest delivery is the day
   /// after tomorrow. Null = no next-day rule.
   nextDayCutoffMinutes Int?
   /// ISO weekdays (1 = Thứ 2 … 7 = Chủ nhật) this account is never delivered on.
-  noDeliveryDays     Int[]            @default([])
+  noDeliveryDays       Int[]            @default([])
   /// Per-order delivery fee (₫). 0 = freeship.
-  shipFeeVnd         Int              @default(0)
+  shipFeeVnd           Int              @default(0)
 
   lines  WholesaleContractLine[]
   orders Order[]
@@ -1511,29 +1511,33 @@ model MfgCategory {
 }
 
 model MfgProduct {
-  id             String         @id @default(uuid())
-  code           String         @unique
-  nameVi         String
-  nameEn         String
-  categoryId     String
-  category       MfgCategory    @relation(fields: [categoryId], references: [id])
-  uomId          String
-  uom            MfgUom         @relation(fields: [uomId], references: [id])
-  type           MfgProductType
-  tracking       MfgTracking    @default(NONE)
-  useExpiration  Boolean        @default(false)
-  expirationDays Int            @default(0)
+  id              String         @id @default(uuid())
+  code            String         @unique
+  nameVi          String
+  nameEn          String
+  categoryId      String
+  category        MfgCategory    @relation(fields: [categoryId], references: [id])
+  uomId           String
+  uom             MfgUom         @relation(fields: [uomId], references: [id])
+  type            MfgProductType
+  tracking        MfgTracking    @default(NONE)
+  useExpiration   Boolean        @default(false)
+  expirationDays  Int            @default(0)
   // Standard cost (finished/manual). AVCO cost is maintained on avgCost as
   // receipts/produces roll in.
-  standardCost   Decimal        @default(0) @db.Decimal(14, 2)
-  avgCost        Decimal        @default(0) @db.Decimal(14, 2)
+  standardCost    Decimal        @default(0) @db.Decimal(14, 2)
+  avgCost         Decimal        @default(0) @db.Decimal(14, 2)
   // Reorder point (base UoM): free stock at STOCK below this raises a
   // replenishment row. Rule of thumb: sales rate × lead time (+ safety).
   // 0 = no minimum watched.
-  reorderPoint   Decimal        @default(0) @db.Decimal(14, 3)
-  active         Boolean        @default(true)
+  reorderPoint    Decimal        @default(0) @db.Decimal(14, 3)
+  active          Boolean        @default(true)
+  /// Bar restock item (syrups, jams, dairy, tea…). Branches order these as the
+  /// "Nguyên liệu pha chế" group of an internal transfer — Sunday/Thursday
+  /// only, delivered next morning (see orders/drink-ingredient-rule.ts).
+  drinkIngredient Boolean        @default(false)
 
-  boms            MfgBom[]            @relation("ProductBoms")
+  boms            MfgBom[]                  @relation("ProductBoms")
   bomLines        MfgBomLine[]
   bomByproducts   MfgBomByproduct[]
   orders          MfgOrder[]
@@ -2117,11 +2121,11 @@ model QcInspection {
   outcome        QcOutcome?
   overallPercent Float?
 
-  createdById    String
-  updatedById    String?
-  completedById  String?
-  reopenedById   String?
-  reopenedAt     DateTime?
+  createdById   String
+  updatedById   String?
+  completedById String?
+  reopenedById  String?
+  reopenedAt    DateTime?
 
   answers     QcInspectionAnswer[]
   riskAnswers QcRiskAnswer[]
@@ -2135,11 +2139,11 @@ model QcInspection {
 }
 
 model QcInspectionAnswer {
-  id           String        @id @default(uuid())
+  id           String         @id @default(uuid())
   inspectionId String
-  inspection   QcInspection  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspection   QcInspection   @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
   itemId       String
-  item         QcItem        @relation(fields: [itemId], references: [id])
+  item         QcItem         @relation(fields: [itemId], references: [id])
   value        QcAnswerValue?
   /// Required when value = FAIL.
   failDetail   String?
@@ -2180,19 +2184,19 @@ model QcEvidence {
 }
 
 model QcReportDelivery {
-  id           String                       @id @default(uuid())
-  inspectionId String
-  inspection   QcInspection                 @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
-  revision     Int
-  recipients   String[]
-  status       InternalReportDeliveryStatus @default(PENDING)
-  attempts     Int                          @default(0)
+  id             String                       @id @default(uuid())
+  inspectionId   String
+  inspection     QcInspection                 @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  revision       Int
+  recipients     String[]
+  status         InternalReportDeliveryStatus @default(PENDING)
+  attempts       Int                          @default(0)
   /// While PROCESSING: when the claim expires and the retry cron may
   /// re-claim (the claiming worker is presumed dead).
-  lockedUntil  DateTime?
+  lockedUntil    DateTime?
   /// Random per-claim token — markResult is guarded on it, so a worker whose
   /// claim was expired+stolen can no longer write the outcome.
-  claimToken   String?
+  claimToken     String?
   /// Immutable report bundle captured AT completion time. The dispatcher
   /// renders email + PDF from THIS, never from the live inspection — so a
   /// retried r1 email can never leak r2 data.
@@ -2200,10 +2204,10 @@ model QcReportDelivery {
   /// Private-store name of the PDF rendered AT completion time — the exact
   /// bytes emailed and downloadable later, immune to evidence files being
   /// deleted afterwards. Null = render from reportSnapshot (best effort).
-  pdfFile      String?
-  lastError    String?
-  sentAt       DateTime?
-  createdAt    DateTime                     @default(now())
+  pdfFile        String?
+  lastError      String?
+  sentAt         DateTime?
+  createdAt      DateTime                     @default(now())
 
   @@unique([inspectionId, revision])
   @@index([status])
@@ -2384,11 +2388,11 @@ model MsSubmission {
 }
 
 model MsAnswer {
-  id           String        @id @default(uuid())
+  id           String         @id @default(uuid())
   submissionId String
-  submission   MsSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submission   MsSubmission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   questionId   String
-  question     MsQuestion    @relation(fields: [questionId], references: [id])
+  question     MsQuestion     @relation(fields: [questionId], references: [id])
   value        MsAnswerValue?
   note         String?
 
@@ -2419,22 +2423,22 @@ model MsEvidence {
 }
 
 model MsReportDelivery {
-  id           String                       @id @default(uuid())
-  assignmentId String
-  assignment   MsAssignment                 @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  revision     Int
-  recipients   String[]
-  status       InternalReportDeliveryStatus @default(PENDING)
-  attempts     Int                          @default(0)
-  lockedUntil  DateTime?
-  claimToken   String?
+  id             String                       @id @default(uuid())
+  assignmentId   String
+  assignment     MsAssignment                 @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  revision       Int
+  recipients     String[]
+  status         InternalReportDeliveryStatus @default(PENDING)
+  attempts       Int                          @default(0)
+  lockedUntil    DateTime?
+  claimToken     String?
   /// Immutable report bundle captured at approval time (see QcReportDelivery).
   reportSnapshot Json
   /// PDF rendered at approval time (see QcReportDelivery.pdfFile).
-  pdfFile      String?
-  lastError    String?
-  sentAt       DateTime?
-  createdAt    DateTime                     @default(now())
+  pdfFile        String?
+  lastError      String?
+  sentAt         DateTime?
+  createdAt      DateTime                     @default(now())
 
   @@unique([assignmentId, revision])
   @@index([status])
@@ -2564,15 +2568,15 @@ enum TrainingProgressStatus {
 }
 
 model TrainingAssignment {
-  id        String         @id @default(uuid())
-  personId  String
-  person    InternalPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
-  pathId    String
-  path      TrainingPath   @relation(fields: [pathId], references: [id])
+  id           String         @id @default(uuid())
+  personId     String
+  person       InternalPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
+  pathId       String
+  path         TrainingPath   @relation(fields: [pathId], references: [id])
   /// Basis for every dueDays deadline in the path.
-  startDate DateTime
+  startDate    DateTime
   assignedById String?
-  createdAt DateTime       @default(now())
+  createdAt    DateTime       @default(now())
 
   progress TrainingProgress[]
 
@@ -2621,13 +2625,13 @@ enum SurveyQuestionType {
 }
 
 model SurveyTemplate {
-  id      String               @id @default(uuid())
-  name    String
-  version Int
-  status  SurveyTemplateStatus @default(DRAFT)
+  id          String               @id @default(uuid())
+  name        String
+  version     Int
+  status      SurveyTemplateStatus @default(DRAFT)
   /// Exactly one PUBLISHED template is the live default served to guests.
   /// Publishing a new version archives the previous default in the same tx.
-  isDefault   Boolean   @default(false)
+  isDefault   Boolean              @default(false)
   publishedAt DateTime?
   createdById String?
 
@@ -2642,16 +2646,16 @@ model SurveyTemplate {
 }
 
 model SurveyQuestion {
-  id         String         @id @default(uuid())
+  id         String             @id @default(uuid())
   templateId String
-  template   SurveyTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template   SurveyTemplate     @relation(fields: [templateId], references: [id], onDelete: Cascade)
   /// Stable semantic key ('overall', 'nps', 'improve', …) — branching, case
   /// creation and reporting key on it, so reports survive template edits.
   code       String
   type       SurveyQuestionType
   textVi     String
   textEn     String
-  required   Boolean        @default(false)
+  required   Boolean            @default(false)
   sortOrder  Int
   /// Max characters for TEXT answers (default 1000 server-side).
   maxLength  Int?
@@ -2723,16 +2727,16 @@ model SurveyResponse {
 }
 
 model SurveyAnswer {
-  id         String         @id @default(uuid())
-  responseId String
-  response   SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
-  questionId String
-  question   SurveyQuestion @relation(fields: [questionId], references: [id])
+  id           String         @id @default(uuid())
+  responseId   String
+  response     SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     SurveyQuestion @relation(fields: [questionId], references: [id])
   /// Question.code snapshot — reporting stays cheap and stable.
   questionCode String
   numberValue  Int?
   textValue    String?
-  optionValues String[] @default([])
+  optionValues String[]       @default([])
 
   @@unique([responseId, questionId])
   @@index([questionCode])
@@ -2781,24 +2785,24 @@ enum SurveyRewardClaimStatus {
 /// Reward foundation — ships DISABLED (isEnabled=false). The gift is only
 /// revealed AFTER a successful submit.
 model SurveyRewardCampaign {
-  id           String           @id @default(uuid())
-  name         String
-  description  String?
+  id             String           @id @default(uuid())
+  name           String
+  description    String?
   /// Hướng dẫn nhận quà shown on the thank-you screen.
-  instructions String?
-  mode         SurveyRewardMode @default(NONE)
-  isEnabled    Boolean          @default(false)
-  startsAt     DateTime?
-  endsAt       DateTime?
+  instructions   String?
+  mode           SurveyRewardMode @default(NONE)
+  isEnabled      Boolean          @default(false)
+  startsAt       DateTime?
+  endsAt         DateTime?
   /// Voucher validity in days from issue.
-  expiryDays   Int              @default(7)
+  expiryDays     Int              @default(7)
   /// % of qualifying responses that win (0–100).
-  probabilityPct Int            @default(100)
-  dailyCap     Int?
-  totalCap     Int?
+  probabilityPct Int              @default(100)
+  dailyCap       Int?
+  totalCap       Int?
   /// Guarded counter — the total-cap check is a conditional UPDATE on this
   /// row (also the row lock serializing concurrent claims).
-  issuedCount  Int              @default(0)
+  issuedCount    Int              @default(0)
 
   claims SurveyRewardClaim[]
 
@@ -2807,20 +2811,20 @@ model SurveyRewardCampaign {
 }
 
 model SurveyRewardClaim {
-  id         String               @id @default(uuid())
-  campaignId String
-  campaign   SurveyRewardCampaign @relation(fields: [campaignId], references: [id])
+  id           String                  @id @default(uuid())
+  campaignId   String
+  campaign     SurveyRewardCampaign    @relation(fields: [campaignId], references: [id])
   /// DB guard: one reward per response, ever.
-  responseId String               @unique
-  response   SurveyResponse       @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  responseId   String                  @unique
+  response     SurveyResponse          @relation(fields: [responseId], references: [id], onDelete: Cascade)
   /// null in MESSAGE_ONLY mode.
-  voucherCode String?             @unique
-  status      SurveyRewardClaimStatus @default(ISSUED)
+  voucherCode  String?                 @unique
+  status       SurveyRewardClaimStatus @default(ISSUED)
   /// yyyy-MM-dd in Asia/Ho_Chi_Minh — with browserKey, the DB guard for one
   /// reward per browser per campaign per day.
-  dayKey     String
-  browserKey String?
-  expiresAt  DateTime?
+  dayKey       String
+  browserKey   String?
+  expiresAt    DateTime?
   redeemedAt   DateTime?
   redeemedById String?
 

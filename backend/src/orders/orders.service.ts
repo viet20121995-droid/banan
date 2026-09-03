@@ -1,3 +1,4 @@
+import { isDrinkIngredientOrderDay, nextMorningDelivery } from './drink-ingredient-rule';
 import {
   BadRequestException,
   ForbiddenException,
@@ -71,7 +72,13 @@ const ORDER_INCLUDE = {
   mfgItems: {
     include: {
       mfgProduct: {
-        select: { id: true, code: true, nameVi: true, uom: { select: { code: true } } },
+        select: {
+          id: true,
+          code: true,
+          nameVi: true,
+          drinkIngredient: true,
+          uom: { select: { code: true } },
+        },
       },
     },
   },
@@ -2313,16 +2320,28 @@ export class OrdersService {
       });
     }
     // Validate the MES lines up-front: product must exist and be active.
+    let hasDrinkIngredients = false;
     if (mfgItems.length > 0) {
       const found = await this.prisma.mfgProduct.findMany({
         where: { id: { in: mfgItems.map((m) => m.mfgProductId) }, active: true },
-        select: { id: true },
+        select: { id: true, drinkIngredient: true },
       });
       const ok = new Set(found.map((p) => p.id));
       if (mfgItems.some((m) => !ok.has(m.mfgProductId))) {
         throw new BadRequestException({
           code: 'MFG_PRODUCT_INVALID',
           message: 'Một vật tư không tồn tại hoặc đã lưu trữ.',
+        });
+      }
+      // Bar restock runs on a fixed rhythm (order Sun/Thu, delivered next
+      // morning). An off-day request is refused outright so the branch
+      // re-keys it on the right day instead of it silently sitting in the
+      // kitchen queue.
+      hasDrinkIngredients = found.some((p) => p.drinkIngredient);
+      if (hasDrinkIngredients && !isDrinkIngredientOrderDay(new Date())) {
+        throw new BadRequestException({
+          code: 'DRINK_INGREDIENT_ORDER_DAY',
+          message: 'Nguyên liệu pha chế chỉ đặt vào Chủ nhật và Thứ 5 (bếp giao sáng hôm sau).',
         });
       }
     }
@@ -2360,11 +2379,18 @@ export class OrdersService {
     }
 
     const placedAt = new Date();
-    const targetAt = dto.scheduledFor ? new Date(dto.scheduledFor) : placedAt;
+    // Drink ingredients default to the next-morning delivery slot; anything
+    // else keeps the branch's own pick (or none = as soon as possible).
+    const scheduledFor = dto.scheduledFor
+      ? new Date(dto.scheduledFor)
+      : hasDrinkIngredients
+        ? nextMorningDelivery(placedAt)
+        : null;
+    const targetAt = scheduledFor ?? placedAt;
     const { products, lineCreates, subtotal } = await this.buildChannelLines(dto.items, {
       enforceLimitedStock: false,
     });
-    await this.assertProductsAcceptingOrder(products, targetAt, placedAt, !!dto.scheduledFor);
+    await this.assertProductsAcceptingOrder(products, targetAt, placedAt, scheduledFor != null);
 
     const orderCode = generateOrderCode();
     const kitchenId = sendToKitchen ? requesting.defaultKitchenId : null;
@@ -2380,7 +2406,7 @@ export class OrdersService {
             customerId: principal.sub,
             storeId: requestingStoreId,
             fulfillmentType: 'DELIVERY',
-            scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
+            scheduledFor,
             status: sendToKitchen ? 'SENT_TO_KITCHEN' : 'PENDING',
             ...(sendToKitchen && { kitchenStatus: 'PENDING_ACK' as const, kitchenId }),
             source: 'INTERNAL_TRANSFER',
@@ -2703,7 +2729,12 @@ export class OrdersService {
         mfgItems: {
           include: {
             mfgProduct: {
-              select: { code: true, nameVi: true, uom: { select: { code: true } } },
+              select: {
+                code: true,
+                nameVi: true,
+                drinkIngredient: true,
+                uom: { select: { code: true } },
+              },
             },
           },
         },
@@ -2719,6 +2750,7 @@ export class OrdersService {
         label: string;
         unit: string;
         isSupply: boolean;
+        isDrinkIngredient: boolean;
         byStore: Map<string, number>;
         total: number;
       }
@@ -2727,23 +2759,36 @@ export class OrdersService {
       const store = order.destinationStore ?? order.requestingStore;
       const storeId = store?.id ?? order.storeId;
       stores.set(storeId, store?.name ?? 'Cửa hàng');
-      const add = (key: string, label: string, unit: string, isSupply: boolean, qty: number) => {
+      const add = (
+        key: string,
+        label: string,
+        unit: string,
+        kind: 'cake' | 'drink' | 'supply',
+        qty: number,
+      ) => {
         if (qty <= 0) return;
-        const row = rows.get(key) ?? { label, unit, isSupply, byStore: new Map(), total: 0 };
+        const row = rows.get(key) ?? {
+          label,
+          unit,
+          isSupply: kind !== 'cake',
+          isDrinkIngredient: kind === 'drink',
+          byStore: new Map(),
+          total: 0,
+        };
         row.byStore.set(storeId, (row.byStore.get(storeId) ?? 0) + qty);
         row.total += qty;
         rows.set(key, row);
       };
       for (const i of order.items) {
         const label = i.variantLabel ? `${i.productName} (${i.variantLabel})` : i.productName;
-        add(`i:${label}`, label, 'cái', false, i.quantity);
+        add(`i:${label}`, label, 'cái', 'cake', i.quantity);
       }
       for (const m of order.mfgItems) {
         add(
           `m:${m.mfgProduct.code}`,
           `${m.mfgProduct.nameVi} (${m.mfgProduct.code})`,
           m.mfgProduct.uom.code,
-          true,
+          m.mfgProduct.drinkIngredient ? 'drink' : 'supply',
           Number(m.qty),
         );
       }
@@ -2752,14 +2797,17 @@ export class OrdersService {
     const storeList = [...stores.entries()]
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    // Cakes first, then the bar restock group, then everything else the
+    // warehouse ships along.
+    const rank = (r: { isSupply: boolean; isDrinkIngredient: boolean }) =>
+      !r.isSupply ? 0 : r.isDrinkIngredient ? 1 : 2;
     const rowList = [...rows.values()]
-      .sort((a, b) =>
-        a.isSupply === b.isSupply ? a.label.localeCompare(b.label, 'vi') : a.isSupply ? 1 : -1,
-      )
+      .sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label, 'vi'))
       .map((r) => ({
         label: r.label,
         unit: r.unit,
         isSupply: r.isSupply,
+        isDrinkIngredient: r.isDrinkIngredient,
         byStore: Object.fromEntries(r.byStore),
         total: r.total,
       }));

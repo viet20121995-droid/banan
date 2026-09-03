@@ -66,8 +66,9 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final res =
-        await ref.read(catalogRepositoryProvider).merchantProducts(perPage: 500);
+    final res = await ref
+        .read(catalogRepositoryProvider)
+        .merchantProducts(perPage: 500);
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -628,7 +629,9 @@ class _InternalTransferScreenState
     extends ConsumerState<InternalTransferScreen> {
   final cart = <_CartLine>[];
   final supplies = <_SupplyLine>[];
+  final drinks = <_SupplyLine>[];
   List<MfgProduct> _mfgCatalog = const [];
+  List<MfgProduct> _drinkCatalog = const [];
   final _notes = TextEditingController();
   DateTime? _scheduledFor;
   String? _requestingStoreId; // admin only
@@ -661,12 +664,16 @@ class _InternalTransferScreenState
       final api = ref.read(manufacturingApiProvider);
       final raw = await api.listProducts(type: 'RAW');
       final pkg = await api.listProducts(type: 'PACKAGING');
+      final bar = await api.listProducts(drinkIngredient: true);
       if (!mounted) return;
       setState(() {
+        _drinkCatalog =
+            bar.when(success: (v) => v, failure: (_) => const <MfgProduct>[]);
+        final drinkIds = _drinkCatalog.map((p) => p.id).toSet();
         _mfgCatalog = [
           ...raw.when(success: (v) => v, failure: (_) => const <MfgProduct>[]),
           ...pkg.when(success: (v) => v, failure: (_) => const <MfgProduct>[]),
-        ];
+        ].where((p) => !drinkIds.contains(p.id)).toList();
       });
     });
   }
@@ -693,12 +700,12 @@ class _InternalTransferScreenState
   }
 
   Future<void> _submit() async {
-    if (cart.isEmpty && supplies.isEmpty) {
+    if (cart.isEmpty && supplies.isEmpty && drinks.isEmpty) {
       _snack('Thêm ít nhất một món hoặc một vật tư.');
       return;
     }
     final mfgItems = <Map<String, dynamic>>[];
-    for (final s in supplies) {
+    for (final s in [...drinks, ...supplies]) {
       final qty = double.tryParse(s.qty.text.trim());
       if (qty == null || qty <= 0) {
         _snack('Nhập số lượng > 0 cho "${s.product.nameVi}".');
@@ -741,6 +748,84 @@ class _InternalTransferScreenState
   void _snack(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
+  /// Bar restock is keyed on Sunday and Thursday only (the backend enforces
+  /// the same rule on the Vietnam calendar; this just greys the picker).
+  bool get _drinkOrderDay => const {DateTime.sunday, DateTime.thursday}
+      .contains(DateTime.now().weekday);
+
+  /// Search field + one editable qty row per picked warehouse line.
+  List<Widget> _supplySection({
+    required String key,
+    required List<MfgProduct> catalog,
+    required List<_SupplyLine> lines,
+    required String label,
+    bool enabled = true,
+  }) {
+    return [
+      Autocomplete<MfgProduct>(
+        // Rebuild after each pick so the field clears and the same list
+        // can be searched again.
+        key: ValueKey('$key-picker-${lines.length}'),
+        displayStringForOption: (p) => '${p.nameVi} (${p.code})',
+        optionsBuilder: (t) {
+          final q = t.text.trim().toLowerCase();
+          final picked = lines.map((s) => s.product.id).toSet();
+          return catalog.where(
+            (p) =>
+                !picked.contains(p.id) &&
+                (q.isEmpty ||
+                    p.nameVi.toLowerCase().contains(q) ||
+                    p.code.toLowerCase().contains(q)),
+          );
+        },
+        onSelected: (p) {
+          if (lines.any((s) => s.product.id == p.id)) return;
+          setState(() => lines.add(_SupplyLine(p)));
+        },
+        fieldViewBuilder: (context, ctl, focus, onSubmit) => TextField(
+          controller: ctl,
+          focusNode: focus,
+          enabled: enabled,
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: const Icon(Icons.add_shopping_cart_outlined),
+            isDense: true,
+          ),
+        ),
+      ),
+      for (final s in lines)
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                s.product.nameVi,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            SizedBox(
+              width: 110,
+              child: TextField(
+                controller: s.qty,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  isDense: true,
+                  suffixText: s.product.uomCode,
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: () => setState(() {
+                lines.remove(s);
+                s.qty.dispose();
+              }),
+            ),
+          ],
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -762,6 +847,26 @@ class _InternalTransferScreenState
           Text('Danh sách cần làm', style: theme.textTheme.titleMedium),
           _CartSection(cart: cart, onChanged: () => setState(() {})),
           const SizedBox(height: BananSpacing.lg),
+          Text('Nguyên liệu pha chế', style: theme.textTheme.titleMedium),
+          Text(
+            'Syrup, mứt, sữa, trà, cà phê… cho quầy pha chế. Đặt Chủ nhật và '
+            'Thứ 5, bếp giao sáng hôm sau. '
+            '${_drinkOrderDay ? 'Hôm nay đặt được — giao sáng mai.' : 'Hôm nay không phải ngày đặt.'}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: _drinkOrderDay
+                  ? theme.colorScheme.outline
+                  : theme.colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: BananSpacing.sm),
+          ..._supplySection(
+            key: 'drink',
+            catalog: _drinkCatalog,
+            lines: drinks,
+            label: 'Thêm nguyên liệu pha chế — gõ tên hoặc mã',
+            enabled: _drinkOrderDay,
+          ),
+          const SizedBox(height: BananSpacing.lg),
           Text(
             'Vật tư từ kho bếp',
             style: theme.textTheme.titleMedium,
@@ -772,66 +877,12 @@ class _InternalTransferScreenState
                 ?.copyWith(color: theme.colorScheme.outline),
           ),
           const SizedBox(height: BananSpacing.sm),
-          Autocomplete<MfgProduct>(
-            // Rebuild after each pick so the field clears and the same list
-            // can be searched again.
-            key: ValueKey('supply-picker-${supplies.length}'),
-            displayStringForOption: (p) => '${p.nameVi} (${p.code})',
-            optionsBuilder: (t) {
-              final q = t.text.trim().toLowerCase();
-              final picked = supplies.map((s) => s.product.id).toSet();
-              return _mfgCatalog.where(
-                (p) =>
-                    !picked.contains(p.id) &&
-                    (q.isEmpty ||
-                        p.nameVi.toLowerCase().contains(q) ||
-                        p.code.toLowerCase().contains(q)),
-              );
-            },
-            onSelected: (p) {
-              if (supplies.any((s) => s.product.id == p.id)) return;
-              setState(() => supplies.add(_SupplyLine(p)));
-            },
-            fieldViewBuilder: (context, ctl, focus, onSubmit) => TextField(
-              controller: ctl,
-              focusNode: focus,
-              decoration: const InputDecoration(
-                labelText: 'Thêm vật tư — gõ tên hoặc mã để tìm',
-                prefixIcon: Icon(Icons.add_shopping_cart_outlined),
-                isDense: true,
-              ),
-            ),
+          ..._supplySection(
+            key: 'supply',
+            catalog: _mfgCatalog,
+            lines: supplies,
+            label: 'Thêm vật tư — gõ tên hoặc mã để tìm',
           ),
-          for (final s in supplies)
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    s.product.nameVi,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                SizedBox(
-                  width: 110,
-                  child: TextField(
-                    controller: s.qty,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      suffixText: s.product.uomCode,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 20),
-                  onPressed: () => setState(() {
-                    supplies.remove(s);
-                    s.qty.dispose();
-                  }),
-                ),
-              ],
-            ),
           const SizedBox(height: BananSpacing.lg),
           if (isAdmin) ...[
             DropdownButtonFormField<String>(

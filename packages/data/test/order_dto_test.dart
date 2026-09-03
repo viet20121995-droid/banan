@@ -52,4 +52,26 @@ void main() {
     expect(order.customerPhone, isNull);
     expect(order.customerEmail, isNull);
   });
+
+  test('TransferMfgItemDto carries the drink-ingredient flag', () {
+    final dto = TransferMfgItemDto.fromJson({
+      'id': 'l1',
+      'mfgProductId': 'm1',
+      'qty': '2',
+      'mfgProduct': {
+        'code': 'DS-HC-004-2-G',
+        'nameVi': 'Jam_Strawberry',
+        'drinkIngredient': true,
+        'uom': {'code': 'g'},
+      },
+    });
+    expect(dto.isDrinkIngredient, isTrue);
+    expect(dto.toDomain().isDrinkIngredient, isTrue);
+    // Older payloads without the flag are plain supplies.
+    expect(
+      TransferMfgItemDto.fromJson({'id': 'l2', 'mfgProductId': 'm2', 'qty': 1})
+          .isDrinkIngredient,
+      isFalse,
+    );
+  });
 }

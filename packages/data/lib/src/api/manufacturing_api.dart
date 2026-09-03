@@ -29,6 +29,7 @@ class MfgProduct {
     this.standardCost = 0,
     this.reorderPoint = 0,
     this.active = true,
+    this.drinkIngredient = false,
   });
 
   factory MfgProduct.fromJson(Map<String, dynamic> j) => MfgProduct(
@@ -50,12 +51,17 @@ class MfgProduct {
         standardCost: _num(j['standardCost']),
         reorderPoint: _num(j['reorderPoint']),
         active: j['active'] as bool? ?? true,
+        drinkIngredient: j['drinkIngredient'] as bool? ?? false,
       );
 
   final String id;
   final String code;
   final String nameVi;
   final String type; // RAW | SEMI | FINISHED | PACKAGING
+
+  /// Bar restock item ("Nguyên liệu pha chế") — branches order it on the
+  /// internal-transfer form, Sunday/Thursday, delivered next morning.
+  final bool drinkIngredient;
   final String uomId;
   final String uomCode;
   final double avgCost;
@@ -1221,12 +1227,14 @@ class ManufacturingApi {
   Future<Result<List<MfgProduct>, AppFailure>> listProducts({
     String? type,
     bool includeInactive = false,
+    bool drinkIngredient = false,
   }) =>
       _get(
         '$_base/products',
         query: {
           if (type != null) 'type': type,
           if (includeInactive) 'all': '1',
+          if (drinkIngredient) 'drinkIngredient': '1',
         },
         parse: (res) => _list(res, MfgProduct.fromJson),
       );

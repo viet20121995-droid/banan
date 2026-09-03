@@ -60,8 +60,12 @@ export class ManufacturingController {
   // ── master data (for the Sản xuất UI) ────────────────────────────────────
   @Roles(...COUNTER_READ)
   @Get('products')
-  listProducts(@Query('type') type?: string, @Query('all') all?: string) {
-    return this.mfg.listProducts(type, all === '1');
+  listProducts(
+    @Query('type') type?: string,
+    @Query('all') all?: string,
+    @Query('drinkIngredient') drinkIngredient?: string,
+  ) {
+    return this.mfg.listProducts(type, all === '1', drinkIngredient === '1');
   }
 
   @Roles(...KITCHEN_WRITE)

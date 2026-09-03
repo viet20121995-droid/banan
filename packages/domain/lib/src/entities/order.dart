@@ -82,6 +82,7 @@ class TransferMfgItem extends Equatable {
     required this.uomCode,
     required this.qty,
     this.receivedQty,
+    this.isDrinkIngredient = false,
   });
 
   final String id;
@@ -91,12 +92,23 @@ class TransferMfgItem extends Equatable {
   final String uomCode;
   final double qty;
 
+  /// Bar restock line ("Nguyên liệu pha chế") vs. any other warehouse supply.
+  final bool isDrinkIngredient;
+
   /// Set once the branch signs for the goods.
   final double? receivedQty;
 
   @override
-  List<Object?> get props =>
-      [id, mfgProductId, code, name, uomCode, qty, receivedQty];
+  List<Object?> get props => [
+        id,
+        mfgProductId,
+        code,
+        name,
+        uomCode,
+        qty,
+        receivedQty,
+        isDrinkIngredient,
+      ];
 }
 
 class Order extends Equatable {

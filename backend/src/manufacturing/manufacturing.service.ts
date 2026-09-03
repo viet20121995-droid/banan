@@ -1155,9 +1155,13 @@ export class ManufacturingService {
   // ── master-data reads (for the Sản xuất UI: pick a BoM to build, etc.) ─────
 
   /** [all] includes archived products — the management screen needs them back. */
-  listProducts(type?: string, all = false) {
+  listProducts(type?: string, all = false, drinkIngredient = false) {
     return this.prisma.mfgProduct.findMany({
-      where: { ...(all ? {} : { active: true }), ...(type ? { type: type as never } : {}) },
+      where: {
+        ...(all ? {} : { active: true }),
+        ...(type ? { type: type as never } : {}),
+        ...(drinkIngredient ? { drinkIngredient: true } : {}),
+      },
       include: { category: true, uom: true },
       orderBy: { code: 'asc' },
     });
