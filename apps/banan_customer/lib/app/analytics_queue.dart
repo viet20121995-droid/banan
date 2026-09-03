@@ -49,6 +49,8 @@ class AnalyticsQueue {
   /// A route change: close the previous page (its max scroll depth) and
   /// open the new one. Same path twice in a row is not a new view.
   void pageView(String path) {
+    // GoRouter reports an empty uri before its first navigation — not a page.
+    if (path.isEmpty) return;
     if (path == _path && _pending.any((e) => e['type'] == 'page_view')) return;
     _closeScroll();
     _path = path;

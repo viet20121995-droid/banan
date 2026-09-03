@@ -34,6 +34,15 @@ void main() {
     expect(events.last['label'], 'Mousse');
   });
 
+  test('an empty path (router before first navigation) is not a page view', () async {
+    q
+      ..pageView('')
+      ..pageView('/');
+    await q.flush();
+    final events = (sent.single['events'] as List).cast<Map<String, dynamic>>();
+    expect(events.map((e) => e['path']), ['/']);
+  });
+
   test('only the max scroll depth of a page is reported, when the page closes', () async {
     q
       ..pageView('/')
