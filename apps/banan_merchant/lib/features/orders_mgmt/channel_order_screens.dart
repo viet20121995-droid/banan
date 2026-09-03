@@ -34,14 +34,9 @@ class _CartLine {
 }
 
 /// Product search + result list; taps add to the cart via [onAdd].
-///
-/// [includeUnavailable] lists menu-hidden products (isAvailable=false) as
-/// well — the internal-transfer form needs them, the counter must not sell
-/// them.
 class _ProductPicker extends ConsumerStatefulWidget {
-  const _ProductPicker({required this.onAdd, this.includeUnavailable = false});
+  const _ProductPicker({required this.onAdd});
   final void Function(Product, ProductVariant) onAdd;
-  final bool includeUnavailable;
 
   @override
   ConsumerState<_ProductPicker> createState() => _ProductPickerState();
@@ -78,9 +73,8 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
     setState(() {
       _loading = false;
       res.when(
-        success: (page) => _all = page.items
-            .where((p) => widget.includeUnavailable || p.isAvailable)
-            .toList(),
+        success: (page) =>
+            _all = page.items.where((p) => p.isAvailable).toList(),
         failure: (_) {},
       );
     });
@@ -106,9 +100,7 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
   }
 
   Future<void> _pick(Product p) async {
-    final variants = p.variants
-        .where((v) => widget.includeUnavailable || v.isAvailable)
-        .toList();
+    final variants = p.variants.where((v) => v.isAvailable).toList();
     if (variants.isEmpty) return;
     if (variants.length == 1) {
       widget.onAdd(p, variants.first);
@@ -618,6 +610,10 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
 
 // ── Đặt hàng nội bộ ─────────────────────────────────────────────────────────
 
+/// Branch order sheet, laid out like the paper/Excel order book the branches
+/// already fill in: every orderable line listed under its section (bánh,
+/// nguyên liệu pha chế, bao bì, vật tư khác) with a quantity cell — staff
+/// scan down and type numbers instead of searching item by item.
 class InternalTransferScreen extends ConsumerStatefulWidget {
   const InternalTransferScreen({super.key});
 
@@ -626,20 +622,66 @@ class InternalTransferScreen extends ConsumerStatefulWidget {
       _InternalTransferScreenState();
 }
 
-/// One kitchen-warehouse supply line in the transfer form.
-class _SupplyLine {
-  _SupplyLine(this.product) : qty = TextEditingController(text: '1');
-  final MfgProduct product;
-  final TextEditingController qty;
+enum _Section { cake, drink, packaging, other }
+
+/// One line of the sheet: a menu variant or a warehouse item.
+class _SheetRow {
+  _SheetRow.menu(this.product, this.variant)
+      : mfg = null,
+        section = _Section.cake,
+        unit = 'cái';
+
+  _SheetRow.mfg(MfgProduct this.mfg, this.section)
+      : product = null,
+        variant = null,
+        unit = mfg.uomCode;
+
+  final Product? product;
+  final ProductVariant? variant;
+  final MfgProduct? mfg;
+  final _Section section;
+  final String unit;
+  final qty = TextEditingController();
+
+  String get code => mfg?.code ?? variant?.sku ?? '';
+
+  /// Sub-heading the row sits under (Excel "Phân loại"): menu category or
+  /// warehouse category.
+  String get group =>
+      mfg != null ? mfg!.categoryName : (product!.category?.name ?? 'Khác');
+
+  /// Macaron (single) × 9 flavours reads "Macaron (single) — Lemon"; a 16cm
+  /// cake reads "Name — 16cm"; single-variant products are just the name.
+  String get name {
+    if (mfg != null) return mfg!.nameVi;
+    final p = product!;
+    if (p.variants.length <= 1) return p.name;
+    final v = variant!;
+    final parts = [
+      if (!const {'Default', 'Single'}.contains(v.size)) v.size,
+      if (!const {'Default', 'Classic'}.contains(v.flavor) &&
+          v.flavor != p.name)
+        v.flavor,
+    ];
+    return parts.isEmpty ? p.name : '${p.name} — ${parts.join(' ')}';
+  }
+
+  double get quantity => double.tryParse(qty.text.trim()) ?? 0;
+
+  bool matches(String q) =>
+      q.isEmpty ||
+      name.toLowerCase().contains(q) ||
+      code.toLowerCase().contains(q) ||
+      group.toLowerCase().contains(q);
 }
 
 class _InternalTransferScreenState
     extends ConsumerState<InternalTransferScreen> {
-  final cart = <_CartLine>[];
-  final supplies = <_SupplyLine>[];
-  final drinks = <_SupplyLine>[];
-  List<MfgProduct> _mfgCatalog = const [];
-  List<MfgProduct> _drinkCatalog = const [];
+  List<_SheetRow> _rows = const [];
+  bool _loading = true;
+  String _filter = '';
+  // Packaging / other supplies are long lists — folded until needed.
+  final _open = <_Section>{_Section.cake, _Section.drink};
   final _notes = TextEditingController();
   DateTime? _scheduledFor;
   String? _requestingStoreId; // admin only
@@ -651,13 +693,16 @@ class _InternalTransferScreenState
   bool get _isAdmin =>
       ref.read(authSessionProvider).valueOrNull?.user.role.isAdmin ?? false;
 
+  /// Bar restock is keyed on Sunday and Thursday only (the backend enforces
+  /// the same rule on the Vietnam calendar; this just greys the cells).
+  bool get _drinkOrderDay => const {DateTime.sunday, DateTime.thursday}
+      .contains(DateTime.now().weekday);
+
   @override
   void initState() {
     super.initState();
     _requestKey =
         'itf-${DateTime.now().millisecondsSinceEpoch}-${identityHashCode(this)}';
-    // Store pickers: admin chooses the requesting store; everyone may pick a
-    // different receiving branch.
     Future.microtask(() async {
       final repo = ref.read(storesRepositoryProvider);
       final res = _isAdmin ? await repo.listForAdmin() : await repo.list();
@@ -667,59 +712,91 @@ class _InternalTransferScreenState
         failure: (_) {},
       );
     });
-    // Kitchen-warehouse catalogue: what a branch can order besides cakes.
-    Future.microtask(() async {
-      final api = ref.read(manufacturingApiProvider);
-      final raw = await api.listProducts(type: 'RAW');
-      final pkg = await api.listProducts(type: 'PACKAGING');
-      final bar = await api.listProducts(drinkIngredient: true);
-      if (!mounted) return;
-      setState(() {
-        _drinkCatalog =
-            bar.when(success: (v) => v, failure: (_) => const <MfgProduct>[]);
-        final drinkIds = _drinkCatalog.map((p) => p.id).toSet();
-        _mfgCatalog = [
-          ...raw.when(success: (v) => v, failure: (_) => const <MfgProduct>[]),
-          ...pkg.when(success: (v) => v, failure: (_) => const <MfgProduct>[]),
-        ].where((p) => !drinkIds.contains(p.id)).toList();
+    Future.microtask(_loadSheet);
+  }
+
+  Future<void> _loadSheet() async {
+    final catalog = await ref
+        .read(catalogRepositoryProvider)
+        .merchantProducts(perPage: 500);
+    final api = ref.read(manufacturingApiProvider);
+    final bar = await api.listProducts(drinkIngredient: true);
+    final pkg = await api.listProducts(type: 'PACKAGING');
+    final raw = await api.listProducts(type: 'RAW');
+    if (!mounted) return;
+    final drinks = bar.when(
+      success: (v) => v,
+      failure: (_) => const <MfgProduct>[],
+    );
+    final packaging = pkg.when(
+      success: (v) => v,
+      failure: (_) => const <MfgProduct>[],
+    );
+    final others = raw.when(
+      success: (v) => v,
+      failure: (_) => const <MfgProduct>[],
+    );
+    final drinkIds = drinks.map((p) => p.id).toSet();
+    // Counter drinks are mixed at the bar, not ordered from the kitchen.
+    final products = catalog
+        .when(success: (page) => page.items, failure: (_) => const <Product>[])
+        .where((p) => p.category?.slug != 'drink-collection')
+        .toList()
+      ..sort((a, b) {
+        final c = (a.category?.sortOrder ?? 999)
+            .compareTo(b.category?.sortOrder ?? 999);
+        return c != 0 ? c : a.name.compareTo(b.name);
       });
+    setState(() {
+      _rows = [
+        for (final p in products)
+          for (final v in p.variants) _SheetRow.menu(p, v),
+        for (final m in drinks) _SheetRow.mfg(m, _Section.drink),
+        for (final m in packaging)
+          if (!drinkIds.contains(m.id)) _SheetRow.mfg(m, _Section.packaging),
+        for (final m in others)
+          if (!drinkIds.contains(m.id)) _SheetRow.mfg(m, _Section.other),
+      ];
+      _loading = false;
     });
   }
 
   @override
   void dispose() {
-    _notes.dispose();
-    for (final s in supplies) {
-      s.qty.dispose();
+    for (final r in _rows) {
+      r.qty.dispose();
     }
+    _notes.dispose();
     super.dispose();
   }
 
-  void _addToCart(Product p, ProductVariant v) {
-    final existing = cart.where(
-      (l) => l.product.id == p.id && l.variant.id == v.id,
-    );
-    if (existing.isNotEmpty) {
-      existing.first.qty++;
-    } else {
-      cart.add(_CartLine(p, v, 1));
-    }
-    setState(() {});
-  }
+  List<_SheetRow> get _picked => [
+        for (final r in _rows)
+          if (r.quantity > 0) r,
+      ];
 
   Future<void> _submit() async {
-    if (cart.isEmpty && supplies.isEmpty && drinks.isEmpty) {
-      _snack('Thêm ít nhất một món hoặc một vật tư.');
+    final picked = _picked;
+    if (picked.isEmpty) {
+      _snack('Điền số lượng cho ít nhất một dòng.');
       return;
     }
+    final items = <Map<String, dynamic>>[];
     final mfgItems = <Map<String, dynamic>>[];
-    for (final s in [...drinks, ...supplies]) {
-      final qty = double.tryParse(s.qty.text.trim());
-      if (qty == null || qty <= 0) {
-        _snack('Nhập số lượng > 0 cho "${s.product.nameVi}".');
+    for (final r in picked) {
+      if (r.mfg != null) {
+        mfgItems.add({'mfgProductId': r.mfg!.id, 'qty': r.quantity});
+        continue;
+      }
+      if (r.quantity != r.quantity.roundToDouble()) {
+        _snack('"${r.name}": bánh đặt theo cái, nhập số nguyên.');
         return;
       }
-      mfgItems.add({'mfgProductId': s.product.id, 'qty': qty});
+      items.add({
+        'productId': r.product!.id,
+        'variantId': r.variant!.id,
+        'quantity': r.quantity.round(),
+      });
     }
     if (_isAdmin && _requestingStoreId == null) {
       _snack('Admin cần chọn cửa hàng yêu cầu.');
@@ -727,21 +804,14 @@ class _InternalTransferScreenState
     }
     setState(() => _saving = true);
     final res = await ref.read(ordersApiProvider).createInternalTransfer(
-      items: [
-        for (final l in cart)
-          {
-            'productId': l.product.id,
-            'variantId': l.variant.id,
-            'quantity': l.qty,
-          },
-      ],
-      mfgItems: mfgItems,
-      scheduledFor: _scheduledFor,
-      notes: _notes.text.trim(),
-      requestingStoreId: _requestingStoreId,
-      destinationStoreId: _destinationStoreId,
-      clientRequestId: _requestKey,
-    );
+          items: items,
+          mfgItems: mfgItems,
+          scheduledFor: _scheduledFor,
+          notes: _notes.text.trim(),
+          requestingStoreId: _requestingStoreId,
+          destinationStoreId: _destinationStoreId,
+          clientRequestId: _requestKey,
+        );
     if (!mounted) return;
     setState(() => _saving = false);
     res.when(
@@ -756,142 +826,41 @@ class _InternalTransferScreenState
   void _snack(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-  /// Bar restock is keyed on Sunday and Thursday only (the backend enforces
-  /// the same rule on the Vietnam calendar; this just greys the picker).
-  bool get _drinkOrderDay => const {DateTime.sunday, DateTime.thursday}
-      .contains(DateTime.now().weekday);
+  static const _titles = {
+    _Section.cake: 'BÁNH / CAKE',
+    _Section.drink: 'NGUYÊN LIỆU PHA CHẾ / DRINK INGREDIENTS',
+    _Section.packaging: 'VẬT TƯ ĐÓNG GÓI / PACKAGING',
+    _Section.other: 'VẬT TƯ KHÁC TỪ KHO',
+  };
 
-  /// Search field + one editable qty row per picked warehouse line.
-  List<Widget> _supplySection({
-    required String key,
-    required List<MfgProduct> catalog,
-    required List<_SupplyLine> lines,
-    required String label,
-    bool enabled = true,
-  }) {
-    return [
-      Autocomplete<MfgProduct>(
-        // Rebuild after each pick so the field clears and the same list
-        // can be searched again.
-        key: ValueKey('$key-picker-${lines.length}'),
-        displayStringForOption: (p) => '${p.nameVi} (${p.code})',
-        optionsBuilder: (t) {
-          final q = t.text.trim().toLowerCase();
-          final picked = lines.map((s) => s.product.id).toSet();
-          return catalog.where(
-            (p) =>
-                !picked.contains(p.id) &&
-                (q.isEmpty ||
-                    p.nameVi.toLowerCase().contains(q) ||
-                    p.code.toLowerCase().contains(q)),
-          );
-        },
-        onSelected: (p) {
-          if (lines.any((s) => s.product.id == p.id)) return;
-          setState(() => lines.add(_SupplyLine(p)));
-        },
-        fieldViewBuilder: (context, ctl, focus, onSubmit) => TextField(
-          controller: ctl,
-          focusNode: focus,
-          enabled: enabled,
-          decoration: InputDecoration(
-            labelText: label,
-            prefixIcon: const Icon(Icons.add_shopping_cart_outlined),
-            isDense: true,
-          ),
-        ),
-      ),
-      for (final s in lines)
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                s.product.nameVi,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            SizedBox(
-              width: 110,
-              child: TextField(
-                controller: s.qty,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  isDense: true,
-                  suffixText: s.product.uomCode,
-                ),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 20),
-              onPressed: () => setState(() {
-                lines.remove(s);
-                s.qty.dispose();
-              }),
-            ),
-          ],
-        ),
-    ];
-  }
+  String _hint(_Section s) => switch (s) {
+        _Section.cake => 'Đặt hôm nay, bếp giao sáng hôm sau.',
+        _Section.drink => _drinkOrderDay
+            ? 'Đặt Chủ nhật và Thứ 5, giao sáng hôm sau — hôm nay đặt được.'
+            : 'Chỉ đặt Chủ nhật và Thứ 5 (giao sáng hôm sau). Hôm nay không đặt được.',
+        _Section.packaging => 'Ly, hộp, túi… bếp xuất kho giao kèm.',
+        _Section.other => 'Nguyên liệu kho khác, dùng khi cần.',
+      };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isAdmin = _isAdmin;
+    final q = _filter.trim().toLowerCase();
+    final picked = _picked;
+    final pickedQty = picked.fold<double>(0, (a, r) => a + r.quantity);
     return MerchantShell(
       title: 'Đặt hàng nội bộ',
       body: ListView(
         padding: const EdgeInsets.all(BananSpacing.lg),
         children: [
           Text(
-            'Bếp làm và giao về chi nhánh. Không phải đơn bán lẻ, '
-            'không tính doanh thu.',
+            'Phiếu đặt hàng chi nhánh → bếp. Điền số lượng vào cột SL, để '
+            'trống dòng không đặt. Không phải đơn bán lẻ, không tính doanh thu.',
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.outline),
           ),
           const SizedBox(height: BananSpacing.md),
-          _ProductPicker(onAdd: _addToCart, includeUnavailable: true),
-          const SizedBox(height: BananSpacing.md),
-          Text('Danh sách cần làm', style: theme.textTheme.titleMedium),
-          _CartSection(cart: cart, onChanged: () => setState(() {})),
-          const SizedBox(height: BananSpacing.lg),
-          Text('Nguyên liệu pha chế', style: theme.textTheme.titleMedium),
-          Text(
-            'Syrup, mứt, sữa, trà, cà phê… cho quầy pha chế. Đặt Chủ nhật và '
-            'Thứ 5, bếp giao sáng hôm sau. '
-            '${_drinkOrderDay ? 'Hôm nay đặt được — giao sáng mai.' : 'Hôm nay không phải ngày đặt.'}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: _drinkOrderDay
-                  ? theme.colorScheme.outline
-                  : theme.colorScheme.error,
-            ),
-          ),
-          const SizedBox(height: BananSpacing.sm),
-          ..._supplySection(
-            key: 'drink',
-            catalog: _drinkCatalog,
-            lines: drinks,
-            label: 'Thêm nguyên liệu pha chế — gõ tên hoặc mã',
-            enabled: _drinkOrderDay,
-          ),
-          const SizedBox(height: BananSpacing.lg),
-          Text(
-            'Vật tư từ kho bếp',
-            style: theme.textTheme.titleMedium,
-          ),
-          Text(
-            'Sữa, trái cây, ly, bao bì… bếp xuất kho và giao kèm.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline),
-          ),
-          const SizedBox(height: BananSpacing.sm),
-          ..._supplySection(
-            key: 'supply',
-            catalog: _mfgCatalog,
-            lines: supplies,
-            label: 'Thêm vật tư — gõ tên hoặc mã để tìm',
-          ),
-          const SizedBox(height: BananSpacing.lg),
           if (isAdmin) ...[
             DropdownButtonFormField<String>(
               initialValue: _requestingStoreId,
@@ -924,18 +893,230 @@ class _InternalTransferScreenState
             value: _scheduledFor,
             onChanged: (v) => setState(() => _scheduledFor = v),
           ),
+          const SizedBox(height: BananSpacing.md),
+          TextField(
+            decoration: const InputDecoration(
+              labelText: 'Tìm nhanh trong phiếu — tên, mã, nhóm',
+              prefixIcon: Icon(Icons.search),
+              isDense: true,
+            ),
+            onChanged: (v) => setState(() => _filter = v),
+          ),
+          const SizedBox(height: BananSpacing.md),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.all(BananSpacing.xl),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            for (final section in _Section.values)
+              ..._sectionWidgets(section, q, theme),
+          const SizedBox(height: BananSpacing.lg),
           TextField(
             controller: _notes,
             maxLines: 2,
             decoration: const InputDecoration(labelText: 'Ghi chú'),
           ),
-          const SizedBox(height: BananSpacing.xl),
+          const SizedBox(height: BananSpacing.md),
+          Text(
+            picked.isEmpty
+                ? 'Chưa điền dòng nào.'
+                : '${picked.length} dòng · tổng ${_fmtQty(pickedQty)}',
+            style: theme.textTheme.titleSmall,
+          ),
+          const SizedBox(height: BananSpacing.sm),
           PrimaryButton(
             label: 'Tạo yêu cầu & gửi bếp',
             icon: Icons.send_outlined,
             loading: _saving,
             expand: true,
             onPressed: _saving ? null : _submit,
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _fmtQty(double v) =>
+      v == v.roundToDouble() ? '${v.round()}' : '$v';
+
+  List<Widget> _sectionWidgets(_Section section, String q, ThemeData theme) {
+    final rows = [
+      for (final r in _rows)
+        if (r.section == section && r.matches(q)) r,
+    ];
+    if (rows.isEmpty) return const [];
+    // A search always opens the section it matched in.
+    final open = q.isNotEmpty || _open.contains(section);
+    final enabled = section != _Section.drink || _drinkOrderDay;
+    final pickedHere = rows.where((r) => r.quantity > 0).length;
+    return [
+      InkWell(
+        onTap: () => setState(() {
+          if (!_open.add(section)) _open.remove(section);
+        }),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: BananSpacing.md,
+            vertical: BananSpacing.sm,
+          ),
+          color: theme.colorScheme.surfaceContainerHighest,
+          child: Row(
+            children: [
+              Icon(open ? Icons.expand_more : Icons.chevron_right, size: 18),
+              const SizedBox(width: BananSpacing.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_titles[section]}  ·  ${rows.length} dòng'
+                      '${pickedHere > 0 ? '  ·  đã điền $pickedHere' : ''}',
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      _hint(section),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: enabled
+                            ? theme.colorScheme.outline
+                            : theme.colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      if (open) ...[
+        _SheetHeader(theme: theme),
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i == 0 || rows[i].group != rows[i - 1].group)
+            Padding(
+              padding: const EdgeInsets.only(
+                left: BananSpacing.md,
+                top: BananSpacing.sm,
+                bottom: 2,
+              ),
+              child: Text(
+                rows[i].group,
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: theme.colorScheme.primary),
+              ),
+            ),
+          _SheetLine(
+            index: i + 1,
+            row: rows[i],
+            enabled: enabled,
+            onChanged: () => setState(() {}),
+          ),
+        ],
+      ],
+      const SizedBox(height: BananSpacing.md),
+    ];
+  }
+}
+
+class _SheetHeader extends StatelessWidget {
+  const _SheetHeader({required this.theme});
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final style =
+        theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        BananSpacing.md,
+        BananSpacing.xs,
+        BananSpacing.md,
+        0,
+      ),
+      child: Row(
+        children: [
+          SizedBox(width: 32, child: Text('STT', style: style)),
+          Expanded(child: Text('Tên sản phẩm', style: style)),
+          SizedBox(width: 48, child: Text('ĐVT', style: style)),
+          SizedBox(
+            width: 84,
+            child: Text('SL', style: style, textAlign: TextAlign.center),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetLine extends StatelessWidget {
+  const _SheetLine({
+    required this.index,
+    required this.row,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final int index;
+  final _SheetRow row;
+  final bool enabled;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final picked = row.quantity > 0;
+    return Container(
+      color: picked
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
+          : null,
+      padding: const EdgeInsets.symmetric(
+        horizontal: BananSpacing.md,
+        vertical: 2,
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 32,
+            child: Text('$index', style: theme.textTheme.bodySmall),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(row.name, overflow: TextOverflow.ellipsis),
+                if (row.code.isNotEmpty)
+                  Text(
+                    row.code,
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: theme.colorScheme.outline),
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 48,
+            child: Text(row.unit, style: theme.textTheme.bodySmall),
+          ),
+          SizedBox(
+            width: 84,
+            child: TextField(
+              controller: row.qty,
+              enabled: enabled,
+              keyboardType: TextInputType.numberWithOptions(
+                decimal: row.mfg != null,
+              ),
+              textAlign: TextAlign.center,
+              decoration: const InputDecoration(
+                isDense: true,
+                hintText: '–',
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 8,
+                ),
+              ),
+              onChanged: (_) => onChanged(),
+            ),
           ),
         ],
       ),

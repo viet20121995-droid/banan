@@ -106,9 +106,8 @@ class _Body extends ConsumerWidget {
     final mfgQtyCtls = {
       for (final m in order.mfgItems)
         m.id: TextEditingController(
-          text: m.qty == m.qty.roundToDouble()
-              ? '${m.qty.round()}'
-              : '${m.qty}',
+          text:
+              m.qty == m.qty.roundToDouble() ? '${m.qty.round()}' : '${m.qty}',
         ),
     };
     final noteCtl = TextEditingController();
@@ -226,8 +225,7 @@ class _Body extends ConsumerWidget {
         ref.invalidate(_orderProvider(order.id));
         ref.invalidate(storeOrdersControllerProvider);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Đã ghi nhận nhận hàng, đơn hoàn tất.')),
+          const SnackBar(content: Text('Đã ghi nhận nhận hàng, đơn hoàn tất.')),
         );
       },
       failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
@@ -342,8 +340,7 @@ class _Body extends ConsumerWidget {
                 // has (no address block). Internal transfers are staff-keyed,
                 // their "customer" is the requesting employee: skip.
                 if (order.source != 'INTERNAL_TRANSFER' &&
-                    ((order.customerName ?? order.customerPhone) !=
-                        null)) ...[
+                    ((order.customerName ?? order.customerPhone) != null)) ...[
                   const SizedBox(height: BananSpacing.md),
                   Container(
                     padding: const EdgeInsets.all(BananSpacing.md),
@@ -418,52 +415,12 @@ class _Body extends ConsumerWidget {
                   _VatInvoiceBlock(order: order),
                 ],
                 const SizedBox(height: BananSpacing.xl),
-                Text('Món trong đơn', style: theme.textTheme.titleLarge),
-                const SizedBox(height: BananSpacing.sm),
-                for (final item in order.items)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: BananSpacing.xs,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${item.quantity}× ${item.productName}',
-                                style: theme.textTheme.bodyLarge,
-                              ),
-                              if (item.variantLabel != null)
-                                Text(
-                                  item.variantLabel!,
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              if (item.customMessage != null &&
-                                  item.customMessage!.isNotEmpty)
-                                Text(
-                                  '“${item.customMessage}”',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              if (item.personalization != null &&
-                                  item.personalization!.isNotEmpty)
-                                _MerchantPersonalizationBlock(
-                                  payload: item.personalization!,
-                                ),
-                            ],
-                          ),
-                        ),
-                        Text(fmt.format(item.lineTotal)),
-                      ],
-                    ),
-                  ),
-                if (order.mfgItems.isNotEmpty) ...[
-                  const SizedBox(height: BananSpacing.md),
-                  Text('Vật tư từ kho bếp', style: theme.textTheme.titleMedium),
-                  for (final m in order.mfgItems)
+                if (order.source == 'INTERNAL_TRANSFER')
+                  _TransferSheet(order: order)
+                else ...[
+                  Text('Món trong đơn', style: theme.textTheme.titleLarge),
+                  const SizedBox(height: BananSpacing.sm),
+                  for (final item in order.items)
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         vertical: BananSpacing.xs,
@@ -471,19 +428,64 @@ class _Body extends ConsumerWidget {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              '${m.name} (${m.code})',
-                              overflow: TextOverflow.ellipsis,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${item.quantity}× ${item.productName}',
+                                  style: theme.textTheme.bodyLarge,
+                                ),
+                                if (item.variantLabel != null)
+                                  Text(
+                                    item.variantLabel!,
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                if (item.customMessage != null &&
+                                    item.customMessage!.isNotEmpty)
+                                  Text(
+                                    '“${item.customMessage}”',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                if (item.personalization != null &&
+                                    item.personalization!.isNotEmpty)
+                                  _MerchantPersonalizationBlock(
+                                    payload: item.personalization!,
+                                  ),
+                              ],
                             ),
                           ),
-                          Text(
-                            m.receivedQty == null
-                                ? '${m.qty} ${m.uomCode}'
-                                : 'nhận ${m.receivedQty}/${m.qty} ${m.uomCode}',
-                          ),
+                          Text(fmt.format(item.lineTotal)),
                         ],
                       ),
                     ),
+                  if (order.mfgItems.isNotEmpty) ...[
+                    const SizedBox(height: BananSpacing.md),
+                    Text('Vật tư từ kho bếp',
+                        style: theme.textTheme.titleMedium),
+                    for (final m in order.mfgItems)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: BananSpacing.xs,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${m.name} (${m.code})',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              m.receivedQty == null
+                                  ? '${m.qty} ${m.uomCode}'
+                                  : 'nhận ${m.receivedQty}/${m.qty} ${m.uomCode}',
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ],
                 const Divider(height: BananSpacing.xl),
                 _Line(label: 'Tạm tính', value: fmt.format(order.subtotal)),
@@ -676,6 +678,176 @@ class _Body extends ConsumerWidget {
 }
 
 const _weekdays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+
+/// Internal transfer rendered like the branch order book: STT · Tên · ĐVT ·
+/// Đặt · Nhận, sectioned into bánh / nguyên liệu pha chế / vật tư. "Nhận"
+/// fills in once the branch signs for the goods; short lines turn red.
+class _TransferSheet extends StatelessWidget {
+  const _TransferSheet({required this.order});
+  final Order order;
+
+  static String _q(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final head =
+        theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline);
+    // Cake lines carry no per-line receipt in the API; once the branch has
+    // signed (COMPLETED) they count as received in full.
+    final received = order.status == OrderStatus.completed ||
+        order.mfgItems.any((m) => m.receivedQty != null);
+    final sections = <(String, List<_SheetCells>)>[
+      (
+        'BÁNH / CAKE',
+        [
+          for (final i in order.items)
+            _SheetCells(
+              name: i.variantLabel == null
+                  ? i.productName
+                  : '${i.productName} — ${i.variantLabel}',
+              note: i.customMessage,
+              unit: 'cái',
+              ordered: i.quantity.toDouble(),
+              received: null,
+            ),
+        ],
+      ),
+      (
+        'NGUYÊN LIỆU PHA CHẾ',
+        [
+          for (final m in order.mfgItems)
+            if (m.isDrinkIngredient)
+              _SheetCells(
+                name: m.name,
+                note: m.code,
+                unit: m.uomCode,
+                ordered: m.qty,
+                received: m.receivedQty,
+              ),
+        ],
+      ),
+      (
+        'VẬT TƯ',
+        [
+          for (final m in order.mfgItems)
+            if (!m.isDrinkIngredient)
+              _SheetCells(
+                name: m.name,
+                note: m.code,
+                unit: m.uomCode,
+                ordered: m.qty,
+                received: m.receivedQty,
+              ),
+        ],
+      ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Phiếu đặt hàng nội bộ', style: theme.textTheme.titleLarge),
+        const SizedBox(height: BananSpacing.sm),
+        Row(
+          children: [
+            SizedBox(width: 32, child: Text('STT', style: head)),
+            Expanded(child: Text('Tên sản phẩm', style: head)),
+            SizedBox(width: 44, child: Text('ĐVT', style: head)),
+            SizedBox(
+              width: 56,
+              child: Text('Đặt', style: head, textAlign: TextAlign.end),
+            ),
+            SizedBox(
+              width: 56,
+              child: Text('Nhận', style: head, textAlign: TextAlign.end),
+            ),
+          ],
+        ),
+        for (final (title, cells) in sections)
+          if (cells.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: BananSpacing.sm, bottom: 2),
+              child: Text(
+                title,
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: theme.colorScheme.primary),
+              ),
+            ),
+            for (var i = 0; i < cells.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      child: Text('${i + 1}', style: theme.textTheme.bodySmall),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(cells[i].name),
+                          if (cells[i].note != null &&
+                              cells[i].note!.isNotEmpty)
+                            Text(
+                              cells[i].note!,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.outline,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      width: 44,
+                      child:
+                          Text(cells[i].unit, style: theme.textTheme.bodySmall),
+                    ),
+                    SizedBox(
+                      width: 56,
+                      child:
+                          Text(_q(cells[i].ordered), textAlign: TextAlign.end),
+                    ),
+                    SizedBox(
+                      width: 56,
+                      child: Text(
+                        cells[i].received == null
+                            ? (received ? _q(cells[i].ordered) : '—')
+                            : _q(cells[i].received!),
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: cells[i].received != null &&
+                                  cells[i].received! < cells[i].ordered
+                              ? theme.colorScheme.error
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+      ],
+    );
+  }
+}
+
+class _SheetCells {
+  const _SheetCells({
+    required this.name,
+    required this.unit,
+    required this.ordered,
+    this.note,
+    this.received,
+  });
+  final String name;
+  final String? note;
+  final String unit;
+  final double ordered;
+  final double? received;
+}
 
 String _vnDateTime(DateTime d) {
   final l = d.toLocal();
