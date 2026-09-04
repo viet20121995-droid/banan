@@ -353,6 +353,24 @@ describe('createInternalTransfer (INTERNAL_TRANSFER)', () => {
     expect(orderCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores the customer daily cap — 10 of a dailyMax=5 product for tomorrow', async () => {
+    const orderCreate = jest
+      .fn()
+      .mockResolvedValue(orderRowFixture({ source: 'INTERNAL_TRANSFER' }));
+    const prisma = transferPrisma(orderCreate);
+    prisma.product.findMany.mockResolvedValue([{ ...productFixture(), dailyMaxQuantity: 5 }]);
+    const tx = makeTxMock(orderCreate, jest.fn());
+    tx.orderItem.aggregate.mockResolvedValue({ _sum: { quantity: 5 } });
+    prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(tx));
+    const { svc } = makeService(prisma);
+    await svc.createInternalTransfer(staff, {
+      ...transferDto,
+      items: [{ ...transferDto.items[0], quantity: 10 }],
+    });
+    expect(orderCreate).toHaveBeenCalledTimes(1);
+    expect(tx.orderItem.aggregate).not.toHaveBeenCalled();
+  });
+
   it('staff cannot request for another store', async () => {
     const { svc } = makeService(transferPrisma(jest.fn()));
     await expect(

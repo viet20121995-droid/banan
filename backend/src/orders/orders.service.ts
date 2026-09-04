@@ -2000,16 +2000,22 @@ export class OrdersService {
     products: Array<{ id: string; name: string; dailyMaxQuantity: number | null }>,
     lineCreates: Prisma.OrderItemCreateManyOrderInput[],
     targetAt: Date,
-    opts: { decrementLimitedStock?: boolean; allowUnavailable?: boolean } = {},
+    opts: {
+      decrementLimitedStock?: boolean;
+      allowUnavailable?: boolean;
+      skipDailyCaps?: boolean;
+    } = {},
   ): Promise<void> {
     // A transfer can carry ONLY kitchen-warehouse (MES) supplies — nothing to
     // cap or lock here, and Prisma.join([]) below would throw on empty input.
     if (lineCreates.length === 0) return;
-    const qtyByProduct = new Map<string, number>();
-    for (const l of lineCreates) {
-      qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.quantity);
+    if (!opts.skipDailyCaps) {
+      const qtyByProduct = new Map<string, number>();
+      for (const l of lineCreates) {
+        qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.quantity);
+      }
+      await this.assertDailyCaps(tx, products, qtyByProduct, targetAt);
     }
-    await this.assertDailyCaps(tx, products, qtyByProduct, targetAt);
 
     const lineProductIds = [...new Set(lineCreates.map((l) => l.productId))].sort();
     const lineVariantIds = [
@@ -2409,9 +2415,12 @@ export class OrdersService {
     let created: OrderWithIncludes;
     try {
       created = await this.prisma.$transaction(async (tx) => {
+        // The daily cap (dailyMaxQuantity) rations online demand; a branch
+        // restocking from the kitchen is the kitchen's own call.
         await this.reserveChannelStock(tx, products, lineCreates, targetAt, {
           decrementLimitedStock: false,
           allowUnavailable: true,
+          skipDailyCaps: true,
         });
         return tx.order.create({
           data: {
