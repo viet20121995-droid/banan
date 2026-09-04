@@ -2802,7 +2802,13 @@ export class OrdersService {
         rows.set(key, row);
       };
       for (const i of order.items) {
-        const label = i.variantLabel ? `${i.productName} (${i.variantLabel})` : i.productName;
+        // Only the distinguishing part of the variant: "Macaron (Lemon)", not
+        // "Macaron (single) (Single · Lemon)" — the board is read at a glance.
+        const parts = (i.variantLabel ?? '')
+          .split(' · ')
+          .map((v) => v.trim())
+          .filter((v) => v && !['Default', 'Single', 'Classic'].includes(v) && v !== i.productName);
+        const label = parts.length ? `${i.productName} (${parts.join(' · ')})` : i.productName;
         add(`i:${label}`, label, 'cái', 'cake', i.quantity);
       }
       for (const m of order.mfgItems) {
