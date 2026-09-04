@@ -9,39 +9,52 @@ RealtimeEvent _ev(String name, Map<String, dynamic> data) =>
     RealtimeEvent(event: name, data: data);
 
 void main() {
+  test('a socket reconnect refetches the board (events were lost while down)',
+      () {
+    expect(isKitchenBoardEvent(_ev(RealtimeEvent.reconnected, {})), isTrue);
+    expect(isNewKitchenTicket(_ev(RealtimeEvent.reconnected, {})), isFalse);
+  });
+
   group('isNewKitchenTicket', () {
     test('a merchant transfer (status_changed → SENT_TO_KITCHEN) rings', () {
       expect(
-        isNewKitchenTicket(_ev('order.status_changed', {'toStatus': 'SENT_TO_KITCHEN'})),
+        isNewKitchenTicket(
+            _ev('order.status_changed', {'toStatus': 'SENT_TO_KITCHEN'})),
         isTrue,
       );
       expect(
-        isNewKitchenTicket(_ev('order.status_changed', {'toStatus': 'COMPLETED'})),
+        isNewKitchenTicket(
+            _ev('order.status_changed', {'toStatus': 'COMPLETED'})),
         isFalse,
       );
     });
 
-    test('a counter / internal-transfer order created straight onto the board rings',
+    test(
+        'a counter / internal-transfer order created straight onto the board rings',
         () {
       expect(
         isNewKitchenTicket(_ev('order.created', {'status': 'SENT_TO_KITCHEN'})),
         isTrue,
       );
       // A web order created at the store (PENDING) is not the kitchen's yet.
-      expect(isNewKitchenTicket(_ev('order.created', {'status': 'PENDING'})), isFalse);
+      expect(isNewKitchenTicket(_ev('order.created', {'status': 'PENDING'})),
+          isFalse);
       expect(isNewKitchenTicket(_ev('order.payment_captured', {})), isFalse);
     });
 
     test('board refetch covers the same events plus kitchen stage changes', () {
       expect(
-        isKitchenBoardEvent(_ev('order.kitchen_status_changed', {'toStatus': 'PREPARING'})),
+        isKitchenBoardEvent(
+            _ev('order.kitchen_status_changed', {'toStatus': 'PREPARING'})),
         isTrue,
       );
-      expect(isKitchenBoardEvent(_ev('order.created', {'status': 'PENDING'})), isFalse);
+      expect(isKitchenBoardEvent(_ev('order.created', {'status': 'PENDING'})),
+          isFalse);
     });
   });
 
-  test('kitchenAlertsProvider chimes once per new ticket, on any screen', () async {
+  test('kitchenAlertsProvider chimes once per new ticket, on any screen',
+      () async {
     final events = StreamController<RealtimeEvent>();
     var chimes = 0;
     final container = ProviderContainer(

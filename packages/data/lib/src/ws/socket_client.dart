@@ -9,6 +9,10 @@ class RealtimeEvent {
   const RealtimeEvent({required this.event, required this.data});
   final String event;
   final Map<String, dynamic> data;
+
+  /// Client-side event, not from the gateway: the socket came back after a
+  /// drop. Events sent while it was down are gone, so boards refetch on it.
+  static const reconnected = 'socket.reconnected';
 }
 
 const _kEvents = [
@@ -59,7 +63,16 @@ class SocketClient {
         }
       });
     }
+    var connectedBefore = false;
     socket
+      ..onConnect((_) {
+        if (connectedBefore) {
+          controller.add(
+            const RealtimeEvent(event: RealtimeEvent.reconnected, data: {}),
+          );
+        }
+        connectedBefore = true;
+      })
       ..onConnectError((err) => log('ws').warning('connect error: $err'))
       ..onError((err) => log('ws').warning('error: $err'));
 

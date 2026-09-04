@@ -25,9 +25,11 @@ bool isNewKitchenTicket(RealtimeEvent event) {
 
 /// Whether the board should refetch after this event.
 bool isKitchenBoardEvent(RealtimeEvent event) =>
+    event.event == RealtimeEvent.reconnected ||
     event.event == 'order.status_changed' ||
     event.event == 'order.kitchen_status_changed' ||
-    (event.event == 'order.created' && event.data['status'] == 'SENT_TO_KITCHEN');
+    (event.event == 'order.created' &&
+        event.data['status'] == 'SENT_TO_KITCHEN');
 
 /// App-wide alert: chimes on every new ticket no matter which screen the
 /// staff is on. NOT autoDispose — it is watched once from the app root and
