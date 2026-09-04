@@ -9,10 +9,14 @@ import 'package:intl/intl.dart';
 /// (`kitchenStatus`), then [done] — dispatched that day.
 enum KitchenBoardTab {
   // Subtitles stay short — five tabs share one line on a 1280px desktop.
-  all('Tất cả', 'Mọi trạng thái', Icons.view_agenda_outlined, BananColors.primary),
-  pending('Chờ nhận', 'Đơn mới chờ nhận', Icons.notifications_active_outlined, BananColors.warning),
-  preparing('Đang làm', 'Đang trong bếp', Icons.cake_outlined, BananColors.info),
-  ready('Sẵn sàng giao', 'Chờ giao / khách lấy', Icons.local_shipping_outlined, BananColors.success),
+  all('Tất cả', 'Mọi trạng thái', Icons.view_agenda_outlined,
+      BananColors.primary),
+  pending('Chờ nhận', 'Đơn mới chờ nhận', Icons.notifications_active_outlined,
+      BananColors.warning),
+  preparing(
+      'Đang làm', 'Đang trong bếp', Icons.cake_outlined, BananColors.info),
+  ready('Sẵn sàng giao', 'Chờ giao / khách lấy', Icons.local_shipping_outlined,
+      BananColors.success),
   done('Đã xong', 'Đã xuất khỏi bếp', Icons.task_alt, BananColors.outline);
 
   const KitchenBoardTab(this.label, this.subtitle, this.icon, this.accent);
@@ -140,7 +144,8 @@ class _StatusTab extends StatelessWidget {
                 padding: const EdgeInsets.all(BananSpacing.sm),
                 decoration: BoxDecoration(
                   borderRadius: BananRadii.rmd,
-                  color: accent.withValues(alpha: live || selected ? 0.18 : 0.10),
+                  color:
+                      accent.withValues(alpha: live || selected ? 0.18 : 0.10),
                 ),
                 child: Icon(tab.icon, color: accent, size: 20),
               ),
@@ -153,7 +158,8 @@ class _StatusTab extends StatelessWidget {
                       tab.label,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w600,
                       ),
                     ),
                     Text(
@@ -169,7 +175,9 @@ class _StatusTab extends StatelessWidget {
                 '$count',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: live ? accent : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                  color: live
+                      ? accent
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.45),
                 ),
               ),
             ],
@@ -200,7 +208,8 @@ KitchenPriority? kitchenPriority(Order order, [DateTime? clock]) {
   if (scheduled != null) {
     final remaining = scheduled.difference(now);
     if (remaining <= Duration.zero) {
-      return KitchenPriority('quá giờ ${shortDuration(-remaining)}', overdue: true);
+      return KitchenPriority('quá giờ ${shortDuration(-remaining)}',
+          overdue: true);
     }
     if (remaining <= const Duration(hours: 2)) {
       return KitchenPriority('còn ${shortDuration(remaining)}', overdue: false);
@@ -209,7 +218,8 @@ KitchenPriority? kitchenPriority(Order order, [DateTime? clock]) {
   if (order.kitchenStatus == KitchenStatus.pendingAck) {
     final waiting = now.difference(order.createdAt.toLocal());
     if (waiting >= const Duration(minutes: 15)) {
-      return KitchenPriority('chờ nhận ${shortDuration(waiting)}', overdue: true);
+      return KitchenPriority('chờ nhận ${shortDuration(waiting)}',
+          overdue: true);
     }
   }
   return null;
@@ -273,7 +283,8 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failMessage)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failMessage)));
     }
   }
 
@@ -367,7 +378,8 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
                 children: [
                   Text(
                     order.code,
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   Text(
                     DateFormat.jm().format(order.updatedAt.toLocal()),
@@ -377,7 +389,8 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.event_outlined, size: 14, color: theme.textTheme.bodySmall?.color),
+                        Icon(Icons.event_outlined,
+                            size: 14, color: theme.textTheme.bodySmall?.color),
                         const SizedBox(width: 2),
                         Text(
                           'hẹn ${DateFormat('HH:mm dd/MM').format(order.scheduledFor!.toLocal())}',
@@ -429,7 +442,11 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
     final order = widget.order;
     final priority = kitchenPriority(order, widget.clock);
     final (sourceLabel, sourceColor, sourceIcon) = switch (order.source) {
-      'STAFF_COUNTER' => ('Tại quầy', BananColors.info, Icons.point_of_sale_outlined),
+      'STAFF_COUNTER' => (
+          'Tại quầy',
+          BananColors.info,
+          Icons.point_of_sale_outlined
+        ),
       'WHOLESALE' => (
           order.wholesaleCompanyName == null
               ? 'Wholesale'
@@ -441,9 +458,11 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
       _ => ('Web', BananColors.outline, Icons.public),
     };
     final destination = switch (order.source) {
-      'INTERNAL_TRANSFER' when order.destinationStoreName != null => 'Giao về ${order.destinationStoreName}'
-          '${order.requestingStoreName != null && order.requestingStoreName != order.destinationStoreName ? ' (yêu cầu: ${order.requestingStoreName})' : ''}',
-      'WHOLESALE' when order.wholesaleDeliveryAddress != null => 'Giao đến ${order.wholesaleDeliveryAddress}',
+      'INTERNAL_TRANSFER' when order.destinationStoreName != null =>
+        'Giao về ${order.destinationStoreName}'
+            '${order.requestingStoreName != null && order.requestingStoreName != order.destinationStoreName ? ' (yêu cầu: ${order.requestingStoreName})' : ''}',
+      'WHOLESALE' when order.wholesaleDeliveryAddress != null =>
+        'Giao đến ${order.wholesaleDeliveryAddress}',
       _ => null,
     };
 
@@ -461,9 +480,14 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
           ),
         _Pill(icon: sourceIcon, label: sourceLabel, color: sourceColor),
         if (order.storeName != null)
-          _Pill(icon: Icons.storefront_outlined, label: order.storeName!, color: BananColors.info),
+          _Pill(
+              icon: Icons.storefront_outlined,
+              label: order.storeName!,
+              color: BananColors.info),
         Text(
-          order.fulfillmentType == FulfillmentType.delivery ? 'Giao hàng' : 'Đến lấy',
+          order.fulfillmentType == FulfillmentType.delivery
+              ? 'Giao hàng'
+              : 'Đến lấy',
           style: theme.textTheme.labelSmall,
         ),
         if (destination != null)
@@ -476,7 +500,9 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
           ),
         if (priority != null)
           _Pill(
-            icon: priority.overdue ? Icons.error_outline : Icons.schedule_outlined,
+            icon: priority.overdue
+                ? Icons.error_outline
+                : Icons.schedule_outlined,
             label: 'Ưu tiên · ${priority.reason}',
             color: priority.overdue ? BananColors.danger : BananColors.warning,
             strong: true,
@@ -495,7 +521,8 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
         final accept = widget.onAccept;
         if (accept == null) return null;
         return FilledButton.icon(
-          onPressed: _busy ? null : () => _run(accept, 'Chưa nhận được đơn, thử lại.'),
+          onPressed:
+              _busy ? null : () => _run(accept, 'Chưa nhận được đơn, thử lại.'),
           icon: const Icon(Icons.play_arrow, size: 18),
           label: const Text('Nhận đơn'),
         );
@@ -503,7 +530,8 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
         final ready = widget.onReady;
         if (ready == null) return null;
         return FilledButton.icon(
-          onPressed: _busy ? null : () => _run(ready, 'Chưa cập nhật được, thử lại.'),
+          onPressed:
+              _busy ? null : () => _run(ready, 'Chưa cập nhật được, thử lại.'),
           icon: const Icon(Icons.check, size: 18),
           label: const Text('Làm xong'),
         );
@@ -512,7 +540,8 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (order.source == 'INTERNAL_TRANSFER' && widget.onAdjust != null) ...[
+            if (order.source == 'INTERNAL_TRANSFER' &&
+                widget.onAdjust != null) ...[
               OutlinedButton.icon(
                 onPressed: _busy ? null : widget.onAdjust,
                 icon: const Icon(Icons.edit_outlined, size: 18),
@@ -522,7 +551,9 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
             ],
             if (dispatch != null)
               FilledButton.icon(
-                onPressed: _busy ? null : () => _run(dispatch, 'Chưa xuất được đơn, thử lại.'),
+                onPressed: _busy
+                    ? null
+                    : () => _run(dispatch, 'Chưa xuất được đơn, thử lại.'),
                 icon: const Icon(Icons.local_shipping_outlined, size: 18),
                 label: const Text('Xuất khỏi bếp'),
               ),
@@ -563,13 +594,54 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
         ),
       for (final m in order.mfgItems)
         _ItemLine(
-          qty: '${m.qty == m.qty.roundToDouble() ? m.qty.round() : m.qty} ${m.uomCode}',
+          qty:
+              '${m.qty == m.qty.roundToDouble() ? m.qty.round() : m.qty} ${m.uomCode}',
           name: m.name,
           detail: m.isDrinkIngredient ? 'nguyên liệu pha chế' : 'vật tư',
           muted: true,
         ),
     ];
     final notes = order.notes?.trim();
+    // Who gets it and where — the baker needs the same facts as the counter
+    // (name on the box, the address the driver reads, the gift card text).
+    // Internal transfers are staff-keyed: their "customer" is an employee.
+    final internal = order.source == 'INTERNAL_TRANSFER';
+    final customer = internal
+        ? null
+        : [order.customerName, order.customerPhone]
+            .whereType<String>()
+            .where((v) => v.isNotEmpty)
+            .join(' · ');
+    final address = order.address;
+    final facts = <(IconData, String, Color)>[
+      if (customer != null && customer.isNotEmpty)
+        (Icons.person_outline, 'Khách: $customer', BananColors.info),
+      if (address != null && order.fulfillmentType == FulfillmentType.delivery)
+        (
+          Icons.location_on_outlined,
+          'Giao đến: ${address.recipient} · ${address.phone} · ${address.oneLine}',
+          BananColors.info,
+        ),
+      if (order.isGift)
+        (
+          Icons.card_giftcard_outlined,
+          [
+            'Quà tặng',
+            if (order.giftRecipientName != null &&
+                order.giftRecipientName!.isNotEmpty)
+              'tặng ${order.giftRecipientName}'
+                  '${order.giftRecipientPhone != null && order.giftRecipientPhone!.isNotEmpty ? ' · ${order.giftRecipientPhone}' : ''}',
+            if (order.giftWrap) 'gói quà',
+            if (order.hidePrice) 'ẩn giá',
+            if (order.giftMessage != null &&
+                order.giftMessage!.trim().isNotEmpty)
+              'thiệp: “${order.giftMessage!.trim()}”',
+          ].join(' · '),
+          BananColors.primary,
+        ),
+      if (notes != null && notes.isNotEmpty)
+        (Icons.sticky_note_2_outlined, notes, BananColors.warning),
+    ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -582,21 +654,25 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
             Wrap(
               spacing: gap,
               runSpacing: BananSpacing.xs,
-              children: [for (final l in lines) SizedBox(width: width, child: l)],
+              children: [
+                for (final l in lines) SizedBox(width: width, child: l)
+              ],
             ),
-            if (notes != null && notes.isNotEmpty) ...[
+            for (final (icon, text, color) in facts) ...[
               const SizedBox(height: BananSpacing.sm),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.sticky_note_2_outlined, size: 16, color: BananColors.warning),
+                  Icon(icon, size: 16, color: color),
                   const SizedBox(width: BananSpacing.xs),
                   Expanded(
                     child: Text(
-                      notes,
+                      text,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurface,
-                        fontStyle: FontStyle.italic,
+                        fontStyle: icon == Icons.sticky_note_2_outlined
+                            ? FontStyle.italic
+                            : FontStyle.normal,
                       ),
                     ),
                   ),
@@ -645,7 +721,9 @@ class _ItemLine extends StatelessWidget {
               textAlign: TextAlign.center,
               style: theme.textTheme.labelLarge?.copyWith(
                 fontWeight: FontWeight.w800,
-                color: muted ? theme.colorScheme.onSurface : theme.colorScheme.primary,
+                color: muted
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.primary,
               ),
             ),
           ),
@@ -689,7 +767,8 @@ class _Pill extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: BananSpacing.sm, vertical: 3),
+      padding:
+          const EdgeInsets.symmetric(horizontal: BananSpacing.sm, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BananRadii.rPill,
         color: color.withValues(alpha: strong ? 0.14 : 0.10),
