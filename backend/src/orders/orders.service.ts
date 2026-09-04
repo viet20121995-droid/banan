@@ -2000,7 +2000,7 @@ export class OrdersService {
     products: Array<{ id: string; name: string; dailyMaxQuantity: number | null }>,
     lineCreates: Prisma.OrderItemCreateManyOrderInput[],
     targetAt: Date,
-    opts: { decrementLimitedStock?: boolean } = {},
+    opts: { decrementLimitedStock?: boolean; allowUnavailable?: boolean } = {},
   ): Promise<void> {
     // A transfer can carry ONLY kitchen-warehouse (MES) supplies — nothing to
     // cap or lock here, and Prisma.join([]) below would throw on empty input.
@@ -2034,9 +2034,12 @@ export class OrdersService {
           ).map((v) => [v.id, v]),
     );
     const limitedDemand = new Map<string, { quantity: number; productName: string }>();
+    // `isAvailable` is the customer-menu switch; internal transfers may
+    // order menu-hidden items (same exemption as buildChannelLines).
+    const allowUnavailable = opts.allowUnavailable ?? false;
     for (const line of lineCreates) {
       const product = freshProducts.get(line.productId);
-      if (!product || !product.isAvailable) {
+      if (!product || (!product.isAvailable && !allowUnavailable)) {
         throw new BadRequestException({
           code: 'PRODUCT_UNAVAILABLE',
           message: `"${line.productName}" vừa ngừng bán.`,
@@ -2045,7 +2048,7 @@ export class OrdersService {
       const variantId = line.variantId;
       if (!variantId) continue;
       const variant = freshVariants.get(variantId);
-      if (!variant || !variant.isAvailable) {
+      if (!variant || (!variant.isAvailable && !allowUnavailable)) {
         throw new BadRequestException({
           code: 'VARIANT_UNAVAILABLE',
           message: `Lựa chọn cho "${line.productName}" vừa ngừng bán.`,
@@ -2408,6 +2411,7 @@ export class OrdersService {
       created = await this.prisma.$transaction(async (tx) => {
         await this.reserveChannelStock(tx, products, lineCreates, targetAt, {
           decrementLimitedStock: false,
+          allowUnavailable: true,
         });
         return tx.order.create({
           data: {

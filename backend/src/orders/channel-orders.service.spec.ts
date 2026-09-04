@@ -323,6 +323,17 @@ describe('createInternalTransfer (INTERNAL_TRANSFER)', () => {
       .mockResolvedValue(orderRowFixture({ source: 'INTERNAL_TRANSFER' }));
     const prisma = transferPrisma(orderCreate);
     prisma.product.findMany.mockResolvedValue([{ ...productFixture(), isAvailable: false }]);
+    // The in-transaction FOR UPDATE re-read must agree: hidden product AND
+    // hidden variant (this second gate is what rejected the 05/09 order sheet).
+    const tx = makeTxMock(orderCreate, jest.fn());
+    tx.$queryRaw = jest.fn((strings: TemplateStringsArray) =>
+      Promise.resolve(
+        strings.join('?').includes('"Product"')
+          ? [{ id: 'p1', isAvailable: false }]
+          : [{ id: 'v1', stockMode: 'UNLIMITED', isAvailable: false }],
+      ),
+    );
+    prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(tx));
     const { svc } = makeService(prisma);
     await svc.createInternalTransfer(staff, transferDto);
     expect(orderCreate).toHaveBeenCalledTimes(1);
