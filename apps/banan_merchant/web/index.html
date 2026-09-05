@@ -106,6 +106,10 @@
           if (window.__bananChime) window.__bananChime();
         });
       } catch (e) {}
+      window.__bananPushPermission = function () {
+        try { return ('Notification' in window) ? Notification.permission : 'unsupported'; }
+        catch (e) { return 'unsupported'; }
+      };
       window.__bananGetPushToken = async function () {
         try {
           if (!('serviceWorker' in navigator) || typeof firebase === 'undefined') return '';

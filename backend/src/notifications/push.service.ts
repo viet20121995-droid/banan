@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
+import type { Role } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -57,14 +58,32 @@ export class PushService {
     return this.messagingClient;
   }
 
-  /** Resolve the click-through URL for a web push from the payload. */
-  private linkFor(data?: Record<string, unknown>): string {
-    const base = (this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? '').replace(/\/$/, '');
+  /**
+   * Resolve the click-through URL for a web push from the payload. Staff
+   * land in their own app (merchant / kitchen on BASE_DOMAIN); customers on
+   * the public site.
+   */
+  private linkFor(data?: Record<string, unknown>, role?: Role): string {
+    const customer = (this.config.get<string>('CUSTOMER_APP_BASE_URL') ?? '').replace(/\/$/, '');
+    const domain = this.config.get<string>('BASE_DOMAIN');
+    const staff =
+      role === 'MERCHANT_OWNER' || role === 'MERCHANT_STAFF' || role === 'ADMIN'
+        ? domain && `https://merchant.${domain}`
+        : role === 'KITCHEN_MANAGER' || role === 'KITCHEN_STAFF'
+          ? domain && `https://kitchen.${domain}`
+          : null;
+    const base = staff || customer;
     if (typeof data?.linkPath === 'string' && data.linkPath) {
       const p = data.linkPath.startsWith('/') ? data.linkPath : `/${data.linkPath}`;
       return base + p;
     }
     if (typeof data?.orderId === 'string' && data.orderId) {
+      if (staff) {
+        // The kitchen has no order page — its board is the target.
+        return role === 'KITCHEN_MANAGER' || role === 'KITCHEN_STAFF'
+          ? `${base}/`
+          : `${base}/orders/${data.orderId}`;
+      }
       // Guest-public tracking route — a guest's device has no session, so
       // /orders/:id would bounce the click-through to /login. Explicit
       // linkPath senders (above) can still target an authed path.
@@ -81,13 +100,14 @@ export class PushService {
   ): Promise<void> {
     const devices = await this.prisma.deviceToken.findMany({
       where: { userId },
-      select: { token: true },
+      select: { token: true, user: { select: { role: true } } },
     });
     await this.sendToTokens(
       devices.map((d) => d.token),
       template,
       data,
       `user=${userId}`,
+      devices[0]?.user.role,
     );
   }
 
@@ -119,6 +139,7 @@ export class PushService {
     template: NotificationTemplate,
     data: Record<string, unknown> | undefined,
     label: string,
+    role?: Role,
   ): Promise<void> {
     try {
       if (tokens.length === 0) return;
@@ -139,7 +160,7 @@ export class PushService {
       const notification = { title: template.title, body: template.body };
       const webpush = {
         notification,
-        fcmOptions: { link: this.linkFor(data) },
+        fcmOptions: { link: this.linkFor(data, role) },
       };
 
       let ok = 0;
