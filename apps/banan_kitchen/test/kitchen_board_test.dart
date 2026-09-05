@@ -145,18 +145,19 @@ void main() {
               stage: KitchenBoardTab.ready,
               clock: _now,
               onDispatch: () async => true,
-              onAdjust: () {},
+              onOpenSheet: () {},
             ),
           ],
         ),
       );
       expect(find.text('Làm xong'), findsOneWidget);
-      expect(find.text('Sửa số lượng'), findsOneWidget);
       expect(find.text('Xuất khỏi bếp'), findsOneWidget);
       expect(find.text('Nội bộ'), findsOneWidget);
       expect(find.textContaining('Giao về Banan – Trường Sa'), findsOneWidget);
-      expect(find.text('2.5 kg'), findsOneWidget);
-      expect(find.text('vật tư'), findsOneWidget);
+      // Quantities live on the order sheet: the row is a pointer to it.
+      expect(find.text('Sửa số lượng'), findsNothing);
+      expect(find.text('2.5 kg'), findsNothing);
+      expect(find.text('Mở phiếu tổng ›'), findsOneWidget);
     });
 
     testWidgets('done tab shows the outcome, no buttons', (tester) async {
@@ -172,8 +173,7 @@ void main() {
       expect(find.byType(FilledButton), findsNothing);
     });
 
-    testWidgets('failed action surfaces a snackbar and re-enables the button',
-        (tester) async {
+    testWidgets('failed action surfaces a snackbar and re-enables the button', (tester) async {
       await _pump(
         tester,
         KitchenOrderRow(
@@ -270,8 +270,7 @@ void main() {
       );
     });
 
-    testWidgets('a row on the mixed tab names its stage and keeps its own action',
-        (tester) async {
+    testWidgets('a row on the mixed tab names its stage and keeps its own action', (tester) async {
       await _pump(
         tester,
         KitchenOrderRow(
@@ -351,8 +350,7 @@ void main() {
         'quá giờ 20 phút',
       );
       expect(
-        kitchenPriority(_order(scheduledFor: _now.add(const Duration(hours: 1))), _now)
-            ?.overdue,
+        kitchenPriority(_order(scheduledFor: _now.add(const Duration(hours: 1))), _now)?.overdue,
         isFalse,
       );
       expect(

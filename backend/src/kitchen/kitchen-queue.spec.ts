@@ -10,8 +10,13 @@ const clausesOf = (w: Prisma.OrderWhereInput) => w.OR as Prisma.OrderWhereInput[
 const range = (c: Prisma.OrderWhereInput, key: 'scheduledFor' | 'createdAt') =>
   c[key] as unknown as Range;
 
-const dispatchedRange = (c: Prisma.OrderWhereInput) =>
-  (c.statusEvents as unknown as { some: { createdAt: Range } }).some;
+// The dispatched clause is an OR: the hand-over events, or — for an internal
+// transfer — the COMPLETED event its dispatch writes.
+const dispatchedRange = (c: Prisma.OrderWhereInput) => {
+  const branches = c.OR as Prisma.OrderWhereInput[];
+  expect(branches[1]).toMatchObject({ source: 'INTERNAL_TRANSFER' });
+  return (branches[0].statusEvents as unknown as { some: { createdAt: Range } }).some;
+};
 
 describe('kitchenQueueWhere', () => {
   it('without a day keeps the classic live queue (+ today done when asked)', () => {

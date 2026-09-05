@@ -270,6 +270,70 @@ describe('OrdersService.dispatchFromKitchen (no resurrect of a cancelled order)'
     return { svc, prisma };
   }
 
+  it('an internal transfer completes on dispatch — receipt written, supplies issued, no branch sign-off', async () => {
+    const order = {
+      id: 'o1',
+      code: 'BAN-X',
+      status: 'SENT_TO_KITCHEN',
+      kitchenStatus: 'READY_DISPATCH',
+      kitchenId: 'k1',
+      fulfillmentType: 'DELIVERY',
+      source: 'INTERNAL_TRANSFER',
+      customerId: 'c1',
+      storeId: 's1',
+    };
+    const tx = {
+      order: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...order, status: 'COMPLETED' }),
+      },
+      orderItem: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'i1', quantity: 3, orderedQty: 5 }]),
+      },
+      internalTransferMfgItem: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'm1', mfgProductId: 'mp1', qty: 2 }]),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      internalTransferReceipt: { create: jest.fn().mockResolvedValue({}) },
+      orderStatusEvent: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(order) },
+      $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
+    };
+    const manufacturing = { issueForTransfer: jest.fn().mockResolvedValue(undefined) };
+    const realtime = { emit: jest.fn() };
+    const notifications = { sendToUser: jest.fn() };
+    const noop = {} as never;
+    const svc = new OrdersService(
+      prisma as never,
+      realtime as never,
+      noop,
+      noop,
+      noop,
+      noop,
+      notifications as never,
+      noop,
+      noop,
+      noop,
+      noop,
+      manufacturing as never,
+    );
+    const res = await svc.dispatchFromKitchen('o1', ADMIN);
+    expect(res.status).toBe('COMPLETED');
+    expect(tx.order.updateMany.mock.calls[0][0].data).toEqual({ status: 'COMPLETED' });
+    expect(tx.internalTransferReceipt.create.mock.calls[0][0].data.lines.createMany.data).toEqual([
+      { orderItemId: 'i1', orderedQty: 5, receivedQty: 3 },
+    ]);
+    expect(manufacturing.issueForTransfer).toHaveBeenCalledWith(tx, {
+      productId: 'mp1',
+      qty: 2,
+      refId: 'o1',
+    });
+    // No customer behind a transfer → no "ready" notification.
+    expect(notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
   it('refuses a CANCELLED order even at kitchenStatus READY_DISPATCH — no status write', async () => {
     const m = svcWith({
       id: 'o1',

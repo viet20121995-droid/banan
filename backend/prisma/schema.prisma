@@ -881,6 +881,9 @@ model InternalTransferMfgItem {
   mfgProduct   MfgProduct @relation(fields: [mfgProductId], references: [id])
   qty          Decimal    @db.Decimal(14, 3)
   receivedQty  Decimal?   @db.Decimal(14, 3)
+  // What the branch asked for, kept when the kitchen adjusts `qty` (null
+  // until the first adjustment: ordered == qty).
+  orderedQty   Decimal?   @db.Decimal(14, 3)
 
   @@index([orderId])
 }
@@ -897,6 +900,9 @@ model OrderItem {
   productName   String
   variantLabel  String?
   quantity      Int
+  // Internal transfers: the branch's original request, set the first time
+  // the kitchen adjusts `quantity` (null == never adjusted).
+  orderedQty    Int?
   unitPrice     Decimal         @db.Decimal(12, 2)
   customMessage String?
   lineTotal     Decimal         @db.Decimal(12, 2)

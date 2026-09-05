@@ -96,144 +96,6 @@ class _Body extends ConsumerWidget {
     );
   }
 
-  /// Receive dialog: per-line received qty (defaults to ordered) + note, then
-  /// POST receive-transfer → COMPLETED with a structured receipt.
-  Future<void> _receiveTransfer(BuildContext context, WidgetRef ref) async {
-    final qtyCtls = {
-      for (final i in order.items)
-        i.id: TextEditingController(text: '${i.quantity}'),
-    };
-    final mfgQtyCtls = {
-      for (final m in order.mfgItems)
-        m.id: TextEditingController(
-          text:
-              m.qty == m.qty.roundToDouble() ? '${m.qty.round()}' : '${m.qty}',
-        ),
-    };
-    final noteCtl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Xác nhận nhận hàng'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final i in order.items)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: BananSpacing.sm),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            i.productName,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        SizedBox(
-                          width: 72,
-                          child: TextField(
-                            controller: qtyCtls[i.id],
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            decoration: InputDecoration(
-                              isDense: true,
-                              suffixText: '/${i.quantity}',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                for (final m in order.mfgItems)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: BananSpacing.sm),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${m.name} (vật tư)',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        SizedBox(
-                          width: 96,
-                          child: TextField(
-                            controller: mfgQtyCtls[m.id],
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            textAlign: TextAlign.center,
-                            decoration: InputDecoration(
-                              isDense: true,
-                              suffixText: '/${m.qty} ${m.uomCode}',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                TextField(
-                  controller: noteCtl,
-                  decoration: const InputDecoration(
-                    labelText: 'Ghi chú (thiếu/hỏng…)',
-                    isDense: true,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Huỷ'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Xác nhận nhận hàng'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    final received = <Map<String, dynamic>>[];
-    for (final i in order.items) {
-      final qty = int.tryParse(qtyCtls[i.id]!.text.trim()) ?? i.quantity;
-      if (qty != i.quantity) {
-        received.add({'orderItemId': i.id, 'receivedQty': qty});
-      }
-    }
-    final receivedMfg = <Map<String, dynamic>>[];
-    for (final m in order.mfgItems) {
-      final qty = double.tryParse(mfgQtyCtls[m.id]!.text.trim()) ?? m.qty;
-      if (qty != m.qty) {
-        receivedMfg.add({'itemId': m.id, 'receivedQty': qty});
-      }
-    }
-    final res = await ref.read(ordersApiProvider).receiveTransfer(
-          order.id,
-          note: noteCtl.text.trim(),
-          receivedItems: received,
-          receivedMfgItems: receivedMfg,
-        );
-    if (!context.mounted) return;
-    res.when(
-      success: (_) {
-        ref.invalidate(_orderProvider(order.id));
-        ref.invalidate(storeOrdersControllerProvider);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã ghi nhận nhận hàng, đơn hoàn tất.')),
-        );
-      },
-      failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(authFailureMessage(f))),
-      ),
-    );
-  }
-
   Future<void> _markCounterPaid(BuildContext context, WidgetRef ref) async {
     final res = await ref.read(ordersApiProvider).markCounterPaid(order.id);
     if (!context.mounted) return;
@@ -541,29 +403,6 @@ class _Body extends ConsumerWidget {
                   ),
                   const SizedBox(height: BananSpacing.md),
                 ],
-                // Destination branch signs for an internal transfer after the
-                // kitchen dispatched it — the only path to COMPLETED for it.
-                if (order.source == 'INTERNAL_TRANSFER' &&
-                    (order.status == OrderStatus.readyForPickup ||
-                        order.status == OrderStatus.delivering)) ...[
-                  Builder(
-                    builder: (context) {
-                      final user =
-                          ref.watch(authSessionProvider).valueOrNull?.user;
-                      final canReceive = user != null &&
-                          (user.role.isAdmin ||
-                              (user.storeId != null &&
-                                  user.storeId == order.destinationStoreId));
-                      if (!canReceive) return const SizedBox.shrink();
-                      return FilledButton.icon(
-                        onPressed: () => _receiveTransfer(context, ref),
-                        icon: const Icon(Icons.inventory_outlined),
-                        label: const Text('Đã nhận hàng tại chi nhánh'),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: BananSpacing.md),
-                ],
                 if (actions.isNotEmpty)
                   Wrap(
                     spacing: BananSpacing.md,
@@ -680,8 +519,9 @@ class _Body extends ConsumerWidget {
 const _weekdays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
 /// Internal transfer rendered like the branch order book: STT · Tên · ĐVT ·
-/// Đặt · Nhận, sectioned into bánh / nguyên liệu pha chế / vật tư. "Nhận"
-/// fills in once the branch signs for the goods; short lines turn red.
+/// Đặt · Giao, sectioned into bánh / nguyên liệu pha chế / vật tư. "Giao" is
+/// what the kitchen ships — known once it adjusted the line or dispatched
+/// the order; short lines turn red.
 class _TransferSheet extends StatelessWidget {
   const _TransferSheet({required this.order});
   final Order order;
@@ -693,10 +533,9 @@ class _TransferSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final head =
         theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline);
-    // Cake lines carry no per-line receipt in the API; once the branch has
-    // signed (COMPLETED) they count as received in full.
-    final received = order.status == OrderStatus.completed ||
-        order.mfgItems.any((m) => m.receivedQty != null);
+    // Dispatched (COMPLETED) means every line shipped as it stands; before
+    // that only lines the kitchen already adjusted have a known "Giao".
+    final dispatched = order.status == OrderStatus.completed;
     final sections = <(String, List<_SheetCells>)>[
       (
         'BÁNH / CAKE',
@@ -708,8 +547,10 @@ class _TransferSheet extends StatelessWidget {
                   : '${i.productName} — ${i.variantLabel}',
               note: i.customMessage,
               unit: 'cái',
-              ordered: i.quantity.toDouble(),
-              received: null,
+              ordered: (i.orderedQty ?? i.quantity).toDouble(),
+              shipped: dispatched || i.orderedQty != null
+                  ? i.quantity.toDouble()
+                  : null,
             ),
         ],
       ),
@@ -722,8 +563,8 @@ class _TransferSheet extends StatelessWidget {
                 name: m.name,
                 note: m.code,
                 unit: m.uomCode,
-                ordered: m.qty,
-                received: m.receivedQty,
+                ordered: m.orderedQty ?? m.qty,
+                shipped: dispatched || m.orderedQty != null ? m.qty : null,
               ),
         ],
       ),
@@ -736,8 +577,8 @@ class _TransferSheet extends StatelessWidget {
                 name: m.name,
                 note: m.code,
                 unit: m.uomCode,
-                ordered: m.qty,
-                received: m.receivedQty,
+                ordered: m.orderedQty ?? m.qty,
+                shipped: dispatched || m.orderedQty != null ? m.qty : null,
               ),
         ],
       ),
@@ -758,7 +599,7 @@ class _TransferSheet extends StatelessWidget {
             ),
             SizedBox(
               width: 56,
-              child: Text('Nhận', style: head, textAlign: TextAlign.end),
+              child: Text('Giao', style: head, textAlign: TextAlign.end),
             ),
           ],
         ),
@@ -812,14 +653,12 @@ class _TransferSheet extends StatelessWidget {
                     SizedBox(
                       width: 56,
                       child: Text(
-                        cells[i].received == null
-                            ? (received ? _q(cells[i].ordered) : '—')
-                            : _q(cells[i].received!),
+                        cells[i].shipped == null ? '—' : _q(cells[i].shipped!),
                         textAlign: TextAlign.end,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: cells[i].received != null &&
-                                  cells[i].received! < cells[i].ordered
+                          color: cells[i].shipped != null &&
+                                  cells[i].shipped! < cells[i].ordered
                               ? theme.colorScheme.error
                               : null,
                         ),
@@ -840,13 +679,13 @@ class _SheetCells {
     required this.unit,
     required this.ordered,
     this.note,
-    this.received,
+    this.shipped,
   });
   final String name;
   final String? note;
   final String unit;
   final double ordered;
-  final double? received;
+  final double? shipped;
 }
 
 String _vnDateTime(DateTime d) {

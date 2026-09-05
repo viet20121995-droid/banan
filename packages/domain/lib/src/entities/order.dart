@@ -18,6 +18,7 @@ class OrderItem extends Equatable {
     this.variantLabel,
     this.customMessage,
     this.personalization,
+    this.orderedQty,
   });
 
   final String id;
@@ -26,6 +27,10 @@ class OrderItem extends Equatable {
   final String productName;
   final String? variantLabel;
   final int quantity;
+
+  /// Internal transfers: what the branch asked for, once the kitchen has
+  /// changed [quantity] (null = never adjusted, ordered == quantity).
+  final int? orderedQty;
   final double unitPrice;
   final double lineTotal;
   final String? customMessage;
@@ -46,6 +51,7 @@ class OrderItem extends Equatable {
         lineTotal,
         customMessage,
         personalization,
+        orderedQty,
       ];
 }
 
@@ -82,6 +88,7 @@ class TransferMfgItem extends Equatable {
     required this.uomCode,
     required this.qty,
     this.receivedQty,
+    this.orderedQty,
     this.isDrinkIngredient = false,
   });
 
@@ -91,6 +98,9 @@ class TransferMfgItem extends Equatable {
   final String name;
   final String uomCode;
   final double qty;
+
+  /// What the branch asked for, once the kitchen has changed [qty].
+  final double? orderedQty;
 
   /// Bar restock line ("Nguyên liệu pha chế") vs. any other warehouse supply.
   final bool isDrinkIngredient;
@@ -107,6 +117,7 @@ class TransferMfgItem extends Equatable {
         uomCode,
         qty,
         receivedQty,
+        orderedQty,
         isDrinkIngredient,
       ];
 }

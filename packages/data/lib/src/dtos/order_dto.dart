@@ -33,6 +33,7 @@ class OrderItemDto {
     this.variantLabel,
     this.customMessage,
     this.personalization,
+    this.orderedQty,
   });
 
   factory OrderItemDto.fromJson(Map<String, dynamic> json) {
@@ -47,6 +48,7 @@ class OrderItemDto {
       lineTotal: _toDouble(json['lineTotal']),
       customMessage: json['customMessage'] as String?,
       personalization: json['personalization'] as Map<String, dynamic>?,
+      orderedQty: (json['orderedQty'] as num?)?.toInt(),
     );
   }
 
@@ -60,6 +62,7 @@ class OrderItemDto {
   final double lineTotal;
   final String? customMessage;
   final Map<String, dynamic>? personalization;
+  final int? orderedQty;
 
   OrderItem toDomain() => OrderItem(
         id: id,
@@ -72,6 +75,7 @@ class OrderItemDto {
         lineTotal: lineTotal,
         customMessage: customMessage,
         personalization: personalization,
+        orderedQty: orderedQty,
       );
 }
 
@@ -116,63 +120,147 @@ class OrderStatusEventDto {
 
 /// Aggregated picking sheet for the kitchen: one row per item across every
 /// live internal transfer, one column per receiving branch, plus a total.
-class TransferSummaryDto {
-  const TransferSummaryDto({
-    required this.stores,
-    required this.rows,
-    required this.orderCount,
-  });
+/// The branch order book as the kitchen works it — one [TransferSheetDayDto]
+/// per delivery day. Read straight from the API (no domain entity: it is a
+/// worksheet, not order state).
+class TransferSheetDto {
+  const TransferSheetDto({required this.days});
 
-  factory TransferSummaryDto.fromJson(Map<String, dynamic> json) =>
-      TransferSummaryDto(
-        stores: ((json['stores'] as List?) ?? const [])
-            .map((e) => (
-                  id: (e as Map)['id'] as String,
-                  name: e['name'] as String? ?? '',
-                ))
-            .toList(),
-        rows: ((json['rows'] as List?) ?? const [])
+  factory TransferSheetDto.fromJson(Map<String, dynamic> json) =>
+      TransferSheetDto(
+        days: ((json['days'] as List?) ?? const [])
             .map(
-              (e) => TransferSummaryRow.fromJson(
+              (e) => TransferSheetDayDto.fromJson(
                 (e as Map).cast<String, dynamic>(),
               ),
             )
             .toList(),
-        orderCount: (json['orderCount'] as num?)?.toInt() ?? 0,
       );
 
-  final List<({String id, String name})> stores;
-  final List<TransferSummaryRow> rows;
-  final int orderCount;
+  final List<TransferSheetDayDto> days;
 }
 
-class TransferSummaryRow {
-  const TransferSummaryRow({
+class TransferSheetDayDto {
+  const TransferSheetDayDto({
+    required this.day,
+    required this.orders,
+    required this.stores,
+    required this.rows,
+  });
+
+  factory TransferSheetDayDto.fromJson(Map<String, dynamic> json) =>
+      TransferSheetDayDto(
+        day: json['day'] as String? ?? '',
+        orders: ((json['orders'] as List?) ?? const [])
+            .map(
+              (e) => (
+                id: (e as Map)['id'] as String,
+                code: e['code'] as String? ?? '',
+                storeId: e['storeId'] as String? ?? '',
+                kitchenStatus: e['kitchenStatus'] as String?,
+              ),
+            )
+            .toList(),
+        stores: ((json['stores'] as List?) ?? const [])
+            .map(
+              (e) => (
+                id: (e as Map)['id'] as String,
+                name: e['name'] as String? ?? '',
+              ),
+            )
+            .toList(),
+        rows: ((json['rows'] as List?) ?? const [])
+            .map(
+              (e) => TransferSheetRowDto.fromJson(
+                (e as Map).cast<String, dynamic>(),
+              ),
+            )
+            .toList(),
+      );
+
+  /// VN calendar day the goods are due, `yyyy-MM-dd`.
+  final String day;
+  final List<({String id, String code, String storeId, String? kitchenStatus})>
+      orders;
+  final List<({String id, String name})> stores;
+  final List<TransferSheetRowDto> rows;
+}
+
+class TransferSheetRowDto {
+  const TransferSheetRowDto({
+    required this.key,
     required this.label,
     required this.unit,
     required this.isSupply,
+    required this.isDrinkIngredient,
     required this.byStore,
-    required this.total,
-    this.isDrinkIngredient = false,
+    required this.ordered,
+    required this.shipped,
   });
 
-  factory TransferSummaryRow.fromJson(Map<String, dynamic> json) =>
-      TransferSummaryRow(
+  factory TransferSheetRowDto.fromJson(Map<String, dynamic> json) =>
+      TransferSheetRowDto(
+        key: json['key'] as String? ?? '',
         label: json['label'] as String? ?? '',
         unit: json['unit'] as String? ?? '',
         isSupply: json['isSupply'] as bool? ?? false,
         isDrinkIngredient: json['isDrinkIngredient'] as bool? ?? false,
-        byStore: ((json['byStore'] as Map?) ?? const {})
-            .map((k, v) => MapEntry('$k', _toDouble(v))),
-        total: _toDouble(json['total']),
+        byStore: ((json['byStore'] as Map?) ?? const {}).map(
+          (k, v) => MapEntry(
+            '$k',
+            TransferSheetCellDto.fromJson((v as Map).cast<String, dynamic>()),
+          ),
+        ),
+        ordered: _toDouble(json['ordered']),
+        shipped: _toDouble(json['shipped']),
       );
 
+  final String key;
   final String label;
   final String unit;
   final bool isSupply;
   final bool isDrinkIngredient;
-  final Map<String, double> byStore;
-  final double total;
+  final Map<String, TransferSheetCellDto> byStore;
+  final double ordered;
+  final double shipped;
+}
+
+class TransferSheetCellDto {
+  const TransferSheetCellDto({
+    required this.ordered,
+    required this.shipped,
+    required this.lines,
+  });
+
+  factory TransferSheetCellDto.fromJson(Map<String, dynamic> json) =>
+      TransferSheetCellDto(
+        ordered: _toDouble(json['ordered']),
+        shipped: _toDouble(json['shipped']),
+        lines: ((json['lines'] as List?) ?? const [])
+            .map(
+              (e) => (
+                orderId: (e as Map)['orderId'] as String,
+                itemId: e['itemId'] as String,
+                kind: e['kind'] as String? ?? 'item',
+                ordered: _toDouble(e['ordered']),
+                shipped: _toDouble(e['shipped']),
+              ),
+            )
+            .toList(),
+      );
+
+  final double ordered;
+  final double shipped;
+
+  /// The order lines behind the cell — a branch can have two orders one day.
+  final List<
+      ({
+        String orderId,
+        String itemId,
+        String kind,
+        double ordered,
+        double shipped,
+      })> lines;
 }
 
 /// MES supply line on an internal transfer (see [TransferMfgItem]).
@@ -185,6 +273,7 @@ class TransferMfgItemDto {
     required this.uomCode,
     required this.qty,
     this.receivedQty,
+    this.orderedQty,
     this.isDrinkIngredient = false,
   });
 
@@ -199,6 +288,8 @@ class TransferMfgItemDto {
       qty: _toDouble(json['qty']),
       receivedQty:
           json['receivedQty'] == null ? null : _toDouble(json['receivedQty']),
+      orderedQty:
+          json['orderedQty'] == null ? null : _toDouble(json['orderedQty']),
       isDrinkIngredient: product?['drinkIngredient'] as bool? ?? false,
     );
   }
@@ -210,6 +301,7 @@ class TransferMfgItemDto {
   final String uomCode;
   final double qty;
   final double? receivedQty;
+  final double? orderedQty;
   final bool isDrinkIngredient;
 
   TransferMfgItem toDomain() => TransferMfgItem(
@@ -220,6 +312,7 @@ class TransferMfgItemDto {
         uomCode: uomCode,
         qty: qty,
         receivedQty: receivedQty,
+        orderedQty: orderedQty,
         isDrinkIngredient: isDrinkIngredient,
       );
 }

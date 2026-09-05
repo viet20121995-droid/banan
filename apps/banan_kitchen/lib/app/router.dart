@@ -67,7 +67,9 @@ final kitchenRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/transfer-summary',
-            builder: (_, __) => const TransferSummaryScreen(),
+            builder: (_, state) => TransferSummaryScreen(
+              initialDay: state.uri.queryParameters['day'],
+            ),
           ),
           // ── "Sản xuất" (manufacturing / MES) — separate from the orders board. ──
           GoRoute(

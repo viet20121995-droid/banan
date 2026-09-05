@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:banan_core/banan_core.dart';
 import 'package:dio/dio.dart';
 
@@ -6,9 +8,14 @@ import '../dtos/order_dto.dart';
 import '../dtos/payment_dto.dart';
 import 'errors.dart';
 
-// The kitchen picking-sheet screen renders these without going through a
-// domain entity — a read-only report shape, not order state.
-export '../dtos/order_dto.dart' show TransferSummaryDto, TransferSummaryRow;
+// The kitchen order-sheet screen renders these without going through a
+// domain entity — a worksheet shape, not order state.
+export '../dtos/order_dto.dart'
+    show
+        TransferSheetCellDto,
+        TransferSheetDayDto,
+        TransferSheetDto,
+        TransferSheetRowDto;
 
 /// Result of POST /orders — server returns the order plus provider-specific
 /// payment instructions (CASH `payAtPickup`, Stripe `redirectUrl`, ...).
@@ -294,15 +301,90 @@ class OrdersApi {
         if (note != null && note.isNotEmpty) 'note': note,
       });
 
-  /// Aggregated picking sheet: rows = items across live internal transfers,
-  /// columns = receiving branches + total.
-  Future<Result<TransferSummaryDto, AppFailure>> transferSummary() async {
+  /// The branch order book as the kitchen works it: every live internal
+  /// transfer, one sheet per delivery day, per branch ordered vs shipped.
+  Future<Result<TransferSheetDto, AppFailure>> transferSheet() async {
     try {
       final res = await _dio
-          .get<Map<String, dynamic>>('/kitchen/orders/internal-transfer/summary');
+          .get<Map<String, dynamic>>('/kitchen/orders/internal-transfer/sheet');
       if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final data = res.data?['data'] as Map<String, dynamic>? ?? const {};
-      return Result.success(TransferSummaryDto.fromJson(data));
+      return Result.success(TransferSheetDto.fromJson(data));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  /// Save the "Giao" cells the kitchen edited. [lines]: {orderId, itemId,
+  /// kind: item|mfg, qty}. Returns how many orders were adjusted.
+  Future<Result<int, AppFailure>> saveTransferSheet(
+    List<Map<String, dynamic>> lines,
+  ) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/kitchen/orders/internal-transfer/sheet/save',
+        data: {'lines': lines},
+      );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
+      final data = res.data?['data'] as Map<String, dynamic>? ?? const {};
+      return Result.success((data['adjusted'] as num?)?.toInt() ?? 0);
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  /// "Xuất đi cả ngày": dispatch every live transfer due on [day]
+  /// (`yyyy-MM-dd`, VN calendar). Orders that could not go are listed.
+  Future<
+      Result<
+          ({
+            List<String> dispatched,
+            List<({String code, String message})> failed
+          }),
+          AppFailure>> dispatchTransferDay(String day) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/kitchen/orders/internal-transfer/sheet/dispatch',
+        data: {'day': day},
+      );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
+      final data = res.data?['data'] as Map<String, dynamic>? ?? const {};
+      return Result.success((
+        dispatched: ((data['dispatched'] as List?) ?? const [])
+            .map((e) => '$e')
+            .toList(),
+        failed: ((data['failed'] as List?) ?? const [])
+            .map(
+              (e) => (
+                code: (e as Map)['code'] as String? ?? '',
+                message: e['message'] as String? ?? '',
+              ),
+            )
+            .toList(),
+      ));
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
+  /// The sheet for one day as PDF bytes (landscape A4).
+  Future<Result<Uint8List, AppFailure>> transferSheetPdf(String day) async {
+    try {
+      final res = await _dio.get<List<int>>(
+        '/kitchen/orders/internal-transfer/sheet/pdf',
+        queryParameters: {'day': day},
+        options: Options(responseType: ResponseType.bytes),
+      );
+      if (res.statusCode != 200 || res.data == null) {
+        return Result.failure(mapHttpStatusToFailure(res));
+      }
+      return Result.success(Uint8List.fromList(res.data!));
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
     } catch (e) {

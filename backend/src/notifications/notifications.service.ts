@@ -113,6 +113,7 @@ export class NotificationsService {
           `${order.fulfillmentType === 'DELIVERY' ? 'Giao hàng' : 'Lấy tại quầy'}`,
       },
       {
+        orderId: order.id,
         code: order.code,
         totalVnd: Number(order.total.toString()),
         contact:

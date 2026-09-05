@@ -1,7 +1,9 @@
 import { isDrinkIngredientOrderDay, nextMorningDelivery } from './drink-ingredient-rule';
+import { buildTransferSheet, transferDayKey, type TransferSheet } from './transfer-sheet';
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -1471,7 +1473,7 @@ export class OrdersService {
         title: `Đơn vào bếp · ${order.code}`,
         body: `${order.items.length} món cần chuẩn bị.`,
       },
-      { code: order.code },
+      { orderId: order.id, code: order.code },
     );
 
     return updated;
@@ -1581,8 +1583,15 @@ export class OrdersService {
         message: 'Order is not a live SENT_TO_KITCHEN card at READY_DISPATCH.',
       });
     }
-    const targetOrderStatus: OrderStatus =
-      order.fulfillmentType === 'DELIVERY' ? 'DELIVERING' : 'READY_FOR_PICKUP';
+    // A branch restock has no customer hand-over: leaving the kitchen IS the
+    // delivery, so it completes here (receipt + warehouse issue included)
+    // instead of waiting for the branch to sign in the merchant app.
+    const internal = order.source === 'INTERNAL_TRANSFER';
+    const targetOrderStatus: OrderStatus = internal
+      ? 'COMPLETED'
+      : order.fulfillmentType === 'DELIVERY'
+        ? 'DELIVERING'
+        : 'READY_FOR_PICKUP';
 
     const updated = await this.prisma.$transaction(async (tx) => {
       // Status-guarded on SENT_TO_KITCHEN (not order.status) so a concurrent
@@ -1606,6 +1615,7 @@ export class OrdersService {
           message: 'Order was already dispatched or changed concurrently.',
         });
       }
+      if (internal) await this.completeTransferLines(tx, id, actor.sub);
       const next = await tx.order.findUniqueOrThrow({
         where: { id },
         include: ORDER_INCLUDE,
@@ -1616,7 +1626,7 @@ export class OrdersService {
           fromStatus: order.status,
           toStatus: targetOrderStatus,
           actorId: actor.sub,
-          note: 'Dispatched from central kitchen',
+          note: internal ? 'Xuất khỏi bếp — giao chi nhánh' : 'Dispatched from central kitchen',
         },
       });
       return next;
@@ -1772,7 +1782,7 @@ export class OrdersService {
         title: `Đơn wholesale · ${order.code}`,
         body: `${updated.items.length} món cần chuẩn bị.`,
       },
-      { code: order.code },
+      { orderId: id, code: order.code },
     );
     return updated;
   }
@@ -2289,7 +2299,7 @@ export class OrdersService {
           title: `Đơn vào bếp · ${created.code}`,
           body: `${created.items.length} món cần chuẩn bị.`,
         },
-        { code: created.code },
+        { orderId: created.id, code: created.code },
       );
     }
     return created;
@@ -2501,7 +2511,7 @@ export class OrdersService {
           title: `Đơn nội bộ · ${created.code}`,
           body: `${created.items.length} món cho chi nhánh.`,
         },
-        { code: created.code },
+        { orderId: created.id, code: created.code },
       );
     }
     return created;
@@ -2686,15 +2696,21 @@ export class OrdersService {
       if (dto.note?.trim()) note = `${note} Lý do: ${dto.note.trim()}`;
 
       for (const u of itemUpdates) {
+        const line = itemById.get(u.id)!;
         await tx.orderItem.update({
           where: { id: u.id },
-          data: { quantity: u.quantity, lineTotal: u.lineTotal },
+          data: {
+            quantity: u.quantity,
+            lineTotal: u.lineTotal,
+            orderedQty: line.orderedQty ?? line.quantity,
+          },
         });
       }
       for (const u of mfgUpdates) {
+        const line = mfgById.get(u.id)!;
         await tx.internalTransferMfgItem.update({
           where: { id: u.id },
-          data: { qty: new Prisma.Decimal(u.qty) },
+          data: { qty: new Prisma.Decimal(u.qty), orderedQty: line.orderedQty ?? line.qty },
         });
       }
       // Internal-ledger money follows the shipped quantities.
@@ -2739,11 +2755,54 @@ export class OrdersService {
   }
 
   /**
-   * Aggregated picking sheet for the kanban: every internal transfer still
-   * live at this kitchen, one row per item, one column per receiving branch,
-   * plus a total — what the bakers batch-produce and pack against.
+   * Books a transfer as handed over: a receipt line per item (received =
+   * shipped) and the MES issue for every supply line. Runs inside the
+   * caller's transaction, after the order row lock.
    */
-  async internalTransferSummary(kitchenId: string) {
+  private async completeTransferLines(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    actorId: string,
+  ): Promise<void> {
+    const items = await tx.orderItem.findMany({ where: { orderId } });
+    const mfgLines = await tx.internalTransferMfgItem.findMany({ where: { orderId } });
+    await tx.internalTransferReceipt.create({
+      data: {
+        orderId,
+        receivedById: actorId,
+        lines: {
+          createMany: {
+            data: items.map((i) => ({
+              orderItemId: i.id,
+              orderedQty: i.orderedQty ?? i.quantity,
+              receivedQty: i.quantity,
+            })),
+          },
+        },
+      },
+    });
+    for (const line of mfgLines) {
+      const qty = Number(line.qty);
+      await tx.internalTransferMfgItem.update({
+        where: { id: line.id },
+        data: { receivedQty: line.qty },
+      });
+      if (qty > 0) {
+        await this.manufacturing.issueForTransfer(tx, {
+          productId: line.mfgProductId,
+          qty,
+          refId: orderId,
+        });
+      }
+    }
+  }
+
+  /**
+   * The branch order book as the kitchen works it: every internal transfer
+   * still live here, one sheet per delivery day, one row per item, per
+   * branch the ordered and the shipped quantity. See `buildTransferSheet`.
+   */
+  async internalTransferSheet(kitchenId: string): Promise<TransferSheet> {
     const orders = await this.prisma.order.findMany({
       where: { kitchenId, source: 'INTERNAL_TRANSFER', status: 'SENT_TO_KITCHEN' },
       include: {
@@ -2764,82 +2823,66 @@ export class OrdersService {
         requestingStore: { select: { id: true, name: true } },
       },
     });
+    return buildTransferSheet(orders);
+  }
 
-    const stores = new Map<string, string>();
-    const rows = new Map<
-      string,
-      {
-        label: string;
-        unit: string;
-        isSupply: boolean;
-        isDrinkIngredient: boolean;
-        byStore: Map<string, number>;
-        total: number;
-      }
-    >();
-    for (const order of orders) {
-      const store = order.destinationStore ?? order.requestingStore;
-      const storeId = store?.id ?? order.storeId;
-      stores.set(storeId, store?.name ?? 'Cửa hàng');
-      const add = (
-        key: string,
-        label: string,
-        unit: string,
-        kind: 'cake' | 'drink' | 'supply',
-        qty: number,
-      ) => {
-        if (qty <= 0) return;
-        const row = rows.get(key) ?? {
-          label,
-          unit,
-          isSupply: kind !== 'cake',
-          isDrinkIngredient: kind === 'drink',
-          byStore: new Map(),
-          total: 0,
-        };
-        row.byStore.set(storeId, (row.byStore.get(storeId) ?? 0) + qty);
-        row.total += qty;
-        rows.set(key, row);
-      };
-      for (const i of order.items) {
-        // Only the distinguishing part of the variant: "Macaron (Lemon)", not
-        // "Macaron (single) (Single · Lemon)" — the board is read at a glance.
-        const parts = (i.variantLabel ?? '')
-          .split(' · ')
-          .map((v) => v.trim())
-          .filter((v) => v && !['Default', 'Single', 'Classic'].includes(v) && v !== i.productName);
-        const label = parts.length ? `${i.productName} (${parts.join(' · ')})` : i.productName;
-        add(`i:${label}`, label, 'cái', 'cake', i.quantity);
-      }
-      for (const m of order.mfgItems) {
-        add(
-          `m:${m.mfgProduct.code}`,
-          `${m.mfgProduct.nameVi} (${m.mfgProduct.code})`,
-          m.mfgProduct.uom.code,
-          m.mfgProduct.drinkIngredient ? 'drink' : 'supply',
-          Number(m.qty),
-        );
+  /** One save of the sheet = one adjustment per touched order. */
+  async saveTransferSheet(
+    actor: { sub: string; role: Role; kitchenId?: string | null },
+    lines: Array<{ orderId: string; itemId: string; kind: 'item' | 'mfg'; qty: number }>,
+  ): Promise<{ adjusted: number }> {
+    const byOrder = new Map<string, typeof lines>();
+    for (const l of lines) byOrder.set(l.orderId, [...(byOrder.get(l.orderId) ?? []), l]);
+    let adjusted = 0;
+    for (const [orderId, ls] of byOrder) {
+      await this.adjustInternalTransfer(orderId, actor, {
+        items: ls
+          .filter((l) => l.kind === 'item')
+          .map((l) => ({ orderItemId: l.itemId, quantity: l.qty })),
+        mfgItems: ls.filter((l) => l.kind === 'mfg').map((l) => ({ itemId: l.itemId, qty: l.qty })),
+        note: 'điều chỉnh từ phiếu tổng',
+      });
+      adjusted++;
+    }
+    return { adjusted };
+  }
+
+  /**
+   * "Xuất đi cả ngày": every live transfer due on `day` (VN calendar) is
+   * walked to READY_DISPATCH and dispatched — which completes it. Orders
+   * that fail are reported, the rest still go.
+   */
+  async dispatchTransferDay(
+    kitchenId: string,
+    actor: { sub: string; role: Role; kitchenId?: string | null },
+    day: string,
+  ): Promise<{ dispatched: string[]; failed: Array<{ code: string; message: string }> }> {
+    const orders = await this.prisma.order.findMany({
+      where: { kitchenId, source: 'INTERNAL_TRANSFER', status: 'SENT_TO_KITCHEN' },
+      select: { id: true, code: true, kitchenStatus: true, scheduledFor: true, createdAt: true },
+    });
+    const dispatched: string[] = [];
+    const failed: Array<{ code: string; message: string }> = [];
+    for (const o of orders) {
+      if (transferDayKey(o) !== day) continue;
+      try {
+        if (o.kitchenStatus === 'PENDING_ACK' || o.kitchenStatus === null) {
+          await this.transitionKitchen(o.id, 'PREPARING', actor);
+          await this.transitionKitchen(o.id, 'READY_DISPATCH', actor);
+        } else if (o.kitchenStatus === 'PREPARING') {
+          await this.transitionKitchen(o.id, 'READY_DISPATCH', actor);
+        }
+        await this.dispatchFromKitchen(o.id, actor);
+        dispatched.push(o.code);
+      } catch (e) {
+        const msg =
+          e instanceof HttpException
+            ? ((e.getResponse() as { message?: string }).message ?? e.message)
+            : String(e);
+        failed.push({ code: o.code, message: msg });
       }
     }
-
-    const storeList = [...stores.entries()]
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
-    // Cakes first, then the bar restock group, then everything else the
-    // warehouse ships along.
-    const rank = (r: { isSupply: boolean; isDrinkIngredient: boolean }) =>
-      !r.isSupply ? 0 : r.isDrinkIngredient ? 1 : 2;
-    const rowList = [...rows.values()]
-      .sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label, 'vi'))
-      .map((r) => ({
-        label: r.label,
-        unit: r.unit,
-        isSupply: r.isSupply,
-        isDrinkIngredient: r.isDrinkIngredient,
-        byStore: Object.fromEntries(r.byStore),
-        total: r.total,
-      }));
-    return { stores: storeList, rows: rowList, orderCount: orders.length };
+    return { dispatched, failed };
   }
 
   async receiveInternalTransfer(

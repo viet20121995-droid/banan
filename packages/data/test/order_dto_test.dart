@@ -74,4 +74,76 @@ void main() {
       isFalse,
     );
   });
+
+  test('transfer lines keep the ordered qty once the kitchen adjusts', () {
+    final item = OrderItemDto.fromJson({
+      'id': 'i1',
+      'productId': 'p1',
+      'productName': 'Mango Pudding',
+      'quantity': 1,
+      'orderedQty': 2,
+      'unitPrice': '0',
+      'lineTotal': '0',
+    });
+    expect(item.orderedQty, 2);
+    expect(item.toDomain().orderedQty, 2);
+    final mfg = TransferMfgItemDto.fromJson({
+      'id': 'l1',
+      'mfgProductId': 'm1',
+      'qty': '1.5',
+      'orderedQty': '2',
+    });
+    expect(mfg.orderedQty, 2);
+    expect(mfg.toDomain().orderedQty, 2);
+  });
+
+  test('transfer sheet parses days, stores, rows and the lines behind a cell',
+      () {
+    final sheet = TransferSheetDto.fromJson({
+      'days': [
+        {
+          'day': '2026-09-05',
+          'orders': [
+            {'id': 'o1', 'code': 'A', 'storeId': 's1', 'kitchenStatus': null},
+          ],
+          'stores': [
+            {'id': 's1', 'name': 'Banan – Trường Sa'},
+          ],
+          'rows': [
+            {
+              'key': 'i:Creme Flan',
+              'label': 'Creme Flan',
+              'unit': 'cái',
+              'isSupply': false,
+              'isDrinkIngredient': false,
+              'byStore': {
+                's1': {
+                  'ordered': 18,
+                  'shipped': 16,
+                  'lines': [
+                    {
+                      'orderId': 'o1',
+                      'itemId': 'i1',
+                      'kind': 'item',
+                      'ordered': 18,
+                      'shipped': 16,
+                    },
+                  ],
+                },
+              },
+              'ordered': 18,
+              'shipped': 16,
+            },
+          ],
+        },
+      ],
+    });
+    final day = sheet.days.single;
+    expect(day.day, '2026-09-05');
+    expect(day.orders.single.code, 'A');
+    expect(day.stores.single.name, 'Banan – Trường Sa');
+    final cell = day.rows.single.byStore['s1']!;
+    expect(cell.shipped, 16);
+    expect(cell.lines.single.itemId, 'i1');
+  });
 }

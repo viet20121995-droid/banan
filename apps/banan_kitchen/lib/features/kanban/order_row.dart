@@ -247,7 +247,7 @@ class KitchenOrderRow extends StatefulWidget {
     this.onAccept,
     this.onReady,
     this.onDispatch,
-    this.onAdjust,
+    this.onOpenSheet,
     this.clock,
   });
 
@@ -264,8 +264,9 @@ class KitchenOrderRow extends StatefulWidget {
   final Future<bool> Function()? onReady;
   final Future<bool> Function()? onDispatch;
 
-  /// Internal transfers only — edit quantities before handover.
-  final VoidCallback? onAdjust;
+  /// Internal transfers only — quantities are worked on the order sheet,
+  /// so the row is a pointer: a tap opens the sheet on the order's day.
+  final VoidCallback? onOpenSheet;
 
   /// Injectable "now" so tests can pin the priority signal.
   final DateTime? clock;
@@ -294,7 +295,7 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
     final accent = widget.stage.accent;
     final border = theme.dividerTheme.color ?? Colors.black12;
 
-    return Container(
+    final card = Container(
       decoration: BoxDecoration(
         borderRadius: BananRadii.rmd,
         color: theme.colorScheme.surface,
@@ -343,6 +344,9 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
         ],
       ),
     );
+    final open = widget.onOpenSheet;
+    if (open == null) return card;
+    return InkWell(onTap: open, borderRadius: BananRadii.rmd, child: card);
   }
 
   Widget _header(ThemeData theme) {
@@ -540,15 +544,6 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (order.source == 'INTERNAL_TRANSFER' &&
-                widget.onAdjust != null) ...[
-              OutlinedButton.icon(
-                onPressed: _busy ? null : widget.onAdjust,
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('Sửa số lượng'),
-              ),
-              const SizedBox(width: BananSpacing.sm),
-            ],
             if (dispatch != null)
               FilledButton.icon(
                 onPressed: _busy
@@ -581,6 +576,7 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
   /// many columns as fit so a 12-line order stays one glance tall.
   Widget _items(ThemeData theme) {
     final order = widget.order;
+    if (order.source == 'INTERNAL_TRANSFER') return _transferSummary(theme);
     final lines = <Widget>[
       for (final i in order.items)
         _ItemLine(
@@ -629,8 +625,7 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
             'Quà tặng',
             if (order.giftRecipientName != null &&
                 order.giftRecipientName!.isNotEmpty)
-              'tặng ${order.giftRecipientName}'
-                  '${order.giftRecipientPhone != null && order.giftRecipientPhone!.isNotEmpty ? ' · ${order.giftRecipientPhone}' : ''}',
+              'tặng ${order.giftRecipientName}${order.giftRecipientPhone != null && order.giftRecipientPhone!.isNotEmpty ? ' · ${order.giftRecipientPhone}' : ''}',
             if (order.giftWrap) 'gói quà',
             if (order.hidePrice) 'ẩn giá',
             if (order.giftMessage != null &&
@@ -682,6 +677,42 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
           ],
         );
       },
+    );
+  }
+}
+
+extension on _KitchenOrderRowState {
+  /// Internal transfers are worked on the order sheet, not here: the row
+  /// only says how much is behind it and that a tap opens the sheet.
+  Widget _transferSummary(ThemeData theme) {
+    final order = widget.order;
+    final lines = order.items.length + order.mfgItems.length;
+    final pieces = order.items.fold<int>(0, (a, i) => a + i.quantity);
+    final supplies = order.mfgItems.length;
+    return Row(
+      children: [
+        Icon(
+          Icons.table_chart_outlined,
+          size: 16,
+          color: theme.colorScheme.primary,
+        ),
+        const SizedBox(width: BananSpacing.xs),
+        Expanded(
+          child: Text(
+            '$lines dòng · $pieces cái bánh${supplies > 0 ? ' · $supplies vật tư' : ''}',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+        if (widget.onOpenSheet != null)
+          Text(
+            'Mở phiếu tổng ›',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+      ],
     );
   }
 }

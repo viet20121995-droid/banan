@@ -1,11 +1,10 @@
-import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import 'day_bar.dart';
 import 'kanban_controller.dart';
@@ -207,6 +206,14 @@ class _Board extends StatelessWidget {
   final ValueChanged<String> onSourceChanged;
   final ValueChanged<bool> onUrgentChanged;
 
+  /// The sheet an internal transfer is on: its delivery day on the Vietnam
+  /// calendar (`yyyy-MM-dd`), matching the backend's `transferDayKey`.
+  static String _sheetDay(Order o) {
+    final vn =
+        (o.scheduledFor ?? o.createdAt).toUtc().add(const Duration(hours: 7));
+    return DateFormat('yyyy-MM-dd').format(vn);
+  }
+
   /// The day an order belongs to on the board — when it has to be READY
   /// (scheduled slot), else the day it was placed (walk-in: make now).
   static DateTime _boardDay(Order o) {
@@ -264,14 +271,8 @@ class _Board extends StatelessWidget {
           onAccept: () => controller.accept(order.id),
           onReady: () => controller.markReady(order.id),
           onDispatch: () => controller.dispatch(order.id),
-          onAdjust: order.source == 'INTERNAL_TRANSFER'
-              ? () => showDialog<void>(
-                    context: context,
-                    builder: (_) => _AdjustTransferDialog(
-                      order: order,
-                      controller: controller,
-                    ),
-                  )
+          onOpenSheet: order.source == 'INTERNAL_TRANSFER'
+              ? () => context.go('/transfer-summary?day=${_sheetDay(order)}')
               : null,
         ),
       );
@@ -518,200 +519,6 @@ class _BoardToolbar extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-/// Kitchen edits the quantities that will actually ship on an internal
-/// transfer. Prefilled with the ordered amounts; a note explains why.
-class _AdjustTransferDialog extends ConsumerStatefulWidget {
-  const _AdjustTransferDialog({required this.order, required this.controller});
-  final Order order;
-  final KanbanController controller;
-
-  @override
-  ConsumerState<_AdjustTransferDialog> createState() =>
-      _AdjustTransferDialogState();
-}
-
-class _AdjustTransferDialogState extends ConsumerState<_AdjustTransferDialog> {
-  late final Map<String, TextEditingController> _itemQty = {
-    for (final i in widget.order.items)
-      i.id: TextEditingController(text: '${i.quantity}'),
-  };
-  late final Map<String, TextEditingController> _mfgQty = {
-    for (final m in widget.order.mfgItems)
-      m.id: TextEditingController(
-        text: m.qty == m.qty.roundToDouble() ? '${m.qty.round()}' : '${m.qty}',
-      ),
-  };
-  final _note = TextEditingController();
-  bool _saving = false;
-
-  @override
-  void dispose() {
-    for (final c in _itemQty.values) {
-      c.dispose();
-    }
-    for (final c in _mfgQty.values) {
-      c.dispose();
-    }
-    _note.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final items = <Map<String, dynamic>>[];
-    for (final i in widget.order.items) {
-      final qty = int.tryParse(_itemQty[i.id]!.text.trim());
-      if (qty == null || qty < 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Số lượng "${i.productName}" không hợp lệ.')),
-        );
-        return;
-      }
-      if (qty != i.quantity) {
-        items.add({'orderItemId': i.id, 'quantity': qty});
-      }
-    }
-    final mfgItems = <Map<String, dynamic>>[];
-    for (final m in widget.order.mfgItems) {
-      final qty = double.tryParse(_mfgQty[m.id]!.text.trim());
-      if (qty == null || qty < 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Số lượng "${m.name}" không hợp lệ.')),
-        );
-        return;
-      }
-      if (qty != m.qty) {
-        mfgItems.add({'itemId': m.id, 'qty': qty});
-      }
-    }
-    if (items.isEmpty && mfgItems.isEmpty) {
-      Navigator.of(context).pop();
-      return;
-    }
-    setState(() => _saving = true);
-    final res = await ref.read(ordersApiProvider).adjustTransfer(
-          widget.order.id,
-          items: items,
-          mfgItems: mfgItems,
-          note: _note.text.trim(),
-        );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    res.when(
-      success: (_) {
-        Navigator.of(context).pop();
-        widget.controller.refresh();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã cập nhật số lượng xuất.')),
-        );
-      },
-      failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi: ${f.message ?? f.code}')),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final order = widget.order;
-    return AlertDialog(
-      title: Text('Sửa số lượng xuất — ${order.code}'),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final i in order.items)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: BananSpacing.sm),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          i.productName,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 80,
-                        child: TextField(
-                          controller: _itemQty[i.id],
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          textAlign: TextAlign.center,
-                          decoration: InputDecoration(
-                            isDense: true,
-                            suffixText: '/${i.quantity}',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              for (final m in order.mfgItems)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: BananSpacing.sm),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${m.name} (${m.isDrinkIngredient ? 'pha chế' : 'vật tư'})',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 100,
-                        child: TextField(
-                          controller: _mfgQty[m.id],
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(RegExp('[0-9.]')),
-                          ],
-                          textAlign: TextAlign.center,
-                          decoration: InputDecoration(
-                            isDense: true,
-                            suffixText: '/${m.qty} ${m.uomCode}',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              TextField(
-                controller: _note,
-                decoration: const InputDecoration(
-                  labelText: 'Lý do (thiếu nguyên liệu, hư hỏng…)',
-                  isDense: true,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Đóng'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _submit,
-          child: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Lưu'),
-        ),
-      ],
     );
   }
 }

@@ -60,12 +60,15 @@ export function kitchenQueueWhere(
 
   const dispatchedIn = (range: { gte: Date; lt?: Date }): Prisma.OrderWhereInput => ({
     status: { in: DISPATCHED },
-    statusEvents: {
-      some: {
-        toStatus: { in: DISPATCH_EVENTS },
-        createdAt: range,
+    OR: [
+      { statusEvents: { some: { toStatus: { in: DISPATCH_EVENTS }, createdAt: range } } },
+      // An internal transfer completes the moment the kitchen dispatches it —
+      // that COMPLETED event is its dispatch.
+      {
+        source: 'INTERNAL_TRANSFER',
+        statusEvents: { some: { toStatus: 'COMPLETED', createdAt: range } },
       },
-    },
+    ],
   });
 
   const from = opts.from ?? opts.date;
