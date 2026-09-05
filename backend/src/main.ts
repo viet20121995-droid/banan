@@ -11,7 +11,6 @@ import { join } from 'node:path';
 import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor';
 
 async function bootstrap() {
@@ -73,7 +72,8 @@ async function bootstrap() {
   );
 
   app.useGlobalInterceptors(new EnvelopeInterceptor());
-  app.useGlobalFilters(new AllExceptionsFilter());
+  // The exception filter is registered by OpsModule (APP_FILTER) so it can
+  // mail ops on 5xx.
 
   if (config.get<string>('NODE_ENV') !== 'production') {
     const swagger = new DocumentBuilder()

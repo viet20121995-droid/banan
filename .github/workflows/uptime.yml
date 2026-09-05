@@ -1,0 +1,37 @@
+# Free uptime monitor: every 5 minutes GitHub curls the API health endpoint
+# and the three web apps. A failed run mails the person who last touched
+# this file (GitHub's default "failed workflow" notification), which is the
+# alert. Each URL gets a second try after 30s so a single hiccup stays quiet.
+name: uptime
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe production
+        run: |
+          set -u
+          probe() {
+            curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$1" || echo 000
+          }
+          fail=0
+          for url in \
+            https://api.banancakes.vn/api/v1/health \
+            https://banancakes.vn/ \
+            https://merchant.banancakes.vn/ \
+            https://kitchen.banancakes.vn/; do
+            code=$(probe "$url")
+            if [ "$code" != 200 ]; then
+              sleep 30
+              code=$(probe "$url")
+            fi
+            echo "$code $url"
+            [ "$code" = 200 ] || fail=1
+          done
+          exit "$fail"

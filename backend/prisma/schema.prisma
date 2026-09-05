@@ -1187,6 +1187,27 @@ enum DevicePlatform {
   ANDROID
 }
 
+/// Staff action trail: every mutating request by a non-customer user, plus
+/// logins. One admin login is shared, so this is what says who did what.
+model AuditLog {
+  id         String   @id @default(uuid())
+  at         DateTime @default(now())
+  userId     String?
+  email      String?
+  role       String?
+  method     String
+  path       String
+  status     Int
+  ip         String?
+  userAgent  String?
+  requestId  String?
+  durationMs Int?
+  body       Json?
+
+  @@index([at])
+  @@index([userId, at])
+}
+
 model DeviceToken {
   id        String         @id @default(uuid())
   userId    String

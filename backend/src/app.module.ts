@@ -33,6 +33,7 @@ import { MarketingModule } from './marketing/marketing.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { OpsModule } from './ops/ops.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -104,6 +105,7 @@ import { WishlistModule } from './wishlist/wishlist.module';
     NewsletterModule,
     NotificationsModule,
     OrdersModule,
+    OpsModule,
     KitchenModule,
     AnalyticsModule,
     ReviewsModule,

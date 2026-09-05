@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/admin_mgmt/accounts_screen.dart';
+import '../features/admin_mgmt/audit_log_screen.dart';
 import '../features/admin_mgmt/delivery_config_screen.dart';
 import '../features/admin_mgmt/display_config_screen.dart';
 import '../features/admin_mgmt/promo_popup_screen.dart';
@@ -188,6 +189,12 @@ final merchantRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin/accounts',
         builder: (_, __) => const AccountsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/audit-log',
+        redirect: (_, __) =>
+            repo.currentSession?.user.role == Role.admin ? null : _home,
+        builder: (_, __) => const AuditLogScreen(),
       ),
       GoRoute(
         path: '/admin/wholesale',

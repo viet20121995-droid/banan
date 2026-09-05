@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../push_nudge.dart';
 import 'change_password_dialog.dart';
 
 /// Persistent navigation shell shared by every merchant screen.
@@ -98,13 +99,20 @@ class MerchantShell extends ConsumerWidget {
               children: [
                 const SizedBox(width: 240, child: _SidebarNav()),
                 const VerticalDivider(width: 1),
-                Expanded(child: body),
+                Expanded(child: _withPushNudge(body)),
               ],
             )
-          : body,
+          : _withPushNudge(body),
     );
   }
 }
+
+Widget _withPushNudge(Widget body) => Column(
+      children: [
+        const PushNudge(),
+        Expanded(child: body),
+      ],
+    );
 
 /// Account chip in the app bar — shows initial + opens a popup menu with
 /// the user's name, role, and a sign-out action. Keeps the "who am I /
@@ -473,6 +481,13 @@ class _SidebarNavState extends ConsumerState<_SidebarNav> {
               icon: Icons.admin_panel_settings_outlined,
               iconSelected: Icons.admin_panel_settings,
               route: '/admin/accounts',
+            ),
+          if (isAdmin)
+            const _NavItem(
+              label: 'Nhật ký thao tác',
+              icon: Icons.history_outlined,
+              iconSelected: Icons.history,
+              route: '/admin/audit-log',
             ),
         ],
       ),
