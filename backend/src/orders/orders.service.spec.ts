@@ -691,6 +691,19 @@ describe('OrdersService.assertDailyCaps (per-product daily order cap)', () => {
 
   const DAY = new Date('2026-06-20T03:00:00Z');
 
+  it('counts customer orders only — internal transfers never consume a slot', async () => {
+    const tx = txWith(0);
+    await call(
+      tx,
+      [{ id: 'p1', name: 'Chiffon', dailyMaxQuantity: 10 }],
+      new Map([['p1', 1]]),
+      DAY,
+    );
+    expect(tx.orderItem.aggregate.mock.calls[0][0].where.order.source).toEqual({
+      not: 'INTERNAL_TRANSFER',
+    });
+  });
+
   it('rejects when existing + requested exceeds the cap (locks first)', async () => {
     const tx = txWith(8); // 8 already ordered for the day
     await expect(

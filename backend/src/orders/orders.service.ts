@@ -3596,6 +3596,9 @@ export class OrdersService {
           productId: p.id,
           order: {
             status: { not: 'CANCELLED' },
+            // Branch restock is the kitchen's own plan — it neither obeys
+            // the customer cap nor uses up the customers' slots.
+            source: { not: 'INTERNAL_TRANSFER' },
             OR: [
               { scheduledFor: { gte: dayStart, lt: dayEnd } },
               { scheduledFor: null, createdAt: { gte: dayStart, lt: dayEnd } },
