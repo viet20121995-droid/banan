@@ -4,9 +4,9 @@ import 'package:banan_domain/banan_domain.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// In-app notification inbox for the kitchen app. Portable copy of the customer
-/// app's controller — same shared data layer (NotificationsRepository + realtime
-/// feed), just hosted in this app so the "Sản xuất" notifications surface here.
+/// In-app notification inbox shared by the staff apps (kitchen, merchant):
+/// the user's notifications, the unread count, and a realtime prepend on
+/// `notification.new` so the bell badge moves without a reload.
 @immutable
 class NotificationsState {
   const NotificationsState({
@@ -59,6 +59,7 @@ class NotificationsController extends StateNotifier<NotificationsState> {
 
   /// Optimistic prepend on realtime push — reconciles with the next refresh.
   void prepend(NotificationEntry n) {
+    if (state.items.any((e) => e.id == n.id)) return;
     state = state.copyWith(
       items: [n, ...state.items],
       unread: state.unread + 1,
@@ -66,14 +67,14 @@ class NotificationsController extends StateNotifier<NotificationsState> {
   }
 
   Future<void> markRead(String id) async {
+    final wasUnread = state.items.any((n) => n.id == id && !n.isRead);
+    if (!wasUnread) return;
     state = state.copyWith(
       items: [
         for (final n in state.items)
-          if (n.id == id && !n.isRead) n.markRead() else n,
+          if (n.id == id) n.markRead() else n,
       ],
-      unread: (state.unread > 0 && state.items.any((n) => n.id == id && !n.isRead))
-          ? state.unread - 1
-          : state.unread,
+      unread: state.unread > 0 ? state.unread - 1 : 0,
     );
     await _repo.markRead([id]);
   }
@@ -87,6 +88,8 @@ class NotificationsController extends StateNotifier<NotificationsState> {
   }
 }
 
+/// NOT autoDispose: the bell in the app shell watches it for the whole
+/// session, and the realtime prepend must keep counting on every page.
 final notificationsControllerProvider =
     StateNotifierProvider<NotificationsController, NotificationsState>((ref) {
   final controller =
@@ -94,6 +97,10 @@ final notificationsControllerProvider =
 
   ref.listen<AsyncValue<RealtimeEvent>>(realtimeEventsProvider, (_, next) {
     next.whenData((event) {
+      if (event.event == RealtimeEvent.reconnected) {
+        controller.refresh();
+        return;
+      }
       if (event.event != 'notification.new') return;
       final json = event.data['notification'];
       if (json is! Map) return;

@@ -81,6 +81,12 @@ class MerchantShell extends ConsumerWidget {
               tooltip: 'Làm mới',
               onPressed: () => onRefresh!.call(),
             ),
+          NotificationBell(
+            // Order notifications deep-link to the order; anything else
+            // lands on the orders board.
+            onOpen: (n) => context.go(n.deepLinkPath ?? '/orders'),
+          ),
+          const SizedBox(width: BananSpacing.xs),
           const _AccountMenu(),
           const SizedBox(width: BananSpacing.sm),
         ],

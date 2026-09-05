@@ -1,4 +1,5 @@
 import 'package:banan_data/banan_data.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +19,11 @@ class BananKitchenApp extends ConsumerWidget {
     // socket on the login screen just to listen for kitchen tickets.
     if (ref.watch(authSessionProvider).valueOrNull != null) {
       ref.watch(kitchenAlertsProvider);
+      // "(3) Bếp Banan" on the browser tab while orders wait.
+      setTabTitle(
+        'Bếp Banan',
+        ref.watch(notificationsControllerProvider.select((s) => s.unread)),
+      );
     }
     return MaterialApp.router(
       title: 'Banan Kitchen',

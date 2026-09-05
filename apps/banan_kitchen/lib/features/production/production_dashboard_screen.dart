@@ -1,11 +1,11 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../notifications/notifications_controller.dart';
 import 'mo_list_screen.dart' show mfgStateColor, mfgStateLabels;
 import 'production_providers.dart';
 

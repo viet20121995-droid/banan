@@ -1,5 +1,6 @@
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +19,11 @@ class BananMerchantApp extends ConsumerWidget {
     // socket on the login screen just to listen for merchant orders.
     if (ref.watch(authSessionProvider).valueOrNull != null) {
       ref.watch(merchantAlertsProvider);
+      // "(2) Banan Merchant" on the browser tab while orders wait.
+      setTabTitle(
+        'Banan Merchant',
+        ref.watch(notificationsControllerProvider.select((s) => s.unread)),
+      );
     }
     return MaterialApp.router(
       title: 'Banan Merchant',

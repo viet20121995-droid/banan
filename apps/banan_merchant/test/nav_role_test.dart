@@ -1,3 +1,4 @@
+import 'package:banan_core/banan_core.dart';
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_domain/banan_domain.dart';
 import 'package:banan_merchant/shared/shell/merchant_shell.dart';
@@ -48,11 +49,30 @@ Future<void> _pumpSidebar(WidgetTester tester, Role role) async {
     ProviderScope(
       overrides: [
         authSessionProvider.overrideWith((ref) => Stream.value(_session(role))),
+        // The app-bar bell loads the inbox; keep the test off the network.
+        notificationsRepositoryProvider.overrideWithValue(_NoNotifications()),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
   );
   await tester.pumpAndSettle();
+}
+
+class _NoNotifications implements NotificationsRepository {
+  @override
+  Future<Result<NotificationsPage, AppFailure>> list({
+    int page = 1,
+    int perPage = 30,
+  }) async =>
+      const Result.success(NotificationsPage(items: [], unread: 0, total: 0));
+
+  @override
+  Future<Result<void, AppFailure>> markRead(List<String> ids) async =>
+      const Result.success(null);
+
+  @override
+  Future<Result<void, AppFailure>> markAllRead() async =>
+      const Result.success(null);
 }
 
 /// Sections start collapsed, so open every group before reading the labels.
@@ -98,7 +118,8 @@ void main() {
       expect(find.text('Popup quảng cáo'), findsOneWidget);
     });
 
-    testWidgets('owner keeps Chương trình ưu đãi — merchant/marketing allows it',
+    testWidgets(
+        'owner keeps Chương trình ưu đãi — merchant/marketing allows it',
         (tester) async {
       // @Roles(ADMIN, MERCHANT_OWNER) at the class level: the owner really can
       // read this one, so hiding it would be the opposite bug.

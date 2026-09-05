@@ -2,12 +2,11 @@ import 'dart:async';
 
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-
-import 'notifications_controller.dart';
 
 /// Kitchen notification inbox — surfaces the MES background jobs (HSD/overdue
 /// digest, QC alerts) plus anything else routed to the signed-in user. Tapping a

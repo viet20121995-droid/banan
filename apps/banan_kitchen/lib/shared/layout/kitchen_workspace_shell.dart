@@ -1,3 +1,4 @@
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -184,10 +185,14 @@ class _WorkspaceNavigation extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: _FooterButton(
-                        icon: Icons.notifications_none,
-                        tooltip: 'Thông báo',
-                        onPressed: () => context.go('/notifications'),
+                      child: Center(
+                        child: NotificationBell(
+                          // Every kitchen notification is about the board.
+                          onOpen: (_) => context.go('/'),
+                          onOpenAll: () => context.go('/notifications'),
+                          color: const Color(0xFFC7D0C9),
+                          backgroundColor: const Color(0xFF243229),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
