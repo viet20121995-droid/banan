@@ -14,7 +14,11 @@ export const STORE_ALERT_EMAILS: Record<string, string> = {
   'banan-le-thanh-ton': 'bananlethanhton@gmail.com',
 };
 
-export const OPS_ALERT_EMAILS = ['operationmanager@banancakes.com', 'ntyen104@gmail.com'];
+export const OPS_ALERT_EMAILS = [
+  'operationmanager@banancakes.com',
+  'ntyen104@gmail.com',
+  'linhtuyen191@gmail.com',
+];
 
 /** Recipients of the daily site-traffic report (MetricsService cron). */
 export const DAILY_REPORT_EMAILS = [
