@@ -18,7 +18,6 @@ import '../content/app_footer.dart';
 // Used inside the inline _QuickAddSheet defined at the bottom of this file.
 // Pulling the import up here keeps all imports grouped at the top.
 import '../locations/locations_screen.dart' show storesListProvider;
-import '../notifications/notifications_controller.dart';
 import '../orders/reorder_helper.dart';
 import '../product_detail/cake_wizard.dart';
 import '../wishlist/wishlist_controller.dart';
