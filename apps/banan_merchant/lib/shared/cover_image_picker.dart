@@ -20,6 +20,7 @@ class CoverImagePicker extends ConsumerStatefulWidget {
     this.recommendedSize = '1200×800px (tỉ lệ 3:2)',
     this.recommendedFileSizeMb = 8,
     this.hardMaxFileSizeMb = 20,
+    this.compact = false,
     super.key,
   });
 
@@ -46,6 +47,10 @@ class CoverImagePicker extends ConsumerStatefulWidget {
   /// Hard server limit (matches backend Multer config). Files above this
   /// are rejected by the server with `LIMIT_FILE_SIZE`.
   final int hardMaxFileSizeMb;
+
+  /// Small inline variant (64px thumbnail, no guidance line) for lists such
+  /// as the product variant rows.
+  final bool compact;
 
   @override
   ConsumerState<CoverImagePicker> createState() => _CoverImagePickerState();
@@ -114,19 +119,21 @@ class _CoverImagePickerState extends ConsumerState<CoverImagePicker> {
         Text(widget.label, style: theme.textTheme.labelLarge),
         const SizedBox(height: BananSpacing.xs),
         Text(widget.helperText, style: theme.textTheme.bodySmall),
-        const SizedBox(height: 2),
-        // Standardized image guidance — same shape across every picker so
-        // merchants learn the format once. Two-tier sizing: a soft
-        // recommendation (warning shown above) and a hard server limit.
-        Text(
-          'Khuyến nghị: ${widget.recommendedSize}  ·  '
-          '≤ ${widget.recommendedFileSizeMb} MB '
-          '(server chấp nhận tối đa ${widget.hardMaxFileSizeMb} MB)  ·  '
-          'JPG / PNG / WebP / AVIF',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.outline,
+        if (!widget.compact) ...[
+          const SizedBox(height: 2),
+          // Standardized image guidance — same shape across every picker so
+          // merchants learn the format once. Two-tier sizing: a soft
+          // recommendation (warning shown above) and a hard server limit.
+          Text(
+            'Khuyến nghị: ${widget.recommendedSize}  ·  '
+            '≤ ${widget.recommendedFileSizeMb} MB '
+            '(server chấp nhận tối đa ${widget.hardMaxFileSizeMb} MB)  ·  '
+            'JPG / PNG / WebP / AVIF',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: BananSpacing.sm),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -134,8 +141,8 @@ class _CoverImagePickerState extends ConsumerState<CoverImagePicker> {
             ClipRRect(
               borderRadius: BananRadii.rmd,
               child: SizedBox(
-                width: 120,
-                height: 120,
+                width: widget.compact ? 64 : 120,
+                height: widget.compact ? 64 : 120,
                 child: hasImage
                     ? Image.network(
                         widget.url!,
@@ -277,8 +284,7 @@ class _FileMeta extends StatelessWidget {
             '$filename  ·  ${_human(sizeBytes)}$note',
             style: theme.textTheme.labelSmall?.copyWith(
               color: color,
-              fontWeight:
-                  (overHard || overSoft) ? FontWeight.w600 : null,
+              fontWeight: (overHard || overSoft) ? FontWeight.w600 : null,
             ),
             overflow: TextOverflow.ellipsis,
           ),

@@ -34,7 +34,8 @@ class CatalogRepositoryImpl implements CatalogRepository {
   }
 
   @override
-  Future<Result<Category, AppFailure>> createCategory(CategoryDraft draft) async {
+  Future<Result<Category, AppFailure>> createCategory(
+      CategoryDraft draft) async {
     final res = await _api.createCategory(draft.toJson());
     return res.map((d) => d.toDomain());
   }
@@ -49,7 +50,8 @@ class CatalogRepositoryImpl implements CatalogRepository {
   }
 
   @override
-  Future<Result<void, AppFailure>> deleteCategory(String id, {bool force = false}) {
+  Future<Result<void, AppFailure>> deleteCategory(String id,
+      {bool force = false}) {
     return _api.deleteCategory(id, force: force);
   }
 
@@ -136,7 +138,8 @@ class CatalogRepositoryImpl implements CatalogRepository {
   }
 
   @override
-  Future<Result<DeleteProductResult, AppFailure>> deleteProduct(String id) async {
+  Future<Result<DeleteProductResult, AppFailure>> deleteProduct(
+      String id) async {
     final res = await _api.deleteProduct(id);
     return res.map(
       (o) => DeleteProductResult(deleted: o.deleted, archived: o.archived),
@@ -208,6 +211,9 @@ class CatalogRepositoryImpl implements CatalogRepository {
               'priceDelta': v.priceDelta,
               if (v.stockQty != null) 'stockQty': v.stockQty,
               'isAvailable': v.isAvailable,
+              // Always sent — null explicitly clears a previously-saved photo.
+              'imageUrl':
+                  (v.imageUrl?.trim().isEmpty ?? true) ? null : v.imageUrl,
             },
           )
           .toList(),

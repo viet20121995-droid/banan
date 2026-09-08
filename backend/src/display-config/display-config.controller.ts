@@ -34,6 +34,12 @@ class UpdateDisplayConfigDto {
   @IsString()
   @MaxLength(160)
   contactEmail?: string;
+
+  /** Seasonal hero "explore" button target — a site path or full URL. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  heroCtaUrl?: string;
 }
 
 @ApiTags('display-config')

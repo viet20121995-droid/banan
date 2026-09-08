@@ -367,6 +367,7 @@ export class ProductsService {
               stockMode: v.stockQty == null ? 'UNLIMITED' : 'LIMITED',
               stockQty: v.stockQty,
               isAvailable: v.isAvailable ?? true,
+              imageUrl: v.imageUrl || null,
             })),
           },
         },
@@ -538,6 +539,8 @@ export class ProductsService {
         stockMode: (v.stockQty == null ? 'UNLIMITED' : 'LIMITED') as 'UNLIMITED' | 'LIMITED',
         stockQty: v.stockQty ?? null,
         isAvailable: v.isAvailable ?? true,
+        // undefined = field omitted (old client) -> keep the stored image.
+        imageUrl: v.imageUrl === undefined ? undefined : v.imageUrl || null,
       };
       if (v.id) {
         await tx.productVariant.update({ where: { id: v.id }, data });

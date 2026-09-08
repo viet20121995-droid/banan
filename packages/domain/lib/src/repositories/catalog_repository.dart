@@ -33,6 +33,7 @@ class ProductDraft {
   String description;
   double basePrice;
   List<String> images;
+
   /// Free-form merchant-set badges. E.g. ["Vegan", "Bestseller", "New"].
   List<String> tags;
   List<VariantDraft> variants;
@@ -61,11 +62,14 @@ class ProductDraft {
 
 class VariantDraft {
   VariantDraft({
-    required this.size, required this.flavor, this.id,
+    required this.size,
+    required this.flavor,
+    this.id,
     this.sku,
     this.priceDelta = 0,
     this.stockQty,
     this.isAvailable = true,
+    this.imageUrl,
   });
 
   /// Present for existing variants; absent for newly added rows.
@@ -78,6 +82,9 @@ class VariantDraft {
   double priceDelta;
   int? stockQty;
   bool isAvailable;
+
+  /// Photo shown when the customer picks this variant. Null/empty clears it.
+  String? imageUrl;
 }
 
 class UploadResult {
@@ -147,6 +154,7 @@ abstract class CatalogRepository {
     String id,
     CategoryDraft draft,
   );
+
   /// [force] also removes the category's products (order-free ones are hard-
   /// deleted; the backend refuses if any product already appears in an order).
   Future<Result<void, AppFailure>> deleteCategory(String id, {bool force});

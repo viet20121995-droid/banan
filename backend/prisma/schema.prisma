@@ -397,6 +397,9 @@ model ProductVariant {
   stockMode         StockMode               @default(UNLIMITED)
   stockQty          Int?
   isAvailable       Boolean                 @default(true)
+  /// Optional photo for this size/flavour. The customer product page swaps
+  /// the cover image to it when the variant is selected.
+  imageUrl          String?
   orderItems        OrderItem[]
   bundleItems       BundleItem[]
   productionBatches ProductionBatch[]
@@ -1374,6 +1377,10 @@ model DisplayConfig {
   contactZaloOaId    String? // Zalo Official Account id → deep link `https://zalo.me/{id}`
   contactMessengerId String? // FB page username → `https://m.me/{id}`
   contactEmail       String?
+
+  /// Where the seasonal hero's "explore" button goes (e.g. the seasonal
+  /// cake's product page). Null = the button just scrolls to the menu.
+  heroCtaUrl String?
 
   updatedAt DateTime @updatedAt
 }

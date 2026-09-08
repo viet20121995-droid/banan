@@ -14,15 +14,16 @@ class DisplayConfig {
     this.contactZaloOaId,
     this.contactMessengerId,
     this.contactEmail,
+    this.heroCtaUrl,
   });
 
   factory DisplayConfig.fromJson(Map<String, dynamic> j) => DisplayConfig(
-        showStockToCustomers:
-            j['showStockToCustomers'] as bool? ?? false,
+        showStockToCustomers: j['showStockToCustomers'] as bool? ?? false,
         contactPhone: j['contactPhone'] as String?,
         contactZaloOaId: j['contactZaloOaId'] as String?,
         contactMessengerId: j['contactMessengerId'] as String?,
         contactEmail: j['contactEmail'] as String?,
+        heroCtaUrl: j['heroCtaUrl'] as String?,
       );
 
   final bool showStockToCustomers;
@@ -30,6 +31,10 @@ class DisplayConfig {
   final String? contactZaloOaId;
   final String? contactMessengerId;
   final String? contactEmail;
+
+  /// Seasonal hero "explore" button target (site path or full URL). Null =
+  /// the button scrolls to the menu.
+  final String? heroCtaUrl;
 
   bool get hasAnyContactChannel =>
       (contactPhone?.isNotEmpty ?? false) ||
@@ -61,6 +66,7 @@ class DisplayConfigApi {
     String? contactZaloOaId,
     String? contactMessengerId,
     String? contactEmail,
+    String? heroCtaUrl,
   }) async {
     try {
       final res = await _dio.patch<Map<String, dynamic>>(
@@ -75,6 +81,7 @@ class DisplayConfigApi {
           if (contactMessengerId != null)
             'contactMessengerId': contactMessengerId,
           if (contactEmail != null) 'contactEmail': contactEmail,
+          if (heroCtaUrl != null) 'heroCtaUrl': heroCtaUrl,
         },
       );
       final data = res.data?['data'] as Map<String, dynamic>?;

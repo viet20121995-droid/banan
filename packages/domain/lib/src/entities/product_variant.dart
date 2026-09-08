@@ -18,6 +18,7 @@ class ProductVariant extends Equatable {
     this.stockMode = StockMode.unlimited,
     this.stockQty,
     this.isAvailable = true,
+    this.imageUrl,
   });
 
   final String id;
@@ -31,9 +32,12 @@ class ProductVariant extends Equatable {
   final int? stockQty;
   final bool isAvailable;
 
+  /// Photo shown on the product page when this variant is selected.
+  final String? imageUrl;
+
   String get label => size == flavor ? size : '$size · $flavor';
 
   @override
   List<Object?> get props =>
-      [id, size, flavor, sku, priceDelta, stockMode, stockQty, isAvailable];
+      [id, size, flavor, sku, priceDelta, stockMode, stockQty, isAvailable, imageUrl];
 }

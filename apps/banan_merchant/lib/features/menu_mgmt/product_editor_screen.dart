@@ -7,11 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../shared/cover_image_picker.dart';
 import 'menu_list_screen.dart';
 
 /// Loads a product for editing. Family parameter = product id.
-final _editorProductProvider = FutureProvider.autoDispose
-    .family<Product, String>((ref, id) async {
+final _editorProductProvider =
+    FutureProvider.autoDispose.family<Product, String>((ref, id) async {
   final repo = ref.watch(catalogRepositoryProvider);
   final res = await repo.product(id);
   return res.when(
@@ -46,10 +47,12 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
   String? _categoryId;
   bool _available = true;
   bool _seasonal = false;
+
   /// 0=Sun..6=Sat. Empty = every day (no restriction).
   List<int> _availableDow = [];
   List<String> _images = [];
   List<String> _tags = [];
+
   /// Macaron flavour-composer options. Empty = composer off.
   List<String> _flavorOptions = [];
   List<VariantDraft> _variants = [VariantDraft(size: '6"', flavor: 'Classic')];
@@ -111,6 +114,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
             priceDelta: v.priceDelta,
             stockQty: v.stockQty,
             isAvailable: v.isAvailable,
+            imageUrl: v.imageUrl,
           ),
         )
         .toList();
@@ -179,7 +183,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     // 0 / empty = composer off. When off we send flavorPickCount = null (NOT 0):
     // the backend DTO is @Min(2), so a 0 would 400 the whole save. Options are
     // only carried when the composer is on.
-    final flavorPick = flavorPickRaw.isEmpty ? 0 : int.tryParse(flavorPickRaw) ?? 0;
+    final flavorPick =
+        flavorPickRaw.isEmpty ? 0 : int.tryParse(flavorPickRaw) ?? 0;
     final composerOn = flavorPick > 0 && _flavorOptions.isNotEmpty;
     final draft = ProductDraft(
       categoryId: _categoryId!,
@@ -313,7 +318,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                           maxLength: 160,
                           decoration: const InputDecoration(
                             labelText: 'Slug URL',
-                            helperText: 'Chữ thường, gạch nối, duy nhất trong cửa hàng',
+                            helperText:
+                                'Chữ thường, gạch nối, duy nhất trong cửa hàng',
                           ),
                           validator: (v) => (v == null || v.trim().isEmpty)
                               ? 'Bắt buộc'
@@ -324,8 +330,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                           controller: _description,
                           maxLines: 4,
                           maxLength: 1000,
-                          decoration:
-                              const InputDecoration(labelText: 'Mô tả'),
+                          decoration: const InputDecoration(labelText: 'Mô tả'),
                           validator: (v) => (v == null || v.trim().isEmpty)
                               ? 'Bắt buộc'
                               : null,
@@ -334,8 +339,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                         categoriesAsync.when(
                           loading: () =>
                               const LinearProgressIndicator(minHeight: 2),
-                          error: (e, _) =>
-                              Text('Không tải được danh mục: $e'),
+                          error: (e, _) => Text('Không tải được danh mục: $e'),
                           data: (categories) => DropdownButtonFormField<String>(
                             initialValue: _categoryId,
                             decoration: const InputDecoration(
@@ -349,8 +353,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (v) =>
-                                setState(() => _categoryId = v),
+                            onChanged: (v) => setState(() => _categoryId = v),
                           ),
                         ),
                       ],
@@ -810,9 +813,8 @@ class _TagsInputState extends State<_TagsInput> {
                 : 'vd. Matcha, Đặt trước',
             suffixIcon: IconButton(
               icon: const Icon(Icons.add),
-              onPressed: widget.tags.length >= 8
-                  ? null
-                  : () => _add(_controller.text),
+              onPressed:
+                  widget.tags.length >= 8 ? null : () => _add(_controller.text),
             ),
           ),
           enabled: widget.tags.length < 8,
@@ -975,67 +977,79 @@ class _VariantRowState extends State<_VariantRow> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: TextFormField(
-            controller: _size,
-            maxLength: 40,
-            decoration: const InputDecoration(labelText: 'Kích cỡ'),
-            onChanged: (v) => widget.variant.size = v,
-            validator: (v) =>
-                (v == null || v.isEmpty) ? 'Bắt buộc' : null,
-          ),
-        ),
-        const SizedBox(width: BananSpacing.sm),
-        Expanded(
-          child: TextFormField(
-            controller: _flavor,
-            maxLength: 40,
-            decoration: const InputDecoration(labelText: 'Hương vị'),
-            onChanged: (v) => widget.variant.flavor = v,
-            validator: (v) =>
-                (v == null || v.isEmpty) ? 'Bắt buộc' : null,
-          ),
-        ),
-        const SizedBox(width: BananSpacing.sm),
-        SizedBox(
-          width: 130,
-          child: TextFormField(
-            controller: _sku,
-            maxLength: 30,
-            decoration: const InputDecoration(
-              labelText: 'SKU',
-              helperText: 'Trùng mã bếp',
-              counterText: '',
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _size,
+                maxLength: 40,
+                decoration: const InputDecoration(labelText: 'Kích cỡ'),
+                onChanged: (v) => widget.variant.size = v,
+                validator: (v) => (v == null || v.isEmpty) ? 'Bắt buộc' : null,
+              ),
             ),
-            onChanged: (v) => widget.variant.sku = v,
-          ),
-        ),
-        const SizedBox(width: BananSpacing.sm),
-        SizedBox(
-          width: 140,
-          child: TextFormField(
-            controller: _delta,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Δ giá (₫)',
-              helperText: '+ so với giá gốc',
+            const SizedBox(width: BananSpacing.sm),
+            Expanded(
+              child: TextFormField(
+                controller: _flavor,
+                maxLength: 40,
+                decoration: const InputDecoration(labelText: 'Hương vị'),
+                onChanged: (v) => widget.variant.flavor = v,
+                validator: (v) => (v == null || v.isEmpty) ? 'Bắt buộc' : null,
+              ),
             ),
-            onChanged: (v) =>
-                widget.variant.priceDelta = double.tryParse(v) ?? 0,
-          ),
-        ),
-        if (widget.onRemove != null)
-          Padding(
-            padding: const EdgeInsets.only(top: BananSpacing.sm),
-            child: IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: widget.onRemove,
+            const SizedBox(width: BananSpacing.sm),
+            SizedBox(
+              width: 130,
+              child: TextFormField(
+                controller: _sku,
+                maxLength: 30,
+                decoration: const InputDecoration(
+                  labelText: 'SKU',
+                  helperText: 'Trùng mã bếp',
+                  counterText: '',
+                ),
+                onChanged: (v) => widget.variant.sku = v,
+              ),
             ),
-          ),
+            const SizedBox(width: BananSpacing.sm),
+            SizedBox(
+              width: 140,
+              child: TextFormField(
+                controller: _delta,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Δ giá (₫)',
+                  helperText: '+ so với giá gốc',
+                ),
+                onChanged: (v) =>
+                    widget.variant.priceDelta = double.tryParse(v) ?? 0,
+              ),
+            ),
+            if (widget.onRemove != null)
+              Padding(
+                padding: const EdgeInsets.only(top: BananSpacing.sm),
+                child: IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: widget.onRemove,
+                ),
+              ),
+          ],
+        ),
+        CoverImagePicker(
+          compact: true,
+          label: 'Ảnh biến thể',
+          helperText:
+              'Tuỳ chọn. Khách chọn biến thể này thì ảnh sản phẩm đổi sang ảnh này.',
+          url: widget.variant.imageUrl,
+          onChanged: (u) => setState(() => widget.variant.imageUrl = u),
+        ),
+        const Divider(height: BananSpacing.lg),
       ],
     );
   }

@@ -67,18 +67,22 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         data: (product) {
           final selected = _selected ??
               (product.variants.isNotEmpty ? product.variants.first : null);
-          final price = selected == null
-              ? product.basePrice
-              : product.priceFor(selected);
+          final price =
+              selected == null ? product.basePrice : product.priceFor(selected);
 
           return BreakpointBuilder(
             builder: (context, bp) {
               final twoCol = bp.isAtLeastMd;
+              // A variant with its own photo replaces the product cover
+              // while it is selected (macaron flavours, cake sizes…).
+              final cover = (selected?.imageUrl?.isNotEmpty ?? false)
+                  ? selected!.imageUrl
+                  : product.coverImage;
               final image = AspectRatio(
                 aspectRatio: 4 / 3,
                 child: ClipRRect(
                   borderRadius: BananRadii.rlg,
-                  child: product.coverImage == null
+                  child: cover == null
                       ? Container(
                           color: BananColors.surfaceDim,
                           alignment: Alignment.center,
@@ -89,7 +93,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           ),
                         )
                       : Image.network(
-                          product.coverImage!,
+                          cover,
+                          key: ValueKey(cover),
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => Container(
                             color: BananColors.surfaceDim,
@@ -160,11 +165,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 coverImage: product.coverImage,
                                 unitPrice: product.priceFor(selected),
                                 quantity: 1,
-                                personalization:
-                                    pers.isEmpty ? null : pers,
+                                personalization: pers.isEmpty ? null : pers,
                                 isBirthdayCake: product.isBirthdayCake,
                                 leadTimeHours: product.leadTimeHours,
-                                availableDaysOfWeek: product.availableDaysOfWeek,
+                                availableDaysOfWeek:
+                                    product.availableDaysOfWeek,
                               ),
                             );
                         // Surface a "View cart" shortcut directly in the
@@ -201,21 +206,24 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (twoCol) Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(child: image),
-                                  const SizedBox(width: BananSpacing.xxl),
-                                  Expanded(child: details),
-                                ],
-                              ) else Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  image,
-                                  const SizedBox(height: BananSpacing.xl),
-                                  details,
-                                ],
-                              ),
+                        if (twoCol)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: image),
+                              const SizedBox(width: BananSpacing.xxl),
+                              Expanded(child: details),
+                            ],
+                          )
+                        else
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              image,
+                              const SizedBox(height: BananSpacing.xl),
+                              details,
+                            ],
+                          ),
                         const SizedBox(height: BananSpacing.xxxl),
                         _RecommendationsSection(productId: product.id),
                         const SizedBox(height: BananSpacing.xxl),
@@ -407,8 +415,7 @@ class _Details extends StatelessWidget {
               ? Icons.do_not_disturb_alt
               : Icons.shopping_bag_outlined,
           expand: true,
-          onPressed:
-              (showStock && product.isSoldOut) ? null : onAdd,
+          onPressed: (showStock && product.isSoldOut) ? null : onAdd,
         ),
       ],
     );
@@ -780,8 +787,7 @@ class _PersonalizationPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final s = ref.watch(stringsProvider);
-    final hasValue =
-        personalization != null && !personalization!.isEmpty;
+    final hasValue = personalization != null && !personalization!.isEmpty;
     return InkWell(
       borderRadius: BananRadii.rmd,
       onTap: onOpen,
@@ -816,9 +822,8 @@ class _PersonalizationPanel extends ConsumerWidget {
                   Text(
                     hasValue ? s.personalizedCake : s.personalizeCake,
                     style: theme.textTheme.titleSmall?.copyWith(
-                      color: hasValue
-                          ? BananColors.success
-                          : BananColors.primary,
+                      color:
+                          hasValue ? BananColors.success : BananColors.primary,
                     ),
                   ),
                   Text(

@@ -23,8 +23,7 @@ class DisplayConfigScreen extends ConsumerStatefulWidget {
       _DisplayConfigScreenState();
 }
 
-class _DisplayConfigScreenState
-    extends ConsumerState<DisplayConfigScreen> {
+class _DisplayConfigScreenState extends ConsumerState<DisplayConfigScreen> {
   bool _saving = false;
 
   Future<void> _toggleStock(bool next) async {
@@ -116,8 +115,7 @@ class _DisplayConfigScreenState
                       SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
                         value: cfg.showStockToCustomers,
-                        onChanged:
-                            (_saving || !canEdit) ? null : _toggleStock,
+                        onChanged: (_saving || !canEdit) ? null : _toggleStock,
                         title: Text(
                           cfg.showStockToCustomers
                               ? 'Đang hiển thị'
@@ -142,6 +140,8 @@ class _DisplayConfigScreenState
                 ),
                 const SizedBox(height: BananSpacing.lg),
                 _ContactChannelsBlock(initial: cfg, canEdit: canEdit),
+                const SizedBox(height: BananSpacing.lg),
+                _HeroCtaBlock(initial: cfg, canEdit: canEdit),
                 const SizedBox(height: BananSpacing.lg),
                 Text(
                   'Lưu ý: chức năng quản lý kho (tự trừ khi đặt, chặn bán '
@@ -176,8 +176,7 @@ class _ContactChannelsBlock extends ConsumerStatefulWidget {
       _ContactChannelsBlockState();
 }
 
-class _ContactChannelsBlockState
-    extends ConsumerState<_ContactChannelsBlock> {
+class _ContactChannelsBlockState extends ConsumerState<_ContactChannelsBlock> {
   late final TextEditingController _phone;
   late final TextEditingController _zalo;
   late final TextEditingController _messenger;
@@ -188,8 +187,7 @@ class _ContactChannelsBlockState
   void initState() {
     super.initState();
     _phone = TextEditingController(text: widget.initial.contactPhone ?? '');
-    _zalo =
-        TextEditingController(text: widget.initial.contactZaloOaId ?? '');
+    _zalo = TextEditingController(text: widget.initial.contactZaloOaId ?? '');
     _messenger = TextEditingController(
       text: widget.initial.contactMessengerId ?? '',
     );
@@ -310,6 +308,106 @@ class _ContactChannelsBlockState
                     )
                   : const Icon(Icons.save_outlined),
               label: const Text('Lưu kênh liên hệ'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Target of the seasonal hero's "Khám phá" button on the customer home
+/// page. Empty = the button scrolls down to the menu (old behaviour).
+class _HeroCtaBlock extends ConsumerStatefulWidget {
+  const _HeroCtaBlock({required this.initial, required this.canEdit});
+  final DisplayConfig initial;
+  final bool canEdit;
+
+  @override
+  ConsumerState<_HeroCtaBlock> createState() => _HeroCtaBlockState();
+}
+
+class _HeroCtaBlockState extends ConsumerState<_HeroCtaBlock> {
+  late final TextEditingController _url =
+      TextEditingController(text: widget.initial.heroCtaUrl ?? '');
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _url.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final res = await ref
+        .read(displayConfigApiProvider)
+        .update(heroCtaUrl: _url.text.trim());
+    if (!mounted) return;
+    setState(() => _saving = false);
+    res.when(
+      success: (_) {
+        ref.invalidate(displayConfigProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã lưu link nút banner mùa.')),
+        );
+      },
+      failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(authFailureMessage(f))),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(BananSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Nút "Khám phá" trên banner mùa',
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: BananSpacing.xs),
+          Text(
+            'Link mở khi khách bấm nút trên banner theo mùa (vd trang bánh '
+            'trung thu: /product/<id>). Để trống = nút cuộn xuống thực đơn. '
+            'Nút "Đặt ngay" thường không bị ảnh hưởng.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+          const SizedBox(height: BananSpacing.md),
+          TextField(
+            controller: _url,
+            enabled: widget.canEdit,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(
+              labelText: 'Link nút "Khám phá"',
+              hintText: '/product/<id> hoặc https://banancakes.vn/product/<id>',
+              prefixIcon: Icon(Icons.link),
+            ),
+          ),
+          const SizedBox(height: BananSpacing.md),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: (_saving || !widget.canEdit) ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: const Text('Lưu link'),
             ),
           ),
         ],

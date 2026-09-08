@@ -22,6 +22,7 @@ export class DisplayConfigService {
     contactZaloOaId?: string;
     contactMessengerId?: string;
     contactEmail?: string;
+    heroCtaUrl?: string;
   }) {
     // Empty-string from the merchant form means "clear this channel".
     // Normalise to null so the customer side can treat empty == not
@@ -38,6 +39,7 @@ export class DisplayConfigService {
         contactZaloOaId: norm(patch.contactZaloOaId),
         contactMessengerId: norm(patch.contactMessengerId),
         contactEmail: norm(patch.contactEmail),
+        heroCtaUrl: norm(patch.heroCtaUrl),
       },
     });
   }

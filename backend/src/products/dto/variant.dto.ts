@@ -45,4 +45,10 @@ export class VariantInputDto {
   @IsOptional()
   @IsBoolean()
   isAvailable?: boolean;
+
+  /** Photo shown when this variant is selected. Empty/null clears it. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string | null;
 }

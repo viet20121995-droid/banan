@@ -1360,6 +1360,24 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
     });
   }
 
+  /// Site paths (and full URLs on this host) navigate in-app; anything else
+  /// opens in a new tab.
+  void _openHeroCta(String raw) {
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return;
+    final sameSite = !uri.hasScheme || uri.host == Uri.base.host;
+    if (sameSite) {
+      context.go(
+        uri.hasScheme
+            ? Uri(path: uri.path, query: uri.hasQuery ? uri.query : null)
+                .toString()
+            : raw,
+      );
+      return;
+    }
+    launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   void _go(int delta) {
     if (!_ctrl.hasClients || _count <= 1) return;
     final next = (_page + delta) % _count;
@@ -1549,6 +1567,18 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                   compact: width < 700,
                   ctaDismissed: ctaDismissed,
                   onOrderTap: () {
+                    // Admin-set target (DisplayConfig.heroCtaUrl) wins —
+                    // e.g. the seasonal cake's page. Otherwise scroll to
+                    // the menu like the plain "Đặt ngay" button.
+                    final target = ref
+                        .read(displayConfigProvider)
+                        .valueOrNull
+                        ?.heroCtaUrl
+                        ?.trim();
+                    if (target != null && target.isNotEmpty) {
+                      _openHeroCta(target);
+                      return;
+                    }
                     ref.read(heroCtaDismissedProvider.notifier).state = true;
                     widget.onOrderTap();
                   },

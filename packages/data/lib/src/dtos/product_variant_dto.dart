@@ -10,6 +10,7 @@ class ProductVariantDto {
     this.sku,
     this.stockQty,
     this.isAvailable = true,
+    this.imageUrl,
   });
 
   factory ProductVariantDto.fromJson(Map<String, dynamic> json) {
@@ -22,6 +23,7 @@ class ProductVariantDto {
       stockMode: json['stockMode'] as String,
       stockQty: (json['stockQty'] as num?)?.toInt(),
       isAvailable: json['isAvailable'] as bool? ?? true,
+      imageUrl: json['imageUrl'] as String?,
     );
   }
 
@@ -33,6 +35,7 @@ class ProductVariantDto {
   final String stockMode;
   final int? stockQty;
   final bool isAvailable;
+  final String? imageUrl;
 
   ProductVariant toDomain() => ProductVariant(
         id: id,
@@ -43,6 +46,7 @@ class ProductVariantDto {
         stockMode: StockMode.fromWire(stockMode),
         stockQty: stockQty,
         isAvailable: isAvailable,
+        imageUrl: imageUrl,
       );
 }
 
