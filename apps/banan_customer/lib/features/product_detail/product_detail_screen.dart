@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
@@ -73,35 +75,24 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           return BreakpointBuilder(
             builder: (context, bp) {
               final twoCol = bp.isAtLeastMd;
-              // A variant with its own photo replaces the product cover
-              // while it is selected (macaron flavours, cake sizes…).
-              final cover = (selected?.imageUrl?.isNotEmpty ?? false)
-                  ? selected!.imageUrl
-                  : product.coverImage;
+              // Gallery: every product image, auto-advancing. A variant
+              // with its own photo goes first while it is selected
+              // (macaron flavours, cake sizes…).
+              final variantImage = selected?.imageUrl;
+              final slides = <String>[
+                if (variantImage != null && variantImage.isNotEmpty)
+                  variantImage,
+                for (final u in product.images)
+                  if (u != variantImage) u,
+              ];
               final image = AspectRatio(
                 aspectRatio: 4 / 3,
                 child: ClipRRect(
                   borderRadius: BananRadii.rlg,
-                  child: cover == null
-                      ? Container(
-                          color: BananColors.surfaceDim,
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.cake_outlined,
-                            size: 80,
-                            color: BananColors.cocoaSoft,
-                          ),
-                        )
-                      : Image.network(
-                          cover,
-                          key: ValueKey(cover),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: BananColors.surfaceDim,
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.broken_image_outlined),
-                          ),
-                        ),
+                  child: _ProductGallery(
+                    key: ValueKey(slides.join('|')),
+                    images: slides,
+                  ),
                 ),
               );
               final showStock = ref
@@ -845,6 +836,117 @@ class _PersonalizationPanel extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Auto-advancing image carousel for the product page. Swipe or tap the
+/// dots to move; the timer restarts after any manual change.
+class _ProductGallery extends StatefulWidget {
+  const _ProductGallery({required this.images, super.key});
+  final List<String> images;
+
+  @override
+  State<_ProductGallery> createState() => _ProductGalleryState();
+}
+
+class _ProductGalleryState extends State<_ProductGallery> {
+  final _ctrl = PageController();
+  Timer? _timer;
+  int _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _restart();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _restart() {
+    _timer?.cancel();
+    if (widget.images.length <= 1) return;
+    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_ctrl.hasClients) return;
+      _ctrl.animateToPage(
+        (_page + 1) % widget.images.length,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeInOutCubic,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.images.isEmpty) {
+      return Container(
+        color: BananColors.surfaceDim,
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.cake_outlined,
+          size: 80,
+          color: BananColors.cocoaSoft,
+        ),
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _ctrl,
+          itemCount: widget.images.length,
+          onPageChanged: (i) {
+            setState(() => _page = i);
+            _restart();
+          },
+          itemBuilder: (_, i) => Image.network(
+            widget.images[i],
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: BananColors.surfaceDim,
+              alignment: Alignment.center,
+              child: const Icon(Icons.broken_image_outlined),
+            ),
+          ),
+        ),
+        if (widget.images.length > 1)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: BananSpacing.sm,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < widget.images.length; i++)
+                  GestureDetector(
+                    onTap: () => _ctrl.animateToPage(
+                      i,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    ),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: i == _page ? 18 : 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: i == _page ? Colors.white : Colors.white70,
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: const [
+                          BoxShadow(blurRadius: 3, color: Colors.black26),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
