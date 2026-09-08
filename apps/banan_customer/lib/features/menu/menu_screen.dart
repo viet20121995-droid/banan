@@ -1366,7 +1366,8 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
     if (uri == null) return;
     final sameSite = !uri.hasScheme || uri.host == Uri.base.host;
     if (sameSite) {
-      context.go(
+      // push (not go) so the product page's back button returns home.
+      context.push(
         uri.hasScheme
             ? Uri(path: uri.path, query: uri.hasQuery ? uri.query : null)
                 .toString()
