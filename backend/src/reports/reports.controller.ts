@@ -47,6 +47,15 @@ export class ReportsController {
     return this.reports.productSales(this.rangeOf(user, q), Number(q.limit) || 50);
   }
 
+  /// Flavour picks inside composed sets (macaron set 5/10), per product.
+  @Get('flavors')
+  flavors(
+    @CurrentUser() user: AuthPrincipal,
+    @Query() q: { from?: string; to?: string; storeId?: string },
+  ) {
+    return this.reports.flavorSales(this.rangeOf(user, q));
+  }
+
   @Get('orders')
   orders(
     @CurrentUser() user: AuthPrincipal,

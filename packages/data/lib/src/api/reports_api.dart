@@ -67,6 +67,35 @@ class ReportsApi {
     }
   }
 
+  /// Flavour picks inside composed sets (macaron set 5/10).
+  Future<Result<List<FlavorSalesRow>, AppFailure>> flavorSales({
+    required String from,
+    required String to,
+    String? storeId,
+  }) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/merchant/reports/flavors',
+        queryParameters: {
+          'from': from,
+          'to': to,
+          if (storeId != null) 'storeId': storeId,
+        },
+      );
+      if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
+      final raw = res.data?['data'] as List? ?? const [];
+      return Result.success(
+        raw
+            .map((e) => FlavorSalesRow.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
   /// Fetches the multi-sheet XLSX workbook as raw bytes. The UI hands
   /// these to a platform-specific saver (browser blob, or
   /// `path_provider` on mobile).
@@ -85,8 +114,10 @@ class ReportsApi {
         },
         options: Options(
           responseType: ResponseType.bytes,
-          headers: {'Accept':
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',},
+          headers: {
+            'Accept':
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          },
         ),
       );
       final data = res.data;
@@ -109,6 +140,11 @@ class ReportSummary {
     required this.daily,
     required this.fulfillment,
     required this.paymentMethods,
+    this.byStatus = const {},
+    this.bySource = const [],
+    this.byStore = const [],
+    this.byCategory = const [],
+    this.topCustomers = const [],
   });
 
   factory ReportSummary.fromJson(Map<String, dynamic> j) {
@@ -119,6 +155,10 @@ class ReportSummary {
         .toList();
     final ful = j['fulfillment'] as Map<String, dynamic>? ?? const {};
     final pm = j['paymentMethods'] as Map<String, dynamic>? ?? const {};
+    final st = j['byStatus'] as Map<String, dynamic>? ?? const {};
+    List<GroupRow> groups(String key) => ((j[key] as List?) ?? const [])
+        .map((e) => GroupRow.fromJson(e as Map<String, dynamic>))
+        .toList();
     return ReportSummary(
       from: DateTime.parse(range['from'] as String),
       to: DateTime.parse(range['to'] as String),
@@ -133,6 +173,19 @@ class ReportSummary {
         pointsBurned: (totals['pointsBurned'] as num).toDouble(),
         avgOrderValue: (totals['avgOrderValue'] as num).toDouble(),
         refundedAmount: (totals['refundedAmount'] as num).toDouble(),
+        inProgress: (totals['inProgress'] as num?)?.toInt() ?? 0,
+        grossSales: (totals['grossSales'] as num?)?.toDouble() ?? 0,
+        discounts: (totals['discounts'] as num?)?.toDouble() ?? 0,
+        itemsSold: (totals['itemsSold'] as num?)?.toInt() ?? 0,
+        avgItemsPerOrder: (totals['avgItemsPerOrder'] as num?)?.toDouble() ?? 0,
+        cancelRate: (totals['cancelRate'] as num?)?.toDouble() ?? 0,
+        cancelledValue: (totals['cancelledValue'] as num?)?.toDouble() ?? 0,
+        uniqueCustomers: (totals['uniqueCustomers'] as num?)?.toInt() ?? 0,
+        newCustomers: (totals['newCustomers'] as num?)?.toInt() ?? 0,
+        returningCustomers:
+            (totals['returningCustomers'] as num?)?.toInt() ?? 0,
+        giftOrders: (totals['giftOrders'] as num?)?.toInt() ?? 0,
+        scheduledOrders: (totals['scheduledOrders'] as num?)?.toInt() ?? 0,
       ),
       daily: daily,
       fulfillment: FulfillmentSplit(
@@ -140,6 +193,21 @@ class ReportSummary {
         delivery: (ful['delivery'] as num?)?.toInt() ?? 0,
       ),
       paymentMethods: pm.map((k, v) => MapEntry(k, (v as num).toInt())),
+      byStatus: st.map((k, v) => MapEntry(k, (v as num).toInt())),
+      bySource: groups('bySource'),
+      byStore: groups('byStore'),
+      byCategory: ((j['byCategory'] as List?) ?? const [])
+          .map(
+            (e) => GroupRow(
+              name: (e as Map<String, dynamic>)['category'] as String,
+              orders: (e['units'] as num).toInt(),
+              revenue: (e['revenue'] as num).toDouble(),
+            ),
+          )
+          .toList(),
+      topCustomers: ((j['topCustomers'] as List?) ?? const [])
+          .map((e) => CustomerSalesRow.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -150,6 +218,74 @@ class ReportSummary {
   final List<DailyRevenue> daily;
   final FulfillmentSplit fulfillment;
   final Map<String, int> paymentMethods;
+  final Map<String, int> byStatus;
+  final List<GroupRow> bySource;
+  final List<GroupRow> byStore;
+
+  /// `orders` carries units sold for category rows.
+  final List<GroupRow> byCategory;
+  final List<CustomerSalesRow> topCustomers;
+}
+
+/// One bucket of a split (channel, branch, category…).
+class GroupRow {
+  const GroupRow({
+    required this.name,
+    required this.orders,
+    required this.revenue,
+    this.completed = 0,
+    this.cancelled = 0,
+  });
+  factory GroupRow.fromJson(Map<String, dynamic> j) => GroupRow(
+        name: j['name'] as String,
+        orders: (j['orders'] as num).toInt(),
+        completed: (j['completed'] as num?)?.toInt() ?? 0,
+        cancelled: (j['cancelled'] as num?)?.toInt() ?? 0,
+        revenue: (j['revenue'] as num).toDouble(),
+      );
+  final String name;
+  final int orders;
+  final int completed;
+  final int cancelled;
+  final double revenue;
+}
+
+class CustomerSalesRow {
+  const CustomerSalesRow({
+    required this.name,
+    required this.phone,
+    required this.orders,
+    required this.completed,
+    required this.revenue,
+  });
+  factory CustomerSalesRow.fromJson(Map<String, dynamic> j) => CustomerSalesRow(
+        name: j['name'] as String,
+        phone: j['phone'] as String? ?? '',
+        orders: (j['orders'] as num).toInt(),
+        completed: (j['completed'] as num?)?.toInt() ?? 0,
+        revenue: (j['revenue'] as num).toDouble(),
+      );
+  final String name;
+  final String phone;
+  final int orders;
+  final int completed;
+  final double revenue;
+}
+
+class FlavorSalesRow {
+  const FlavorSalesRow({
+    required this.productName,
+    required this.flavor,
+    required this.units,
+  });
+  factory FlavorSalesRow.fromJson(Map<String, dynamic> j) => FlavorSalesRow(
+        productName: j['productName'] as String,
+        flavor: j['flavor'] as String,
+        units: (j['units'] as num).toInt(),
+      );
+  final String productName;
+  final String flavor;
+  final int units;
 }
 
 class ReportTotals {
@@ -163,6 +299,18 @@ class ReportTotals {
     required this.pointsBurned,
     required this.avgOrderValue,
     required this.refundedAmount,
+    this.inProgress = 0,
+    this.grossSales = 0,
+    this.discounts = 0,
+    this.itemsSold = 0,
+    this.avgItemsPerOrder = 0,
+    this.cancelRate = 0,
+    this.cancelledValue = 0,
+    this.uniqueCustomers = 0,
+    this.newCustomers = 0,
+    this.returningCustomers = 0,
+    this.giftOrders = 0,
+    this.scheduledOrders = 0,
   });
   final int orders;
   final int completed;
@@ -173,6 +321,20 @@ class ReportTotals {
   final double pointsBurned;
   final double avgOrderValue;
   final double refundedAmount;
+  final int inProgress;
+  final double grossSales;
+  final double discounts;
+  final int itemsSold;
+  final double avgItemsPerOrder;
+
+  /// Percent, 0–100.
+  final double cancelRate;
+  final double cancelledValue;
+  final int uniqueCustomers;
+  final int newCustomers;
+  final int returningCustomers;
+  final int giftOrders;
+  final int scheduledOrders;
 }
 
 class DailyRevenue {
@@ -203,15 +365,36 @@ class ProductSalesRow {
     required this.productName,
     required this.unitsSold,
     required this.revenue,
+    this.variantLabel = '',
+    this.sku = '',
+    this.category = '',
+    this.orders = 0,
+    this.share = 0,
   });
   factory ProductSalesRow.fromJson(Map<String, dynamic> j) => ProductSalesRow(
         productId: j['productId'] as String,
         productName: j['productName'] as String,
+        variantLabel: j['variantLabel'] as String? ?? '',
+        sku: j['sku'] as String? ?? '',
+        category: j['category'] as String? ?? '',
+        orders: (j['orders'] as num?)?.toInt() ?? 0,
         unitsSold: (j['unitsSold'] as num).toInt(),
         revenue: (j['revenue'] as num).toDouble(),
+        share: (j['share'] as num?)?.toDouble() ?? 0,
       );
   final String productId;
   final String productName;
+
+  /// "size · flavor" of the sold variant; empty when the product has none.
+  final String variantLabel;
+  final String sku;
+  final String category;
+
+  /// Distinct orders containing this line.
+  final int orders;
   final int unitsSold;
   final double revenue;
+
+  /// Share of item revenue in the period, percent 0–100.
+  final double share;
 }
