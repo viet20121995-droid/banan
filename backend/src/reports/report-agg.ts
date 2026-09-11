@@ -30,8 +30,19 @@ export function ictWeekday(d: Date): number {
   return new Date(d.getTime() + 7 * 60 * 60 * 1000).getUTCDay();
 }
 
+const CANDLE_LABEL: Record<string, string> = {
+  regular: 'Nến thường',
+  spiral: 'Nến xoắn',
+  number: 'Nến số',
+};
+const KEY_LABEL: Record<string, string> = {
+  textOnCake: 'Chữ trên bánh',
+  note: 'Ghi chú',
+};
+
 /// Human line for `OrderItem.personalization`: macaron sets store
-/// `{ flavors: { Jasmine: 3, Lemon: 2 } }`, cakes store free-form keys.
+/// `{ flavors: { Jasmine: 3, Lemon: 2 } }`; birthday cakes store the wizard
+/// payload `{ textOnCake, candleType, candleCount, candleNumber, note }`.
 export function describePersonalization(p: unknown): string {
   if (!p || typeof p !== 'object') return '';
   const obj = p as Record<string, unknown>;
@@ -43,10 +54,23 @@ export function describePersonalization(p: unknown): string {
       .map(([name, n]) => `${name}×${n}`);
     if (f.length) parts.push(f.join(', '));
   }
+  if (typeof obj.candleType === 'string') {
+    const type = CANDLE_LABEL[obj.candleType] ?? obj.candleType;
+    const qty =
+      obj.candleType === 'number'
+        ? obj.candleNumber != null
+          ? ` ${obj.candleNumber}`
+          : ''
+        : obj.candleCount != null
+          ? ` ×${obj.candleCount}`
+          : '';
+    parts.push(`${type}${qty}`);
+  }
   for (const [k, v] of Object.entries(obj)) {
-    if (k === 'flavors' || v === null || v === undefined || v === '' || v === false) continue;
+    if (['flavors', 'candleType', 'candleCount', 'candleNumber'].includes(k)) continue;
+    if (v === null || v === undefined || v === '' || v === false) continue;
     if (typeof v === 'object') continue;
-    parts.push(`${k}: ${String(v)}`);
+    parts.push(`${KEY_LABEL[k] ?? k}: ${String(v)}`);
   }
   return parts.join(' · ');
 }

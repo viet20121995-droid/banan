@@ -49,6 +49,24 @@ const PAYMENT_LABEL: Record<string, string> = {
   VNPAY: 'VNPay (cũ)',
   STRIPE: 'Stripe',
 };
+const PAYMENT_STATUS_LABEL: Record<string, string> = {
+  INITIATED: 'Chưa thanh toán',
+  AUTHORIZED: 'Đã uỷ quyền',
+  CAPTURED: 'Đã thanh toán',
+  FAILED: 'Thất bại',
+  VOIDED: 'Đã huỷ',
+  REFUNDED: 'Đã hoàn tiền',
+};
+const REFUND_STATUS_LABEL: Record<string, string> = {
+  REQUESTED: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
+  PROCESSING: 'Đang xử lý',
+  COMPLETED: 'Đã hoàn',
+  REJECTED: 'Từ chối',
+};
+/// Guest checkouts get a synthetic `guest+<hash>@banan.local` mailbox — not a
+/// real contact, so the sheet leaves it blank.
+const realEmail = (e: string) => (e.startsWith('guest+') ? '' : e);
 const WEEKDAY_LABEL = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 const label = (map: Record<string, string>, k: string) => map[k] ?? k;
 
@@ -735,7 +753,7 @@ export class ReportsService {
         completedAt: ictDateTime(eventAt(o, 'COMPLETED')?.createdAt),
         customer: o.customer.fullName,
         phone: o.customer.phone ?? '',
-        email: o.customer.email,
+        email: realEmail(o.customer.email),
         store: o.store.name,
         source: label(SOURCE_LABEL, o.source),
         createdBy: o.createdBy?.fullName ?? '',
@@ -748,7 +766,7 @@ export class ReportsService {
         status: label(STATUS_LABEL, o.status),
         cancelReason: o.status === 'CANCELLED' ? (eventAt(o, 'CANCELLED')?.note ?? '') : '',
         payment: o.payments[0] ? label(PAYMENT_LABEL, o.payments[0].provider) : '',
-        paymentStatus: o.payments[0]?.status ?? '',
+        paymentStatus: o.payments[0] ? label(PAYMENT_STATUS_LABEL, o.payments[0].status) : '',
         items: o.items.reduce((s, i) => s + i.quantity, 0),
         itemsText: o.items
           .map((i) => {
@@ -833,7 +851,7 @@ export class ReportsService {
         customer: f.order.customer.fullName,
         store: f.order.store.name,
         amount: num(f.amount),
-        status: f.status,
+        status: label(REFUND_STATUS_LABEL, f.status),
         reason: f.reason ?? '',
       })),
     );

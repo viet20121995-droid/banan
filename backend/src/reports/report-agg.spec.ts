@@ -73,8 +73,16 @@ describe('report-agg', () => {
     expect(describePersonalization({ flavors: { Jasmine: 3, Lemon: 2 } })).toBe(
       'Jasmine×3, Lemon×2',
     );
-    expect(describePersonalization({ message: 'Happy birthday', candles: 3, topper: null })).toBe(
-      'message: Happy birthday · candles: 3',
+    expect(
+      describePersonalization({
+        textOnCake: 'Happy birthday',
+        candleType: 'number',
+        candleNumber: 30,
+        note: null,
+      }),
+    ).toBe('Nến số 30 · Chữ trên bánh: Happy birthday');
+    expect(describePersonalization({ candleType: 'regular', candleCount: 5 })).toBe(
+      'Nến thường ×5',
     );
     expect(describePersonalization(null)).toBe('');
   });
