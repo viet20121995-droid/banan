@@ -187,6 +187,8 @@ class Order extends Equatable {
     this.customMessage,
     this.createdByName,
     this.kitchenName,
+    this.storeAddress,
+    this.storePhone,
   });
 
   final String id;
@@ -302,6 +304,10 @@ class Order extends Equatable {
   /// Kitchen the order was routed to, once sent there.
   final String? kitchenName;
 
+  /// Branch contact printed on receipts.
+  final String? storeAddress;
+  final String? storePhone;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -372,6 +378,8 @@ class Order extends Equatable {
         customMessage,
         createdByName,
         kitchenName,
+        storeAddress,
+        storePhone,
         createdAt,
         updatedAt,
       ];

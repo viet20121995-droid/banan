@@ -69,8 +69,12 @@ Future<void> showOrderReceipt(BuildContext context, Order order) =>
 /// Thermal-paper receipt shared by the customer and counter-order workflows.
 /// The boundary encloses the entire paper, even when it exceeds the viewport.
 class OrderReceipt extends StatefulWidget {
-  const OrderReceipt(
-      {required this.order, super.key, this.reload, this.saveImage,});
+  const OrderReceipt({
+    required this.order,
+    super.key,
+    this.reload,
+    this.saveImage,
+  });
 
   final Order order;
   final Future<Order> Function()? reload;
@@ -339,6 +343,18 @@ class ReceiptPaper extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Brand mark ships inside this package so every app that
+                // shows a receipt (customer, merchant) has it.
+                Center(
+                  child: Image.asset(
+                    'assets/brand/logo.png',
+                    package: 'banan_features_shared',
+                    width: 64,
+                    height: 64,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+                const SizedBox(height: 4),
                 const Text(
                   'BANAN',
                   textAlign: TextAlign.center,
@@ -357,6 +373,18 @@ class ReceiptPaper extends StatelessWidget {
                 ),
                 if (order.storeName != null)
                   Text(order.storeName!, textAlign: TextAlign.center),
+                if ((order.storeAddress ?? '').isNotEmpty)
+                  Text(
+                    order.storeAddress!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                if ((order.storePhone ?? '').isNotEmpty)
+                  Text(
+                    'ĐT: ${order.storePhone}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 11),
+                  ),
                 divider,
                 row('Mã đơn', order.code),
                 row('Đặt lúc', DateFormat('dd/MM/yyyy HH:mm').format(date)),
@@ -438,7 +466,6 @@ class ReceiptPaper extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 18),
-                const Text('Bánh ngon, ngày vui.', textAlign: TextAlign.center),
                 const Text('banancakes.vn', textAlign: TextAlign.center),
                 const SizedBox(height: 12),
                 const Text(

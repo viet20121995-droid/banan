@@ -381,6 +381,8 @@ class OrderDto {
     this.customMessage,
     this.createdByName,
     this.kitchenName,
+    this.storeAddress,
+    this.storePhone,
   });
 
   factory OrderDto.fromJson(Map<String, dynamic> json) {
@@ -400,6 +402,8 @@ class OrderDto {
       customerId: json['customerId'] as String,
       storeId: json['storeId'] as String,
       storeName: store?['name'] as String?,
+      storeAddress: store?['address'] as String?,
+      storePhone: store?['phone'] as String?,
       fulfillmentType: json['fulfillmentType'] as String,
       status: json['status'] as String,
       kitchenId: json['kitchenId'] as String?,
@@ -532,6 +536,8 @@ class OrderDto {
   final String? customMessage;
   final String? createdByName;
   final String? kitchenName;
+  final String? storeAddress;
+  final String? storePhone;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -597,6 +603,8 @@ class OrderDto {
         customMessage: customMessage,
         createdByName: createdByName,
         kitchenName: kitchenName,
+        storeAddress: storeAddress,
+        storePhone: storePhone,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );

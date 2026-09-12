@@ -23,7 +23,11 @@ const demoProduct = Product(
   images: [],
   variants: [
     ProductVariant(
-        id: 'demo-18', size: '18 cm', flavor: 'Classic', priceDelta: 0,),
+      id: 'demo-18',
+      size: '18 cm',
+      flavor: 'Classic',
+      priceDelta: 0,
+    ),
   ],
 );
 
@@ -37,7 +41,11 @@ Map<String, dynamic> demoOrderJson({
       'code': 'BAN-DEMO-001',
       'customerId': 'demo-customer',
       'storeId': 'demo-store',
-      'store': {'name': 'Banan · Ngô Quang Huy'},
+      'store': {
+        'name': 'Banan · Ngô Quang Huy',
+        'address': '12 Ngô Quang Huy, P. Thảo Điền, TP. Thủ Đức',
+        'phone': '0867 540 939',
+      },
       'source': 'COUNTER',
       'settlementMode': 'PAID_AT_COUNTER',
       'fulfillmentType': 'PICKUP',
@@ -83,7 +91,8 @@ class DemoCatalog implements CatalogRepository {
     int perPage = 50,
   }) async =>
       const Result.success(
-          ProductPage(items: [demoProduct], page: 1, perPage: 50, total: 1),);
+        ProductPage(items: [demoProduct], page: 1, perPage: 50, total: 1),
+      );
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -106,18 +115,25 @@ class _ReceiptDemoState extends State<ReceiptDemo> {
           if (options.path == '/merchant/orders/counter') {
             final body = options.data as Map<String, dynamic>;
             final data = demoOrderJson(
-                status: body['payment'] == 'PAID_AT_COUNTER'
-                    ? 'CAPTURED'
-                    : 'AUTHORIZED',);
-            handler.resolve(Response(
+              status: body['payment'] == 'PAID_AT_COUNTER'
+                  ? 'CAPTURED'
+                  : 'AUTHORIZED',
+            );
+            handler.resolve(
+              Response(
                 requestOptions: options,
                 statusCode: 201,
-                data: {'data': data},),);
+                data: {'data': data},
+              ),
+            );
           } else {
-            handler.resolve(Response(
+            handler.resolve(
+              Response(
                 requestOptions: options,
                 statusCode: 200,
-                data: <String, dynamic>{},),);
+                data: <String, dynamic>{},
+              ),
+            );
           }
         },
       ),
@@ -133,9 +149,33 @@ class _ReceiptDemoState extends State<ReceiptDemo> {
             body: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: OrderReceipt(
-                  order: OrderDto.fromJson(demoOrderJson()).toDomain(),),
+                order: OrderDto.fromJson(demoOrderJson()).toDomain(),
+              ),
             ),
           ),
+        ),
+        // Static paper (no print animation) — for headless screenshots.
+        GoRoute(
+          path: '/paper/:state',
+          builder: (_, state) {
+            final value = state.pathParameters['state'];
+            return Scaffold(
+              body: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: ReceiptPaper(
+                    order: OrderDto.fromJson(
+                      demoOrderJson(
+                        status: value == 'pending' ? 'INITIATED' : 'CAPTURED',
+                        count: value == 'long' ? 24 : 1,
+                        discounts: value == 'discounts',
+                      ),
+                    ).toDomain(),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
         GoRoute(
           path: '/preview/:state',

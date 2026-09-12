@@ -91,7 +91,7 @@ const ORDER_INCLUDE = {
   // password/role fields; email may be a synthetic @banan.local guest one
   // (clients hide those).
   customer: { select: { fullName: true, phone: true, email: true } },
-  store: { select: { id: true, name: true, slug: true } },
+  store: { select: { id: true, name: true, slug: true, address: true, phone: true } },
   statusEvents: { orderBy: { createdAt: 'asc' } },
   payments: { orderBy: { createdAt: 'desc' } },
   refunds: { orderBy: { createdAt: 'desc' } },
