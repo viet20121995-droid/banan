@@ -268,6 +268,16 @@ class _Body extends ConsumerWidget {
                   ),
                   Text(order.notes!, style: theme.textTheme.bodyMedium),
                 ],
+                if (order.customMessage != null &&
+                    order.customMessage!.trim().isNotEmpty) ...[
+                  const SizedBox(height: BananSpacing.md),
+                  Text('Lời nhắn của khách', style: theme.textTheme.titleSmall),
+                  Text(
+                    '“${order.customMessage!.trim()}”',
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontStyle: FontStyle.italic),
+                  ),
+                ],
                 if (order.isGift) ...[
                   const SizedBox(height: BananSpacing.lg),
                   _GiftBlock(order: order),
@@ -297,9 +307,15 @@ class _Body extends ConsumerWidget {
                                   '${item.quantity}× ${item.productName}',
                                   style: theme.textTheme.bodyLarge,
                                 ),
-                                if (item.variantLabel != null)
+                                if (item.variantLabel != null ||
+                                    (item.sku ?? '').isNotEmpty)
                                   Text(
-                                    item.variantLabel!,
+                                    [
+                                      if (item.variantLabel != null)
+                                        item.variantLabel!,
+                                      if ((item.sku ?? '').isNotEmpty)
+                                        'SKU ${item.sku}',
+                                    ].join(' · '),
                                     style: theme.textTheme.bodySmall,
                                   ),
                                 if (item.customMessage != null &&
@@ -318,7 +334,17 @@ class _Body extends ConsumerWidget {
                               ],
                             ),
                           ),
-                          Text(fmt.format(item.lineTotal)),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(fmt.format(item.lineTotal)),
+                              if (item.quantity > 1)
+                                Text(
+                                  '${item.quantity} × ${fmt.format(item.unitPrice)}',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -358,12 +384,14 @@ class _Body extends ConsumerWidget {
                   ),
                 if (order.campaignDiscount > 0)
                   _Line(
-                    label: 'Khuyến mãi',
+                    label: _campaignLabel(order),
                     value: '−${fmt.format(order.campaignDiscount)}',
                   ),
                 if (order.couponDiscount > 0)
                   _Line(
-                    label: 'Mã giảm giá',
+                    label: order.couponCode == null
+                        ? 'Mã giảm giá'
+                        : 'Mã giảm giá · ${order.couponCode}',
                     value: '−${fmt.format(order.couponDiscount)}',
                   ),
                 if (order.pointsDiscount > 0)
@@ -373,7 +401,9 @@ class _Body extends ConsumerWidget {
                   ),
                 if (order.giftCardAmountVnd > 0)
                   _Line(
-                    label: 'Thẻ quà tặng',
+                    label: order.giftCardCode == null
+                        ? 'Thẻ quà tặng'
+                        : 'Thẻ quà tặng · ${order.giftCardCode}',
                     value: '−${fmt.format(order.giftCardAmountVnd)}',
                   ),
                 if (order.fulfillmentType == FulfillmentType.delivery)
@@ -387,6 +417,10 @@ class _Body extends ConsumerWidget {
                   value: fmt.format(order.total),
                   bold: true,
                 ),
+                if (order.payments.isNotEmpty || order.refunds.isNotEmpty) ...[
+                  const SizedBox(height: BananSpacing.xl),
+                  _PaymentsBlock(order: order),
+                ],
                 if (order.statusEvents.isNotEmpty) ...[
                   const SizedBox(height: BananSpacing.xl),
                   _TimelineBlock(order: order),
@@ -718,6 +752,21 @@ List<Widget> _metaChips(Order order) {
       ),
     if (order.settlementMode == 'ON_ACCOUNT')
       const StatusBadge(label: 'Công nợ', intent: StatusIntent.info),
+    if (order.currentPayment != null)
+      StatusBadge(
+        label: order.currentPayment!.provider.label,
+        intent: StatusIntent.neutral,
+      ),
+    if (order.storeName != null)
+      StatusBadge(label: order.storeName!, intent: StatusIntent.neutral),
+    if (order.kitchenName != null)
+      StatusBadge(
+          label: 'Bếp: ${order.kitchenName}', intent: StatusIntent.info),
+    if (order.createdByName != null)
+      StatusBadge(
+        label: 'Tạo bởi ${order.createdByName}',
+        intent: StatusIntent.neutral,
+      ),
     if (order.status == OrderStatus.sentToKitchen && kitchen != null)
       StatusBadge(
         label: 'Bếp: ${kitchen.label}',
@@ -1159,6 +1208,68 @@ class _MerchantPersonalizationBlock extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// "Khuyến mãi · Flash sale, Happy hour" — names come from the campaign
+/// snapshot on the order; falls back to the plain label.
+String _campaignLabel(Order order) {
+  final names = (order.campaignInfo ?? const [])
+      .map((c) => c['name'])
+      .whereType<String>()
+      .where((n) => n.isNotEmpty)
+      .join(', ');
+  return names.isEmpty ? 'Khuyến mãi' : 'Khuyến mãi · $names';
+}
+
+/// Every payment attempt and refund on the order, newest first — the
+/// status badge above only shows the latest payment.
+class _PaymentsBlock extends StatelessWidget {
+  const _PaymentsBlock({required this.order});
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final fmt = NumberFormat.currency(
+      locale: 'vi_VN',
+      symbol: '₫',
+      decimalDigits: 0,
+    );
+    Widget row(String when, String what, String amount) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 150,
+                child: Text(when, style: theme.textTheme.bodySmall),
+              ),
+              Expanded(child: Text(what, style: theme.textTheme.bodyMedium)),
+              Text(amount, style: theme.textTheme.bodyMedium),
+            ],
+          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Thanh toán', style: theme.textTheme.titleMedium),
+        const SizedBox(height: BananSpacing.xs),
+        for (final p in order.payments)
+          row(
+            _vnDateTime(p.createdAt),
+            '${p.provider.label} — ${p.status.label}',
+            fmt.format(p.amount),
+          ),
+        for (final r in order.refunds)
+          row(
+            _vnDateTime(r.createdAt),
+            'Hoàn tiền — ${r.status.label}'
+                '${r.reason.isEmpty ? '' : ' · ${r.reason}'}',
+            '−${fmt.format(r.amount)}',
+          ),
+      ],
     );
   }
 }

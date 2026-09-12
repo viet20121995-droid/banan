@@ -34,10 +34,12 @@ class OrderItemDto {
     this.customMessage,
     this.personalization,
     this.orderedQty,
+    this.sku,
   });
 
   factory OrderItemDto.fromJson(Map<String, dynamic> json) {
     return OrderItemDto(
+      sku: (json['variant'] as Map?)?['sku'] as String?,
       id: json['id'] as String,
       productId: json['productId'] as String,
       variantId: json['variantId'] as String?,
@@ -63,8 +65,10 @@ class OrderItemDto {
   final String? customMessage;
   final Map<String, dynamic>? personalization;
   final int? orderedQty;
+  final String? sku;
 
   OrderItem toDomain() => OrderItem(
+        sku: sku,
         id: id,
         productId: productId,
         variantId: variantId,
@@ -372,6 +376,11 @@ class OrderDto {
     this.customerName,
     this.customerPhone,
     this.customerEmail,
+    this.couponCode,
+    this.giftCardCode,
+    this.customMessage,
+    this.createdByName,
+    this.kitchenName,
   });
 
   factory OrderDto.fromJson(Map<String, dynamic> json) {
@@ -455,6 +464,11 @@ class OrderDto {
       customerName: customer?['fullName'] as String?,
       customerPhone: customer?['phone'] as String?,
       customerEmail: customerEmail,
+      couponCode: (json['coupon'] as Map?)?['code'] as String?,
+      giftCardCode: json['giftCardCode'] as String?,
+      customMessage: json['customMessage'] as String?,
+      createdByName: (json['createdBy'] as Map?)?['fullName'] as String?,
+      kitchenName: (json['kitchen'] as Map?)?['name'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -513,6 +527,11 @@ class OrderDto {
   final String? customerName;
   final String? customerPhone;
   final String? customerEmail;
+  final String? couponCode;
+  final String? giftCardCode;
+  final String? customMessage;
+  final String? createdByName;
+  final String? kitchenName;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -573,6 +592,11 @@ class OrderDto {
         customerName: customerName,
         customerPhone: customerPhone,
         customerEmail: customerEmail,
+        couponCode: couponCode,
+        giftCardCode: giftCardCode,
+        customMessage: customMessage,
+        createdByName: createdByName,
+        kitchenName: kitchenName,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );

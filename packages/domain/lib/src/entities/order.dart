@@ -19,6 +19,7 @@ class OrderItem extends Equatable {
     this.customMessage,
     this.personalization,
     this.orderedQty,
+    this.sku,
   });
 
   final String id;
@@ -26,6 +27,9 @@ class OrderItem extends Equatable {
   final String? variantId;
   final String productName;
   final String? variantLabel;
+
+  /// Unified SKU of the sold variant (same code the kitchen MES uses).
+  final String? sku;
   final int quantity;
 
   /// Internal transfers: what the branch asked for, once the kitchen has
@@ -52,6 +56,7 @@ class OrderItem extends Equatable {
         customMessage,
         personalization,
         orderedQty,
+        sku,
       ];
 }
 
@@ -177,6 +182,11 @@ class Order extends Equatable {
     this.customerPhone,
     this.customerEmail,
     this.mfgItems = const [],
+    this.couponCode,
+    this.giftCardCode,
+    this.customMessage,
+    this.createdByName,
+    this.kitchenName,
   });
 
   final String id;
@@ -278,6 +288,20 @@ class Order extends Equatable {
   final String? customerPhone;
   final String? customerEmail;
 
+  /// Coupon / gift-card codes behind the discount lines (null = none used).
+  final String? couponCode;
+  final String? giftCardCode;
+
+  /// Order-level message the customer typed at checkout (distinct from
+  /// [notes] and from per-item cake text).
+  final String? customMessage;
+
+  /// Staff member who keyed a counter / internal order; null for self-service.
+  final String? createdByName;
+
+  /// Kitchen the order was routed to, once sent there.
+  final String? kitchenName;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -343,6 +367,11 @@ class Order extends Equatable {
         customerName,
         customerPhone,
         customerEmail,
+        couponCode,
+        giftCardCode,
+        customMessage,
+        createdByName,
+        kitchenName,
         createdAt,
         updatedAt,
       ];

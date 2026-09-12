@@ -1,5 +1,6 @@
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -584,9 +585,16 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
           name: i.productName,
           detail: [
             if (i.variantLabel != null) i.variantLabel!,
+            if ((i.sku ?? '').isNotEmpty) i.sku!,
+          ].join(' · '),
+          // What the baker must do to THIS item: cake text, candles, the
+          // flavours picked for a macaron set, the customer's line message.
+          highlight: [
+            if (i.personalization != null && i.personalization!.isNotEmpty)
+              personalizationText(i.personalization!),
             if (i.customMessage != null && i.customMessage!.trim().isNotEmpty)
               '“${i.customMessage!.trim()}”',
-          ].join(' · '),
+          ].where((s) => s.isNotEmpty).join(' · '),
         ),
       for (final m in order.mfgItems)
         _ItemLine(
@@ -598,6 +606,7 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
         ),
     ];
     final notes = order.notes?.trim();
+    final message = order.customMessage?.trim();
     // Who gets it and where — the baker needs the same facts as the counter
     // (name on the box, the address the driver reads, the gift card text).
     // Internal transfers are staff-keyed: their "customer" is an employee.
@@ -634,8 +643,20 @@ class _KitchenOrderRowState extends State<KitchenOrderRow> {
           ].join(' · '),
           BananColors.primary,
         ),
+      if (message != null && message.isNotEmpty)
+        (
+          Icons.chat_bubble_outline,
+          'Lời nhắn: “$message”',
+          BananColors.warning
+        ),
       if (notes != null && notes.isNotEmpty)
         (Icons.sticky_note_2_outlined, notes, BananColors.warning),
+      if (order.createdByName != null)
+        (
+          Icons.badge_outlined,
+          'Tạo bởi: ${order.createdByName}',
+          BananColors.outline
+        ),
     ];
 
     return LayoutBuilder(
@@ -722,12 +743,17 @@ class _ItemLine extends StatelessWidget {
     required this.qty,
     required this.name,
     this.detail = '',
+    this.highlight = '',
     this.muted = false,
   });
 
   final String qty;
   final String name;
   final String detail;
+
+  /// Baker instructions (cake text, candles, flavours) — drawn in the
+  /// accent colour so they can't be missed at a glance.
+  final String highlight;
   final bool muted;
 
   @override
@@ -772,6 +798,14 @@ class _ItemLine extends StatelessWidget {
                 ),
                 if (detail.isNotEmpty)
                   Text(detail, style: theme.textTheme.labelSmall),
+                if (highlight.isNotEmpty)
+                  Text(
+                    '★ $highlight',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
               ],
             ),
           ),

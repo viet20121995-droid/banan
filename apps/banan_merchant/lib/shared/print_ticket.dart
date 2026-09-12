@@ -5,6 +5,7 @@
 import 'dart:js_interop';
 
 import 'package:banan_domain/banan_domain.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:intl/intl.dart';
 
 @JS('eval')
@@ -15,47 +16,6 @@ final _fmt =
 
 String _esc(String s) =>
     s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-
-/// Builds the candle instruction line from a personalization payload, kept
-/// clear for the baker: "3 nến xoắn", "nến số 25", "5 nến".
-///
-/// Backward-compat: a legacy payload that has `candleCount` but no
-/// `candleType` is treated as regular candles → "{count} nến".
-String? candleTicketLabel(Map<String, dynamic> p) {
-  final count = (p['candleCount'] as num?)?.toInt();
-  final number = (p['candleNumber'] as num?)?.toInt();
-  final type = (p['candleType'] as String?) ?? (count != null ? 'regular' : null);
-  switch (type) {
-    case 'number':
-      if (number == null) return null;
-      return 'nến số $number';
-    case 'spiral':
-      if (count == null) return null;
-      return '$count nến xoắn';
-    case 'regular':
-      if (count == null) return null;
-      return '$count nến';
-    default:
-      return null;
-  }
-}
-
-/// Human-readable one-line of a cart/order personalization payload.
-String _persText(Map<String, dynamic> p) {
-  final parts = <String>[];
-  final t = p['textOnCake'];
-  if (t is String && t.isNotEmpty) parts.add('Chữ: "$t"');
-  final candle = candleTicketLabel(p);
-  if (candle != null) parts.add(candle);
-  final note = p['note'];
-  if (note is String && note.isNotEmpty) parts.add('Ghi chú: $note');
-  final flavors = p['flavors'];
-  if (flavors is Map && flavors.isNotEmpty) {
-    parts.add('Vị: ' +
-        flavors.entries.map((e) => '${e.value}× ${e.key}').join(', '));
-  }
-  return parts.join(' · ');
-}
 
 /// Renders the dashed "ĐƠN QUÀ TẶNG" block printed on the slip when the
 /// order is a gift — greeting message, recipient and the GÓI QUÀ / ẨN GIÁ
@@ -129,7 +89,8 @@ void printReceipt(Order order) {
   final hidePrice = order.isGift && order.hidePrice;
   final b = StringBuffer()
     ..write('<h1>Banan Fukuoka Saigon</h1>')
-    ..write('<div class="muted">${hidePrice ? 'Phiếu giao' : 'Phiếu thanh toán'}</div>')
+    ..write(
+        '<div class="muted">${hidePrice ? 'Phiếu giao' : 'Phiếu thanh toán'}</div>')
     ..write(
         '<div class="row"><span>Mã đơn</span><span class="big">${_esc(order.code)}</span></div>')
     ..write(
@@ -164,7 +125,7 @@ void printReceipt(Order order) {
       b.write('<div class="muted">${_esc(it.variantLabel!)}</div>');
     }
     if (it.personalization != null && it.personalization!.isNotEmpty) {
-      final t = _persText(it.personalization!);
+      final t = personalizationText(it.personalization!);
       if (t.isNotEmpty) b.write('<div class="pers">${_esc(t)}</div>');
     }
     b.write('</div>');
@@ -184,7 +145,7 @@ void printReceipt(Order order) {
     }
     if (order.couponDiscount > 0) {
       b.write(
-          '<div class="row"><span>Mã giảm giá</span><span>−${_fmt.format(order.couponDiscount)}</span></div>');
+          '<div class="row"><span>Mã giảm giá${order.couponCode == null ? '' : ' ${_esc(order.couponCode!)}'}</span><span>−${_fmt.format(order.couponDiscount)}</span></div>');
     }
     if (order.pointsDiscount > 0) {
       b.write(
@@ -217,12 +178,15 @@ void printKitchenTicket(Order order) {
     ..write(_giftBlockHtml(order))
     ..write('<h2>Cần làm</h2>');
   for (final it in order.items) {
-    b.write('<div class="item big">${it.quantity}× ${_esc(it.productName)}</div>');
-    if ((it.variantLabel ?? '').isNotEmpty) {
-      b.write('<div class="muted">${_esc(it.variantLabel!)}</div>');
-    }
+    b.write(
+        '<div class="item big">${it.quantity}× ${_esc(it.productName)}</div>');
+    final line = [
+      if ((it.variantLabel ?? '').isNotEmpty) it.variantLabel!,
+      if ((it.sku ?? '').isNotEmpty) it.sku!,
+    ].join(' · ');
+    if (line.isNotEmpty) b.write('<div class="muted">${_esc(line)}</div>');
     if (it.personalization != null && it.personalization!.isNotEmpty) {
-      final t = _persText(it.personalization!);
+      final t = personalizationText(it.personalization!);
       if (t.isNotEmpty) b.write('<div class="pers">★ ${_esc(t)}</div>');
     }
     if ((it.customMessage ?? '').isNotEmpty) {

@@ -69,7 +69,8 @@ type ExpandedLineInput = {
 };
 
 const ORDER_INCLUDE = {
-  items: true,
+  // Unified SKU next to each line so the boards can name the kitchen code.
+  items: { include: { variant: { select: { sku: true } } } },
   // MES supply lines on internal transfers (empty for every other source).
   mfgItems: {
     include: {
@@ -101,6 +102,11 @@ const ORDER_INCLUDE = {
   wholesaleAccount: {
     select: { id: true, companyName: true, deliveryAddress: true },
   },
+  // Which coupon was used (the discount alone doesn't say), the staff member
+  // who keyed a counter order, and the kitchen it was routed to.
+  coupon: { select: { code: true } },
+  createdBy: { select: { fullName: true } },
+  kitchen: { select: { id: true, name: true } },
 } satisfies Prisma.OrderInclude;
 
 type OrderWithIncludes = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE }>;
@@ -142,6 +148,7 @@ const TRACK_INCLUDE = {
   // don't ship the orderer's account contact there (the address block already
   // carries what the recipient needs).
   customer: false,
+  createdBy: false,
   payments: {
     orderBy: { createdAt: 'desc' },
     select: {
