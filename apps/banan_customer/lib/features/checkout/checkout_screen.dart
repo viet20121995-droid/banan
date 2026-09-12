@@ -641,15 +641,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           ref.invalidate(membershipSummaryProvider);
           context.go('/orders/${placed.order.id}');
         } else {
-          // Returning guest (no session): the order page is auth-gated, so
-          // confirm here and return home instead of bouncing to the login
-          // screen. The order IS placed — staff will process it.
+          // Returning guests can view their receipt through public tracking.
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(ref.read(stringsProvider).orderSuccess),
             ),
           );
-          context.go('/');
+          context.go('/track/${placed.order.id}');
         }
       },
       failure: (f) => setState(() {

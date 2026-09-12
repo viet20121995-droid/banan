@@ -187,9 +187,18 @@ class _Body extends ConsumerWidget {
                   spacing: BananSpacing.sm,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: () => printReceipt(order),
-                      icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                      label: const Text('In phiếu'),
+                      onPressed: () => order.source == 'INTERNAL_TRANSFER'
+                          ? printReceipt(order)
+                          : showOrderReceipt(context, order),
+                      icon: Icon(
+                        order.source == 'INTERNAL_TRANSFER'
+                            ? Icons.receipt_long_outlined
+                            : Icons.photo_camera_outlined,
+                        size: 18,
+                      ),
+                      label: Text(order.source == 'INTERNAL_TRANSFER'
+                          ? 'In phiếu'
+                          : 'Hóa đơn / Chụp ảnh',),
                     ),
                     OutlinedButton.icon(
                       onPressed: () => printKitchenTicket(order),

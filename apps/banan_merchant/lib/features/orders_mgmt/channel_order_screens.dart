@@ -2,7 +2,7 @@ import 'package:banan_data/banan_data.dart';
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
 import 'package:banan_features_shared/banan_features_shared.dart'
-    show WardPickerField;
+    show WardPickerField, showOrderReceipt;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -477,8 +477,10 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
     res.when(
-      success: (order) {
+      success: (order) async {
         _snack('Đã tạo ${order.code} và gửi bếp.');
+        await showOrderReceipt(context, order.toDomain());
+        if (!mounted) return;
         context.go('/orders/${order.id}');
       },
       failure: (f) => _snack('Lỗi: ${f.message ?? f.code}'),

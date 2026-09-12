@@ -18,6 +18,7 @@ export 'src/orders/personalization_text.dart';
 export 'src/orders/personalization_text.dart';
 export 'src/orders/personalization_text.dart';
 export 'src/orders/personalization_text.dart';
+export 'src/receipt/order_receipt.dart';
 export 'src/survey/public_survey_screen.dart';
 export 'src/survey/survey_draft.dart';
 export 'src/survey/survey_flow.dart';

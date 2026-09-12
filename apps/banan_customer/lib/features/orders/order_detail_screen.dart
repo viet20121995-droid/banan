@@ -22,7 +22,8 @@ final _orderProvider =
       final eventOrderId = event.data['orderId'] as String?;
       if (eventOrderId == id &&
           (event.event == 'order.status_changed' ||
-              event.event == 'order.kitchen_status_changed')) {
+              event.event == 'order.kitchen_status_changed' ||
+              event.event == 'order.payment_captured')) {
         // Audible cue while the customer is watching their order.
         playOrderUpdateChime();
         ref.invalidateSelf();
@@ -194,6 +195,20 @@ class _Body extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                OrderReceipt(
+                  order: order,
+                  reload: () async {
+                    final repo = ref.read(orderRepositoryProvider);
+                    final result = readOnly
+                        ? await repo.tracking(order.id)
+                        : await repo.order(order.id);
+                    return result.when(
+                      success: (value) => value,
+                      failure: (failure) => throw Exception(failure.code),
+                    );
+                  },
+                ),
+                const SizedBox(height: BananSpacing.xl),
                 Row(
                   children: [
                     Expanded(
