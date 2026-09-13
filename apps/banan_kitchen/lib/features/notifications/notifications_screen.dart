@@ -80,24 +80,31 @@ class NotificationsScreen extends ConsumerWidget {
   ) async {
     if (!n.isRead) await controller.markRead(n.id);
     if (!context.mounted) return;
-    final moId = n.data?['moId'];
-    if (moId is String && moId.isNotEmpty) {
-      unawaited(context.push('/production/orders/$moId'));
-      return;
-    }
-    // No MO to deep-link — route by type to the screen that shows the subject.
-    switch (n.type) {
-      case 'kitchen_new':
-        // New order — the kanban board is where it lands. Payload only
-        // carries the order code; there is no per-order route to push.
-        unawaited(context.push('/'));
-      case 'mfg.qc_alert':
-        unawaited(context.push('/production/alerts'));
-      case 'mfg.daily_digest':
-        // Digest counts expiring lots + overdue MOs — both live on the
-        // production dashboard.
-        unawaited(context.push('/production'));
-    }
+    openKitchenNotification(context, n);
+  }
+}
+
+/// Where a kitchen notification leads — shared by the inbox and the bell.
+void openKitchenNotification(BuildContext context, NotificationEntry n) {
+  final moId = n.data?['moId'];
+  if (moId is String && moId.isNotEmpty) {
+    unawaited(context.push('/production/orders/$moId'));
+    return;
+  }
+  // No MO to deep-link — route by type to the screen that shows the subject.
+  switch (n.type) {
+    case 'kitchen_new':
+      // New order — the kanban board is where it lands. Payload only
+      // carries the order code; there is no per-order route to push.
+      unawaited(context.push('/'));
+    case 'mfg.qc_alert':
+      unawaited(context.push('/production/alerts'));
+    case 'mfg.daily_digest':
+      // Digest counts expiring lots + overdue MOs — both live on the
+      // production dashboard.
+      unawaited(context.push('/production'));
+    default:
+      unawaited(context.push('/notifications'));
   }
 }
 

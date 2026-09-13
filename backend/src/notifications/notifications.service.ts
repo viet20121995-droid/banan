@@ -262,19 +262,27 @@ export class NotificationsService {
     return { recipients: users.length };
   }
 
-  async listForUser(userId: string, page = 1, perPage = 30) {
+  /**
+   * `types` scopes the inbox (and its unread count) to what the calling app
+   * shows: the kitchen app asks for kitchen/MES types, the merchant app for
+   * order types — one staff account used on both sites no longer sees the
+   * other site's notifications.
+   */
+  async listForUser(userId: string, page = 1, perPage = 30, types?: string[]) {
     const skip = (page - 1) * perPage;
+    const where: Prisma.NotificationWhereInput = {
+      userId,
+      ...(types && types.length > 0 && { type: { in: types } }),
+    };
     const [items, total, unread] = await this.prisma.$transaction([
       this.prisma.notification.findMany({
-        where: { userId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take: perPage,
       }),
-      this.prisma.notification.count({ where: { userId } }),
-      this.prisma.notification.count({
-        where: { userId, readAt: null },
-      }),
+      this.prisma.notification.count({ where }),
+      this.prisma.notification.count({ where: { ...where, readAt: null } }),
     ]);
     return {
       items: items.map((n) => this.toView(n)),

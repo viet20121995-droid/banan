@@ -7,9 +7,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final merchantChimeProvider = Provider<void Function()>((_) => () {});
 
 /// Realtime events that mean "something new needs the counter's attention":
-/// a brand-new order, or an online (9Pay) order that just got paid.
-bool isNewMerchantOrderEvent(RealtimeEvent event) =>
-    event.event == 'order.created' || event.event == 'order.payment_captured';
+/// a brand-new order, or an online (9Pay) order that just got paid. Orders
+/// the staff keyed in themselves (counter, internal transfer) don't ring —
+/// the person who typed it is the one who would hear it.
+bool isNewMerchantOrderEvent(RealtimeEvent event) {
+  if (event.event == 'order.payment_captured') return true;
+  if (event.event != 'order.created') return false;
+  final source = event.data['source'];
+  return source != 'STAFF_COUNTER' && source != 'INTERNAL_TRANSFER';
+}
 
 /// App-wide alert: chimes on every new order no matter which screen the
 /// merchant is on (menu, reports, …). NOT autoDispose — watched once from the

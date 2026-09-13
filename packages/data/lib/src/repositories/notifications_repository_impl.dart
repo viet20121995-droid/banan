@@ -11,8 +11,9 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
   Future<Result<NotificationsPage, AppFailure>> list({
     int page = 1,
     int perPage = 30,
+    List<String>? types,
   }) async {
-    final res = await _api.list(page: page, perPage: perPage);
+    final res = await _api.list(page: page, perPage: perPage, types: types);
     return res.map(
       (data) => NotificationsPage(
         items: data.items.map((d) => d.toDomain()).toList(),

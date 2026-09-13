@@ -63,6 +63,7 @@ class _NoNotifications implements NotificationsRepository {
   Future<Result<NotificationsPage, AppFailure>> list({
     int page = 1,
     int perPage = 30,
+    List<String>? types,
   }) async =>
       const Result.success(NotificationsPage(items: [], unread: 0, total: 0));
 

@@ -206,7 +206,11 @@ describe('storeAlertRecipients', () => {
       ...OPS_ALERT_EMAILS,
     ]);
     expect(Object.keys(STORE_ALERT_EMAILS)).toHaveLength(4);
-    expect(OPS_ALERT_EMAILS).toEqual(['operationmanager@banancakes.com', 'ntyen104@gmail.com']);
+    expect(OPS_ALERT_EMAILS).toEqual([
+      'operationmanager@banancakes.com',
+      'ntyen104@gmail.com',
+      'linhtuyen191@gmail.com',
+    ]);
   });
 
   it('unknown / missing slug → ops only (new store never silently drops ops)', () => {

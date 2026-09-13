@@ -1,5 +1,6 @@
 import 'package:banan_core/banan_core.dart';
 import 'package:banan_data/banan_data.dart';
+import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -22,7 +23,12 @@ Future<void> main() async {
 
   // The WebAudio chime is web-only; the alert rule itself stays pure.
   final container = ProviderContainer(
-    overrides: [merchantChimeProvider.overrideWithValue(playNewOrderChime)],
+    overrides: [
+      merchantChimeProvider.overrideWithValue(playNewOrderChime),
+      // New-order alerts only — kitchen tickets / MES digests belong to the
+      // kitchen site even when the same account is used here.
+      notificationTypesProvider.overrideWithValue(const ['order_new']),
+    ],
   );
   await container.read(authRepositoryProvider).bootstrap();
 

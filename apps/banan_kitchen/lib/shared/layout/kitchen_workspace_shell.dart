@@ -2,6 +2,8 @@ import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/notifications/notifications_screen.dart';
+
 /// Desktop workspace for the central-kitchen app.
 ///
 /// Operational screens keep their own app bars. This shell only provides
@@ -187,8 +189,7 @@ class _WorkspaceNavigation extends StatelessWidget {
                     Expanded(
                       child: Center(
                         child: NotificationBell(
-                          // Every kitchen notification is about the board.
-                          onOpen: (_) => context.go('/'),
+                          onOpen: (n) => openKitchenNotification(context, n),
                           onOpenAll: () => context.go('/notifications'),
                           color: const Color(0xFFC7D0C9),
                           backgroundColor: const Color(0xFF243229),

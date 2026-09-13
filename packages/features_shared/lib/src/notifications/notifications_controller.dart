@@ -37,16 +37,26 @@ class NotificationsState {
 
 const _sentinel = Object();
 
+/// Notification types this app shows. Each app overrides it in its
+/// ProviderScope (kitchen: tickets + MES, merchant: new orders) so a staff
+/// account used on both sites only sees what belongs to the site it is on.
+/// Null = no filter.
+final notificationTypesProvider = Provider<List<String>?>((_) => null);
+
 class NotificationsController extends StateNotifier<NotificationsState> {
-  NotificationsController(this._repo) : super(const NotificationsState()) {
+  NotificationsController(this._repo, {this.types})
+      : super(const NotificationsState()) {
     refresh();
   }
 
   final NotificationsRepository _repo;
+  final List<String>? types;
+
+  bool accepts(String type) => types == null || types!.contains(type);
 
   Future<void> refresh() async {
     state = state.copyWith(loading: true, failure: null);
-    final res = await _repo.list();
+    final res = await _repo.list(types: types);
     res.when(
       success: (page) => state = state.copyWith(
         items: page.items,
@@ -92,8 +102,10 @@ class NotificationsController extends StateNotifier<NotificationsState> {
 /// session, and the realtime prepend must keep counting on every page.
 final notificationsControllerProvider =
     StateNotifierProvider<NotificationsController, NotificationsState>((ref) {
-  final controller =
-      NotificationsController(ref.watch(notificationsRepositoryProvider));
+  final controller = NotificationsController(
+    ref.watch(notificationsRepositoryProvider),
+    types: ref.watch(notificationTypesProvider),
+  );
 
   ref.listen<AsyncValue<RealtimeEvent>>(realtimeEventsProvider, (_, next) {
     next.whenData((event) {
@@ -105,6 +117,7 @@ final notificationsControllerProvider =
       final json = event.data['notification'];
       if (json is! Map) return;
       final cast = Map<String, dynamic>.from(json);
+      if (!controller.accepts(cast['type'] as String)) return;
       controller.prepend(
         NotificationEntry(
           id: cast['id'] as String,

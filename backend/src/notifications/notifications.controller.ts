@@ -1,12 +1,20 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { ArrayMaxSize, IsArray, IsString } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsOptional, IsString, Matches } from 'class-validator';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 import { NotificationsService } from './notifications.service';
+
+class ListDto extends PaginationDto {
+  /** Comma-separated notification types to keep, e.g. `kitchen_new,mfg.qc_alert`. */
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z0-9_.]+(,[a-z0-9_.]+)*$/i)
+  types?: string;
+}
 
 class MarkReadDto {
   @IsArray()
@@ -22,11 +30,16 @@ export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthPrincipal, @Query() q: PaginationDto) {
+  list(@CurrentUser() user: AuthPrincipal, @Query() q: ListDto) {
     // PaginationDto validates page/perPage as finite ints (1..100) at the
     // boundary, so a decimal/Infinity is rejected with 400 rather than
     // reaching Prisma and 500-ing.
-    return this.notifications.listForUser(user.sub, q.page ?? 1, q.perPage ?? 30);
+    return this.notifications.listForUser(
+      user.sub,
+      q.page ?? 1,
+      q.perPage ?? 30,
+      q.types?.split(',').filter(Boolean),
+    );
   }
 
   @Post('read')

@@ -8,23 +8,34 @@ class NotificationsApi {
   NotificationsApi(this._dio);
   final Dio _dio;
 
-  Future<Result<({List<NotificationDto> items, int unread, int total}),
-      AppFailure>> list({int page = 1, int perPage = 30}) async {
+  Future<
+      Result<({List<NotificationDto> items, int unread, int total}),
+          AppFailure>> list({
+    int page = 1,
+    int perPage = 30,
+    List<String>? types,
+  }) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(
         '/me/notifications',
-        queryParameters: {'page': page, 'perPage': perPage},
+        queryParameters: {
+          'page': page,
+          'perPage': perPage,
+          if (types != null && types.isNotEmpty) 'types': types.join(','),
+        },
       );
       if (!isOk(res)) return Result.failure(mapHttpStatusToFailure(res));
       final raw = res.data?['data'] as List? ?? const [];
       final meta = res.data?['meta'] as Map<String, dynamic>? ?? const {};
-      return Result.success((
-        items: raw
-            .map((e) => NotificationDto.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        unread: (meta['unread'] as num?)?.toInt() ?? 0,
-        total: (meta['total'] as num?)?.toInt() ?? raw.length,
-      ),);
+      return Result.success(
+        (
+          items: raw
+              .map((e) => NotificationDto.fromJson(e as Map<String, dynamic>))
+              .toList(),
+          unread: (meta['unread'] as num?)?.toInt() ?? 0,
+          total: (meta['total'] as num?)?.toInt() ?? raw.length,
+        ),
+      );
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
     } catch (e) {

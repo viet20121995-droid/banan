@@ -1556,11 +1556,15 @@ export class OrdersService {
       at: new Date().toISOString(),
     });
 
-    await this.notifications.sendToUser(
-      order.customerId,
-      kitchenStatusNotification(order.code, toKitchenStatus),
-      { orderId: id, code: order.code, kitchenStatus: toKitchenStatus },
-    );
+    // Customer journey — internal transfers have no customer (customerId is
+    // the requesting staffer, who would otherwise see "đơn của bạn" alerts).
+    if (order.source !== 'INTERNAL_TRANSFER') {
+      await this.notifications.sendToUser(
+        order.customerId,
+        kitchenStatusNotification(order.code, toKitchenStatus),
+        { orderId: id, code: order.code, kitchenStatus: toKitchenStatus },
+      );
+    }
 
     return updated;
   }
@@ -3713,6 +3717,8 @@ export class OrdersService {
       createdAt: order.createdAt.toISOString(),
       customerId: order.customerId,
       storeId: order.storeId,
+      // Lets the merchant board skip the chime for orders its own staff keyed.
+      source: order.source,
     };
   }
 
