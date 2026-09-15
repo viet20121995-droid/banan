@@ -180,6 +180,12 @@ export class CreateOrderDto {
   @Min(0)
   pointsToRedeem?: number;
 
+  /** Opt in to the member discount (5% off goods for >100 Micho holders).
+   *  Mutually exclusive with `couponCode`. */
+  @IsOptional()
+  @IsBoolean()
+  useMemberDiscount?: boolean;
+
   // ── Guest checkout ────────────────────────────────────────────────────
   // Optional — only used when the request has no auth token. The service
   // upserts a CUSTOMER user keyed by phone (or creates a new one), then

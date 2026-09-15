@@ -23,7 +23,12 @@ import {
   isWardServiceable,
 } from '../geo/hcm-wards';
 import { StoreRouterService } from '../geo/store-router.service';
-import { LoyaltyService, LOYALTY_CONFIG } from '../loyalty/loyalty.service';
+import {
+  LoyaltyService,
+  LOYALTY_CONFIG,
+  memberDiscountEligible,
+  memberDiscountVnd,
+} from '../loyalty/loyalty.service';
 import {
   kitchenStatusNotification,
   orderStatusNotification,
@@ -600,8 +605,49 @@ export class OrdersService {
       // re-activation) for a guest order bound to a pre-existing account.
       customerId: guestBoundToExisting ? undefined : customerId,
     });
-    const campaignDiscountVnd = Math.min(promo.discountVnd, subtotalAfterBundleVnd);
-    // Subtotal after BOTH the combo discount and the auto-promo discount.
+    const autoPromoVnd = Math.min(promo.discountVnd, subtotalAfterBundleVnd);
+
+    // Member perk: >100 Micho holders may take 5% off the goods total
+    // (after combos + auto-promos), opted in at checkout. The customer picks
+    // EITHER this OR a coupon code — never both. Stored as a synthetic entry
+    // in campaignInfo so boards, receipts and reports show it without a
+    // schema change; it is NOT a Campaign row, so usage recording skips it.
+    let memberDiscount = 0;
+    if (dto.useMemberDiscount && !guestBoundToExisting) {
+      if (dto.couponCode) {
+        throw new BadRequestException({
+          code: 'MEMBER_DISCOUNT_EXCLUSIVE',
+          message: 'Ưu đãi thành viên không dùng chung với mã giảm giá.',
+        });
+      }
+      const holder = await this.prisma.user.findUnique({
+        where: { id: customerId },
+        select: { pointsBalance: true },
+      });
+      if (!memberDiscountEligible(holder?.pointsBalance ?? 0)) {
+        throw new BadRequestException({
+          code: 'MEMBER_DISCOUNT_INELIGIBLE',
+          message: `Cần trên ${LOYALTY_CONFIG.michoDiscountThreshold} Micho để dùng ưu đãi thành viên.`,
+        });
+      }
+      memberDiscount = memberDiscountVnd(subtotalAfterBundleVnd - autoPromoVnd);
+    }
+    const campaignInfo = [
+      ...promo.applied,
+      ...(memberDiscount > 0
+        ? [
+            {
+              id: 'member-discount',
+              name: `Ưu đãi thành viên Micho −${Math.round(LOYALTY_CONFIG.michoDiscountRate * 100)}%`,
+              type: 'MEMBERSHIP_BENEFIT' as const,
+              discountVnd: memberDiscount,
+            },
+          ]
+        : []),
+    ];
+    const campaignDiscountVnd = Math.min(autoPromoVnd + memberDiscount, subtotalAfterBundleVnd);
+    // Subtotal after the combo discount, the auto-promo discount and the
+    // member discount.
     const subtotalAfterCampaign = subtotalAfterBundleVnd - campaignDiscountVnd;
 
     let couponDiscountVnd = 0;
@@ -699,9 +745,12 @@ export class OrdersService {
       // REDEEM event references the order id — all inside this tx.
       // Never spend a pre-existing account's points on an unverified guest
       // order that merely matched its phone number.
-      const requestedPoints = guestBoundToExisting
-        ? 0
-        : Math.max(0, Math.floor(dto.pointsToRedeem ?? 0));
+      // Redemption can be switched off globally (LOYALTY_CONFIG); any points
+      // a stale client still sends are simply ignored, not rejected.
+      const requestedPoints =
+        guestBoundToExisting || !LOYALTY_CONFIG.redemptionEnabled
+          ? 0
+          : Math.max(0, Math.floor(dto.pointsToRedeem ?? 0));
       let pointsRedeemed = 0;
       let pointsDiscount = new Prisma.Decimal(0);
       if (requestedPoints > 0) {
@@ -852,8 +901,8 @@ export class OrdersService {
           campaignDiscount: new Prisma.Decimal(campaignDiscountVnd),
           bundleDiscount: new Prisma.Decimal(bundleDiscountVnd),
           campaignInfo:
-            promo.applied.length > 0
-              ? (promo.applied as unknown as Prisma.InputJsonValue)
+            campaignInfo.length > 0
+              ? (campaignInfo as unknown as Prisma.InputJsonValue)
               : Prisma.JsonNull,
           giftCardCode: giftCardAmountVnd > 0 ? giftCardCode : null,
           giftCardAmountVnd,

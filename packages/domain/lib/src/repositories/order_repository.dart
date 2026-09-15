@@ -79,6 +79,7 @@ class NewOrder {
     this.couponCode,
     this.giftCardCode,
     this.pointsToRedeem,
+    this.useMemberDiscount = false,
     this.guestFullName,
     this.guestPhone,
     this.guestEmail,
@@ -106,6 +107,10 @@ class NewOrder {
   final String? couponCode;
   final String? giftCardCode;
   final int? pointsToRedeem;
+
+  /// Opt in to the >100-Micho member discount (5% off goods). The backend
+  /// rejects it together with a coupon code — the customer picks one.
+  final bool useMemberDiscount;
 
   /// Guest-checkout fields. Sent only when the customer is unauthenticated.
   final String? guestFullName;
@@ -148,11 +153,13 @@ class NewOrder {
         if (scheduledFor != null)
           'scheduledFor': scheduledFor!.toUtc().toIso8601String(),
         if (notes != null && notes!.isNotEmpty) 'notes': notes,
-        if (couponCode != null && couponCode!.isNotEmpty) 'couponCode': couponCode,
+        if (couponCode != null && couponCode!.isNotEmpty)
+          'couponCode': couponCode,
         if (giftCardCode != null && giftCardCode!.isNotEmpty)
           'giftCardCode': giftCardCode,
         if (pointsToRedeem != null && pointsToRedeem! > 0)
           'pointsToRedeem': pointsToRedeem,
+        if (useMemberDiscount) 'useMemberDiscount': true,
         if (guestFullName != null && guestFullName!.isNotEmpty)
           'guestFullName': guestFullName,
         if (guestPhone != null && guestPhone!.isNotEmpty)
@@ -212,7 +219,8 @@ class PlaceOrderResult extends Equatable {
 abstract class OrderRepository {
   // Customer-side
   Future<Result<PlaceOrderResult, AppFailure>> placeOrder(NewOrder draft);
-  Future<Result<OrderPage, AppFailure>> myOrders({int page = 1, int perPage = 20});
+  Future<Result<OrderPage, AppFailure>> myOrders(
+      {int page = 1, int perPage = 20});
   Future<Result<Order, AppFailure>> order(String id);
 
   /// Public tracking fetch — hits the guest-accessible `/orders/:id/track`

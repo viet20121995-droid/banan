@@ -77,6 +77,10 @@ class MembershipSummary extends Equatable {
     required this.redemptionValueVnd,
     required this.tierThresholds,
     this.birthday,
+    this.redemptionEnabled = false,
+    this.memberDiscountEligible = false,
+    this.memberDiscountRate = 0.05,
+    this.memberDiscountThresholdMicho = 100,
   });
 
   final MembershipTier tier;
@@ -86,6 +90,16 @@ class MembershipSummary extends Equatable {
   final int earnRatePerVnd;
   final int redemptionValueVnd;
   final Map<MembershipTier, int> tierThresholds;
+
+  /// Whether the checkout point-redemption slider is switched on (backend
+  /// flag; currently paused).
+  final bool redemptionEnabled;
+
+  /// Holding more than [memberDiscountThresholdMicho] Micho unlocks an
+  /// opt-in [memberDiscountRate] discount on the goods total at checkout.
+  final bool memberDiscountEligible;
+  final double memberDiscountRate;
+  final int memberDiscountThresholdMicho;
 
   /// Points needed to reach the next tier (null if at top tier).
   int? get pointsToNextTier {
@@ -118,5 +132,9 @@ class MembershipSummary extends Equatable {
         earnRatePerVnd,
         redemptionValueVnd,
         tierThresholds,
+        redemptionEnabled,
+        memberDiscountEligible,
+        memberDiscountRate,
+        memberDiscountThresholdMicho,
       ];
 }

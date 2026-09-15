@@ -55,12 +55,23 @@ class MembershipSummaryDto {
     required this.redemptionValueVnd,
     required this.tierThresholds,
     this.birthday,
+    this.redemptionEnabled = false,
+    this.memberDiscountEligible = false,
+    this.memberDiscountRate = 0.05,
+    this.memberDiscountThresholdMicho = 100,
   });
 
   factory MembershipSummaryDto.fromJson(Map<String, dynamic> json) {
     final thresholds =
         (json['thresholds'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final member =
+        (json['memberDiscount'] as Map?)?.cast<String, dynamic>() ?? const {};
     return MembershipSummaryDto(
+      redemptionEnabled: json['redemptionEnabled'] as bool? ?? false,
+      memberDiscountEligible: member['eligible'] as bool? ?? false,
+      memberDiscountRate: (member['rate'] as num?)?.toDouble() ?? 0.05,
+      memberDiscountThresholdMicho:
+          (member['thresholdMicho'] as num?)?.toInt() ?? 100,
       tier: json['tier'] as String,
       balance: (json['balance'] as num).toInt(),
       birthday: json['birthday'] as String?,
@@ -68,8 +79,7 @@ class MembershipSummaryDto {
           .map((e) => LoyaltyEventDto.fromJson(e as Map<String, dynamic>))
           .toList(),
       earnRatePerVnd: (json['earnRatePerVnd'] as num?)?.toInt() ?? 10000,
-      redemptionValueVnd:
-          (json['redemptionValueVnd'] as num?)?.toInt() ?? 100,
+      redemptionValueVnd: (json['redemptionValueVnd'] as num?)?.toInt() ?? 100,
       tierThresholds: {
         for (final entry in thresholds.entries)
           entry.key: (entry.value as num).toInt(),
@@ -84,8 +94,16 @@ class MembershipSummaryDto {
   final int earnRatePerVnd;
   final int redemptionValueVnd;
   final Map<String, int> tierThresholds;
+  final bool redemptionEnabled;
+  final bool memberDiscountEligible;
+  final double memberDiscountRate;
+  final int memberDiscountThresholdMicho;
 
   MembershipSummary toDomain() => MembershipSummary(
+        redemptionEnabled: redemptionEnabled,
+        memberDiscountEligible: memberDiscountEligible,
+        memberDiscountRate: memberDiscountRate,
+        memberDiscountThresholdMicho: memberDiscountThresholdMicho,
         tier: MembershipTier.fromWire(tier.toUpperCase()),
         balance: balance,
         birthday: birthday == null ? null : DateTime.tryParse(birthday!),

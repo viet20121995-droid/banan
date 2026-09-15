@@ -38,17 +38,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _recipient = TextEditingController();
   final _phone = TextEditingController();
   final _line1 = TextEditingController();
+
   /// Hard-coded to TP.HCM — we only deliver in HCMC. Kept as a controller
   /// so the submit payload still carries the field; the form renders a
   /// read-only disabled tile instead of a TextField.
   final _city = TextEditingController(text: 'Thành phố Hồ Chí Minh');
+
   /// Selected HCMC ward (post-2025 reform) for the delivery address. Drives
   /// the distance-based delivery surcharge.
   String? _wardCode;
+
   /// Carried through from a picked saved address (no visible fields in the
   /// inline form). Re-sent on the order so the address book stays faithful.
   String? _line2;
   String? _district;
+
   /// Id of the saved address the customer tapped, so the picker can show
   /// which one is currently applied. Null = manual entry.
   String? _selectedAddressId;
@@ -84,6 +88,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   // customer chose to burn on this order. Clamped to balance + order value
   // in build(); the backend caps it authoritatively too.
   int _pointsToRedeem = 0;
+  // Opt-in >100-Micho member discount. Exclusive with a coupon: ticking it
+  // clears the coupon, applying a coupon unticks it.
+  bool _useMemberDiscount = false;
   bool _placing = false;
   String? _error;
 
@@ -164,8 +171,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // menu screen — once they're on checkout, "Xem giỏ" is redundant
       // and the message overlaps the bottom "Đặt hàng" button.
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      if (draftAddressId == null ||
-          _fulfillment != FulfillmentType.delivery) {
+      if (draftAddressId == null || _fulfillment != FulfillmentType.delivery) {
         return;
       }
       final addresses = ref.read(myAddressesProvider).valueOrNull;
@@ -277,6 +283,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         success: (preview) {
           _appliedCoupon = preview;
           _couponError = null;
+          _useMemberDiscount = false;
         },
         failure: (f) {
           _appliedCoupon = null;
@@ -452,7 +459,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   /// invalid input. `ensureVisible` walks up from the section's own context,
   /// so it works in both the narrow single-column and wide two-column
   /// layouts without guessing offsets.
-  Future<void> _revealIssue(({GlobalKey anchor, FocusNode? focus}) issue) async {
+  Future<void> _revealIssue(
+      ({GlobalKey anchor, FocusNode? focus}) issue) async {
     final ctx = issue.anchor.currentContext;
     if (ctx != null) {
       await Scrollable.ensureVisible(
@@ -509,14 +517,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     // never send more than the customer can actually burn. Guests redeem
     // nothing. The backend re-caps authoritatively; this keeps the request
     // honest and matches the on-screen preview.
-    final membership = isGuest
-        ? null
-        : ref.read(membershipSummaryProvider).valueOrNull;
+    final membership =
+        isGuest ? null : ref.read(membershipSummaryProvider).valueOrNull;
     final couponDiscount = _appliedCoupon?.discount ?? 0.0;
+    final useMemberDiscount = _useMemberDiscount &&
+        _appliedCoupon == null &&
+        (membership?.memberDiscountEligible ?? false);
     final subtotalAfterCoupon =
         (cart.subtotal - couponDiscount).clamp(0.0, double.infinity);
-    final maxRedeemable = (subtotalAfterCoupon ~/ _vndPerPoint)
-        .clamp(0, membership?.balance ?? 0);
+    final maxRedeemable = (membership?.redemptionEnabled ?? false)
+        ? (subtotalAfterCoupon ~/ _vndPerPoint).clamp(0, membership!.balance)
+        : 0;
     final pointsToRedeem = _pointsToRedeem.clamp(0, maxRedeemable);
 
     final draft = NewOrder(
@@ -551,10 +562,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // up at the same branch the customer saw on the checkout breakdown.
       deliveryStoreId: _fulfillment == FulfillmentType.delivery
           ? ref
-              .read(_deliveryQuoteProvider((
-                wardCode: _wardCode,
-                productIdsCsv: cart.orderedProductIds.join(','),
-              ),),)
+              .read(
+                _deliveryQuoteProvider(
+                  (
+                    wardCode: _wardCode,
+                    productIdsCsv: cart.orderedProductIds.join(','),
+                  ),
+                ),
+              )
               .valueOrNull
               ?.store
               ?.id
@@ -563,6 +578,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       couponCode: _appliedCoupon?.code,
       giftCardCode: _giftCode,
       pointsToRedeem: pointsToRedeem > 0 ? pointsToRedeem : null,
+      useMemberDiscount: useMemberDiscount,
       scheduledFor: _scheduledFor,
       guestFullName: isGuest ? _guestName.text.trim() : null,
       guestPhone: isGuest ? _guestPhone.text.trim() : null,
@@ -575,8 +591,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       invoiceCompanyName:
           _requestVatInvoice ? _invoiceCompany.text.trim() : null,
       invoiceTaxId: _requestVatInvoice ? _invoiceTaxId.text.trim() : null,
-      invoiceAddress:
-          _requestVatInvoice ? _invoiceAddress.text.trim() : null,
+      invoiceAddress: _requestVatInvoice ? _invoiceAddress.text.trim() : null,
       invoiceEmail: _requestVatInvoice ? _invoiceEmail.text.trim() : null,
       // Gift fields — only sent when the gift toggle is on; off → nothing.
       isGift: _isGift,
@@ -693,7 +708,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   void _applyEarliestFeasible(CartState cart, OrderTimelineFailure f) {
     final lead = f.earliestLeadHours ?? cart.maxLeadHours;
     final allowed = cart.allowedDaysOfWeek;
-    final set = (allowed.isEmpty || allowed.length >= 7) ? null : allowed.toSet();
+    final set =
+        (allowed.isEmpty || allowed.length >= 7) ? null : allowed.toSet();
     setState(() {
       _scheduledFor = earliestScheduleSlot(
         Duration(hours: lead),
@@ -720,9 +736,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final cart = ref.watch(cartControllerProvider);
     final session = ref.watch(authSessionProvider).valueOrNull;
     final isGuest = session == null;
-    final membership = isGuest
-        ? null
-        : ref.watch(membershipSummaryProvider).valueOrNull;
+    final membership =
+        isGuest ? null : ref.watch(membershipSummaryProvider).valueOrNull;
     final theme = Theme.of(context);
     final s = ref.watch(stringsProvider);
     final fmt = NumberFormat.currency(
@@ -749,13 +764,25 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
     final fee = _fulfillment == FulfillmentType.delivery ? deliveryFee : 0.0;
     final couponDiscount = _appliedCoupon?.discount ?? 0.0;
-    final subtotalAfterCoupon = (cart.subtotal - couponDiscount).clamp(0.0, double.infinity);
-    final maxRedeemable = (subtotalAfterCoupon ~/ _vndPerPoint)
-        .clamp(0, membership?.balance ?? 0);
+    final memberEligible = membership?.memberDiscountEligible ?? false;
+    final memberRate = membership?.memberDiscountRate ?? 0.05;
+    // Preview only — the backend applies the rate after combos/auto-promos
+    // and floors it; this mirrors the common no-promo case.
+    final memberDiscount = _useMemberDiscount && memberEligible
+        ? (cart.subtotal * memberRate).floorToDouble()
+        : 0.0;
+    final subtotalAfterCoupon =
+        (cart.subtotal - couponDiscount - memberDiscount)
+            .clamp(0.0, double.infinity);
+    final redemptionOn = membership?.redemptionEnabled ?? false;
+    final maxRedeemable = redemptionOn
+        ? (subtotalAfterCoupon ~/ _vndPerPoint).clamp(0, membership!.balance)
+        : 0;
     final pointsActuallyUsed = _pointsToRedeem.clamp(0, maxRedeemable);
     final pointsDiscount = pointsActuallyUsed * _vndPerPoint.toDouble();
-    final total = (cart.subtotal - couponDiscount - pointsDiscount + fee)
-        .clamp(0.0, double.infinity);
+    final total =
+        (cart.subtotal - couponDiscount - memberDiscount - pointsDiscount + fee)
+            .clamp(0.0, double.infinity);
     // Gift-card preview — backend applies min(balance, total) authoritatively;
     // this just shows the customer what they'll actually pay.
     final giftPreview = (_giftCode != null && _giftBalance != null)
@@ -809,8 +836,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   children: [
                     if (_timeline != null)
                       Padding(
-                        padding:
-                            const EdgeInsets.only(bottom: BananSpacing.lg),
+                        padding: const EdgeInsets.only(bottom: BananSpacing.lg),
                         child: _TimelineErrorPanel(
                           failure: _timeline!,
                           onPickEarliest: () =>
@@ -821,8 +847,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     else if (_error != null)
                       Container(
                         padding: const EdgeInsets.all(BananSpacing.md),
-                        margin:
-                            const EdgeInsets.only(bottom: BananSpacing.lg),
+                        margin: const EdgeInsets.only(bottom: BananSpacing.lg),
                         decoration: BoxDecoration(
                           borderRadius: BananRadii.rmd,
                           color: theme.colorScheme.errorContainer
@@ -880,8 +905,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       ),
                       if (_pickupError != null)
                         Padding(
-                          padding:
-                              const EdgeInsets.only(top: BananSpacing.xs),
+                          padding: const EdgeInsets.only(top: BananSpacing.xs),
                           child: Text(
                             _pickupError!,
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -913,8 +937,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     ),
                     if (_scheduleError != null)
                       Padding(
-                        padding:
-                            const EdgeInsets.only(top: BananSpacing.xs),
+                        padding: const EdgeInsets.only(top: BananSpacing.xs),
                         child: Text(
                           _scheduleError!,
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -943,8 +966,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         key: _addressKey,
                         controller: _recipient,
                         focusNode: _recipientFocus,
-                        decoration:
-                            InputDecoration(labelText: s.recipient),
+                        decoration: InputDecoration(labelText: s.recipient),
                         onChanged: (_) => _clearSavedSelection(),
                         validator: (v) =>
                             (v == null || v.isEmpty) ? s.required : null,
@@ -1039,8 +1061,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     _VatInvoiceSection(
                       key: _vatKey,
                       enabled: _requestVatInvoice,
-                      onToggle: (v) =>
-                          setState(() => _requestVatInvoice = v),
+                      onToggle: (v) => setState(() => _requestVatInvoice = v),
                       company: _invoiceCompany,
                       taxId: _invoiceTaxId,
                       address: _invoiceAddress,
@@ -1127,7 +1148,28 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                               ?.copyWith(color: theme.colorScheme.error),
                         ),
                       ),
-                    if (membership != null && membership.balance > 0) ...[
+                    if (membership != null && memberEligible) ...[
+                      const SizedBox(height: BananSpacing.lg),
+                      _MemberDiscountTile(
+                        balance: membership.balance,
+                        threshold: membership.memberDiscountThresholdMicho,
+                        percent: (memberRate * 100).round(),
+                        value: _useMemberDiscount,
+                        preview: memberDiscount,
+                        fmt: fmt,
+                        onChanged: (v) => setState(() {
+                          _useMemberDiscount = v;
+                          if (v) {
+                            _coupon.clear();
+                            _appliedCoupon = null;
+                            _couponError = null;
+                          }
+                        }),
+                      ),
+                    ],
+                    if (membership != null &&
+                        redemptionOn &&
+                        membership.balance > 0) ...[
                       const SizedBox(height: BananSpacing.lg),
                       _PointsRedeemer(
                         balance: membership.balance,
@@ -1144,6 +1186,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   cart: cart,
                   fee: fee,
                   couponDiscount: couponDiscount,
+                  memberDiscount: memberDiscount,
                   pointsDiscount: pointsDiscount,
                   total: total,
                   fmt: fmt,
@@ -1460,8 +1503,11 @@ class _CouponField extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.check_circle_outline,
-                color: BananColors.success, size: 20,),
+            const Icon(
+              Icons.check_circle_outline,
+              color: BananColors.success,
+              size: 20,
+            ),
             const SizedBox(width: BananSpacing.sm),
             Expanded(
               child: Column(
@@ -1498,8 +1544,7 @@ class _CouponField extends ConsumerWidget {
                 textCapitalization: TextCapitalization.characters,
                 decoration: InputDecoration(
                   labelText: s.couponCode,
-                  prefixIcon:
-                      const Icon(Icons.local_offer_outlined, size: 20),
+                  prefixIcon: const Icon(Icons.local_offer_outlined, size: 20),
                 ),
                 onSubmitted: (_) => onApply(),
               ),
@@ -1530,6 +1575,79 @@ class _CouponField extends ConsumerWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// "Ưu đãi thành viên" — opt-in 5% member discount for >100-Micho holders.
+/// Exclusive with a coupon code; the parent clears the coupon when ticked.
+class _MemberDiscountTile extends ConsumerWidget {
+  const _MemberDiscountTile({
+    required this.balance,
+    required this.threshold,
+    required this.percent,
+    required this.value,
+    required this.preview,
+    required this.fmt,
+    required this.onChanged,
+  });
+
+  final int balance;
+  final int threshold;
+  final int percent;
+  final bool value;
+  final double preview;
+  final NumberFormat fmt;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: theme.colorScheme.surface,
+        border: Border.all(
+          color: value
+              ? theme.colorScheme.primary
+              : theme.dividerTheme.color ?? Colors.black12,
+        ),
+      ),
+      child: CheckboxListTile(
+        value: value,
+        onChanged: (v) => onChanged(v ?? false),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: BananSpacing.sm,
+          vertical: BananSpacing.xs,
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                s.memberDiscountTitle(percent),
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            if (value && preview > 0)
+              Text(
+                '−${fmt.format(preview)}',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
+        ),
+        subtitle: Text(
+          '${s.memberDiscountSub('$balance', threshold)}\n'
+          '${s.memberDiscountExclusive}',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1761,6 +1879,7 @@ class _Summary extends ConsumerWidget {
     required this.cart,
     required this.fee,
     required this.couponDiscount,
+    required this.memberDiscount,
     required this.pointsDiscount,
     required this.total,
     required this.fmt,
@@ -1769,6 +1888,7 @@ class _Summary extends ConsumerWidget {
   final CartState cart;
   final double fee;
   final double couponDiscount;
+  final double memberDiscount;
   final double pointsDiscount;
   final double total;
   final NumberFormat fmt;
@@ -1840,6 +1960,12 @@ class _Summary extends ConsumerWidget {
               value: '−${fmt.format(couponDiscount)}',
               accent: true,
             ),
+          if (memberDiscount > 0)
+            _Line(
+              label: s.memberDiscountLine,
+              value: '−${fmt.format(memberDiscount)}',
+              accent: true,
+            ),
           if (pointsDiscount > 0)
             _Line(
               label: s.pointsDiscount,
@@ -1870,10 +1996,10 @@ class _Line extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final base = bold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium;
-    final style = accent
-        ? base?.copyWith(color: theme.colorScheme.primary)
-        : base;
+    final base =
+        bold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium;
+    final style =
+        accent ? base?.copyWith(color: theme.colorScheme.primary) : base;
     return Row(
       children: [
         Expanded(child: Text(label, style: style)),
@@ -2014,10 +2140,14 @@ class _DeliveryQuoteBox extends ConsumerWidget {
       decimalDigits: 0,
     );
 
-    final quoteFuture = ref.watch(_deliveryQuoteProvider((
-      wardCode: wardCode,
-      productIdsCsv: productIds.join(','),
-    ),),);
+    final quoteFuture = ref.watch(
+      _deliveryQuoteProvider(
+        (
+          wardCode: wardCode,
+          productIdsCsv: productIds.join(','),
+        ),
+      ),
+    );
 
     return quoteFuture.when(
       loading: () => const SizedBox(

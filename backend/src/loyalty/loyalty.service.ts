@@ -16,6 +16,10 @@ const CONFIG = {
    *  discount of [michoDiscountRate]. */
   michoDiscountThreshold: 100,
   michoDiscountRate: 0.05,
+  /** Point redemption (N Micho = N×redemptionValueVnd off) at checkout.
+   *  ponytail: paused 15/09/2026 by request — flip to true to bring the
+   *  slider + backend redeem back; the code paths are still wired. */
+  redemptionEnabled: false,
   tiers: {
     bronze: 0,
     silver: 500,
@@ -203,6 +207,12 @@ export class LoyaltyService {
       thresholds: CONFIG.tiers,
       earnRatePerVnd: CONFIG.earnRatePerVnd,
       redemptionValueVnd: CONFIG.redemptionValueVnd,
+      redemptionEnabled: CONFIG.redemptionEnabled,
+      memberDiscount: {
+        eligible: memberDiscountEligible(user.pointsBalance),
+        rate: CONFIG.michoDiscountRate,
+        thresholdMicho: CONFIG.michoDiscountThreshold,
+      },
     };
   }
 
@@ -272,6 +282,17 @@ function tierFor(balance: number): MembershipTier {
 
 /** Re-export for tests / consumers. */
 export const LOYALTY_CONFIG = CONFIG;
+
+/** Holding MORE than the threshold (strict) unlocks the member discount. */
+export function memberDiscountEligible(pointsBalance: number): boolean {
+  return pointsBalance > CONFIG.michoDiscountThreshold;
+}
+
+/** VND taken off the goods total by the opt-in member discount. Floored so
+ *  a Decimal(12,2) goods total can never be over-discounted by rounding. */
+export function memberDiscountVnd(goodsVnd: number): number {
+  return Math.max(0, Math.floor(goodsVnd * CONFIG.michoDiscountRate));
+}
 
 // Tiny no-op so unused-import linters don't complain — this file uses Prisma
 // types directly above.

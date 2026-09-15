@@ -1,6 +1,18 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { LoyaltyService } from './loyalty.service';
+import { LoyaltyService, memberDiscountEligible, memberDiscountVnd } from './loyalty.service';
+
+describe('member discount helpers', () => {
+  it('needs strictly more than 100 Micho', () => {
+    expect(memberDiscountEligible(100)).toBe(false);
+    expect(memberDiscountEligible(101)).toBe(true);
+  });
+  it('takes 5% off the goods total, floored, never negative', () => {
+    expect(memberDiscountVnd(550_000)).toBe(27_500);
+    expect(memberDiscountVnd(199_999.99)).toBe(9_999);
+    expect(memberDiscountVnd(-5)).toBe(0);
+  });
+});
 
 // Stateful mock: the balance mutates as updates apply, and reads return the
 // current value — so the atomic-increment / guarded-decrement flow in
