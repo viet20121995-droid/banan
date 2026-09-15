@@ -8,7 +8,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
-import { CukcukKind, isCukcukKind } from './cukcuk-normalize';
+import { CUKCUK_KINDS, CukcukKind, isCukcukKind } from './cukcuk-normalize';
 import { CukcukService } from './cukcuk.service';
 
 class SyncDto {
@@ -51,11 +51,18 @@ export class CukcukController {
     return this.cukcuk.status();
   }
 
+  /// Starts the pull in the background and returns at once — a full first
+  /// sync (tens of thousands of customers / invoices) outlives any HTTP
+  /// timeout. The UI polls `status` while `running` is set.
   @Post('sync')
-  async sync(@Body() dto: SyncDto, @CurrentUser() user: AuthPrincipal) {
-    if (!dto.kind || dto.kind === 'all') return this.cukcuk.syncAll(user.sub);
+  sync(@Body() dto: SyncDto, @CurrentUser() user: AuthPrincipal) {
+    if (!dto.kind || dto.kind === 'all') {
+      void this.cukcuk.syncAll(user.sub);
+      return { started: [...CUKCUK_KINDS] };
+    }
     const kind = kindOf(dto.kind);
-    return [{ kind, fetched: await this.cukcuk.sync(kind, user.sub), error: null }];
+    void this.cukcuk.sync(kind, user.sub).catch(() => undefined);
+    return { started: [kind] };
   }
 
   @Get('records')

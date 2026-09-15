@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:banan_core/banan_core.dart';
@@ -96,6 +97,7 @@ class _CukcukScreenState extends ConsumerState<CukcukScreen> {
   int _page = 1;
   Result<CukcukPage, AppFailure>? _records;
   bool _busy = false;
+  Timer? _poll;
   final _search = TextEditingController();
 
   InternalApi get _api => ref.read(internalApiProvider);
@@ -109,13 +111,26 @@ class _CukcukScreenState extends ConsumerState<CukcukScreen> {
 
   @override
   void dispose() {
+    _poll?.cancel();
     _search.dispose();
     super.dispose();
   }
 
   Future<void> _loadStatus() async {
     final res = await _api.cukcukStatus();
-    if (mounted) setState(() => _status = res);
+    if (!mounted) return;
+    setState(() => _status = res);
+    final running = res.valueOrNull?.kinds.any((k) => k.running) ?? false;
+    if (running && _poll == null) {
+      // A sync is in flight: refresh the counters every few seconds until
+      // every dataset is idle, then reload the table once.
+      _poll = Timer.periodic(const Duration(seconds: 4), (_) => _loadStatus());
+    } else if (!running && _poll != null) {
+      _poll!.cancel();
+      _poll = null;
+      setState(() => _busy = false);
+      _loadRecords();
+    }
   }
 
   Future<void> _loadRecords() async {
@@ -136,24 +151,17 @@ class _CukcukScreenState extends ConsumerState<CukcukScreen> {
     setState(() => _busy = true);
     final res = await _api.cukcukSync(kind);
     if (!mounted) return;
-    setState(() => _busy = false);
     res.when(
-      success: (results) {
-        final failed = results.where((r) => r.error != null).toList();
-        final fetched = results.fold<int>(0, (s, r) => s + r.fetched);
+      success: (_) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              failed.isEmpty
-                  ? 'Đã đồng bộ $fetched dòng.'
-                  : 'Đồng bộ $fetched dòng, lỗi: ${failed.map((f) => '${f.kind}: ${f.error}').join(' · ')}',
-            ),
-          ),
+          const SnackBar(content: Text('Đang đồng bộ trên server, số liệu tự cập nhật.')),
         );
         _loadStatus();
-        _loadRecords();
       },
-      failure: (f) => showFailure(context, f),
+      failure: (f) {
+        setState(() => _busy = false);
+        showFailure(context, f);
+      },
     );
   }
 

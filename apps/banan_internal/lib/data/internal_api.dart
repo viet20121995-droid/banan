@@ -910,15 +910,11 @@ extension CukcukApi on InternalApi {
         (d) => CukcukStatus.fromJson(d as Map<String, dynamic>),
       );
 
-  /// [kind] = one dataset or `all`.
-  Future<Result<List<CukcukSyncResult>, AppFailure>> cukcukSync(String kind) => _run(
-        () => _dio.post<dynamic>(
-          '/internal/cukcuk/sync',
-          data: {'kind': kind},
-          options: Options(receiveTimeout: const Duration(minutes: 10)),
-        ),
-        (d) =>
-            (d as List).map((e) => CukcukSyncResult.fromJson(e as Map<String, dynamic>)).toList(),
+  /// [kind] = one dataset or `all`. Returns at once; the pull runs on the
+  /// server — poll [cukcukStatus] while any kind is `running`.
+  Future<Result<List<String>, AppFailure>> cukcukSync(String kind) => _run(
+        () => _dio.post<dynamic>('/internal/cukcuk/sync', data: {'kind': kind}),
+        (d) => ((d as Map<String, dynamic>)['started'] as List).cast<String>(),
       );
 
   Future<Result<CukcukPage, AppFailure>> cukcukRecords({
