@@ -16,23 +16,25 @@ import '../../shared/widgets.dart';
 final _vnd = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
 
 /// One table column of a dataset: header + which raw-row keys feed it.
+/// [lookup] resolves an id column through another dataset (branch /
+/// category names are not embedded in invoice / item rows).
 class _Col {
-  const _Col(this.header, this.keys, {this.money = false, this.date = false});
+  const _Col(this.header, this.keys, {this.money = false, this.date = false, this.lookup});
   final String header;
   final List<String> keys;
   final bool money;
   final bool date;
+  final String? lookup;
 }
 
-/// Columns per dataset. Keys are candidates (first non-empty wins) because
-/// CukCuk names the same thing differently across endpoints; the full raw
-/// row is always one tap away.
+/// Columns per dataset — keys verified against the first real sync
+/// (15/09/2026); the full raw row is always one tap away.
 const _columns = <String, List<_Col>>{
   'branches': [
     _Col('Mã', ['Code']),
     _Col('Tên', ['Name']),
     _Col('Địa chỉ', ['Address']),
-    _Col('Điện thoại', ['Tel', 'Phone']),
+    _Col('Kho tổng', ['IsBaseDepot']),
     _Col('Ngừng', ['Inactive']),
   ],
   'categories': [
@@ -44,39 +46,45 @@ const _columns = <String, List<_Col>>{
   'items': [
     _Col('Mã', ['Code']),
     _Col('Tên món', ['Name']),
-    _Col('Nhóm', ['CategoryName']),
+    _Col('Nhóm', ['CategoryID', 'CategoryId'], lookup: 'categories'),
     _Col('ĐVT', ['UnitName']),
-    _Col('Giá', ['Price', 'UnitPrice'], money: true),
+    _Col('Giá', ['Price'], money: true),
+    _Col('Loại', ['ItemType']),
     _Col('Ngừng', ['Inactive']),
   ],
   'customers': [
     _Col('Mã', ['Code']),
     _Col('Tên', ['Name']),
-    _Col('SĐT', ['Tel', 'Phone']),
+    _Col('SĐT', ['Tel']),
     _Col('Email', ['Email']),
+    _Col('Địa chỉ', ['Address']),
     _Col('Sinh nhật', ['Birthday'], date: true),
     _Col('Hạng', ['MemberLevelName', 'MembershipLevelName']),
-    _Col('Thẻ', ['MemberCardNo']),
-    _Col('Điểm', ['TotalPoint', 'Point', 'AvailablePoint']),
+    _Col('Điểm', ['AvailablePoint', 'TotalPoint', 'Point']),
     _Col('Tổng chi', ['TotalAmount'], money: true),
+    _Col('Ngừng', ['Inactive']),
   ],
   'invoices': [
     _Col('Số HĐ', ['RefNo']),
     _Col('Ngày', ['RefDate'], date: true),
-    _Col('Chi nhánh', ['BranchName']),
+    _Col('Chi nhánh', ['BranchId'], lookup: 'branches'),
     _Col('Khách', ['CustomerName']),
     _Col('SĐT', ['CustomerTel']),
+    _Col('Món', ['TotalItem']),
     _Col('Giảm', ['DiscountAmount'], money: true),
-    _Col('Tổng', ['TotalAmount', 'Amount'], money: true),
-    _Col('Thanh toán', ['PaymentStatus']),
+    _Col('Tổng', ['TotalAmount'], money: true),
+    _Col('Huỷ', ['CancelDate'], date: true),
+    _Col('NV', ['EmployeeName']),
   ],
   'orders': [
-    _Col('Số', ['No', 'Code']),
-    _Col('Ngày', ['Date', 'CreatedDate'], date: true),
-    _Col('Chi nhánh', ['BranchName']),
+    _Col('Số', ['No']),
+    _Col('Ngày', ['Date'], date: true),
+    _Col('Chi nhánh', ['BranchId'], lookup: 'branches'),
     _Col('Bàn', ['TableName']),
     _Col('Khách', ['CustomerName']),
-    _Col('Tổng', ['TotalAmount', 'Amount'], money: true),
+    _Col('SĐT', ['CustomerTel']),
+    _Col('Giao lúc', ['ShippingDate'], date: true),
+    _Col('Tổng', ['TotalAmount'], money: true),
     _Col('Trạng thái', ['Status']),
   ],
 };
@@ -100,6 +108,9 @@ class _CukcukScreenState extends ConsumerState<CukcukScreen> {
   Timer? _poll;
   final _search = TextEditingController();
 
+  /// externalId → name for datasets other rows reference by id.
+  final _names = <String, Map<String, String>>{};
+
   InternalApi get _api => ref.read(internalApiProvider);
 
   @override
@@ -107,6 +118,19 @@ class _CukcukScreenState extends ConsumerState<CukcukScreen> {
     super.initState();
     _loadStatus();
     _loadRecords();
+    _loadNames('branches');
+    _loadNames('categories');
+  }
+
+  Future<void> _loadNames(String kind) async {
+    final res = await _api.cukcukRecords(kind: kind, perPage: 100);
+    final page = res.valueOrNull;
+    if (page == null || !mounted) return;
+    setState(() {
+      _names[kind] = {
+        for (final r in page.items) r.externalId: r.label ?? r.externalId,
+      };
+    });
   }
 
   @override
@@ -147,9 +171,9 @@ class _CukcukScreenState extends ConsumerState<CukcukScreen> {
     _loadRecords();
   }
 
-  Future<void> _sync(String kind) async {
+  Future<void> _sync(String kind, {bool full = false}) async {
     setState(() => _busy = true);
-    final res = await _api.cukcukSync(kind);
+    final res = await _api.cukcukSync(kind, full: full);
     if (!mounted) return;
     res.when(
       success: (_) {
@@ -293,6 +317,9 @@ class _CukcukScreenState extends ConsumerState<CukcukScreen> {
                           busy: _busy,
                           onSelect: () => _pickKind(k.kind),
                           onSync: status.configured ? () => _sync(k.kind) : null,
+                          onFullSync: status.configured && k.count > 0
+                              ? () => _sync(k.kind, full: true)
+                              : null,
                         ),
                       ),
                   ],
@@ -350,6 +377,7 @@ class _CukcukScreenState extends ConsumerState<CukcukScreen> {
           const SizedBox(height: BananSpacing.md),
           _RecordsTable(
             kind: _kind,
+            names: _names,
             state: _records,
             page: _page,
             onPage: (p) {
@@ -372,12 +400,16 @@ class _KindCard extends StatelessWidget {
     required this.busy,
     required this.onSelect,
     this.onSync,
+    this.onFullSync,
   });
   final CukcukKindStatus status;
   final bool selected;
   final bool busy;
   final VoidCallback onSelect;
   final VoidCallback? onSync;
+
+  /// Re-read the whole dataset (ignores the incremental cursor).
+  final VoidCallback? onFullSync;
 
   @override
   Widget build(BuildContext context) {
@@ -420,13 +452,20 @@ class _KindCard extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: BananSpacing.sm),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: busy || status.running ? null : onSync,
-                icon: const Icon(Icons.sync, size: 16),
-                label: Text(status.running ? 'Đang đồng bộ…' : 'Đồng bộ'),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (onFullSync != null)
+                  TextButton(
+                    onPressed: busy || status.running ? null : onFullSync,
+                    child: const Text('Kéo lại toàn bộ'),
+                  ),
+                TextButton.icon(
+                  onPressed: busy || status.running ? null : onSync,
+                  icon: const Icon(Icons.sync, size: 16),
+                  label: Text(status.running ? 'Đang đồng bộ…' : 'Đồng bộ'),
+                ),
+              ],
             ),
           ],
         ),
@@ -438,12 +477,14 @@ class _KindCard extends StatelessWidget {
 class _RecordsTable extends StatelessWidget {
   const _RecordsTable({
     required this.kind,
+    required this.names,
     required this.state,
     required this.page,
     required this.onPage,
     required this.onOpen,
   });
   final String kind;
+  final Map<String, Map<String, String>> names;
   final Result<CukcukPage, AppFailure>? state;
   final int page;
   final ValueChanged<int> onPage;
@@ -452,6 +493,7 @@ class _RecordsTable extends StatelessWidget {
   String _cell(CukcukRecord r, _Col c) {
     final raw = r.field(c.keys);
     if (raw.isEmpty) return '';
+    if (c.lookup != null) return names[c.lookup]?[raw] ?? raw;
     if (c.money) {
       final n = double.tryParse(raw);
       return n == null ? raw : _vnd.format(n);

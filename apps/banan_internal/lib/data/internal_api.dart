@@ -912,8 +912,8 @@ extension CukcukApi on InternalApi {
 
   /// [kind] = one dataset or `all`. Returns at once; the pull runs on the
   /// server — poll [cukcukStatus] while any kind is `running`.
-  Future<Result<List<String>, AppFailure>> cukcukSync(String kind) => _run(
-        () => _dio.post<dynamic>('/internal/cukcuk/sync', data: {'kind': kind}),
+  Future<Result<List<String>, AppFailure>> cukcukSync(String kind, {bool full = false}) => _run(
+        () => _dio.post<dynamic>('/internal/cukcuk/sync', data: {'kind': kind, 'full': full}),
         (d) => ((d as Map<String, dynamic>)['started'] as List).cast<String>(),
       );
 

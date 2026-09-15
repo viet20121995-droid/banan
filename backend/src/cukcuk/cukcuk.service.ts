@@ -69,11 +69,11 @@ export class CukcukService {
 
   // ── sync ────────────────────────────────────────────────────────────
 
-  async syncAll(startedBy?: string) {
+  async syncAll(startedBy?: string, full = false) {
     const results: { kind: CukcukKind; fetched: number; error: string | null }[] = [];
     for (const kind of CUKCUK_KINDS) {
       try {
-        results.push({ kind, fetched: await this.sync(kind, startedBy), error: null });
+        results.push({ kind, fetched: await this.sync(kind, startedBy, full), error: null });
       } catch (err) {
         results.push({ kind, fetched: 0, error: (err as Error).message });
       }
@@ -82,7 +82,8 @@ export class CukcukService {
   }
 
   /// Pull one dataset and upsert its rows. Returns how many rows came back.
-  async sync(kind: CukcukKind, startedBy?: string): Promise<number> {
+  /// `full` ignores the last sync date and re-reads everything.
+  async sync(kind: CukcukKind, startedBy?: string, full = false): Promise<number> {
     if (this.running.has(kind)) {
       throw new BadRequestException({
         code: 'CUKCUK_SYNC_RUNNING',
@@ -94,13 +95,14 @@ export class CukcukService {
       data: { kind, startedBy: startedBy ?? null },
     });
     try {
-      const lastOk = INCREMENTAL.has(kind)
-        ? await this.prisma.cukcukSync.findFirst({
-            where: { kind, ok: true },
-            orderBy: { finishedAt: 'desc' },
-            select: { startedAt: true },
-          })
-        : null;
+      const lastOk =
+        INCREMENTAL.has(kind) && !full
+          ? await this.prisma.cukcukSync.findFirst({
+              where: { kind, ok: true },
+              orderBy: { finishedAt: 'desc' },
+              select: { startedAt: true },
+            })
+          : null;
       // Overlap by 1h so a clock skew or a row saved mid-sync is not missed.
       const since = lastOk ? new Date(lastOk.startedAt.getTime() - 60 * 60 * 1000) : null;
       const fetched = await this.pull(kind, since);

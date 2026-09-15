@@ -136,7 +136,8 @@ export class CukcukClient {
       if (rows.length === 0) break;
       await onPage(rows);
       total += rows.length;
-      if (rows.length < limit || page > 500) break;
+      // Hard stop far above any real dataset (5000 pages = 500k rows).
+      if (rows.length < limit || page >= 5000) break;
       page += 1;
     }
     return total;

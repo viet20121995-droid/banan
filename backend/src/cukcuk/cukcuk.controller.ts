@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -16,6 +16,11 @@ class SyncDto {
   @IsOptional()
   @IsString()
   kind?: string;
+
+  /** Re-read everything instead of only rows changed since the last sync. */
+  @IsOptional()
+  @IsBoolean()
+  full?: boolean;
 }
 
 class RecordsQuery extends PaginationDto {
@@ -56,12 +61,13 @@ export class CukcukController {
   /// timeout. The UI polls `status` while `running` is set.
   @Post('sync')
   sync(@Body() dto: SyncDto, @CurrentUser() user: AuthPrincipal) {
+    const full = dto.full === true;
     if (!dto.kind || dto.kind === 'all') {
-      void this.cukcuk.syncAll(user.sub);
+      void this.cukcuk.syncAll(user.sub, full);
       return { started: [...CUKCUK_KINDS] };
     }
     const kind = kindOf(dto.kind);
-    void this.cukcuk.sync(kind, user.sub).catch(() => undefined);
+    void this.cukcuk.sync(kind, user.sub, full).catch(() => undefined);
     return { started: [kind] };
   }
 

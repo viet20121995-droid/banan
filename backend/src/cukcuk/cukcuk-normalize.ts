@@ -48,7 +48,8 @@ export function normalizeRecord(kind: CukcukKind, row: Record<string, unknown>):
         ? (str(row.No) ?? str(row.Code))
         : (str(row.Name) ?? str(row.Code));
   const branchId = str(row.BranchId) ?? (kind === 'branches' ? externalId : null);
-  const modifiedRaw = row.ModifiedDate ?? row.RefDate ?? row.Date ?? row.CreatedDate;
+  const modifiedRaw =
+    row.ModifiedDate ?? row.LastUpdatedAt ?? row.RefDate ?? row.Date ?? row.CreatedDate;
   const modified = typeof modifiedRaw === 'string' ? new Date(modifiedRaw) : null;
   return {
     externalId,

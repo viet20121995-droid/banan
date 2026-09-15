@@ -39,6 +39,9 @@ describe('cukcuk-normalize', () => {
       label: 'KH1',
       modifiedAt: null,
     });
+    expect(
+      normalizeRecord('items', { Id: 'i1', Name: 'x', LastUpdatedAt: '2026-07-11T16:07:29+07:00' }),
+    ).toMatchObject({ modifiedAt: new Date('2026-07-11T16:07:29+07:00') });
     expect(() => normalizeRecord('items', { Name: 'x' })).toThrow();
   });
 
