@@ -36,6 +36,7 @@ import 'customers_api.dart';
 import 'devices_api.dart';
 import 'dio_client.dart';
 import 'display_config_api.dart';
+import 'spend_lookup_api.dart';
 import 'geo_api.dart';
 import 'gift_cards_api.dart';
 import 'health_api.dart';
@@ -127,6 +128,12 @@ final Provider<ReviewsApi> reviewsApiProvider = Provider<ReviewsApi>(
 /// Merchant + admin reports API — KPIs, best-sellers, XLSX export.
 final Provider<ReportsApi> reportsApiProvider = Provider<ReportsApi>(
   (ref) => ReportsApi(ref.watch(dioProvider)),
+);
+
+/// Public counter-spend lookup by phone (customer site "Tra cứu chi tiêu").
+final Provider<SpendLookupApi> spendLookupApiProvider =
+    Provider<SpendLookupApi>(
+  (ref) => SpendLookupApi(ref.watch(dioProvider)),
 );
 
 /// Chain-wide customer display preferences (stock badge on/off, …).

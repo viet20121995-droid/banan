@@ -20,6 +20,7 @@ import '../features/content/policy_screens.dart';
 import '../features/locations/locations_screen.dart';
 import '../features/marketing/marketing_pages.dart';
 import '../features/membership/membership_screen.dart';
+import '../features/membership/spend_lookup_screen.dart';
 import '../features/menu/menu_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/orders/order_detail_screen.dart';
@@ -111,6 +112,11 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/membership',
         builder: (_, __) => const MembershipScreen(),
+      ),
+      // Counter-spend lookup by phone — public (guest-allowed).
+      GoRoute(
+        path: '/spend-lookup',
+        builder: (_, __) => const SpendLookupScreen(),
       ),
       // Voucher wallet — CUSTOMER-only (not in `_guestAllowed`, so the
       // redirect bounces guests to /login and non-customers to /wrong-app).

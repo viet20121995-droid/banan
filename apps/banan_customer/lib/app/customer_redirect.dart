@@ -37,6 +37,7 @@ const _guestAllowed = <String>{
   '/subscription',
   '/catering',
   '/rewards',
+  '/spend-lookup',
   loginPath,
   registerPath,
   // Account recovery — reachable without a session (the user is locked out).

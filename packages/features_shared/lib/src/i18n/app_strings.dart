@@ -31,9 +31,7 @@ final localeProvider = StateProvider<AppLocale>((_) => AppLocale.vi);
 /// The string table for the active locale. Watch this in any ConsumerWidget:
 /// `final s = ref.watch(stringsProvider);`
 final stringsProvider = Provider<AppStrings>((ref) {
-  return ref.watch(localeProvider) == AppLocale.en
-      ? const _En()
-      : const _Vi();
+  return ref.watch(localeProvider) == AppLocale.en ? const _En() : const _Vi();
 });
 
 /// Vietnamese table as a const default for call sites without a ref
@@ -84,6 +82,19 @@ abstract class AppStrings {
   String get notifications;
   String get myProfile;
   String get membership;
+  String get spendLookup;
+  String get spendLookupIntro;
+  String get spendLookupPhone;
+  String get spendLookupSubmit;
+  String get spendLookupNotFound;
+  String get spendLookupTotal;
+  String get spendLookupVisits;
+  String get spendLookupLastVisit;
+  String get spendLookupMicho;
+  String spendLookupDiscountOn(int percent);
+  String spendLookupDiscountOff(String threshold, int percent);
+  String get spendLookupHasAccount;
+  String get spendLookupCreateAccount;
   String get myOrders;
   String get myAddresses;
   String get shopThisProduct;
@@ -831,6 +842,41 @@ class _Vi extends AppStrings {
   @override
   String get membership => 'Thành viên';
   @override
+  String get spendLookup => 'Tra cứu chi tiêu';
+  @override
+  String get spendLookupIntro =>
+      'Nhập số điện thoại bạn dùng khi mua tại quầy để xem tổng chi tiêu, '
+      'số Micho tương ứng và ưu đãi thành viên. Không cần tài khoản.';
+  @override
+  String get spendLookupPhone => 'Số điện thoại';
+  @override
+  String get spendLookupSubmit => 'Tra cứu';
+  @override
+  String get spendLookupNotFound =>
+      'Chưa có lịch sử mua tại quầy với số này. Nếu bạn vừa mua, dữ liệu '
+      'cập nhật sau tối đa 30 phút.';
+  @override
+  String get spendLookupTotal => 'Tổng chi tiêu tại quầy';
+  @override
+  String get spendLookupVisits => 'Số hoá đơn';
+  @override
+  String get spendLookupLastVisit => 'Lần mua gần nhất';
+  @override
+  String get spendLookupMicho => 'Micho tương ứng';
+  @override
+  String spendLookupDiscountOn(int percent) =>
+      'Bạn đang được giảm $percent% cho mọi đơn.';
+  @override
+  String spendLookupDiscountOff(String threshold, int percent) =>
+      'Chi tiêu trên $threshold sẽ được tự động giảm $percent% mọi đơn.';
+  @override
+  String get spendLookupHasAccount =>
+      'Số này đã có tài khoản Banan — đăng nhập để dùng Micho khi đặt hàng.';
+  @override
+  String get spendLookupCreateAccount =>
+      'Tạo tài khoản với số này để nhận Micho từ chi tiêu tại quầy và dùng '
+      'ưu đãi khi đặt online.';
+  @override
   String get myOrders => 'Đơn của tôi';
   @override
   String get myAddresses => 'Địa chỉ của tôi';
@@ -847,8 +893,7 @@ class _Vi extends AppStrings {
   @override
   String get noNotificationsTitle => 'Chưa có thông báo';
   @override
-  String get noNotificationsMsg =>
-      'Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây.';
+  String get noNotificationsMsg => 'Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây.';
   @override
   String get chooseSizeFlavor => 'Chọn kích thước & hương vị';
   @override
@@ -993,8 +1038,7 @@ class _Vi extends AppStrings {
       'Tài xế vừa lên đường với chiếc bánh của bạn. Chúng tôi sẽ '
       'báo "đã giao" ngay khi đến nơi.';
   @override
-  String get pickupNote =>
-      'Ghé cửa hàng bất cứ lúc nào, đơn đã sẵn ở quầy.';
+  String get pickupNote => 'Ghé cửa hàng bất cứ lúc nào, đơn đã sẵn ở quầy.';
 
   @override
   String get loginTitle => 'Banan Fukuoka Saigon';
@@ -1398,8 +1442,7 @@ class _Vi extends AppStrings {
   @override
   String get estimatedFee => 'Phí giao hàng dự kiến';
   @override
-  String feeBreakTier(String tier, String band) =>
-      '• Phân loại: $tier · $band';
+  String feeBreakTier(String tier, String band) => '• Phân loại: $tier · $band';
   @override
   String get feeBirthdaySchedule =>
       '• Đơn có bánh sinh nhật, áp dụng biểu phí riêng';
@@ -1483,11 +1526,20 @@ class _Vi extends AppStrings {
   @override
   String get personalizeCake => 'Cá nhân hoá bánh';
   @override
-  String get personalizeSub => 'Chữ trên bánh, số nến, ảnh tham khảo, ghi chú …';
+  String get personalizeSub =>
+      'Chữ trên bánh, số nến, ảnh tham khảo, ghi chú …';
 
   @override
   String weekdayShort(int d) =>
-      const {0: 'CN', 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7'}[d] ??
+      const {
+        0: 'CN',
+        1: 'T2',
+        2: 'T3',
+        3: 'T4',
+        4: 'T5',
+        5: 'T6',
+        6: 'T7'
+      }[d] ??
       '?$d';
 
   @override
@@ -1588,8 +1640,7 @@ class _Vi extends AppStrings {
   String get authErrSessionExpired =>
       'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.';
   @override
-  String get authErrCheckInfo =>
-      'Vui lòng kiểm tra lại thông tin và thử lại.';
+  String get authErrCheckInfo => 'Vui lòng kiểm tra lại thông tin và thử lại.';
   @override
   String get authErrNetwork =>
       'Không kết nối được máy chủ, kiểm tra lại mạng của bạn.';
@@ -1640,8 +1691,7 @@ class _Vi extends AppStrings {
   @override
   String get kitchenDetailPending => 'Đang chờ bếp bắt đầu.';
   @override
-  String get kitchenDetailPreparing =>
-      'Thợ bánh đang thực hiện đơn của bạn.';
+  String get kitchenDetailPreparing => 'Thợ bánh đang thực hiện đơn của bạn.';
   @override
   String get kitchenDetailReady => 'Đã xong, đang chuyển về cửa hàng.';
   @override
@@ -1826,8 +1876,7 @@ class _Vi extends AppStrings {
   @override
   String fromPoints(String n) => 'Từ $n điểm';
   @override
-  String pointsToTier(int n, String tier) =>
-      'Còn $n điểm để lên hạng $tier';
+  String pointsToTier(int n, String tier) => 'Còn $n điểm để lên hạng $tier';
   @override
   String loyaltyTypeLabel(LoyaltyEventType t) => switch (t) {
         LoyaltyEventType.earn => 'Tích điểm',
@@ -1849,8 +1898,7 @@ class _Vi extends AppStrings {
   @override
   String get whPickAtLeastOne => 'Chọn ít nhất một sản phẩm.';
   @override
-  String get whNeedDeliveryDate =>
-      'Hợp đồng này yêu cầu chọn ngày giao hàng.';
+  String get whNeedDeliveryDate => 'Hợp đồng này yêu cầu chọn ngày giao hàng.';
   @override
   String whOrderPlaced(String code) =>
       'Đã đặt $code. Đơn đang chờ admin xác nhận.';
@@ -1972,8 +2020,7 @@ class _Vi extends AppStrings {
   @override
   String get wizNote => 'Ghi chú thêm cho thợ bánh';
   @override
-  String get wizNoteHint =>
-      'vd: ribbon vàng, không sprinkles, kem ít ngọt …';
+  String get wizNoteHint => 'vd: ribbon vàng, không sprinkles, kem ít ngọt …';
   @override
   String get wizClear => 'Xoá cá nhân hoá';
 
@@ -2103,8 +2150,7 @@ class _Vi extends AppStrings {
   @override
   String get referralTitle => 'Giới thiệu bạn bè';
   @override
-  String get referralLoginPrompt =>
-      'Đăng nhập để lấy mã giới thiệu của bạn.';
+  String get referralLoginPrompt => 'Đăng nhập để lấy mã giới thiệu của bạn.';
   @override
   String referralBonus(int referrer, int referee) =>
       'Bạn nhận $referrer điểm • Bạn bè nhận $referee điểm khi '
@@ -2176,13 +2222,11 @@ class _Vi extends AppStrings {
 
   // Checkout validation
   @override
-  String get checkMarkedFields =>
-      'Vui lòng kiểm tra thông tin được đánh dấu';
+  String get checkMarkedFields => 'Vui lòng kiểm tra thông tin được đánh dấu';
   @override
   String get wardRequired => 'Vui lòng chọn phường/xã';
   @override
-  String get wardNotServiceable =>
-      'Hiện chưa hỗ trợ giao đến khu vực này';
+  String get wardNotServiceable => 'Hiện chưa hỗ trợ giao đến khu vực này';
   @override
   String get wardReselectRequired =>
       'Phường cũ đã được chia tách, vui lòng chọn lại phường/xã mới';
@@ -2190,8 +2234,7 @@ class _Vi extends AppStrings {
   String get quotePending =>
       'Đang tính phí giao hàng, vui lòng chờ giây lát rồi thử lại';
   @override
-  String get quoteFailed =>
-      'Không tính được phí giao hàng. Vui lòng thử lại.';
+  String get quoteFailed => 'Không tính được phí giao hàng. Vui lòng thử lại.';
   @override
   String get pickupStoreRequired => 'Vui lòng chọn chi nhánh nhận bánh';
 }
@@ -2272,6 +2315,41 @@ class _En extends AppStrings {
   String get myProfile => 'My profile';
   @override
   String get membership => 'Membership';
+  @override
+  String get spendLookup => 'Spend lookup';
+  @override
+  String get spendLookupIntro =>
+      'Enter the phone number you use at the counter to see your total spend, '
+      'the Micho it is worth and your member perks. No account needed.';
+  @override
+  String get spendLookupPhone => 'Phone number';
+  @override
+  String get spendLookupSubmit => 'Look up';
+  @override
+  String get spendLookupNotFound =>
+      'No counter purchases for this number yet. Recent purchases can take '
+      'up to 30 minutes to appear.';
+  @override
+  String get spendLookupTotal => 'Total spent at the counter';
+  @override
+  String get spendLookupVisits => 'Receipts';
+  @override
+  String get spendLookupLastVisit => 'Last purchase';
+  @override
+  String get spendLookupMicho => 'Micho earned';
+  @override
+  String spendLookupDiscountOn(int percent) =>
+      'You get $percent% off every order.';
+  @override
+  String spendLookupDiscountOff(String threshold, int percent) =>
+      'Spend over $threshold and every order is automatically $percent% off.';
+  @override
+  String get spendLookupHasAccount =>
+      'This number already has a Banan account — sign in to use your Micho.';
+  @override
+  String get spendLookupCreateAccount =>
+      'Create an account with this number to receive Micho for counter '
+      'purchases and use your perks online.';
   @override
   String get myOrders => 'My orders';
   @override
@@ -2654,8 +2732,7 @@ class _En extends AppStrings {
   @override
   String get newsletterTitle => 'Get Banan offers';
   @override
-  String get newsletterSub =>
-      'Sign up for new cakes + seasonal offers. '
+  String get newsletterSub => 'Sign up for new cakes + seasonal offers. '
       'At most 2 emails a month, no spam.';
   @override
   String get newsletterAlready => 'You are already subscribed — thank you!';
@@ -2701,8 +2778,7 @@ class _En extends AppStrings {
   String bizAddress(String a) => 'Address: $a';
 
   @override
-  String get cookieText =>
-      'We use essential cookies to run this website. '
+  String get cookieText => 'We use essential cookies to run this website. '
       'You can opt in to analytics cookies. See our ';
   @override
   String get privacyPolicy => 'Privacy policy';
@@ -2746,8 +2822,7 @@ class _En extends AppStrings {
   @override
   String get fillMissing => 'Please fill in the missing details above.';
   @override
-  String get orderSuccess =>
-      'Order placed! We will contact you to confirm it.';
+  String get orderSuccess => 'Order placed! We will contact you to confirm it.';
   @override
   String get mixedDaysError =>
       'Items in your cart are not sold on the same day. Remove some items '
@@ -3198,7 +3273,8 @@ class _En extends AppStrings {
   String get reorderUnavailable =>
       'The items in this order are no longer available';
   @override
-  String reorderAdded(int n) => 'Added $n item${n == 1 ? '' : 's'} to your cart';
+  String reorderAdded(int n) =>
+      'Added $n item${n == 1 ? '' : 's'} to your cart';
   @override
   String reorderAddedSkipped(int n, int k) =>
       'Added $n item${n == 1 ? '' : 's'} · $k no longer sold';
@@ -3238,8 +3314,7 @@ class _En extends AppStrings {
   @override
   String get changePasswordSub => 'Update your sign-in password.';
   @override
-  String get changeEmailSub =>
-      'We send a confirmation link to your new email.';
+  String get changeEmailSub => 'We send a confirmation link to your new email.';
   @override
   String get marketingOptIn => 'Promotions & news';
   @override
@@ -3273,8 +3348,7 @@ class _En extends AppStrings {
   String get deleteAccountWarn =>
       'This cannot be undone. Past orders are anonymised.';
   @override
-  String get pleaseEnterPwConfirm =>
-      'Please enter your password to confirm.';
+  String get pleaseEnterPwConfirm => 'Please enter your password to confirm.';
   @override
   String get deleteForever => 'Delete permanently';
 
@@ -3333,8 +3407,7 @@ class _En extends AppStrings {
   @override
   String fromPoints(String n) => 'From $n points';
   @override
-  String pointsToTier(int n, String tier) =>
-      '$n more points to reach $tier';
+  String pointsToTier(int n, String tier) => '$n more points to reach $tier';
   @override
   String loyaltyTypeLabel(LoyaltyEventType t) => switch (t) {
         LoyaltyEventType.earn => 'Earned',
@@ -3356,8 +3429,7 @@ class _En extends AppStrings {
   @override
   String get whPickAtLeastOne => 'Pick at least one product.';
   @override
-  String get whNeedDeliveryDate =>
-      'This contract requires a delivery date.';
+  String get whNeedDeliveryDate => 'This contract requires a delivery date.';
   @override
   String whOrderPlaced(String code) =>
       'Placed $code. Awaiting admin confirmation.';
@@ -3494,8 +3566,7 @@ class _En extends AppStrings {
   @override
   String get flavorComplete => 'All set! You can add to cart.';
   @override
-  String flavorRemaining(int n) =>
-      '$n more to pick (repeats allowed).';
+  String flavorRemaining(int n) => '$n more to pick (repeats allowed).';
 
   // Bundles
   @override
@@ -3689,8 +3760,7 @@ class _En extends AppStrings {
   @override
   String get wardRequired => 'Please pick a ward';
   @override
-  String get wardNotServiceable =>
-      "We don't deliver to this area yet";
+  String get wardNotServiceable => "We don't deliver to this area yet";
   @override
   String get wardReselectRequired =>
       'This ward was split in the 2025 reform — please pick your new ward';

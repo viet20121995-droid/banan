@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
+import { CukcukModule } from '../cukcuk/cukcuk.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 import { AuthController } from './auth.controller';
@@ -18,6 +19,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({}),
     NotificationsModule,
+    CukcukModule,
   ],
   controllers: [AuthController],
   providers: [

@@ -199,6 +199,7 @@ class MenuScreen extends ConsumerWidget {
       if (wholesaleEnabled)
         navText('Wholesale', () => context.push('/wholesale')),
       if (!isGuest) navText(s.membership, () => context.push('/membership')),
+      navText(s.spendLookup, () => context.push('/spend-lookup')),
       const SizedBox(width: BananSpacing.sm),
       if (pwaCanInstall())
         IconButton(
@@ -275,6 +276,8 @@ class MenuScreen extends ConsumerWidget {
               context.push('/addresses');
             case 'membership':
               context.push('/membership');
+            case 'spend':
+              context.push('/spend-lookup');
             case 'orders':
               context.push('/orders');
             case 'wholesale':
@@ -356,6 +359,14 @@ class MenuScreen extends ConsumerWidget {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
+          PopupMenuItem(
+            value: 'spend',
+            child: ListTile(
+              leading: const Icon(Icons.point_of_sale_rounded),
+              title: Text(s.spendLookup),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
           if (!isGuest)
             PopupMenuItem(
               value: 'orders',

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +11,7 @@ import { type Gender, Prisma, type User } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 
+import { CukcukService } from '../cukcuk/cukcuk.service';
 import { EmailService } from '../notifications/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -43,6 +45,8 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly email: EmailService,
+    // Optional: unit tests build the service without the CukCuk module.
+    @Optional() private readonly cukcuk?: CukcukService,
   ) {}
 
   async register(dto: RegisterDto, deviceId?: string): Promise<IssuedTokens> {
@@ -60,6 +64,9 @@ export class AuthService {
           claimed: true,
         },
       });
+      // Counter regular registering online: pull their POS profile + spend
+      // into Micho right away (also re-applied after every CukCuk sync).
+      void this.cukcuk?.linkUser(user.id).catch(() => undefined);
       return this.issueSession(user, deviceId);
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
