@@ -62,12 +62,6 @@ model User {
   /// Counter (CukCuk POS) spend already converted into Micho for this
   /// account — the sync credits only the growth beyond this figure.
   cukcukSpendVnd Int            @default(0)
-  /// Counter (CukCuk POS) spend already converted into Micho for this
-  /// account — the sync credits only the growth beyond this figure.
-  cukcukSpendVnd Int            @default(0)
-  /// Counter (CukCuk POS) spend already converted into Micho for this
-  /// account — the sync credits only the growth beyond this figure.
-  cukcukSpendVnd Int            @default(0)
 
   // Notification preferences (customer self-service opt-out).
   marketingOptIn    Boolean @default(true)
