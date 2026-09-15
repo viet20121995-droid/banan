@@ -2967,3 +2967,39 @@ model WorkSchedulePublish {
 
   @@unique([scheduleId, revision])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MISA CukCuk POS sync (internal ops app → "Update dữ liệu CukCuk")
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One raw row from a CukCuk dataset (branches / categories / items /
+/// customers / invoices / orders). `data` is the row exactly as the API sent
+/// it; `label`, `branchId`, `modifiedAt`, `search` are extracted for lists.
+model CukcukRecord {
+  id         String    @id @default(uuid())
+  kind       String
+  externalId String
+  label      String?
+  branchId   String?
+  modifiedAt DateTime?
+  /// Lower-cased concatenation of the row's string fields for search.
+  search     String?
+  data       Json
+  syncedAt   DateTime  @default(now()) @updatedAt
+
+  @@unique([kind, externalId])
+  @@index([kind, modifiedAt])
+}
+
+model CukcukSync {
+  id         String    @id @default(uuid())
+  kind       String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean?
+  fetched    Int       @default(0)
+  error      String?
+  startedBy  String?
+
+  @@index([kind, startedAt])
+}

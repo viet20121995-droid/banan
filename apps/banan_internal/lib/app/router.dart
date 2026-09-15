@@ -4,6 +4,7 @@ import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/cukcuk/cukcuk_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/ms/ms_detail_screen.dart';
 import '../features/ms/ms_list_screen.dart';
@@ -67,7 +68,7 @@ Set<Role> _requiredRolesFor(String loc) {
   if (loc == '/training' || loc.startsWith('/training/')) {
     return const {Role.admin, Role.trainee};
   }
-  // /qc, /schedule, /ms and anything unlisted: admin only.
+  // /qc, /schedule, /ms, /cukcuk and anything unlisted: admin only.
   return const {Role.admin};
 }
 
@@ -110,12 +111,11 @@ final internalRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, _) {
           final repo = ref.read(authRepositoryProvider);
           final role = repo.currentSession?.user.role;
-          return role == Role.trainee
-              ? const TraineeTrainingScreen()
-              : const TrainingScreen();
+          return role == Role.trainee ? const TraineeTrainingScreen() : const TrainingScreen();
         },
       ),
       GoRoute(path: '/schedule', builder: (_, __) => const ScheduleScreen()),
+      GoRoute(path: '/cukcuk', builder: (_, __) => const CukcukScreen()),
       // The guest survey moved to the customer domain; a bare /survey here
       // (old bookmark that slipped past Caddy's 308) lands on the admin
       // reports — the redirect above has already demanded an ADMIN session.

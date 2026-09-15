@@ -5,6 +5,7 @@ import 'package:banan_data/banan_data.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'cukcuk_models.dart';
 import 'internal_models.dart';
 import 'survey_models.dart';
 
@@ -68,10 +69,7 @@ class InternalApi {
   // ── stores ──
   Future<Result<List<StoreRef>, AppFailure>> stores() => _run(
         () => _dio.get<dynamic>('/stores'),
-        (data) => (data as List)
-            .whereType<Map<String, dynamic>>()
-            .map(StoreRef.fromJson)
-            .toList(),
+        (data) => (data as List).whereType<Map<String, dynamic>>().map(StoreRef.fromJson).toList(),
       );
 
   // ── QC ──
@@ -83,18 +81,19 @@ class InternalApi {
     DateTime? to,
   }) =>
       _run(
-        () => _dio.get<dynamic>('/internal/qc/inspections', queryParameters: {
-          if (storeId != null) 'storeId': storeId,
-          if (status != null) 'status': status,
-          if (outcome != null) 'outcome': outcome,
-          if (from != null) 'from': from.toIso8601String(),
-          if (to != null) 'to': to.toIso8601String(),
-          'perPage': 100,
-        },),
-        (data) => (data as List)
-            .whereType<Map<String, dynamic>>()
-            .map(QcListItem.fromJson)
-            .toList(),
+        () => _dio.get<dynamic>(
+          '/internal/qc/inspections',
+          queryParameters: {
+            if (storeId != null) 'storeId': storeId,
+            if (status != null) 'status': status,
+            if (outcome != null) 'outcome': outcome,
+            if (from != null) 'from': from.toIso8601String(),
+            if (to != null) 'to': to.toIso8601String(),
+            'perPage': 100,
+          },
+        ),
+        (data) =>
+            (data as List).whereType<Map<String, dynamic>>().map(QcListItem.fromJson).toList(),
       );
 
   Future<Result<QcInspectionDetail, AppFailure>> qcCreate({
@@ -104,13 +103,15 @@ class InternalApi {
     String? staffOnShift,
   }) =>
       _run(
-        () => _dio.post<dynamic>('/internal/qc/inspections', data: {
-          'storeId': storeId,
-          'inspectionDate': inspectionDate.toIso8601String(),
-          if (inspectorName != null && inspectorName.isNotEmpty)
-            'inspectorName': inspectorName,
-          if (staffOnShift != null && staffOnShift.isNotEmpty) 'staffOnShift': staffOnShift,
-        },),
+        () => _dio.post<dynamic>(
+          '/internal/qc/inspections',
+          data: {
+            'storeId': storeId,
+            'inspectionDate': inspectionDate.toIso8601String(),
+            if (inspectorName != null && inspectorName.isNotEmpty) 'inspectorName': inspectorName,
+            if (staffOnShift != null && staffOnShift.isNotEmpty) 'staffOnShift': staffOnShift,
+          },
+        ),
         (data) => QcInspectionDetail.fromJson(data as Map<String, dynamic>),
       );
 
@@ -136,11 +137,14 @@ class InternalApi {
     String? naReason,
   }) =>
       _run(
-        () => _dio.put<dynamic>('/internal/qc/inspections/$id/answers/$itemId', data: {
-          'value': value,
-          if (failDetail != null) 'failDetail': failDetail,
-          if (naReason != null) 'naReason': naReason,
-        },),
+        () => _dio.put<dynamic>(
+          '/internal/qc/inspections/$id/answers/$itemId',
+          data: {
+            'value': value,
+            if (failDetail != null) 'failDetail': failDetail,
+            if (naReason != null) 'naReason': naReason,
+          },
+        ),
         (data) => QcInspectionDetail.fromJson(data as Map<String, dynamic>),
       );
 
@@ -151,10 +155,13 @@ class InternalApi {
     String? detail,
   }) =>
       _run(
-        () => _dio.put<dynamic>('/internal/qc/inspections/$id/risks/$itemId', data: {
-          'occurred': occurred,
-          if (detail != null) 'detail': detail,
-        },),
+        () => _dio.put<dynamic>(
+          '/internal/qc/inspections/$id/risks/$itemId',
+          data: {
+            'occurred': occurred,
+            if (detail != null) 'detail': detail,
+          },
+        ),
         (data) => QcInspectionDetail.fromJson(data as Map<String, dynamic>),
       );
 
@@ -196,10 +203,13 @@ class InternalApi {
       );
 
   Future<Result<List<QcCompareRow>, AppFailure>> qcCompare(DateTime from, DateTime to) => _run(
-        () => _dio.get<dynamic>('/internal/qc/compare', queryParameters: {
-          'from': from.toIso8601String(),
-          'to': to.toIso8601String(),
-        },),
+        () => _dio.get<dynamic>(
+          '/internal/qc/compare',
+          queryParameters: {
+            'from': from.toIso8601String(),
+            'to': to.toIso8601String(),
+          },
+        ),
         (data) => ((data as Map<String, dynamic>)['stores'] as List)
             .whereType<Map<String, dynamic>>()
             .map(QcCompareRow.fromJson)
@@ -270,16 +280,17 @@ class InternalApi {
     String? source,
   }) =>
       _run(
-        () => _dio.get<dynamic>('/internal/ms/assignments', queryParameters: {
-          if (storeId != null) 'storeId': storeId,
-          if (status != null) 'status': status,
-          if (source != null) 'source': source,
-          'perPage': 100,
-        },),
-        (data) => (data as List)
-            .whereType<Map<String, dynamic>>()
-            .map(MsListItem.fromJson)
-            .toList(),
+        () => _dio.get<dynamic>(
+          '/internal/ms/assignments',
+          queryParameters: {
+            if (storeId != null) 'storeId': storeId,
+            if (status != null) 'status': status,
+            if (source != null) 'source': source,
+            'perPage': 100,
+          },
+        ),
+        (data) =>
+            (data as List).whereType<Map<String, dynamic>>().map(MsListItem.fromJson).toList(),
       );
 
   Future<Result<MsAssignmentDetail, AppFailure>> msCreate(Map<String, dynamic> body) => _run(
@@ -307,9 +318,12 @@ class InternalApi {
       );
 
   Future<Result<MsIssuedToken, AppFailure>> msIssueToken(String id, {int? ttlDays}) => _run(
-        () => _dio.post<dynamic>('/internal/ms/assignments/$id/token', data: {
-          if (ttlDays != null) 'ttlDays': ttlDays,
-        },),
+        () => _dio.post<dynamic>(
+          '/internal/ms/assignments/$id/token',
+          data: {
+            if (ttlDays != null) 'ttlDays': ttlDays,
+          },
+        ),
         (data) => MsIssuedToken.fromJson(data as Map<String, dynamic>),
       );
 
@@ -318,8 +332,7 @@ class InternalApi {
         (data) => MsAssignmentDetail.fromJson(data as Map<String, dynamic>),
       );
 
-  Future<Result<MsAssignmentDetail, AppFailure>> msRequestRevision(String id, String note) =>
-      _run(
+  Future<Result<MsAssignmentDetail, AppFailure>> msRequestRevision(String id, String note) => _run(
         () => _dio.post<dynamic>(
           '/internal/ms/assignments/$id/request-revision',
           data: {'note': note},
@@ -353,10 +366,8 @@ class InternalApi {
 
   Future<Result<List<MaterialView>, AppFailure>> myMaterials() => _run(
         () => _dio.get<dynamic>('/internal/training/me/materials'),
-        (data) => (data as List)
-            .whereType<Map<String, dynamic>>()
-            .map(MaterialView.fromJson)
-            .toList(),
+        (data) =>
+            (data as List).whereType<Map<String, dynamic>>().map(MaterialView.fromJson).toList(),
       );
 
   /// Screen reloads myTraining after this — the raw row isn't re-parsed.
@@ -370,14 +381,15 @@ class InternalApi {
 
   // ── Training ──
   Future<Result<List<PersonView>, AppFailure>> people({String? storeId, String? q}) => _run(
-        () => _dio.get<dynamic>('/internal/training/people', queryParameters: {
-          if (storeId != null) 'storeId': storeId,
-          if (q != null && q.isNotEmpty) 'q': q,
-        },),
-        (data) => (data as List)
-            .whereType<Map<String, dynamic>>()
-            .map(PersonView.fromJson)
-            .toList(),
+        () => _dio.get<dynamic>(
+          '/internal/training/people',
+          queryParameters: {
+            if (storeId != null) 'storeId': storeId,
+            if (q != null && q.isNotEmpty) 'q': q,
+          },
+        ),
+        (data) =>
+            (data as List).whereType<Map<String, dynamic>>().map(PersonView.fromJson).toList(),
       );
 
   Future<Result<PersonView, AppFailure>> createPerson(Map<String, dynamic> body) => _run(
@@ -385,8 +397,7 @@ class InternalApi {
         (data) => PersonView.fromJson(data as Map<String, dynamic>),
       );
 
-  Future<Result<PersonView, AppFailure>> updatePerson(String id, Map<String, dynamic> body) =>
-      _run(
+  Future<Result<PersonView, AppFailure>> updatePerson(String id, Map<String, dynamic> body) => _run(
         () => _dio.patch<dynamic>('/internal/training/people/$id', data: body),
         (data) => PersonView.fromJson(data as Map<String, dynamic>),
       );
@@ -396,10 +407,8 @@ class InternalApi {
           '/internal/training/materials',
           queryParameters: {if (all) 'all': 'true'},
         ),
-        (data) => (data as List)
-            .whereType<Map<String, dynamic>>()
-            .map(MaterialView.fromJson)
-            .toList(),
+        (data) =>
+            (data as List).whereType<Map<String, dynamic>>().map(MaterialView.fromJson).toList(),
       );
 
   Future<Result<MaterialView, AppFailure>> createMaterial(Map<String, dynamic> body) => _run(
@@ -418,8 +427,7 @@ class InternalApi {
 
   Future<Result<List<PathView>, AppFailure>> paths() => _run(
         () => _dio.get<dynamic>('/internal/training/paths'),
-        (data) =>
-            (data as List).whereType<Map<String, dynamic>>().map(PathView.fromJson).toList(),
+        (data) => (data as List).whereType<Map<String, dynamic>>().map(PathView.fromJson).toList(),
       );
 
   Future<Result<PathView, AppFailure>> createPath(Map<String, dynamic> body) => _run(
@@ -439,12 +447,15 @@ class InternalApi {
     String? status,
   }) =>
       _run(
-        () => _dio.get<dynamic>('/internal/training/progress', queryParameters: {
-          if (storeId != null) 'storeId': storeId,
-          if (personId != null) 'personId': personId,
-          if (overdueOnly) 'overdue': 'true',
-          if (status != null) 'status': status,
-        },),
+        () => _dio.get<dynamic>(
+          '/internal/training/progress',
+          queryParameters: {
+            if (storeId != null) 'storeId': storeId,
+            if (personId != null) 'personId': personId,
+            if (overdueOnly) 'overdue': 'true',
+            if (status != null) 'status': status,
+          },
+        ),
         (data) => (data as List)
             .whereType<Map<String, dynamic>>()
             .map(TrainingOverviewRow.fromJson)
@@ -473,16 +484,17 @@ class InternalApi {
   // ── Schedule ──
   Future<Result<List<WeekListItem>, AppFailure>> weeks() => _run(
         () => _dio.get<dynamic>('/internal/schedule/weeks'),
-        (data) => (data as List)
-            .whereType<Map<String, dynamic>>()
-            .map(WeekListItem.fromJson)
-            .toList(),
+        (data) =>
+            (data as List).whereType<Map<String, dynamic>>().map(WeekListItem.fromJson).toList(),
       );
 
   Future<Result<ScheduleWeek?, AppFailure>> weekByStart(DateTime weekStart) => _run(
-        () => _dio.get<dynamic>('/internal/schedule/week', queryParameters: {
-          'weekStart': weekStart.toIso8601String(),
-        },),
+        () => _dio.get<dynamic>(
+          '/internal/schedule/week',
+          queryParameters: {
+            'weekStart': weekStart.toIso8601String(),
+          },
+        ),
         (data) => data == null ? null : ScheduleWeek.fromJson(data as Map<String, dynamic>),
       );
 
@@ -491,10 +503,13 @@ class InternalApi {
     String? copyFromScheduleId,
   }) =>
       _run(
-        () => _dio.post<dynamic>('/internal/schedule/weeks', data: {
-          'weekStart': weekStart.toIso8601String(),
-          if (copyFromScheduleId != null) 'copyFromScheduleId': copyFromScheduleId,
-        },),
+        () => _dio.post<dynamic>(
+          '/internal/schedule/weeks',
+          data: {
+            'weekStart': weekStart.toIso8601String(),
+            if (copyFromScheduleId != null) 'copyFromScheduleId': copyFromScheduleId,
+          },
+        ),
         (data) => ScheduleWeek.fromJson(data as Map<String, dynamic>),
       );
 
@@ -586,14 +601,15 @@ class InternalApi {
     String? storeId,
   }) =>
       _run(
-        () => _dio.get<dynamic>('/internal/survey/cases', queryParameters: {
-          if (status != null) 'status': status,
-          if (storeId != null) 'storeId': storeId,
-        },),
-        (data) => (data as List)
-            .whereType<Map<String, dynamic>>()
-            .map(SurveyCaseView.fromJson)
-            .toList(),
+        () => _dio.get<dynamic>(
+          '/internal/survey/cases',
+          queryParameters: {
+            if (status != null) 'status': status,
+            if (storeId != null) 'storeId': storeId,
+          },
+        ),
+        (data) =>
+            (data as List).whereType<Map<String, dynamic>>().map(SurveyCaseView.fromJson).toList(),
       );
 
   Future<Result<SurveyCaseView, AppFailure>> surveyUpdateCase(
@@ -623,10 +639,13 @@ class InternalApi {
     String? cloneFromId,
   }) =>
       _run(
-        () => _dio.post<dynamic>('/internal/survey/templates', data: {
-          if (name != null && name.isNotEmpty) 'name': name,
-          if (cloneFromId != null) 'cloneFromId': cloneFromId,
-        },),
+        () => _dio.post<dynamic>(
+          '/internal/survey/templates',
+          data: {
+            if (name != null && name.isNotEmpty) 'name': name,
+            if (cloneFromId != null) 'cloneFromId': cloneFromId,
+          },
+        ),
         (data) => SurveyTemplateView.fromJson(data as Map<String, dynamic>),
       );
 
@@ -698,14 +717,15 @@ class InternalApi {
     String? status,
   }) =>
       _run(
-        () => _dio.get<dynamic>('/internal/survey/rewards/claims', queryParameters: {
-          if (campaignId != null) 'campaignId': campaignId,
-          if (status != null) 'status': status,
-        },),
-        (data) => (data as List)
-            .whereType<Map<String, dynamic>>()
-            .map(SurveyClaimView.fromJson)
-            .toList(),
+        () => _dio.get<dynamic>(
+          '/internal/survey/rewards/claims',
+          queryParameters: {
+            if (campaignId != null) 'campaignId': campaignId,
+            if (status != null) 'status': status,
+          },
+        ),
+        (data) =>
+            (data as List).whereType<Map<String, dynamic>>().map(SurveyClaimView.fromJson).toList(),
       );
 }
 
@@ -746,15 +766,18 @@ class InternalPublicApi {
     String? note,
   }) async {
     try {
-      final res = await _dio.post<dynamic>('/internal/ms/public/create-assignment', data: {
-        'requesterName': requesterName,
-        'accessCode': accessCode,
-        'storeId': storeId,
-        'idempotencyKey': idempotencyKey,
-        if (employeeCode != null && employeeCode.isNotEmpty) 'employeeCode': employeeCode,
-        if (ttlDays != null) 'ttlDays': ttlDays,
-        if (note != null && note.isNotEmpty) 'note': note,
-      },);
+      final res = await _dio.post<dynamic>(
+        '/internal/ms/public/create-assignment',
+        data: {
+          'requesterName': requesterName,
+          'accessCode': accessCode,
+          'storeId': storeId,
+          'idempotencyKey': idempotencyKey,
+          if (employeeCode != null && employeeCode.isNotEmpty) 'employeeCode': employeeCode,
+          if (ttlDays != null) 'ttlDays': ttlDays,
+          if (note != null && note.isNotEmpty) 'note': note,
+        },
+      );
       final status = res.statusCode ?? 0;
       final body = res.data;
       if (status >= 400) return Result.failure(_failureOf(status, body));
@@ -878,6 +901,76 @@ class InternalPublicApi {
     final data = body is Map<String, dynamic> ? body['data'] : body;
     return Result.success(MsPublicView.fromJson(data as Map<String, dynamic>));
   }
+}
+
+/// CukCuk POS sync (`/internal/cukcuk/*`, admin).
+extension CukcukApi on InternalApi {
+  Future<Result<CukcukStatus, AppFailure>> cukcukStatus() => _run(
+        () => _dio.get<dynamic>('/internal/cukcuk/status'),
+        (d) => CukcukStatus.fromJson(d as Map<String, dynamic>),
+      );
+
+  /// [kind] = one dataset or `all`.
+  Future<Result<List<CukcukSyncResult>, AppFailure>> cukcukSync(String kind) => _run(
+        () => _dio.post<dynamic>(
+          '/internal/cukcuk/sync',
+          data: {'kind': kind},
+          options: Options(receiveTimeout: const Duration(minutes: 10)),
+        ),
+        (d) =>
+            (d as List).map((e) => CukcukSyncResult.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Future<Result<CukcukPage, AppFailure>> cukcukRecords({
+    required String kind,
+    String? q,
+    int page = 1,
+    int perPage = 50,
+  }) async {
+    try {
+      final res = await _dio.get<dynamic>(
+        '/internal/cukcuk/records',
+        queryParameters: {
+          'kind': kind,
+          'page': page,
+          'perPage': perPage,
+          if (q != null && q.isNotEmpty) 'q': q,
+        },
+      );
+      final status = res.statusCode ?? 0;
+      final body = res.data;
+      if (status >= 400) return Result.failure(_httpFailure(status, body));
+      final map = body as Map<String, dynamic>;
+      final meta = map['meta'] as Map<String, dynamic>? ?? const {};
+      return Result.success(
+        CukcukPage(
+          items: ((map['data'] as List?) ?? const [])
+              .map((e) => CukcukRecord.fromJson(e as Map<String, dynamic>))
+              .toList(),
+          total: (meta['total'] as num?)?.toInt() ?? 0,
+          page: (meta['page'] as num?)?.toInt() ?? page,
+        ),
+      );
+    } on DioException catch (e) {
+      return Result.failure(_dioFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(message: e.toString(), cause: e));
+    }
+  }
+
+  Future<Result<CukcukRecord, AppFailure>> cukcukRecord(
+    String kind,
+    String externalId,
+  ) =>
+      _run(
+        () => _dio.get<dynamic>('/internal/cukcuk/records/$kind/$externalId'),
+        (d) => CukcukRecord.fromJson(d as Map<String, dynamic>),
+      );
+
+  Future<Result<CukcukApplyResult, AppFailure>> cukcukApplyCustomers() => _run(
+        () => _dio.post<dynamic>('/internal/cukcuk/customers/apply'),
+        (d) => CukcukApplyResult.fromJson(d as Map<String, dynamic>),
+      );
 }
 
 final internalApiProvider = Provider<InternalApi>((ref) {

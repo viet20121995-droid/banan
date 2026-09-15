@@ -159,6 +159,14 @@ const _cards = <HomeCardSpec>[
     description: 'Báo cáo trải nghiệm tại quán, xử lý case điểm thấp, link & QR khảo sát.',
     path: '/survey/reports',
   ),
+  HomeCardSpec(
+    icon: Icons.sync_outlined,
+    title: 'Update dữ liệu CukCuk',
+    badge: 'Admin',
+    description:
+        'Kéo chi nhánh, thực đơn, khách hàng, hoá đơn và đơn đang phục vụ từ máy POS CukCuk về website.',
+    path: '/cukcuk',
+  ),
 ];
 
 class _FunctionCard extends StatelessWidget {
@@ -231,9 +239,7 @@ class _FunctionCard extends StatelessWidget {
         border: Border.all(color: theme.dividerColor),
       ),
       clipBehavior: Clip.antiAlias,
-      child: spec.path != null
-          ? InkWell(onTap: () => context.go(spec.path!), child: body)
-          : body,
+      child: spec.path != null ? InkWell(onTap: () => context.go(spec.path!), child: body) : body,
     );
   }
 }
