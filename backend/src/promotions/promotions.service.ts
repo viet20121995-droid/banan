@@ -276,7 +276,15 @@ export class PromotionsService {
       }
     }
 
-    return { discountVnd: total, applied: [...applied.values()], hints };
+    // Promotions never stack: keep the single campaign worth the most to the
+    // customer (ties → higher priority, which is the findMany order). The
+    // member 5% is applied by the order service on top of this one.
+    const ranked = [...applied.values()].sort((a, b) => b.discountVnd - a.discountVnd);
+    const best = ranked[0];
+    if (!best) return { discountVnd: 0, applied: [], hints };
+    // A hint would only tempt the customer into a campaign that then loses
+    // to the one already applied, so hints only show when nothing applied.
+    return { discountVnd: best.discountVnd, applied: [best], hints: [] };
   }
 
   private async productNames(ids: string[]): Promise<{ id: string; name: string }[]> {
@@ -510,8 +518,11 @@ export class PromotionsService {
         where: { id: customerId },
         select: { birthday: true, membershipTier: true },
       }),
+      // Only orders the customer placed on the website count — a walk-in
+      // keyed in by staff under the same phone does not spend the first-order
+      // perk. Cancelled orders don't count either.
       this.prisma.order.aggregate({
-        where: { customerId, status: { not: 'CANCELLED' } },
+        where: { customerId, source: 'WEB', status: { not: 'CANCELLED' } },
         _count: { _all: true },
         _max: { createdAt: true },
       }),

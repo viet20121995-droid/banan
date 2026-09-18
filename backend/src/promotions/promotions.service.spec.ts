@@ -177,7 +177,7 @@ describe('PromotionsService.evaluate — gift with purchase + birthday exclusion
     expect(r.hints).toMatchObject([{ campaignId: 'gift', shortVnd: 250_000 }]);
   });
 
-  it('first-order 15% ignores birthday-cake lines and both campaigns apply independently', async () => {
+  it('first-order 15% ignores birthday-cake lines; campaigns never stack — the best one wins', async () => {
     const r = await makeEvalService([GIFT, FIRST]).evaluate({
       lines: [
         { productId: 'cake', quantity: 1, lineTotalVnd: 500_000 },
@@ -188,11 +188,35 @@ describe('PromotionsService.evaluate — gift with purchase + birthday exclusion
       customerId: 'u1',
     });
     // First order: 15% of (855k − 500k cake) = 53 250. Gift: flan 55k free.
-    expect(r.applied.map((a) => [a.id, a.discountVnd])).toEqual([
-      ['gift', 55_000],
-      ['first', 53_250],
-    ]);
-    expect(r.discountVnd).toBe(108_250);
+    // Only the larger one applies.
+    expect(r.applied.map((a) => [a.id, a.discountVnd])).toEqual([['gift', 55_000]]);
+    expect(r.discountVnd).toBe(55_000);
+
+    const r2 = await makeEvalService([GIFT, FIRST]).evaluate({
+      lines: [
+        { productId: 'mochi', quantity: 4, lineTotalVnd: 600_000 },
+        { productId: 'flan', quantity: 1, lineTotalVnd: 55_000 },
+      ],
+      subtotalVnd: 655_000,
+      customerId: 'u1',
+    });
+    // 15% of 655k = 98 250 beats the 55k flan.
+    expect(r2.applied.map((a) => [a.id, a.discountVnd])).toEqual([['first', 98_250]]);
+  });
+
+  it('only website orders count toward "first order"', async () => {
+    const svc = makeEvalService([FIRST]);
+    await svc.evaluate({
+      lines: [{ productId: 'mochi', quantity: 1, lineTotalVnd: 400_000 }],
+      subtotalVnd: 400_000,
+      customerId: 'u1',
+    });
+    const prisma = (svc as unknown as { prisma: { order: { aggregate: jest.Mock } } }).prisma;
+    expect(prisma.order.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { customerId: 'u1', source: 'WEB', status: { not: 'CANCELLED' } },
+      }),
+    );
   });
 
   it('first-order under the minimum yields a hint with the missing amount', async () => {

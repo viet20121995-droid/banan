@@ -97,7 +97,8 @@ class _Body extends ConsumerWidget {
                         summary.pointsToNextTier == null
                             ? s.topTier
                             : s.michoUntilNextTier(
-                                summary.pointsToNextTier!,),
+                                summary.pointsToNextTier!,
+                              ),
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: Colors.white.withValues(alpha: 0.85),
                         ),
@@ -135,7 +136,10 @@ class _Body extends ConsumerWidget {
                       Text(
                         s.loyaltyHowText(
                           fmt.format(summary.earnRatePerVnd),
-                          fmt.format(summary.redemptionValueVnd),
+                          fmt.format(
+                            summary.memberDiscountThresholdMicho *
+                                summary.earnRatePerVnd,
+                          ),
                         ),
                         style: theme.textTheme.bodyMedium,
                       ),
@@ -147,7 +151,8 @@ class _Body extends ConsumerWidget {
                 const SizedBox(height: BananSpacing.sm),
                 if (summary.history.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: BananSpacing.lg),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: BananSpacing.lg),
                     child: Text(
                       s.noLoyaltyActivity,
                       style: theme.textTheme.bodyMedium,

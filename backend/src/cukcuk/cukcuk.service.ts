@@ -435,7 +435,7 @@ export class CukcukService {
       select: { id: true },
     });
     const rate = LOYALTY_CONFIG.earnRatePerVnd;
-    const thresholdVnd = (LOYALTY_CONFIG.michoDiscountThreshold + 1) * rate;
+    const thresholdVnd = LOYALTY_CONFIG.michoDiscountThreshold * rate;
     if (rows.length === 0) {
       return {
         found: false,
@@ -476,7 +476,7 @@ export class CukcukService {
       name: maskName(typeof merged.Name === 'string' ? merged.Name : ''),
       totalSpendVnd: total,
       micho,
-      discountEligible: micho > LOYALTY_CONFIG.michoDiscountThreshold,
+      discountEligible: micho >= LOYALTY_CONFIG.michoDiscountThreshold,
       discountRate: LOYALTY_CONFIG.michoDiscountRate,
       discountThresholdVnd: thresholdVnd,
       earnRatePerVnd: rate,

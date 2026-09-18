@@ -774,8 +774,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           .join('|'),
       storeId: _fulfillment == FulfillmentType.pickup ? _pickupStoreId : null,
     );
-    final promo = ref.watch(_promoQuoteProvider(promoKey)).valueOrNull ??
+    final promoQuote = ref.watch(_promoQuoteProvider(promoKey)).valueOrNull ??
         PromoQuote.empty;
+    // Promotions never stack: an applied coupon replaces the auto campaign
+    // (the backend does the same), so the preview drops it too.
+    final promo = _appliedCoupon != null ? PromoQuote.empty : promoQuote;
+    final couponReplacesPromo =
+        _appliedCoupon != null && promoQuote.discountVnd > 0;
     final campaignDiscount = promo.discountVnd.clamp(0.0, cart.subtotal);
     final memberEligible = membership?.memberDiscountEligible ?? false;
     final memberRate = membership?.memberDiscountRate ?? 0.05;
@@ -1118,8 +1123,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       applied: _appliedCoupon,
                       validating: _validatingCoupon,
                       error: _couponError,
-                      onApply: () =>
-                          _applyCoupon(cart.subtotal - campaignDiscount, fee),
+                      onApply: () => _applyCoupon(cart.subtotal, fee),
                       onClear: () => setState(() {
                         _coupon.clear();
                         _appliedCoupon = null;
@@ -1127,6 +1131,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       }),
                       fmt: fmt,
                     ),
+                    if (couponReplacesPromo)
+                      Padding(
+                        padding: const EdgeInsets.only(top: BananSpacing.xs),
+                        child: Text(
+                          s.couponReplacesPromo,
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.outline),
+                        ),
+                      ),
                     const SizedBox(height: BananSpacing.md),
                     Row(
                       children: [

@@ -605,7 +605,12 @@ export class OrdersService {
       // re-activation) for a guest order bound to a pre-existing account.
       customerId: guestBoundToExisting ? undefined : customerId,
     });
-    const autoPromoVnd = Math.min(promo.discountVnd, subtotalAfterBundleVnd);
+    // Promotions never stack: a coupon code is the customer's explicit pick,
+    // so it replaces whatever the engine would have applied automatically
+    // (the engine itself already keeps only its single best campaign).
+    const usesCoupon = Boolean(dto.couponCode) && !guestBoundToExisting;
+    const autoPromoVnd = usesCoupon ? 0 : Math.min(promo.discountVnd, subtotalAfterBundleVnd);
+    const autoApplied = usesCoupon ? [] : promo.applied;
 
     // Member perk: >100 Micho holders may take 5% off the goods total
     // (after combos + auto-promos), opted in at checkout. The customer picks
@@ -627,13 +632,13 @@ export class OrdersService {
       if (!memberDiscountEligible(holder?.pointsBalance ?? 0)) {
         throw new BadRequestException({
           code: 'MEMBER_DISCOUNT_INELIGIBLE',
-          message: `Cần trên ${LOYALTY_CONFIG.michoDiscountThreshold} Micho để dùng ưu đãi thành viên.`,
+          message: `Cần từ ${LOYALTY_CONFIG.michoDiscountThreshold} Micho để dùng ưu đãi thành viên.`,
         });
       }
       memberDiscount = memberDiscountVnd(subtotalAfterBundleVnd - autoPromoVnd);
     }
     const campaignInfo = [
-      ...promo.applied,
+      ...autoApplied,
       ...(memberDiscount > 0
         ? [
             {
@@ -953,9 +958,9 @@ export class OrdersService {
       // Record campaign usage (enforces per-user / global caps atomically).
       // Skipped for a guest order bound to a pre-existing account so it can't
       // burn that account's campaign allowances.
-      if (!guestBoundToExisting && promo.applied.length > 0) {
+      if (!guestBoundToExisting && autoApplied.length > 0) {
         await this.promotions.recordUsage({
-          campaignIds: promo.applied.map((c) => c.id),
+          campaignIds: autoApplied.map((c) => c.id),
           userId: customerId,
           orderId: order.id,
           tx,

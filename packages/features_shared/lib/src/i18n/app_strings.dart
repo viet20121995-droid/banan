@@ -96,6 +96,7 @@ abstract class AppStrings {
   String get spendLookupHasAccount;
   String get spendLookupCreateAccount;
   String get promoLine;
+  String get couponReplacesPromo;
   String giftHintNow(String names);
   String giftHintShort(String amount, String names);
   String promoHintShort(String name, String amount);
@@ -877,9 +878,12 @@ class _Vi extends AppStrings {
       'thanh toán.';
   @override
   String spendLookupDiscountOff(String threshold, int percent) =>
-      'Chi tiêu trên $threshold sẽ được giảm $percent% mọi đơn online.';
+      'Chi tiêu từ $threshold sẽ được giảm $percent% mọi đơn online.';
   @override
   String get promoLine => 'Khuyến mãi';
+  @override
+  String get couponReplacesPromo =>
+      'Mã giảm giá thay thế khuyến mãi tự động (không cộng dồn).';
   @override
   String giftHintNow(String names) =>
       'Đơn của bạn được tặng 1 món: thêm $names vào giỏ, món rẻ nhất sẽ 0 ₫.';
@@ -1161,8 +1165,8 @@ class _Vi extends AppStrings {
   @override
   String loyaltyHowText(String earn, String value) =>
       'Tích 1 Micho cho mỗi $earn chi tiêu (cả tại quầy). '
-      'Khi có trên 100 Micho, chọn "Ưu đãi thành viên" ở bước thanh toán '
-      'để giảm 5% tiền hàng (không dùng chung với mã giảm giá).';
+      'Chi tiêu tích luỹ từ $value, chọn "Ưu đãi thành viên" ở bước thanh '
+      'toán để giảm 5% tiền hàng (không dùng chung với mã giảm giá).';
 
   @override
   String get orders => 'Đơn hàng';
@@ -2373,9 +2377,12 @@ class _En extends AppStrings {
       'You get $percent% off every order — tick "Member discount" at checkout.';
   @override
   String spendLookupDiscountOff(String threshold, int percent) =>
-      'Spend over $threshold and every online order is $percent% off.';
+      'Spend $threshold or more and every online order is $percent% off.';
   @override
   String get promoLine => 'Promotion';
+  @override
+  String get couponReplacesPromo =>
+      'A coupon code replaces the automatic promotion (no stacking).';
   @override
   String giftHintNow(String names) =>
       'Your order earns a free treat: add $names to the cart, the cheapest one is on us.';
@@ -2658,8 +2665,8 @@ class _En extends AppStrings {
   @override
   String loyaltyHowText(String earn, String value) =>
       'Earn 1 Micho for every $earn you spend (in store too). '
-      'Hold over 100 Micho and tick "Member discount" at checkout for 5% off '
-      'the goods total (not combinable with a coupon code).';
+      'Once your spend reaches $value, tick "Member discount" at checkout for '
+      '5% off the goods total (not combinable with a coupon code).';
 
   @override
   String get orders => 'Orders';

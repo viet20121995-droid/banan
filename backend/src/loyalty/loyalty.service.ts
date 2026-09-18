@@ -8,23 +8,26 @@ import { PrismaService } from '../prisma/prisma.service';
  * `LoyaltyConfig` table when admin UI lands.
  */
 const CONFIG = {
-  /** 1 Micho per N VND spent on the order subtotal. */
-  earnRatePerVnd: 50_000,
+  /** 1 Micho per N VND spent on the order subtotal. Was 50 000 until
+   *  18/09/2026 — existing balances were re-based by a one-off ledger
+   *  adjustment when the rate changed. */
+  earnRatePerVnd: 10_000,
   /** Legacy: 1 point redeems for N VND off (kept for the loyalty view). */
   redemptionValueVnd: 100,
-  /** Members holding more than this many Micho get an automatic order
-   *  discount of [michoDiscountRate]. */
-  michoDiscountThreshold: 100,
+  /** Members holding at least this many Micho (= 5 000 000₫ of spend at
+   *  the earn rate) may take the [michoDiscountRate] member discount. */
+  michoDiscountThreshold: 500,
   michoDiscountRate: 0.05,
   /** Point redemption (N Micho = N×redemptionValueVnd off) at checkout.
    *  ponytail: paused 15/09/2026 by request — flip to true to bring the
    *  slider + backend redeem back; the code paths are still wired. */
   redemptionEnabled: false,
+  // Same spend thresholds as before the rate change (25M / 100M / 250M₫).
   tiers: {
     bronze: 0,
-    silver: 500,
-    gold: 2_000,
-    platinum: 5_000,
+    silver: 2_500,
+    gold: 10_000,
+    platinum: 25_000,
   },
 };
 
@@ -283,9 +286,9 @@ function tierFor(balance: number): MembershipTier {
 /** Re-export for tests / consumers. */
 export const LOYALTY_CONFIG = CONFIG;
 
-/** Holding MORE than the threshold (strict) unlocks the member discount. */
+/** Holding at least the threshold unlocks the member discount. */
 export function memberDiscountEligible(pointsBalance: number): boolean {
-  return pointsBalance > CONFIG.michoDiscountThreshold;
+  return pointsBalance >= CONFIG.michoDiscountThreshold;
 }
 
 /** VND taken off the goods total by the opt-in member discount. Floored so

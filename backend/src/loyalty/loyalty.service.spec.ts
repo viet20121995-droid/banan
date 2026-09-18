@@ -3,9 +3,9 @@ import { BadRequestException } from '@nestjs/common';
 import { LoyaltyService, memberDiscountEligible, memberDiscountVnd } from './loyalty.service';
 
 describe('member discount helpers', () => {
-  it('needs strictly more than 100 Micho', () => {
-    expect(memberDiscountEligible(100)).toBe(false);
-    expect(memberDiscountEligible(101)).toBe(true);
+  it('needs at least 500 Micho (= 5 000 000₫ at 1 Micho / 10 000₫)', () => {
+    expect(memberDiscountEligible(499)).toBe(false);
+    expect(memberDiscountEligible(500)).toBe(true);
   });
   it('takes 5% off the goods total, floored, never negative', () => {
     expect(memberDiscountVnd(550_000)).toBe(27_500);
