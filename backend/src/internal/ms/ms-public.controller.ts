@@ -78,7 +78,8 @@ export class MsPublicController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  // The form autosaves on every tap — a quick shopper does >30 taps a minute.
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   @Post('save')
   @HttpCode(HttpStatus.OK)
   save(@Body() dto: PublicSaveDto) {

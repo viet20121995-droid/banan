@@ -30,6 +30,7 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
   final Map<String, dynamic> _pendingSave = {};
   bool _busy = false;
   bool _saving = false;
+  int _saveRetries = 0;
 
   InternalPublicApi get _api => ref.read(internalPublicApiProvider);
 
@@ -53,7 +54,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
     // was stripped) — the link itself must be reopened.
     if (widget.token.isEmpty) {
       setState(
-        () => _state = const Result.failure(ServerFailure(code: 'INTERNAL_MS_LINK_INVALID')),
+        () => _state = const Result.failure(
+            ServerFailure(code: 'INTERNAL_MS_LINK_INVALID')),
       );
       return;
     }
@@ -65,7 +67,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
   MsPublicView? get _view => _state?.valueOrNull;
 
   bool get _editable =>
-      _view != null && ['ASSIGNED', 'OPENED', 'NEEDS_REVISION'].contains(_view!.status);
+      _view != null &&
+      ['ASSIGNED', 'OPENED', 'NEEDS_REVISION'].contains(_view!.status);
 
   /// Queues a field for the debounced autosave.
   void _queueSave(Map<String, dynamic> patch) {
@@ -83,12 +86,37 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
     res.when(
-      success: (v) => setState(() => _state = Result.success(v)),
-      failure: (f) => showFailure(context, f),
+      success: (v) {
+        _saveRetries = 0;
+        setState(() => _state = Result.success(v));
+      },
+      failure: (f) {
+        // A dropped autosave silently loses answers (rate limit, flaky 4G):
+        // put the patch back under any newer edits and retry a few times.
+        List<Map<String, dynamic>> answersOf(Map<String, dynamic> m) =>
+            (m['answers'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        final newer = answersOf(_pendingSave);
+        final newerIds = newer.map((a) => a['questionId']).toSet();
+        final answers = [
+          ...answersOf(patch).where((a) => !newerIds.contains(a['questionId'])),
+          ...newer,
+        ];
+        final merged = {...patch, ..._pendingSave};
+        if (answers.isNotEmpty) merged['answers'] = answers;
+        _pendingSave
+          ..clear()
+          ..addAll(merged);
+        if (_saveRetries == 0) showFailure(context, f);
+        if (_saveRetries++ < 5) {
+          _saveDebounce?.cancel();
+          _saveDebounce = Timer(const Duration(seconds: 5), _flushSave);
+        }
+      },
     );
   }
 
-  Future<void> _saveAnswer(String questionId, {String? value, String? note}) async {
+  Future<void> _saveAnswer(String questionId,
+      {String? value, String? note}) async {
     _queueSave({
       'answers': [
         ..._collectPendingAnswers(questionId, value: value, note: note),
@@ -115,8 +143,10 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
     ];
   }
 
-  Future<void> _uploadEvidence({required String kind, String? questionId}) async {
-    final picked = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+  Future<void> _uploadEvidence(
+      {required String kind, String? questionId}) async {
+    final picked = await FilePicker.platform
+        .pickFiles(type: FileType.image, withData: true);
     final file = picked?.files.firstOrNull;
     if (file?.bytes == null || !mounted) return;
     final ext = (file!.extension ?? 'jpg').toLowerCase();
@@ -162,7 +192,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
           if (a?.value == 'YES' && (a?.note ?? '').isEmpty) return q.id;
         } else {
           if (a?.value == null) return q.id;
-          if (a?.value == 'NOT_AVAILABLE' && (a?.note ?? '').isEmpty) return q.id;
+          if (a?.value == 'NOT_AVAILABLE' && (a?.note ?? '').isEmpty)
+            return q.id;
         }
       }
     }
@@ -175,11 +206,15 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
     final v = _view;
     if (v == null) return;
     final invalid = _firstInvalid(v);
-    final receipts = (v.submission?.evidence ?? []).where((e) => e.kind == 'RECEIPT');
-    final products = (v.submission?.evidence ?? []).where((e) => e.kind == 'PRODUCT');
+    final receipts =
+        (v.submission?.evidence ?? []).where((e) => e.kind == 'RECEIPT');
+    final products =
+        (v.submission?.evidence ?? []).where((e) => e.kind == 'PRODUCT');
     if (invalid != null || receipts.isEmpty || products.isEmpty) {
-      var message = 'Còn câu chưa trả lời hoặc thiếu ghi chú — đã cuộn tới câu cần bổ sung.';
-      if (invalid == null && receipts.isEmpty) message = 'Bạn cần tải ảnh HÓA ĐƠN trước khi gửi.';
+      var message =
+          'Còn câu chưa trả lời hoặc thiếu ghi chú — đã cuộn tới câu cần bổ sung.';
+      if (invalid == null && receipts.isEmpty)
+        message = 'Bạn cần tải ảnh HÓA ĐƠN trước khi gửi.';
       if (invalid == null && receipts.isNotEmpty && products.isEmpty) {
         message = 'Bạn cần tải ảnh SẢN PHẨM trước khi gửi.';
       }
@@ -197,7 +232,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
     final ok = await confirmDialog(
       context,
       title: 'Gửi bài kiểm tra?',
-      message: 'Sau khi gửi, bạn không sửa được nữa (trừ khi Banan yêu cầu bổ sung). '
+      message:
+          'Sau khi gửi, bạn không sửa được nữa (trừ khi Banan yêu cầu bổ sung). '
           'Kiểm tra lại ảnh hóa đơn và các câu trả lời trước khi gửi.',
       confirmLabel: 'Gửi bài',
     );
@@ -291,9 +327,11 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle_outline, size: 64, color: BananColors.success),
+              const Icon(Icons.check_circle_outline,
+                  size: 64, color: BananColors.success),
               const SizedBox(height: BananSpacing.md),
-              Text('Đã nộp bài — cảm ơn bạn!', style: Theme.of(context).textTheme.titleLarge),
+              Text('Đã nộp bài — cảm ơn bạn!',
+                  style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: BananSpacing.sm),
               Text(
                 'Bài kiểm tra ${v.code} tại ${v.storeName} đã được ghi nhận'
@@ -373,17 +411,21 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
           borderRadius: BananRadii.rmd,
           border: Border.all(color: Colors.black12),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: children),
       );
 
   Widget _briefCard(MsPublicView v) => _card(
         children: [
-          Text('Nhiệm vụ ${v.code} · ${v.storeName}',
-              style: Theme.of(context).textTheme.titleMedium,),
+          Text(
+            'Nhiệm vụ ${v.code} · ${v.storeName}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: BananSpacing.sm),
           if (v.scenario != null) Text('Tình huống: ${v.scenario}'),
           if (v.productsToBuy != null) Text('Cần mua: ${v.productsToBuy}'),
-          if (v.budgetVnd != null) Text('Ngân sách: ${vnd.format(v.budgetVnd)}'),
+          if (v.budgetVnd != null)
+            Text('Ngân sách: ${vnd.format(v.budgetVnd)}'),
           if (v.deadline != null)
             Text('Hạn nộp: ${vnDateTime.format(v.deadline!.toLocal())}'),
           if (v.brief != null) ...[
@@ -408,7 +450,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
     ];
     return _card(
       children: [
-        Text('Thông tin thực tế', style: Theme.of(context).textTheme.titleMedium),
+        Text('Thông tin thực tế',
+            style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: BananSpacing.sm),
         Wrap(
           spacing: BananSpacing.sm,
@@ -435,7 +478,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
                         unawaited(_flushSave());
                       }
                     : null,
-                child: Text('$label: ${value == null ? '—' : vnTime.format(value.toLocal())}'),
+                child: Text(
+                    '$label: ${value == null ? '—' : vnTime.format(value.toLocal())}'),
               ),
           ],
         ),
@@ -479,23 +523,28 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
         Text('Ảnh bằng chứng', style: Theme.of(context).textTheme.titleMedium),
         for (final (kind, label, required) in groups) ...[
           const SizedBox(height: BananSpacing.sm),
-          Text(label,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: required &&
-                        (sub?.evidence.where((e) => e.kind == kind).isEmpty ?? true)
-                    ? BananColors.danger
-                    : null,
-              ),),
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: required &&
+                      (sub?.evidence.where((e) => e.kind == kind).isEmpty ??
+                          true)
+                  ? BananColors.danger
+                  : null,
+            ),
+          ),
           const SizedBox(height: BananSpacing.xs),
           Wrap(
             spacing: BananSpacing.sm,
             runSpacing: BananSpacing.sm,
             children: [
-              for (final ev in (sub?.evidence ?? []).where((e) => e.kind == kind))
+              for (final ev
+                  in (sub?.evidence ?? []).where((e) => e.kind == kind))
                 Stack(
                   children: [
-                    PublicEvidenceImage(token: widget.token, name: ev.url, size: 88),
+                    PublicEvidenceImage(
+                        token: widget.token, name: ev.url, size: 88),
                     if (_editable)
                       Positioned(
                         top: 0,
@@ -504,7 +553,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
                           onTap: () => _removeEvidence(ev),
                           child: const ColoredBox(
                             color: Colors.black54,
-                            child: Icon(Icons.close, size: 18, color: Colors.white),
+                            child: Icon(Icons.close,
+                                size: 18, color: Colors.white),
                           ),
                         ),
                       ),
@@ -523,7 +573,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
     );
   }
 
-  Widget _sectionCard(MsPublicView v, MsSectionView section, MsSubmissionView? sub) {
+  Widget _sectionCard(
+      MsPublicView v, MsSectionView section, MsSubmissionView? sub) {
     final isCritical = section.kind == 'CRITICAL';
     return _card(
       children: [
@@ -540,7 +591,10 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
             padding: const EdgeInsets.only(top: BananSpacing.xs),
             child: Text(
               'Chỉ chọn "Có" khi thực sự xảy ra — cần mô tả rõ và kèm ảnh nếu có thể.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: BananColors.danger),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: BananColors.danger),
             ),
           ),
         const SizedBox(height: BananSpacing.sm),
@@ -549,7 +603,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
     );
   }
 
-  Widget _questionRow(MsSectionView section, MsQuestionView q, MsSubmissionView? sub) {
+  Widget _questionRow(
+      MsSectionView section, MsQuestionView q, MsSubmissionView? sub) {
     final key = _questionKeys.putIfAbsent(q.id, GlobalKey.new);
     final a = sub?.answerFor(q.id);
     final isCritical = section.kind == 'CRITICAL';
@@ -578,7 +633,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
                     const ButtonSegment(value: 'YES', label: Text('Đạt')),
                     const ButtonSegment(value: 'NO', label: Text('Không đạt')),
                     if (q.allowNa)
-                      const ButtonSegment(value: 'NOT_AVAILABLE', label: Text('N/A')),
+                      const ButtonSegment(
+                          value: 'NOT_AVAILABLE', label: Text('N/A')),
                   ],
             selected: {if (a?.value != null) a!.value!},
             emptySelectionAllowed: true,
@@ -601,20 +657,25 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
                 decoration: InputDecoration(
                   isDense: true,
                   labelText: needsNote
-                      ? (isCritical ? 'Mô tả vi phạm (bắt buộc)' : 'Lý do N/A (bắt buộc)')
+                      ? (isCritical
+                          ? 'Mô tả vi phạm (bắt buộc)'
+                          : 'Lý do N/A (bắt buộc)')
                       : 'Ghi chú',
-                  errorText:
-                      needsNote && noteController.text.trim().isEmpty ? 'Bắt buộc nhập' : null,
+                  errorText: needsNote && noteController.text.trim().isEmpty
+                      ? 'Bắt buộc nhập'
+                      : null,
                 ),
               ),
             ),
-          if (_editable && (a?.value == 'NO' || (isCritical && a?.value == 'YES')))
+          if (_editable &&
+              (a?.value == 'NO' || (isCritical && a?.value == 'YES')))
             Padding(
               padding: const EdgeInsets.only(top: BananSpacing.xs),
               child: TextButton.icon(
                 icon: const Icon(Icons.add_a_photo_outlined, size: 16),
                 label: const Text('Thêm ảnh cho câu này'),
-                onPressed: () => _uploadEvidence(kind: 'ANSWER', questionId: q.id),
+                onPressed: () =>
+                    _uploadEvidence(kind: 'ANSWER', questionId: q.id),
               ),
             ),
           if (a != null && a.evidence.isNotEmpty)
@@ -626,7 +687,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
                   for (final ev in a.evidence)
                     Stack(
                       children: [
-                        PublicEvidenceImage(token: widget.token, name: ev.url, size: 64),
+                        PublicEvidenceImage(
+                            token: widget.token, name: ev.url, size: 64),
                         if (_editable)
                           Positioned(
                             top: 0,
@@ -635,7 +697,8 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
                               onTap: () => _removeEvidence(ev),
                               child: const ColoredBox(
                                 color: Colors.black54,
-                                child: Icon(Icons.close, size: 14, color: Colors.white),
+                                child: Icon(Icons.close,
+                                    size: 14, color: Colors.white),
                               ),
                             ),
                           ),
@@ -651,14 +714,16 @@ class _MsFormScreenState extends ConsumerState<MsFormScreen> {
 
   Widget _commentCard(MsSubmissionView? sub) => _card(
         children: [
-          Text('Đánh giá tổng quan', style: Theme.of(context).textTheme.titleMedium),
+          Text('Đánh giá tổng quan',
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: BananSpacing.sm),
           TextFormField(
             initialValue: sub?.overallComment ?? '',
             enabled: _editable,
             maxLines: 4,
             decoration: const InputDecoration(
-              labelText: 'Điều làm tốt nhất / điều cần cải thiện nhất, nhận xét tự do',
+              labelText:
+                  'Điều làm tốt nhất / điều cần cải thiện nhất, nhận xét tự do',
             ),
             onChanged: (v) => _queueSave({'overallComment': v}),
           ),
