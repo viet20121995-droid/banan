@@ -230,7 +230,8 @@ export class PromotionsService {
         const d = Math.round(cheapest);
         total += d;
         add(c, d);
-      } else if (!hasGift) {
+      } else {
+        // Under the minimum (with or without a gift in the cart) → nudge.
         hints.push({
           campaignId: c.id,
           name: c.name,

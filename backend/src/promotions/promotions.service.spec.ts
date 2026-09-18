@@ -168,6 +168,15 @@ describe('PromotionsService.evaluate — gift with purchase + birthday exclusion
     ]);
   });
 
+  it('a gift product in a cart under the minimum still yields a hint', async () => {
+    const r = await makeEvalService([GIFT]).evaluate({
+      lines: [{ productId: 'flan', quantity: 1, lineTotalVnd: 55_000 }],
+      subtotalVnd: 55_000,
+    });
+    expect(r.discountVnd).toBe(0);
+    expect(r.hints).toMatchObject([{ campaignId: 'gift', shortVnd: 250_000 }]);
+  });
+
   it('first-order 15% ignores birthday-cake lines and both campaigns apply independently', async () => {
     const r = await makeEvalService([GIFT, FIRST]).evaluate({
       lines: [
