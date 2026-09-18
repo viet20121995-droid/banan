@@ -95,6 +95,10 @@ abstract class AppStrings {
   String spendLookupDiscountOff(String threshold, int percent);
   String get spendLookupHasAccount;
   String get spendLookupCreateAccount;
+  String get promoLine;
+  String giftHintNow(String names);
+  String giftHintShort(String amount, String names);
+  String promoHintShort(String name, String amount);
   String memberDiscountTitle(int percent);
   String memberDiscountSub(String balance, int threshold);
   String get memberDiscountExclusive;
@@ -874,6 +878,17 @@ class _Vi extends AppStrings {
   @override
   String spendLookupDiscountOff(String threshold, int percent) =>
       'Chi tiêu trên $threshold sẽ được giảm $percent% mọi đơn online.';
+  @override
+  String get promoLine => 'Khuyến mãi';
+  @override
+  String giftHintNow(String names) =>
+      'Đơn của bạn được tặng 1 món: thêm $names vào giỏ, món rẻ nhất sẽ 0 ₫.';
+  @override
+  String giftHintShort(String amount, String names) =>
+      'Mua thêm $amount để được tặng 1 món ($names).';
+  @override
+  String promoHintShort(String name, String amount) =>
+      '$name: mua thêm $amount để được áp dụng.';
   @override
   String memberDiscountTitle(int percent) =>
       'Ưu đãi thành viên: giảm $percent%';
@@ -2359,6 +2374,17 @@ class _En extends AppStrings {
   @override
   String spendLookupDiscountOff(String threshold, int percent) =>
       'Spend over $threshold and every online order is $percent% off.';
+  @override
+  String get promoLine => 'Promotion';
+  @override
+  String giftHintNow(String names) =>
+      'Your order earns a free treat: add $names to the cart, the cheapest one is on us.';
+  @override
+  String giftHintShort(String amount, String names) =>
+      'Add $amount more to get a free treat ($names).';
+  @override
+  String promoHintShort(String name, String amount) =>
+      '$name: add $amount more to qualify.';
   @override
   String memberDiscountTitle(int percent) => 'Member discount: $percent% off';
   @override

@@ -764,15 +764,28 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
     final fee = _fulfillment == FulfillmentType.delivery ? deliveryFee : 0.0;
     final couponDiscount = _appliedCoupon?.discount ?? 0.0;
+    // Automatic campaigns (first order, gift with purchase, …) — same engine
+    // the order transaction runs, so the total shown is the total charged.
+    final promoKey = (
+      linesKey: cart.items
+          .map(
+            (i) => '${i.productId}:${i.quantity}:${i.lineTotal}:${i.isBundle}',
+          )
+          .join('|'),
+      storeId: _fulfillment == FulfillmentType.pickup ? _pickupStoreId : null,
+    );
+    final promo = ref.watch(_promoQuoteProvider(promoKey)).valueOrNull ??
+        PromoQuote.empty;
+    final campaignDiscount = promo.discountVnd.clamp(0.0, cart.subtotal);
     final memberEligible = membership?.memberDiscountEligible ?? false;
     final memberRate = membership?.memberDiscountRate ?? 0.05;
     // Preview only — the backend applies the rate after combos/auto-promos
-    // and floors it; this mirrors the common no-promo case.
+    // and floors it.
     final memberDiscount = _useMemberDiscount && memberEligible
-        ? (cart.subtotal * memberRate).floorToDouble()
+        ? ((cart.subtotal - campaignDiscount) * memberRate).floorToDouble()
         : 0.0;
     final subtotalAfterCoupon =
-        (cart.subtotal - couponDiscount - memberDiscount)
+        (cart.subtotal - campaignDiscount - couponDiscount - memberDiscount)
             .clamp(0.0, double.infinity);
     final redemptionOn = membership?.redemptionEnabled ?? false;
     final maxRedeemable = redemptionOn
@@ -780,9 +793,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         : 0;
     final pointsActuallyUsed = _pointsToRedeem.clamp(0, maxRedeemable);
     final pointsDiscount = pointsActuallyUsed * _vndPerPoint.toDouble();
-    final total =
-        (cart.subtotal - couponDiscount - memberDiscount - pointsDiscount + fee)
-            .clamp(0.0, double.infinity);
+    final total = (cart.subtotal -
+            campaignDiscount -
+            couponDiscount -
+            memberDiscount -
+            pointsDiscount +
+            fee)
+        .clamp(0.0, double.infinity);
     // Gift-card preview — backend applies min(balance, total) authoritatively;
     // this just shows the customer what they'll actually pay.
     final giftPreview = (_giftCode != null && _giftBalance != null)
@@ -1092,12 +1109,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   children: [
                     Text(s.savings, style: theme.textTheme.titleLarge),
                     const SizedBox(height: BananSpacing.md),
+                    if (promo.hints.isNotEmpty) ...[
+                      _PromoHints(hints: promo.hints, fmt: fmt),
+                      const SizedBox(height: BananSpacing.md),
+                    ],
                     _CouponField(
                       controller: _coupon,
                       applied: _appliedCoupon,
                       validating: _validatingCoupon,
                       error: _couponError,
-                      onApply: () => _applyCoupon(cart.subtotal, fee),
+                      onApply: () =>
+                          _applyCoupon(cart.subtotal - campaignDiscount, fee),
                       onClear: () => setState(() {
                         _coupon.clear();
                         _appliedCoupon = null;
@@ -1188,6 +1210,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   couponDiscount: couponDiscount,
                   memberDiscount: memberDiscount,
                   pointsDiscount: pointsDiscount,
+                  campaigns: promo.applied,
                   total: total,
                   fmt: fmt,
                 );
@@ -1883,6 +1906,7 @@ class _Summary extends ConsumerWidget {
     required this.pointsDiscount,
     required this.total,
     required this.fmt,
+    this.campaigns = const [],
   });
 
   final CartState cart;
@@ -1890,6 +1914,7 @@ class _Summary extends ConsumerWidget {
   final double couponDiscount;
   final double memberDiscount;
   final double pointsDiscount;
+  final List<PromoApplied> campaigns;
   final double total;
   final NumberFormat fmt;
 
@@ -1954,6 +1979,13 @@ class _Summary extends ConsumerWidget {
             ),
           const Divider(height: BananSpacing.lg),
           _Line(label: s.subtotal, value: fmt.format(cart.subtotal)),
+          for (final c in campaigns)
+            if (c.discountVnd > 0)
+              _Line(
+                label: '${s.promoLine} · ${c.name}',
+                value: '−${fmt.format(c.discountVnd)}',
+                accent: true,
+              ),
           if (couponDiscount > 0)
             _Line(
               label: s.coupon,
@@ -2340,6 +2372,117 @@ class _DeliveryQuoteBox extends ConsumerWidget {
 /// structural equality works — earlier versions included a raw
 /// `List<String>` which is reference-compared, so every widget rebuild
 /// produced a *new* family entry and the quote loop never settled.
+typedef _PromoKey = ({String linesKey, String? storeId});
+
+/// Auto-campaign preview for the current cart. Re-runs when the cart lines,
+/// the picked branch or the auth session change (a first-order promo depends
+/// on who is logged in). Failures fall back to "no promo" — the backend is
+/// authoritative at order time anyway.
+final _promoQuoteProvider =
+    FutureProvider.autoDispose.family<PromoQuote, _PromoKey>((ref, key) async {
+  ref.watch(authSessionProvider);
+  final cart = ref.read(cartControllerProvider);
+  if (cart.items.isEmpty) return PromoQuote.empty;
+  final res = await ref.read(promoQuoteApiProvider).quote(
+    lines: [
+      for (final i in cart.items)
+        PromoQuoteLine(
+          productId: i.productId,
+          quantity: i.quantity,
+          lineTotalVnd: i.lineTotal,
+          comboLine: i.isBundle,
+        ),
+    ],
+    subtotalVnd: cart.subtotal,
+    storeId: key.storeId,
+  );
+  return res.when(success: (q) => q, failure: (_) => PromoQuote.empty);
+});
+
+/// Nudges for campaigns within reach: "add X more for the first-order
+/// discount", "add a flan to get it free". Gift products link to their page.
+class _PromoHints extends ConsumerWidget {
+  const _PromoHints({required this.hints, required this.fmt});
+  final List<PromoHint> hints;
+  final NumberFormat fmt;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final h in hints)
+          Container(
+            margin: const EdgeInsets.only(bottom: BananSpacing.sm),
+            padding: const EdgeInsets.all(BananSpacing.md),
+            decoration: BoxDecoration(
+              borderRadius: BananRadii.rmd,
+              color: BananColors.primary.withValues(alpha: 0.06),
+              border: Border.all(
+                color: BananColors.primary.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      h.isGift
+                          ? Icons.card_giftcard_rounded
+                          : Icons.local_offer_outlined,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: BananSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        h.isGift
+                            ? (h.shortVnd <= 0
+                                ? s.giftHintNow(
+                                    h.giftProducts
+                                        .map((g) => g.name)
+                                        .join(' / '),
+                                  )
+                                : s.giftHintShort(
+                                    fmt.format(h.shortVnd),
+                                    h.giftProducts
+                                        .map((g) => g.name)
+                                        .join(' / '),
+                                  ))
+                            : s.promoHintShort(h.name, fmt.format(h.shortVnd)),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+                if (h.isGift && h.giftProducts.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: BananSpacing.sm),
+                    child: Wrap(
+                      spacing: BananSpacing.xs,
+                      runSpacing: BananSpacing.xs,
+                      children: [
+                        for (final g in h.giftProducts)
+                          ActionChip(
+                            label: Text(g.name),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => context.push('/product/${g.id}'),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 typedef _QuoteKey = ({String? wardCode, String productIdsCsv});
 
 /// Cached by (wardCode + cart hash) — re-fetched only when the customer

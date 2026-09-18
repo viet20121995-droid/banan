@@ -12,7 +12,8 @@ enum CampaignType {
   firstOrder,
   birthday,
   reactivation,
-  membershipBenefit;
+  membershipBenefit,
+  giftWithPurchase;
 
   /// Wire (API) string ↔ enum. Throws on an unknown value so a backend
   /// addition surfaces loudly instead of silently dropping campaigns.
@@ -36,6 +37,8 @@ enum CampaignType {
         return CampaignType.reactivation;
       case 'MEMBERSHIP_BENEFIT':
         return CampaignType.membershipBenefit;
+      case 'GIFT_WITH_PURCHASE':
+        return CampaignType.giftWithPurchase;
       default:
         throw FormatException('Unknown campaign type: $value');
     }
@@ -61,6 +64,8 @@ enum CampaignType {
         return 'REACTIVATION';
       case CampaignType.membershipBenefit:
         return 'MEMBERSHIP_BENEFIT';
+      case CampaignType.giftWithPurchase:
+        return 'GIFT_WITH_PURCHASE';
     }
   }
 
@@ -77,7 +82,8 @@ enum CampaignType {
       this == CampaignType.firstOrder ||
       this == CampaignType.birthday ||
       this == CampaignType.reactivation ||
-      this == CampaignType.membershipBenefit;
+      this == CampaignType.membershipBenefit ||
+      this == CampaignType.giftWithPurchase;
 }
 
 /// A promotion campaign as managed in the admin promotions screen.

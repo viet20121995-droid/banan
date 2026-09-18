@@ -16,6 +16,7 @@ const AUTO_TYPES: CampaignType[] = [
   'BIRTHDAY',
   'REACTIVATION',
   'MEMBERSHIP_BENEFIT',
+  'GIFT_WITH_PURCHASE',
 ];
 
 /** Per-line discount types (each line takes the single best match). */
@@ -53,9 +54,23 @@ export interface AppliedCampaign {
   discountVnd: number;
 }
 
+/** A campaign the cart is close to (or already qualifies for) but that has
+ *  nothing to discount yet — the checkout nudges the customer with it. */
+export interface PromoHint {
+  campaignId: string;
+  name: string;
+  type: CampaignType;
+  /** ₫ still missing to reach the campaign's minimum (0 = reached). */
+  shortVnd: number;
+  minSubtotalVnd: number;
+  /** GIFT_WITH_PURCHASE: the products the customer may add as the gift. */
+  giftProducts: { id: string; name: string }[];
+}
+
 export interface PromoResult {
   discountVnd: number;
   applied: AppliedCampaign[];
+  hints: PromoHint[];
 }
 
 interface CustomerContext {
@@ -83,26 +98,49 @@ export class PromotionsService {
    */
   async evaluate(input: {
     lines: CartLine[];
-    storeId: string;
+    /** Omitted = chain-wide campaigns only (checkout preview before a branch). */
+    storeId?: string;
     subtotalVnd: number;
     customerId?: string;
     now?: Date;
   }): Promise<PromoResult> {
     const now = input.now ?? new Date();
-    if (input.lines.length === 0) return { discountVnd: 0, applied: [] };
+    const none: PromoResult = { discountVnd: 0, applied: [], hints: [] };
+    if (input.lines.length === 0) return none;
 
     const productIds = [...new Set(input.lines.map((l) => l.productId))];
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, categoryId: true },
+      select: {
+        id: true,
+        categoryId: true,
+        category: { select: { isBirthdayCakeCategory: true } },
+      },
     });
     const catOf = new Map(products.map((p) => [p.id, p.categoryId]));
+    const bday = new Set(
+      products.filter((p) => p.category?.isBirthdayCakeCategory).map((p) => p.id),
+    );
+    // `excludeBirthdayCakes` on a campaign: birthday-collection lines neither
+    // get the discount nor count toward the campaign's minimum.
+    const excludes = (c: Campaign, line: CartLine) =>
+      Boolean(((c.config ?? {}) as Record<string, unknown>).excludeBirthdayCakes) &&
+      bday.has(line.productId);
+    const bdayVnd = input.lines
+      .filter((l) => bday.has(l.productId))
+      .reduce((s, l) => s + l.lineTotalVnd, 0);
+    const baseFor = (c: Campaign) =>
+      ((c.config ?? {}) as Record<string, unknown>).excludeBirthdayCakes
+        ? Math.max(0, input.subtotalVnd - bdayVnd)
+        : input.subtotalVnd;
 
     const campaigns = await this.prisma.campaign.findMany({
       where: {
         isActive: true,
         type: { in: AUTO_TYPES },
-        OR: [{ storeId: null }, { storeId: input.storeId }],
+        // No store yet (checkout preview before a branch is picked) → only
+        // chain-wide campaigns; `{ storeId: undefined }` would match ALL.
+        OR: input.storeId ? [{ storeId: null }, { storeId: input.storeId }] : [{ storeId: null }],
         AND: [
           { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
           { OR: [{ endsAt: null }, { endsAt: { gte: now } }] },
@@ -111,14 +149,15 @@ export class PromotionsService {
       orderBy: { priority: 'desc' },
     });
     const live = campaigns.filter((c) => this.isLiveNow(c, now));
-    if (live.length === 0) return { discountVnd: 0, applied: [] };
+    if (live.length === 0) return none;
 
     // Enforce usage caps before applying. Drop globally-exhausted campaigns,
     // and — when the customer is known — ones the user already hit their
     // per-user limit on. recordUsage() re-checks atomically in the order tx;
     // this just stops exhausted campaigns from quoting a discount.
     const eligible = await this.filterByUsage(live, input.customerId);
-    if (eligible.length === 0) return { discountVnd: 0, applied: [] };
+    if (eligible.length === 0) return none;
+    const hints: PromoHint[] = [];
 
     const applied = new Map<string, AppliedCampaign>();
     const add = (c: Campaign, amount: number) => {
@@ -142,6 +181,7 @@ export class PromotionsService {
       let bestDiscount = 0;
       let best: Campaign | null = null;
       for (const c of lineCampaigns) {
+        if (excludes(c, line)) continue;
         if (!this.matchesLine(c, line.productId, cat)) continue;
         const d = this.lineDiscount(c, line.lineTotalVnd);
         if (d > bestDiscount) {
@@ -158,10 +198,47 @@ export class PromotionsService {
     // 2. Buy X Get Y (cart-level) — combo lines excluded.
     const bxgyLines = input.lines.filter((l) => !l.comboLine);
     for (const c of eligible.filter((c) => c.type === 'BUY_X_GET_Y')) {
-      const d = this.bxgyDiscount(c, bxgyLines, catOf);
+      const d = this.bxgyDiscount(
+        c,
+        bxgyLines.filter((l) => !excludes(c, l)),
+        catOf,
+      );
       if (d > 0) {
         total += d;
         add(c, d);
+      }
+    }
+
+    // 2b. Gift with purchase (cart-level, independent of the other buckets):
+    //     when the paid base reaches `minSubtotal`, the cheapest unit of a
+    //     gift product already in the cart is free. Not in the cart yet →
+    //     a hint so the checkout can offer the gift.
+    for (const c of eligible.filter((c) => c.type === 'GIFT_WITH_PURCHASE')) {
+      const cfg = (c.config ?? {}) as Record<string, unknown>;
+      const giftIds = asStrArray(cfg.productIds);
+      const minSub = Number(cfg.minSubtotal) || 0;
+      if (giftIds.length === 0) continue;
+      let cheapest = Infinity;
+      for (const line of input.lines) {
+        if (line.comboLine || line.quantity <= 0 || !giftIds.includes(line.productId)) continue;
+        cheapest = Math.min(cheapest, line.lineTotalVnd / line.quantity);
+      }
+      const hasGift = Number.isFinite(cheapest);
+      // The gifted unit itself is not part of what the customer pays for.
+      const base = baseFor(c) - (hasGift ? cheapest : 0);
+      if (hasGift && base >= minSub) {
+        const d = Math.round(cheapest);
+        total += d;
+        add(c, d);
+      } else if (!hasGift) {
+        hints.push({
+          campaignId: c.id,
+          name: c.name,
+          type: c.type,
+          shortVnd: Math.max(0, minSub - base),
+          minSubtotalVnd: minSub,
+          giftProducts: await this.productNames(giftIds),
+        });
       }
     }
 
@@ -173,10 +250,23 @@ export class PromotionsService {
       let best: Campaign | null = null;
       for (const c of orderCampaigns) {
         if (!this.orderApplies(c, ctx, now)) continue;
-        const d = this.orderDiscount(c, input.subtotalVnd, ctx);
+        const base = baseFor(c);
+        const d = this.orderDiscount(c, base, ctx);
         if (d > bestDiscount) {
           bestDiscount = d;
           best = c;
+        }
+        // Qualifies as a customer but the cart is under the minimum → hint.
+        const minSub = Number(((c.config ?? {}) as Record<string, unknown>).minSubtotal) || 0;
+        if (d === 0 && minSub > 0 && base < minSub) {
+          hints.push({
+            campaignId: c.id,
+            name: c.name,
+            type: c.type,
+            shortVnd: minSub - base,
+            minSubtotalVnd: minSub,
+            giftProducts: [],
+          });
         }
       }
       if (best) {
@@ -185,7 +275,16 @@ export class PromotionsService {
       }
     }
 
-    return { discountVnd: total, applied: [...applied.values()] };
+    return { discountVnd: total, applied: [...applied.values()], hints };
+  }
+
+  private async productNames(ids: string[]): Promise<{ id: string; name: string }[]> {
+    const rows = await this.prisma.product.findMany({
+      where: { id: { in: ids }, isAvailable: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    return rows;
   }
 
   /** Drops campaigns that have hit their global `usageLimit`, and (when the
@@ -411,7 +510,7 @@ export class PromotionsService {
         select: { birthday: true, membershipTier: true },
       }),
       this.prisma.order.aggregate({
-        where: { customerId },
+        where: { customerId, status: { not: 'CANCELLED' } },
         _count: { _all: true },
         _max: { createdAt: true },
       }),

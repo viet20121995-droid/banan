@@ -1,6 +1,11 @@
 import { CampaignType } from '@prisma/client';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsNumber,
+  ValidateNested,
   IsDateString,
   IsEnum,
   IsInt,
@@ -109,4 +114,41 @@ export class UpdateCampaignDto {
   @IsInt()
   @Min(0)
   perUserLimit?: number;
+}
+
+/** One cart line for the checkout promo preview (`POST /promotions/quote`). */
+export class QuoteLineDto {
+  @IsString()
+  @MaxLength(80)
+  productId!: string;
+
+  @IsInt()
+  @Min(1)
+  quantity!: number;
+
+  @IsNumber()
+  @Min(0)
+  lineTotalVnd!: number;
+
+  /** True for a combo/bundle line (skipped by line-level promos). */
+  @IsOptional()
+  @IsBoolean()
+  comboLine?: boolean;
+}
+
+export class QuotePromotionsDto {
+  @IsOptional()
+  @IsUUID()
+  storeId?: string;
+
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => QuoteLineDto)
+  lines!: QuoteLineDto[];
+
+  /** Goods subtotal after combo pricing — the base the engine discounts. */
+  @IsNumber()
+  @Min(0)
+  subtotalVnd!: number;
 }

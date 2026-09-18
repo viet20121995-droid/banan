@@ -36,6 +36,7 @@ import 'customers_api.dart';
 import 'devices_api.dart';
 import 'dio_client.dart';
 import 'display_config_api.dart';
+import 'promo_quote_api.dart';
 import 'spend_lookup_api.dart';
 import 'geo_api.dart';
 import 'gift_cards_api.dart';
@@ -134,6 +135,11 @@ final Provider<ReportsApi> reportsApiProvider = Provider<ReportsApi>(
 final Provider<SpendLookupApi> spendLookupApiProvider =
     Provider<SpendLookupApi>(
   (ref) => SpendLookupApi(ref.watch(dioProvider)),
+);
+
+/// Checkout preview of the automatic campaign engine (`POST /promotions/quote`).
+final Provider<PromoQuoteApi> promoQuoteApiProvider = Provider<PromoQuoteApi>(
+  (ref) => PromoQuoteApi(ref.watch(dioProvider)),
 );
 
 /// Chain-wide customer display preferences (stock badge on/off, …).

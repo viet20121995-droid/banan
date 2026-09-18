@@ -31,6 +31,7 @@ const _editableTypes = <CampaignType>[
   CampaignType.birthday,
   CampaignType.reactivation,
   CampaignType.membershipBenefit,
+  CampaignType.giftWithPurchase,
 ];
 
 String _typeLabel(CampaignType t) {
@@ -53,6 +54,8 @@ String _typeLabel(CampaignType t) {
       return 'Kéo khách quay lại';
     case CampaignType.membershipBenefit:
       return 'Ưu đãi hạng thành viên';
+    case CampaignType.giftWithPurchase:
+      return 'Quà tặng theo đơn';
   }
 }
 
@@ -114,12 +117,11 @@ class CampaignsScreen extends ConsumerWidget {
                     ),
                     child: Text(
                       _typeLabel(type).toUpperCase(),
-                      style:
-                          Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(context).colorScheme.outline,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                              ),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Theme.of(context).colorScheme.outline,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                          ),
                     ),
                   ),
                   for (final c in byType[type]!) ...[
@@ -225,6 +227,10 @@ class _CampaignCard extends ConsumerWidget {
         return 'Mua $buy $gift';
       case CampaignType.membershipBenefit:
         return _membershipBenefitText();
+      case CampaignType.giftWithPurchase:
+        final min = (cfg['minSubtotal'] as num?)?.toDouble() ?? 0;
+        final n = ((cfg['productIds'] as List?) ?? const []).length;
+        return 'Đơn từ ${_vnd.format(min)}₫ tặng 1 trong $n món';
       case CampaignType.productDiscount:
       case CampaignType.categoryDiscount:
       case CampaignType.flashSale:
@@ -376,8 +382,7 @@ class _CampaignCard extends ConsumerWidget {
       ),
     );
     if (ok != true || !context.mounted) return;
-    final res =
-        await ref.read(campaignsRepositoryProvider).delete(campaign.id);
+    final res = await ref.read(campaignsRepositoryProvider).delete(campaign.id);
     if (!context.mounted) return;
     res.when(
       success: (_) => ref.invalidate(_campaignsProvider),
@@ -447,6 +452,9 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
   CampaignType _type = CampaignType.productDiscount;
   String _kind = 'PERCENT'; // PERCENT | FIXED
   bool _isActive = true;
+  // `config.excludeBirthdayCakes` — birthday-collection lines neither get
+  // the discount nor count toward the campaign's minimum.
+  bool _excludeBday = false;
 
   // Scope selections.
   final Set<String> _productIds = {};
@@ -494,6 +502,7 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
       // Phase-2 type-specific fields.
       final minSubtotal = cfg['minSubtotal'] as num?;
       if (minSubtotal != null) _minSubtotal.text = _numText(minSubtotal);
+      _excludeBday = cfg['excludeBirthdayCakes'] == true;
       final windowDays = cfg['windowDays'] as num?;
       if (windowDays != null) _windowDays.text = '${windowDays.toInt()}';
       final inactiveDays = cfg['inactiveDays'] as num?;
@@ -561,6 +570,7 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
 
   bool get _wantsProductScope =>
       _type == CampaignType.productDiscount ||
+      _type == CampaignType.giftWithPurchase ||
       _type == CampaignType.flashSale ||
       _type == CampaignType.happyHour ||
       _type == CampaignType.buyXGetY;
@@ -571,7 +581,12 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
       _type == CampaignType.happyHour ||
       _type == CampaignType.buyXGetY;
 
-  bool get _productScopeRequired => _type == CampaignType.productDiscount;
+  bool get _productScopeRequired =>
+      _type == CampaignType.productDiscount ||
+      _type == CampaignType.giftWithPurchase;
+  bool get _usesMinSubtotal =>
+      _type == CampaignType.firstOrder ||
+      _type == CampaignType.giftWithPurchase;
   bool get _categoryScopeRequired => _type == CampaignType.categoryDiscount;
 
   /// True for types whose primary discount is a single shared kind/value pair
@@ -580,11 +595,13 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
   /// single kind/value field.
   bool get _usesKindValue =>
       _type != CampaignType.buyXGetY &&
+      _type != CampaignType.giftWithPurchase &&
       _type != CampaignType.membershipBenefit;
 
   /// Whether the PERCENT/FIXED kind chips apply — shared by the single-value
   /// types and Membership Benefit (whose per-tier values use the same kind).
-  bool get _usesKind => _usesKindValue || _type == CampaignType.membershipBenefit;
+  bool get _usesKind =>
+      _usesKindValue || _type == CampaignType.membershipBenefit;
 
   Map<String, dynamic> _buildConfig() {
     final value = num.tryParse(_value.text.trim()) ?? 0;
@@ -592,7 +609,8 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
     // Benefit carries the shared kind plus a per-tier value map (no single
     // value); everything else shares a single kind/value pair.
     final Map<String, dynamic> config;
-    if (_type == CampaignType.buyXGetY) {
+    if (_type == CampaignType.buyXGetY ||
+        _type == CampaignType.giftWithPurchase) {
       config = <String, dynamic>{};
     } else if (_type == CampaignType.membershipBenefit) {
       config = <String, dynamic>{'kind': _kind};
@@ -658,7 +676,12 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
           tierValues['PLATINUM'] = platinum;
         }
         config['tierValues'] = tierValues;
+      // Gift with purchase — minimum + the gift products (customer adds one).
+      case CampaignType.giftWithPurchase:
+        config['minSubtotal'] = num.tryParse(_minSubtotal.text.trim()) ?? 0;
+        config['productIds'] = _productIds.toList();
     }
+    if (_excludeBday) config['excludeBirthdayCakes'] = true;
     return config;
   }
 
@@ -682,7 +705,8 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
     }
     if (_type == CampaignType.flashSale) {
       if (_startsAt == null || _endsAt == null) {
-        setState(() => _error = 'Flash Sale cần thời gian bắt đầu và kết thúc.');
+        setState(
+            () => _error = 'Flash Sale cần thời gian bắt đầu và kết thúc.');
         return;
       }
     }
@@ -802,9 +826,8 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
                   ChoiceChip(
                     label: Text(_typeLabel(t)),
                     selected: _type == t,
-                    onSelected: _isEdit
-                        ? null
-                        : (_) => setState(() => _type = t),
+                    onSelected:
+                        _isEdit ? null : (_) => setState(() => _type = t),
                   ),
               ],
             ),
@@ -901,19 +924,28 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
                 kind: _kind,
               ),
             ],
-            // First order — optional minimum subtotal gate.
-            if (_type == CampaignType.firstOrder) ...[
+            // First order — optional minimum subtotal gate. Gift with
+            // purchase — required minimum.
+            if (_usesMinSubtotal) ...[
               const SizedBox(height: BananSpacing.md),
               TextFormField(
                 controller: _minSubtotal,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Đơn tối thiểu (₫), tuỳ chọn',
-                  hintText: 'Trống = áp dụng mọi đơn đầu',
+                decoration: InputDecoration(
+                  labelText: _type == CampaignType.giftWithPurchase
+                      ? 'Đơn tối thiểu (₫) để được tặng'
+                      : 'Đơn tối thiểu (₫), tuỳ chọn',
+                  hintText: _type == CampaignType.giftWithPurchase
+                      ? 'VD: 250000'
+                      : 'Trống = áp dụng mọi đơn đầu',
                 ),
                 validator: (v) {
                   final t = v?.trim() ?? '';
-                  if (t.isEmpty) return null;
+                  if (t.isEmpty) {
+                    return _type == CampaignType.giftWithPurchase
+                        ? 'Nhập đơn tối thiểu'
+                        : null;
+                  }
                   final n = num.tryParse(t);
                   if (n == null || n < 0) return 'Nhập một số hợp lệ';
                   return null;
@@ -1005,8 +1037,10 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
             // Scope pickers.
             if (_wantsProductScope)
               _ScopePickerTile(
-                title: 'Sản phẩm áp dụng'
-                    '${_productScopeRequired ? '' : ' (trống = cả menu)'}',
+                title: _type == CampaignType.giftWithPurchase
+                    ? 'Món quà (khách chọn 1, món rẻ nhất 0₫)'
+                    : 'Sản phẩm áp dụng'
+                        '${_productScopeRequired ? '' : ' (trống = cả menu)'}',
                 count: _productIds.length,
                 onTap: _pickProducts,
               ),
@@ -1100,6 +1134,15 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
               ),
             ],
             const SizedBox(height: BananSpacing.md),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Không áp dụng cho Birthday Cakes Collection'),
+              subtitle: const Text(
+                'Bánh sinh nhật không được giảm và không tính vào đơn tối thiểu.',
+              ),
+              value: _excludeBday,
+              onChanged: (v) => setState(() => _excludeBday = v),
+            ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Kích hoạt ngay'),
@@ -1437,8 +1480,7 @@ class _CategoryMultiSelectSheetState
             const SizedBox(height: BananSpacing.sm),
             Expanded(
               child: async.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('Lỗi: $e')),
                 data: (categories) {
                   if (categories.isEmpty) {

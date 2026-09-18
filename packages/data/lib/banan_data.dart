@@ -16,6 +16,7 @@ export 'src/api/customers_api.dart';
 export 'src/api/devices_api.dart';
 export 'src/api/dio_client.dart';
 export 'src/api/display_config_api.dart';
+export 'src/api/promo_quote_api.dart';
 export 'src/api/spend_lookup_api.dart';
 export 'src/api/errors.dart';
 export 'src/api/geo_api.dart';
