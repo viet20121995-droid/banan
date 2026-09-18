@@ -2412,8 +2412,43 @@ final _promoQuoteProvider =
   return res.when(success: (q) => q, failure: (_) => PromoQuote.empty);
 });
 
+/// One tap on a gift chip drops the product's default variant into the cart
+/// (the customer stays on the checkout; the promo quote re-runs by itself).
+/// Falls back to the product page if the product can't be loaded.
+Future<void> _addGift(BuildContext context, WidgetRef ref, String id) async {
+  final s = ref.read(stringsProvider);
+  final res = await ref.read(catalogRepositoryProvider).product(id);
+  if (!context.mounted) return;
+  res.when(
+    success: (p) {
+      final available = p.variants.where((v) => v.isAvailable).toList();
+      final v = available.isNotEmpty
+          ? available.first
+          : (p.variants.isEmpty ? null : p.variants.first);
+      ref.read(cartControllerProvider.notifier).add(
+            CartItem(
+              productId: p.id,
+              variantId: v?.id ?? p.id,
+              productName: p.name,
+              variantLabel: v == null ? '' : '${v.size} · ${v.flavor}',
+              unitPrice: v == null ? p.basePrice : p.priceFor(v),
+              quantity: 1,
+              coverImage: p.coverImage,
+              isBirthdayCake: p.isBirthdayCake,
+              leadTimeHours: p.leadTimeHours,
+              availableDaysOfWeek: p.availableDaysOfWeek,
+            ),
+          );
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(s.addedToCart(p.name))));
+    },
+    failure: (_) => unawaited(context.push('/product/$id')),
+  );
+}
+
 /// Nudges for campaigns within reach: "add X more for the first-order
-/// discount", "add a flan to get it free". Gift products link to their page.
+/// discount", "add a flan to get it free". Gift chips add to the cart.
 class _PromoHints extends ConsumerWidget {
   const _PromoHints({required this.hints, required this.fmt});
   final List<PromoHint> hints;
@@ -2481,9 +2516,10 @@ class _PromoHints extends ConsumerWidget {
                       children: [
                         for (final g in h.giftProducts)
                           ActionChip(
+                            avatar: const Icon(Icons.add, size: 16),
                             label: Text(g.name),
                             visualDensity: VisualDensity.compact,
-                            onPressed: () => context.push('/product/${g.id}'),
+                            onPressed: () => _addGift(context, ref, g.id),
                           ),
                       ],
                     ),

@@ -209,10 +209,10 @@ export class PromotionsService {
       }
     }
 
-    // 2b. Gift with purchase (cart-level, independent of the other buckets):
-    //     when the paid base reaches `minSubtotal`, the cheapest unit of a
-    //     gift product already in the cart is free. Not in the cart yet →
-    //     a hint so the checkout can offer the gift.
+    // 2b. Gift with purchase: when the cart reaches `minSubtotal`, the
+    //     cheapest unit of a gift product already in the cart is free. Not in
+    //     the cart yet (or under the minimum) → a hint so the checkout can
+    //     offer the gift.
     for (const c of eligible.filter((c) => c.type === 'GIFT_WITH_PURCHASE')) {
       const cfg = (c.config ?? {}) as Record<string, unknown>;
       const giftIds = asStrArray(cfg.productIds);
@@ -224,8 +224,8 @@ export class PromotionsService {
         cheapest = Math.min(cheapest, line.lineTotalVnd / line.quantity);
       }
       const hasGift = Number.isFinite(cheapest);
-      // The gifted unit itself is not part of what the customer pays for.
-      const base = baseFor(c) - (hasGift ? cheapest : 0);
+      // "Đơn từ X" — the whole cart (gift included) counts toward X.
+      const base = baseFor(c);
       if (hasGift && base >= minSub) {
         const d = Math.round(cheapest);
         total += d;
