@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
+import { CukcukModule } from '../cukcuk/cukcuk.module';
 import { CouponsModule } from '../coupons/coupons.module';
 import { GeoModule } from '../geo/geo.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
@@ -27,6 +28,7 @@ import { OrdersService } from './orders.service';
     GeoModule,
     PromotionsModule,
     ManufacturingModule,
+    CukcukModule,
   ],
   controllers: [OrdersController, MerchantOrdersController],
   providers: [OrdersService, OrdersSchedulerService],

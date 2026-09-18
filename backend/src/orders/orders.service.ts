@@ -7,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { KitchenStatus, OrderSource, OrderStatus, Prisma, Refund, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -23,6 +24,7 @@ import {
   isWardServiceable,
 } from '../geo/hcm-wards';
 import { StoreRouterService } from '../geo/store-router.service';
+import { CukcukService } from '../cukcuk/cukcuk.service';
 import {
   LoyaltyService,
   LOYALTY_CONFIG,
@@ -199,6 +201,8 @@ export class OrdersService {
     private readonly deliveryConfig: DeliveryConfigService,
     private readonly promotions: PromotionsService,
     private readonly manufacturing: ManufacturingService,
+    /** Optional so the order specs need not wire the CukCuk sync. */
+    @Optional() private readonly cukcuk?: CukcukService,
   ) {}
 
   /**
@@ -317,6 +321,9 @@ export class OrdersService {
       customerId = guest.userId;
       if (guest.createdNew) {
         freshGuestUserId = guest.userId;
+        // A brand-new implicit account: pull any counter (CukCuk) history
+        // for this phone onto it right away, like registration does.
+        void this.cukcuk?.linkUser(guest.userId).catch(() => undefined);
       } else {
         guestBoundToExisting = true;
       }
