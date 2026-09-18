@@ -22,10 +22,15 @@ class PickupStorePicker extends ConsumerStatefulWidget {
   const PickupStorePicker({
     required this.selectedId,
     required this.onSelect,
+    this.blocked = const {},
     super.key,
   });
   final String? selectedId;
   final ValueChanged<String?> onSelect;
+
+  /// Branches that can't serve the cart (`Product.excludedStoreIds`):
+  /// store id → the product names it doesn't serve. Rendered disabled.
+  final Map<String, List<String>> blocked;
 
   @override
   ConsumerState<PickupStorePicker> createState() => _PickupStorePickerState();
@@ -52,9 +57,11 @@ class _PickupStorePickerState extends ConsumerState<PickupStorePicker> {
         // the list — skipping any that have pickup paused, so the customer
         // never lands on a blocked default. Falls back to the first store
         // if every branch is paused (so the picker still renders something).
+        bool canPick(Store st) =>
+            st.acceptsPickup && !widget.blocked.containsKey(st.id);
         if (widget.selectedId == null && stores.isNotEmpty) {
           final firstOpen = stores.firstWhere(
-            (s) => s.acceptsPickup,
+            canPick,
             orElse: () => stores.first,
           );
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -70,9 +77,9 @@ class _PickupStorePickerState extends ConsumerState<PickupStorePicker> {
                   (s) => s?.id == widget.selectedId,
                   orElse: () => null,
                 );
-        if (sel != null && !sel.acceptsPickup) {
+        if (sel != null && !canPick(sel)) {
           final next = stores.firstWhere(
-            (s) => s.acceptsPickup,
+            canPick,
             orElse: () => sel,
           );
           if (next.id != sel.id) {
@@ -99,10 +106,12 @@ class _PickupStorePickerState extends ConsumerState<PickupStorePicker> {
                       store: store,
                       selected: store.id == widget.selectedId,
                       // Disable selection when this branch isn't accepting
-                      // pickup; the badge inside the tile explains why.
-                      onTap: store.acceptsPickup
+                      // pickup or can't serve the cart; the badge inside the
+                      // tile explains why.
+                      onTap: canPick(store)
                           ? () => widget.onSelect(store.id)
                           : null,
+                      blockedItems: widget.blocked[store.id],
                     ),
                   ),
               ],
@@ -121,10 +130,14 @@ class _StoreOption extends StatelessWidget {
     required this.store,
     required this.selected,
     required this.onTap,
+    this.blockedItems,
   });
 
   final Store store;
   final bool selected;
+
+  /// Non-null when this branch doesn't serve something in the cart.
+  final List<String>? blockedItems;
 
   /// Null = this branch is paused and can't be selected. The tile renders
   /// dimmed with a "Đang tạm nghỉ" badge instead.
@@ -184,7 +197,9 @@ class _StoreOption extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: BananSpacing.sm),
-                        if (disabled)
+                        if (blockedItems != null)
+                          const _PausedChip(blocked: true)
+                        else if (disabled)
                           const _PausedChip()
                         else
                           _OpenClosedChip(open: store.isOpenNow),
@@ -198,9 +213,27 @@ class _StoreOption extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (blockedItems != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Consumer(
+                          builder: (context, ref, _) => Text(
+                            ref.watch(stringsProvider).branchCannotServeItems(
+                                  blockedItems!.join(', '),
+                                ),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontStyle: FontStyle.italic,
+                              color: theme.colorScheme.outline,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
                     // Why this branch is paused (e.g. "Hết nguyên liệu"), when
                     // the merchant set a reason. Only shown for paused tiles.
-                    if (disabled && (store.pauseReason?.isNotEmpty ?? false))
+                    else if (disabled &&
+                        (store.pauseReason?.isNotEmpty ?? false))
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
@@ -226,7 +259,10 @@ class _StoreOption extends StatelessWidget {
 
 /// "Đang tạm nghỉ" badge shown on a paused branch tile.
 class _PausedChip extends ConsumerWidget {
-  const _PausedChip();
+  const _PausedChip({this.blocked = false});
+
+  /// True = the branch can't serve the cart (vs. paused by the merchant).
+  final bool blocked;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -238,7 +274,9 @@ class _PausedChip extends ConsumerWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        ref.watch(stringsProvider).onBreak,
+        blocked
+            ? ref.watch(stringsProvider).branchCannotServe
+            : ref.watch(stringsProvider).onBreak,
         style: theme.textTheme.labelSmall?.copyWith(
           color: theme.colorScheme.onErrorContainer,
           fontWeight: FontWeight.w600,
@@ -477,8 +515,7 @@ String? dayConstraintNote({
   required List<String> names,
 }) {
   if (allowedDays.isEmpty || allowedDays.length >= 7) return null;
-  final days =
-      (allowedDays.toList()..sort()).map(s.weekdayShort).join(', ');
+  final days = (allowedDays.toList()..sort()).map(s.weekdayShort).join(', ');
   return s.onlySoldDaysNote(_whoLabel(s, names), days);
 }
 
@@ -590,8 +627,9 @@ class ScheduleSection extends ConsumerWidget {
   /// restriction; otherwise the picker hides disallowed days.
   final List<int> allowedDays;
 
-  Set<int>? get _allowed =>
-      (allowedDays.isEmpty || allowedDays.length >= 7) ? null : allowedDays.toSet();
+  Set<int>? get _allowed => (allowedDays.isEmpty || allowedDays.length >= 7)
+      ? null
+      : allowedDays.toSet();
 
   Future<void> _pick(BuildContext context) async {
     final earliest = earliestScheduleSlot(minLead, allowedDays: _allowed);
@@ -915,8 +953,7 @@ class _SchedulePickerSheetState extends ConsumerState<_SchedulePickerSheet> {
                           label: Text(hm.format(slot)),
                           selected: _selected != null &&
                               _selected!.isAtSameMomentAs(slot),
-                          onSelected: (_) =>
-                              setState(() => _selected = slot),
+                          onSelected: (_) => setState(() => _selected = slot),
                         ),
                     ],
                   ),

@@ -356,6 +356,7 @@ export class ProductsService {
           leadTimeHours: dto.leadTimeHours ?? null,
           availableDaysOfWeek: dto.availableDaysOfWeek ?? [],
           dailyMaxQuantity: dto.dailyMaxQuantity ?? null,
+          excludedStoreIds: dto.excludedStoreIds ?? [],
           flavorPickCount: dto.flavorPickCount ?? null,
           flavorOptions: dto.flavorOptions ?? [],
           variants: {
@@ -429,6 +430,9 @@ export class ProductsService {
           }),
           ...(dto.dailyMaxQuantity !== undefined && {
             dailyMaxQuantity: dto.dailyMaxQuantity,
+          }),
+          ...(dto.excludedStoreIds !== undefined && {
+            excludedStoreIds: dto.excludedStoreIds,
           }),
           ...(dto.flavorPickCount !== undefined && {
             flavorPickCount: dto.flavorPickCount,

@@ -77,6 +77,17 @@ export class DeliveryConfigService {
   /// Category is flagged `isBirthdayCakeCategory`. Drives the birthday delivery
   /// fee tier. (`config` is accepted for call-site compatibility but no longer
   /// used — detection moved from a Collection slug to the Category flag.)
+  /** Union of `Product.excludedStoreIds` over the cart — branches that
+   *  can't fulfil at least one line. */
+  async blockedStoreIdsFor(productIds: string[]): Promise<string[]> {
+    if (productIds.length === 0) return [];
+    const rows = await this.prisma.product.findMany({
+      where: { id: { in: productIds }, NOT: { excludedStoreIds: { isEmpty: true } } },
+      select: { excludedStoreIds: true },
+    });
+    return [...new Set(rows.flatMap((r) => r.excludedStoreIds))];
+  }
+
   async cartHasBirthdayCake(productIds: string[], _config?: DeliveryConfig): Promise<boolean> {
     if (productIds.length === 0) return false;
     const count = await this.prisma.product.count({

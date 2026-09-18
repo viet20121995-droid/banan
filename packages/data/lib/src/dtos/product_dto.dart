@@ -24,6 +24,7 @@ class ProductDto {
     this.leadTimeHours,
     this.availableDaysOfWeek = const [],
     this.dailyMaxQuantity,
+    this.excludedStoreIds = const [],
     this.averageRating = 0,
     this.reviewCount = 0,
     this.isBirthdayCake = false,
@@ -42,8 +43,7 @@ class ProductDto {
       basePrice: _toDouble(json['basePrice']),
       images: ((json['images'] as List?) ?? const []).cast<String>(),
       tags: ((json['tags'] as List?) ?? const []).cast<String>(),
-      preparationMinutes:
-          (json['preparationMinutes'] as num?)?.toInt() ?? 60,
+      preparationMinutes: (json['preparationMinutes'] as num?)?.toInt() ?? 60,
       isAvailable: json['isAvailable'] as bool? ?? true,
       isSeasonal: json['isSeasonal'] as bool? ?? false,
       seasonStart: json['seasonStart'] as String?,
@@ -53,6 +53,8 @@ class ProductDto {
           .map((e) => (e as num).toInt())
           .toList(),
       dailyMaxQuantity: (json['dailyMaxQuantity'] as num?)?.toInt(),
+      excludedStoreIds:
+          ((json['excludedStoreIds'] as List?) ?? const []).cast<String>(),
       averageRating: (json['averageRating'] as num?)?.toDouble() ?? 0,
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       isBirthdayCake: json['isBirthdayCake'] as bool? ?? false,
@@ -87,6 +89,7 @@ class ProductDto {
   final int? leadTimeHours;
   final List<int> availableDaysOfWeek;
   final int? dailyMaxQuantity;
+  final List<String> excludedStoreIds;
   final double averageRating;
   final int reviewCount;
   final bool isBirthdayCake;
@@ -114,6 +117,7 @@ class ProductDto {
         leadTimeHours: leadTimeHours,
         availableDaysOfWeek: availableDaysOfWeek,
         dailyMaxQuantity: dailyMaxQuantity,
+        excludedStoreIds: excludedStoreIds,
         averageRating: averageRating,
         reviewCount: reviewCount,
         isBirthdayCake: isBirthdayCake,

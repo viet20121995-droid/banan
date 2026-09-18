@@ -196,6 +196,7 @@ class CatalogRepositoryImpl implements CatalogRepository {
       'leadTimeHours': d.leadTimeHours,
       'availableDaysOfWeek': d.availableDaysOfWeek,
       'dailyMaxQuantity': d.dailyMaxQuantity,
+      if (d.excludedStoreIds != null) 'excludedStoreIds': d.excludedStoreIds,
       if (d.flavorPickCount != null) 'flavorPickCount': d.flavorPickCount,
       // Always sent (like availableDaysOfWeek): an empty array explicitly
       // clears a previously-saved flavour list when the composer is turned off.

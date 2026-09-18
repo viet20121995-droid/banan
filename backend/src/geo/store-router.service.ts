@@ -34,16 +34,23 @@ export class StoreRouterService {
   /// Resolves the fulfilling branch for a given ward. Returns null when the
   /// ward is unknown, has no verified centroid (outside the delivery zone),
   /// has no eligible stores, or no store has coordinates.
-  async pickNearestDeliveryStore(wardCode: string | null | undefined): Promise<RoutedStore | null> {
+  async pickNearestDeliveryStore(
+    wardCode: string | null | undefined,
+    excludeStoreIds: string[] = [],
+  ): Promise<RoutedStore | null> {
     const ward = findWard(wardCode);
     if (!isWardServiceable(ward)) return null;
-    return this.pickNearestForPoint({ lat: ward!.lat!, lng: ward!.lng! });
+    return this.pickNearestForPoint({ lat: ward!.lat!, lng: ward!.lng! }, excludeStoreIds);
   }
 
   /// Same as above but for an arbitrary point — exposed in case we add a
   /// "use my GPS location" feature later. Stays in this service so the
   /// filtering rules (pause flags, missing coords) live in one place.
-  async pickNearestForPoint(point: { lat: number; lng: number }): Promise<RoutedStore | null> {
+  async pickNearestForPoint(
+    point: { lat: number; lng: number },
+    /** Branches that can't serve something in the cart (Product.excludedStoreIds). */
+    excludeStoreIds: string[] = [],
+  ): Promise<RoutedStore | null> {
     // Only branches accepting delivery — both master and channel pause
     // must be off. NULL lat/lng excluded so we don't compute against
     // missing data.
@@ -53,6 +60,7 @@ export class StoreRouterService {
         isDeliveryPaused: false,
         lat: { not: null },
         lng: { not: null },
+        ...(excludeStoreIds.length > 0 && { id: { notIn: excludeStoreIds } }),
       },
       select: {
         id: true,

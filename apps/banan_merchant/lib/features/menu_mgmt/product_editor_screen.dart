@@ -21,6 +21,13 @@ final _editorProductProvider =
   );
 });
 
+/// Branch list for the "Không phục vụ tại chi nhánh" chips.
+final _editorStoresProvider =
+    FutureProvider.autoDispose<List<OrgOption>>((ref) async {
+  final res = await ref.watch(adminRepositoryProvider).stores();
+  return res.when(success: (l) => l, failure: (_) => const []);
+});
+
 class ProductEditorScreen extends ConsumerStatefulWidget {
   const ProductEditorScreen({this.productId, super.key});
 
@@ -47,6 +54,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
   String? _categoryId;
   bool _available = true;
   bool _seasonal = false;
+  // Branches that do NOT serve this product (Product.excludedStoreIds).
+  final Set<String> _excludedStoreIds = {};
 
   /// 0=Sun..6=Sat. Empty = every day (no restriction).
   List<int> _availableDow = [];
@@ -97,6 +106,9 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _categoryId = p.categoryId;
     _available = p.isAvailable;
     _seasonal = p.isSeasonal;
+    _excludedStoreIds
+      ..clear()
+      ..addAll(p.excludedStoreIds);
     _leadHours.text = p.leadTimeHours?.toString() ?? '';
     _dailyMax.text = p.dailyMaxQuantity?.toString() ?? '';
     _availableDow = List.of(p.availableDaysOfWeek);
@@ -198,6 +210,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       preparationMinutes: int.tryParse(_prep.text),
       isAvailable: _available,
       isSeasonal: _seasonal,
+      excludedStoreIds: _excludedStoreIds.toList()..sort(),
       leadTimeHours: leadRaw.isEmpty ? null : int.tryParse(leadRaw),
       availableDaysOfWeek: List.of(_availableDow)..sort(),
       dailyMaxQuantity: dailyRaw.isEmpty ? null : int.tryParse(dailyRaw),
@@ -406,6 +419,43 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                           title: const Text('Theo mùa'),
                           value: _seasonal,
                           onChanged: (v) => setState(() => _seasonal = v),
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                        Text(
+                          'Không phục vụ tại chi nhánh',
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                        const SizedBox(height: BananSpacing.xs),
+                        Text(
+                          'Chi nhánh được tick sẽ bị mờ ở bước thanh toán khi '
+                          'khách có món này; giao hàng tự bỏ qua chi nhánh đó.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: BananSpacing.sm),
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final stores =
+                                ref.watch(_editorStoresProvider).valueOrNull ??
+                                    const <OrgOption>[];
+                            return Wrap(
+                              spacing: BananSpacing.xs,
+                              runSpacing: BananSpacing.xs,
+                              children: [
+                                for (final st in stores)
+                                  FilterChip(
+                                    label: Text(st.name),
+                                    selected: _excludedStoreIds.contains(st.id),
+                                    onSelected: (v) => setState(() {
+                                      if (v) {
+                                        _excludedStoreIds.add(st.id);
+                                      } else {
+                                        _excludedStoreIds.remove(st.id);
+                                      }
+                                    }),
+                                  ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ),

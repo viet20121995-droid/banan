@@ -404,6 +404,8 @@ abstract class AppStrings {
 
   // Fulfillment widgets
   String get onBreak;
+  String get branchCannotServe;
+  String branchCannotServeItems(String items);
   String get useSavedAddress;
   String get someCakes;
   String andOthers(String list, int n);
@@ -1499,6 +1501,10 @@ class _Vi extends AppStrings {
 
   @override
   String get onBreak => 'Đang tạm nghỉ';
+  @override
+  String get branchCannotServe => 'Không phục vụ món trong giỏ';
+  @override
+  String branchCannotServeItems(String items) => 'Không phục vụ: $items';
   @override
   String get useSavedAddress => 'Dùng địa chỉ đã lưu';
   @override
@@ -3013,6 +3019,10 @@ class _En extends AppStrings {
 
   @override
   String get onBreak => 'On a break right now';
+  @override
+  String get branchCannotServe => 'Cannot serve items in your cart';
+  @override
+  String branchCannotServeItems(String items) => 'Does not serve: $items';
   @override
   String get useSavedAddress => 'Use a saved address';
   @override

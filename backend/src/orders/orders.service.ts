@@ -423,8 +423,16 @@ export class OrdersService {
         }
         storeId = dStore.id;
       } else {
-        // Auto-route to nearest open branch by ward centroid.
-        const routed = await this.storeRouter.pickNearestDeliveryStore(dto.address?.wardCode);
+        // Auto-route to nearest open branch by ward centroid, skipping
+        // branches that don't serve something in the cart (combo parts
+        // included).
+        const routed = await this.storeRouter.pickNearestDeliveryStore(
+          dto.address?.wardCode,
+          await this.deliveryConfig.blockedStoreIdsFor([
+            ...products.map((p) => p.id),
+            ...bundles.flatMap((b) => b.items.map((i) => i.productId)),
+          ]),
+        );
         if (routed) {
           storeId = routed.storeId;
         }
@@ -574,6 +582,7 @@ export class OrdersService {
     // Delivery fee keys off the REAL products in the order (combo-expanded
     // included) — e.g. the birthday-cake tier — so resolve from the line set.
     const orderedProductIds = [...new Set(lineCreates.map((l) => l.productId))];
+    await this.assertStoreCanServe(storeId, orderedProductIds);
     const deliveryFeeVndRaw =
       dto.fulfillmentType === 'DELIVERY'
         ? await this.computeDeliveryFee(storeId, dto.address?.wardCode, orderedProductIds)
@@ -2260,6 +2269,10 @@ export class OrdersService {
       { skipLeadTime: true },
     );
     const { products, lineCreates, subtotal } = await this.buildChannelLines(dto.items);
+    await this.assertStoreCanServe(
+      storeId,
+      products.map((p) => p.id),
+    );
     await this.assertProductsAcceptingOrder(products, targetAt, placedAt, !!dto.scheduledFor, {
       skipLeadTime: true,
     });
@@ -3128,6 +3141,29 @@ export class OrdersService {
    * error message suggests the next opening slot so the customer can
    * use "Schedule for later".
    */
+  /** A branch may be excluded per product (`Product.excludedStoreIds`) —
+   *  e.g. a drink only some branches can make. Rejects the order with the
+   *  offending product names so the customer can switch branch or drop the
+   *  line. Applies to web, counter and transfer orders alike. */
+  private async assertStoreCanServe(storeId: string, productIds: string[]): Promise<void> {
+    if (productIds.length === 0) return;
+    const blocked = await this.prisma.product.findMany({
+      where: { id: { in: productIds }, excludedStoreIds: { has: storeId } },
+      select: { name: true },
+    });
+    if (blocked.length === 0) return;
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+      select: { name: true },
+    });
+    throw new BadRequestException({
+      code: 'STORE_CANNOT_SERVE',
+      message:
+        `${store?.name ?? 'Chi nhánh này'} không phục vụ: ` +
+        `${blocked.map((p) => p.name).join(', ')}. Vui lòng chọn chi nhánh khác.`,
+    });
+  }
+
   private async assertStoreAcceptingOrder(
     storeId: string,
     channel: 'PICKUP' | 'DELIVERY',

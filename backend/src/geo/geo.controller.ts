@@ -158,7 +158,11 @@ export class GeoController {
         store: null,
       };
     }
-    const routed = await this.router.pickNearestForPoint({ lat: ward.lat!, lng: ward.lng! });
+    const blocked = await this.config.blockedStoreIdsFor(productIds);
+    const routed = await this.router.pickNearestForPoint(
+      { lat: ward.lat!, lng: ward.lng! },
+      blocked,
+    );
     if (!routed) {
       const fee = hasBirthdayCake ? cfg.birthdayCakeFeeOtherWardVnd : cfg.standardFeeOtherWardVnd;
       return {

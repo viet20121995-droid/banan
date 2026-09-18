@@ -23,6 +23,7 @@ class ProductDraft {
     this.leadTimeHours,
     this.availableDaysOfWeek = const [],
     this.dailyMaxQuantity,
+    this.excludedStoreIds,
     this.flavorPickCount,
     this.flavorOptions = const [],
   });
@@ -51,6 +52,9 @@ class ProductDraft {
   int? leadTimeHours;
   List<int> availableDaysOfWeek;
   int? dailyMaxQuantity;
+
+  /// Branches that do NOT serve the product; null = leave unchanged.
+  List<String>? excludedStoreIds;
 
   /// Macaron-set composer. When non-null and > 0, the customer must pick
   /// exactly this many flavours from [flavorOptions]. 0/null = off.
@@ -190,7 +194,8 @@ abstract class CatalogRepository {
   });
 
   Future<Result<Product, AppFailure>> createProduct(ProductDraft draft);
-  Future<Result<Product, AppFailure>> updateProduct(String id, ProductDraft draft);
+  Future<Result<Product, AppFailure>> updateProduct(
+      String id, ProductDraft draft);
 
   /// Removes the product. Returns `(deleted, archived)` so the UI can
   /// surface the correct outcome — hard delete vs archive-because-of-orders.

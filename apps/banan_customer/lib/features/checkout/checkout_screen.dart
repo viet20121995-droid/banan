@@ -919,6 +919,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         key: _pickupKey,
                         child: PickupStorePicker(
                           selectedId: _pickupStoreId,
+                          blocked: ref
+                                  .watch(_blockedStoresProvider(productIdsCsv))
+                                  .valueOrNull ??
+                              const {},
                           onSelect: (id) => setState(() {
                             _pickupStoreId = id;
                             if (id != null) _pickupError = null;
@@ -2385,6 +2389,28 @@ class _DeliveryQuoteBox extends ConsumerWidget {
 /// structural equality works — earlier versions included a raw
 /// `List<String>` which is reference-compared, so every widget rebuild
 /// produced a *new* family entry and the quote loop never settled.
+/// Branches that can't serve the cart: store id → product names. Read from
+/// each product's `excludedStoreIds` (catalog cache, so usually no network).
+/// Keyed by the expanded product-id list so combos count their parts.
+final _blockedStoresProvider = FutureProvider.autoDispose
+    .family<Map<String, List<String>>, String>((ref, productIdsCsv) async {
+  if (productIdsCsv.isEmpty) return const {};
+  final repo = ref.read(catalogRepositoryProvider);
+  final out = <String, List<String>>{};
+  for (final id in productIdsCsv.split(',')) {
+    final res = await repo.product(id);
+    res.when(
+      success: (p) {
+        for (final storeId in p.excludedStoreIds) {
+          out.putIfAbsent(storeId, () => []).add(p.name);
+        }
+      },
+      failure: (_) {},
+    );
+  }
+  return out;
+});
+
 typedef _PromoKey = ({String linesKey, String? storeId});
 
 /// Auto-campaign preview for the current cart. Re-runs when the cart lines,

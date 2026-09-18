@@ -26,6 +26,7 @@ class Product extends Equatable {
     this.leadTimeHours,
     this.availableDaysOfWeek = const [],
     this.dailyMaxQuantity,
+    this.excludedStoreIds = const [],
     this.averageRating = 0,
     this.reviewCount = 0,
     this.isBirthdayCake = false,
@@ -43,6 +44,7 @@ class Product extends Equatable {
   final double basePrice;
   final List<String> images;
   final List<ProductVariant> variants;
+
   /// Free-form merchant-set badges. E.g. ["Vegan", "Bestseller", "New"].
   final List<String> tags;
   final int preparationMinutes;
@@ -61,6 +63,9 @@ class Product extends Equatable {
 
   /// Hard daily quantity cap. Null = unlimited.
   final int? dailyMaxQuantity;
+
+  /// Branches that do NOT serve this product. Empty = every branch.
+  final List<String> excludedStoreIds;
 
   /// Average star rating across all PUBLISHED reviews (0..5). 0 means no
   /// reviews yet (use [reviewCount] == 0 to distinguish from "rated 0").
@@ -114,9 +119,8 @@ class Product extends Equatable {
       (v) => v.stockMode == StockMode.unlimited && v.isAvailable,
     );
     if (unlimited) return false;
-    return variants
-        .where((v) => v.isAvailable)
-        .every((v) => v.stockMode == StockMode.limited && (v.stockQty ?? 0) <= 0);
+    return variants.where((v) => v.isAvailable).every(
+        (v) => v.stockMode == StockMode.limited && (v.stockQty ?? 0) <= 0);
   }
 
   String? get coverImage => images.isEmpty ? null : images.first;
@@ -127,16 +131,12 @@ class Product extends Equatable {
   /// Min price across all variants — used for "from X" labels in lists.
   double get minPrice {
     if (variants.isEmpty) return basePrice;
-    return variants
-        .map((v) => basePrice + v.priceDelta)
-        .reduce(min);
+    return variants.map((v) => basePrice + v.priceDelta).reduce(min);
   }
 
   double get maxPrice {
     if (variants.isEmpty) return basePrice;
-    return variants
-        .map((v) => basePrice + v.priceDelta)
-        .reduce(max);
+    return variants.map((v) => basePrice + v.priceDelta).reduce(max);
   }
 
   bool get hasPriceRange => variants.length > 1 && minPrice != maxPrice;
@@ -162,6 +162,7 @@ class Product extends Equatable {
         leadTimeHours,
         availableDaysOfWeek,
         dailyMaxQuantity,
+        excludedStoreIds,
         averageRating,
         reviewCount,
         isBirthdayCake,

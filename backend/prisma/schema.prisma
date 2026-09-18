@@ -354,6 +354,10 @@ model Product {
   leadTimeHours       Int?
   availableDaysOfWeek Int[] @default([])
   dailyMaxQuantity    Int?
+  /// Branches that do NOT serve this product (e.g. a drink only some
+  /// branches can make). Checkout greys those branches out, delivery
+  /// routing skips them, and order creation rejects them.
+  excludedStoreIds    String[]  @default([])
 
   /// Flavor-composition products (macaron sets). When [flavorPickCount]
   /// is set, the customer must compose exactly that many picks from

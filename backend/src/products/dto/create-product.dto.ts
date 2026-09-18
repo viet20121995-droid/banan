@@ -100,6 +100,12 @@ export class CreateProductDto {
   @Min(1)
   dailyMaxQuantity?: number | null;
 
+  /** Store ids that do NOT serve this product. Empty = every branch. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  excludedStoreIds?: string[];
+
   /// Macaron-set flavour composer. When set, the customer picks exactly
   /// this many flavours from [flavorOptions] (repeats allowed) at
   /// checkout. Null = no composer.
