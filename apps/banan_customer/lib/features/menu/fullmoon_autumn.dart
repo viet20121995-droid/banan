@@ -8,7 +8,7 @@ bool get fullmoonAutumnCampaignEnabled {
 }
 
 const fullmoonAutumnBannerAsset =
-    'assets/campaigns/fullmoon-autumn-golden-kiwi.jpg';
+    'assets/campaigns/fullmoon-daifuku-green-plate.png';
 const fullmoonAutumnParadeAsset =
     'assets/campaigns/fullmoon-autumn-lantern-parade.png';
 
