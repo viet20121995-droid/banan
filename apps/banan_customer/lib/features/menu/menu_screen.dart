@@ -1466,8 +1466,8 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                       key: ValueKey(slide.image ?? 'slide-$i'),
                       decoration: BoxDecoration(
                         // Campaign art is pinned right at full height, so
-                        // the plum ground has to be solid behind it.
-                        color: slide.isAsset ? const Color(0xFF4A1727) : null,
+                        // the mustard ground has to be solid behind it.
+                        color: slide.isAsset ? const Color(0xFFD9A93A) : null,
                         gradient: slide.isAsset
                             ? null
                             : LinearGradient(
@@ -1488,7 +1488,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                               ? Align(
                                   alignment: Alignment.centerRight,
                                   // Left third of the art dissolves into the
-                                  // plum ground — no hard seam at any width.
+                                  // mustard ground — no hard seam at any width.
                                   child: ShaderMask(
                                     blendMode: BlendMode.dstIn,
                                     shaderCallback: (r) => const LinearGradient(
@@ -1526,9 +1526,9 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                       end: Alignment.centerRight,
                       stops: [0, 0.34, 0.6, 1],
                       colors: [
-                        Color(0xF24A1727),
-                        Color(0xB86F2833),
-                        Color(0x1F5B261D),
+                        Color(0xF2D9A93A),
+                        Color(0xB8E3BC5A),
+                        Color(0x1FE3C878),
                         Color(0x00000000),
                       ],
                     ),
@@ -1558,7 +1558,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                   child: Icon(
                     Icons.auto_awesome_rounded,
                     size: 28,
-                    color: Color(0xFFFFD875),
+                    color: Color(0xFF4A1727),
                   ),
                 ),
               ] else
@@ -1794,16 +1794,13 @@ class _FullmoonAutumnHeroContent extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.16),
                   borderRadius: BananRadii.rPill,
-                  border: Border.all(
-                    color: BananColors.goldLight.withValues(alpha: 0.7),
-                  ),
+                  border: Border.all(color: const Color(0xFF4A1727)),
                 ),
                 child: const Text(
                   'BANAN · FULLMOON AUTUMN',
                   style: TextStyle(
-                    color: Color(0xFFFFE9A6),
+                    color: Color(0xFF4A1727),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.6,
@@ -1818,12 +1815,9 @@ class _FullmoonAutumnHeroContent extends StatelessWidget {
                         ? theme.textTheme.headlineSmall
                         : theme.textTheme.headlineLarge)
                     ?.copyWith(
-                  color: Colors.white,
+                  color: const Color(0xFF4A1727),
                   fontWeight: FontWeight.w700,
                   height: 1.05,
-                  shadows: const [
-                    Shadow(blurRadius: 12, color: Color(0x66000000)),
-                  ],
                 ),
               ),
               const SizedBox(height: BananSpacing.sm),
@@ -1834,7 +1828,7 @@ class _FullmoonAutumnHeroContent extends StatelessWidget {
                         ? theme.textTheme.bodyMedium
                         : theme.textTheme.titleMedium)
                     ?.copyWith(
-                  color: const Color(0xFFFFF4DC),
+                  color: const Color(0xFF4A1727),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -1843,9 +1837,8 @@ class _FullmoonAutumnHeroContent extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onOrderTap,
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFD875),
-                    foregroundColor: const Color(0xFF4A1727),
-                    side: const BorderSide(color: Color(0xFFFFE9A6)),
+                    backgroundColor: const Color(0xFF4A1727),
+                    foregroundColor: const Color(0xFFFFF6E0),
                     padding: EdgeInsets.symmetric(
                       horizontal: compact ? BananSpacing.lg : BananSpacing.xl,
                       vertical: compact ? 10 : BananSpacing.md,
@@ -1869,7 +1862,7 @@ class _FullmoonAutumnPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final moonGold = Paint()
-      ..color = const Color(0xFFFFD875).withValues(alpha: 0.28)
+      ..color = const Color(0xFFFFF6E0).withValues(alpha: 0.45)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     final center = Offset(size.width * 0.77, size.height * 0.36);
