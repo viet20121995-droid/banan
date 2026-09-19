@@ -891,7 +891,7 @@ class _Vi extends AppStrings {
       'Đơn của bạn được tặng 1 món: thêm $names vào giỏ, món rẻ nhất sẽ 0 ₫.';
   @override
   String giftHintShort(String amount, String names) =>
-      'Mua thêm $amount để được tặng 1 món ($names).';
+      'Mua thêm $amount (chưa tính món tặng) để được tặng 1 món ($names).';
   @override
   String promoHintShort(String name, String amount) =>
       '$name: mua thêm $amount để được áp dụng.';
@@ -2394,7 +2394,7 @@ class _En extends AppStrings {
       'Your order earns a free treat: add $names to the cart, the cheapest one is on us.';
   @override
   String giftHintShort(String amount, String names) =>
-      'Add $amount more to get a free treat ($names).';
+      'Add $amount more (not counting the free treat) to get one ($names).';
   @override
   String promoHintShort(String name, String amount) =>
       '$name: add $amount more to qualify.';

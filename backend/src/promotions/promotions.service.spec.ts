@@ -142,16 +142,28 @@ const FIRST = {
 };
 
 describe('PromotionsService.evaluate — gift with purchase + birthday exclusion', () => {
-  it('frees the gift unit once the cart (gift included) reaches the minimum', async () => {
+  it('frees the gift unit once the paid amount (gift excluded) reaches the minimum', async () => {
     const r = await makeEvalService([GIFT]).evaluate({
       lines: [
-        { productId: 'mochi', quantity: 1, lineTotalVnd: 200_000 },
+        { productId: 'mochi', quantity: 1, lineTotalVnd: 250_000 },
         { productId: 'flan', quantity: 1, lineTotalVnd: 55_000 },
       ],
-      subtotalVnd: 255_000,
+      subtotalVnd: 305_000,
     });
     expect(r.discountVnd).toBe(55_000);
     expect(r.hints).toEqual([]);
+  });
+
+  it('a 250k cart that includes the gift pays under the minimum → no gift, hint for the rest', async () => {
+    const r = await makeEvalService([GIFT]).evaluate({
+      lines: [
+        { productId: 'mochi', quantity: 1, lineTotalVnd: 195_000 },
+        { productId: 'flan', quantity: 1, lineTotalVnd: 55_000 },
+      ],
+      subtotalVnd: 250_000,
+    });
+    expect(r.discountVnd).toBe(0);
+    expect(r.hints).toMatchObject([{ campaignId: 'gift', shortVnd: 55_000 }]);
   });
 
   it('does not count a birthday cake toward the minimum, and hints when no gift is in the cart', async () => {
@@ -174,7 +186,7 @@ describe('PromotionsService.evaluate — gift with purchase + birthday exclusion
       subtotalVnd: 55_000,
     });
     expect(r.discountVnd).toBe(0);
-    expect(r.hints).toMatchObject([{ campaignId: 'gift', shortVnd: 195_000 }]);
+    expect(r.hints).toMatchObject([{ campaignId: 'gift', shortVnd: 250_000 }]);
   });
 
   it('first-order 15% ignores birthday-cake lines; campaigns never stack — the best one wins', async () => {
