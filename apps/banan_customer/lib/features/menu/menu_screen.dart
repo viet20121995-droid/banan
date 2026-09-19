@@ -1466,8 +1466,8 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                       key: ValueKey(slide.image ?? 'slide-$i'),
                       decoration: BoxDecoration(
                         // Campaign art is pinned right at full height, so
-                        // the mustard ground has to be solid behind it.
-                        color: slide.isAsset ? const Color(0xFFD9A93A) : null,
+                        // the cream ground has to be solid behind it.
+                        color: slide.isAsset ? const Color(0xFFF3DDA6) : null,
                         gradient: slide.isAsset
                             ? null
                             : LinearGradient(
@@ -1488,7 +1488,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                               ? Align(
                                   alignment: Alignment.centerRight,
                                   // Left third of the art dissolves into the
-                                  // mustard ground — no hard seam at any width.
+                                  // cream ground — no hard seam at any width.
                                   child: ShaderMask(
                                     blendMode: BlendMode.dstIn,
                                     shaderCallback: (r) => const LinearGradient(
@@ -1526,9 +1526,9 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                       end: Alignment.centerRight,
                       stops: [0, 0.34, 0.6, 1],
                       colors: [
-                        Color(0xF2D9A93A),
-                        Color(0xB8E3BC5A),
-                        Color(0x1FE3C878),
+                        Color(0xF2F3DDA6),
+                        Color(0xB8F5E4B8),
+                        Color(0x1FF5E8C8),
                         Color(0x00000000),
                       ],
                     ),
@@ -1837,7 +1837,7 @@ class _FullmoonAutumnHeroContent extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onOrderTap,
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF4A1727),
+                    backgroundColor: const Color(0xFF8A5A12),
                     foregroundColor: const Color(0xFFFFF6E0),
                     padding: EdgeInsets.symmetric(
                       horizontal: compact ? BananSpacing.lg : BananSpacing.xl,
@@ -1862,15 +1862,9 @@ class _FullmoonAutumnPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final moonGold = Paint()
-      ..color = const Color(0xFFFFF6E0).withValues(alpha: 0.45)
+      ..color = const Color(0xFF8A5A12).withValues(alpha: 0.35)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
-    final center = Offset(size.width * 0.77, size.height * 0.36);
-    final baseRadius = size.shortestSide * 0.22;
-    for (var i = 0; i < 3; i++) {
-      canvas.drawCircle(center, baseRadius + i * 14, moonGold);
-    }
-
     final cloud = Path()
       ..moveTo(0, size.height * 0.84)
       ..cubicTo(
