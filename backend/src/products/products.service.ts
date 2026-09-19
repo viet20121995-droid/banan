@@ -120,10 +120,18 @@ export class ProductsService {
       this.prisma.product.findMany({
         where,
         include: PRODUCT_INCLUDE,
+        // Storefront order: seasonal first, then grouped by category (the
+        // merchant's category order), newest first inside a group.
         // `id` tiebreaker makes the sort total — without it, products sharing a
         // createdAt (common after a seed / bulk import) order differently per
         // query, so offset pagination can repeat or skip a row across pages.
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [
+          { isSeasonal: 'desc' },
+          { category: { sortOrder: 'asc' } },
+          { category: { name: 'asc' } },
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ],
         skip: (page - 1) * perPage,
         take: perPage,
       }),
