@@ -16,11 +16,10 @@
 <meta property="og:url" content="https://banancakes.vn/">
 <meta property="og:image" content="https://banancakes.vn/img/strawberry-cake.jpg">
 <meta name="twitter:card" content="summary_large_image">
-<!-- Address, opening hours and phone are deliberately absent: add them here as
-     "address", "openingHoursSpecification" and "telephone" once the owner supplies them.
-     Local search depends on these far more than on anything else on the page. -->
+<!-- Shop data mirrors GET api.banancakes.vn/api/v1/stores. When a shop opens, moves or changes
+     hours, update BOTH this block and the #stores section below. -->
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Bakery","name":"Banan Fukuoka Pâtisserie Saigon","alternateName":"Banan","url":"https://banancakes.vn/","image":"https://banancakes.vn/img/strawberry-cake.jpg","servesCuisine":"Japanese pâtisserie","foundingDate":"2021","potentialAction":{"@type":"OrderAction","target":"https://order.banancakes.vn/"}}
+{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://banancakes.vn/#brand","name":"Banan Fukuoka Pâtisserie Saigon","alternateName":"Banan","legalName":"CÔNG TY TNHH MTV DỊCH VỤ VƯỜN CHUỐI","url":"https://banancakes.vn/","logo":"https://banancakes.vn/favicon.png","foundingDate":"2021","telephone":"+84868897131"},{"@type":"Bakery","name":"Banan – Lê Thánh Tôn","url":"https://banancakes.vn/","image":"https://banancakes.vn/img/strawberry-cake.jpg","telephone":"+84867540939","servesCuisine":"Japanese pâtisserie","priceRange":"₫₫","address":{"@type":"PostalAddress","streetAddress":"15B8 Lê Thánh Tôn, Phường Bến Nghé","addressLocality":"Thành phố Hồ Chí Minh","addressCountry":"VN"},"openingHoursSpecification":[{"@type":"OpeningHoursSpecification","dayOfWeek":["Monday","Tuesday","Wednesday","Thursday"],"opens":"10:00","closes":"21:30"},{"@type":"OpeningHoursSpecification","dayOfWeek":["Friday","Saturday","Sunday"],"opens":"10:00","closes":"22:00"}],"parentOrganization":{"@id":"https://banancakes.vn/#brand"},"potentialAction":{"@type":"OrderAction","target":"https://order.banancakes.vn/"}},{"@type":"Bakery","name":"Banan – Ngô Quang Huy","url":"https://banancakes.vn/","image":"https://banancakes.vn/img/strawberry-cake.jpg","telephone":"+84868897131","servesCuisine":"Japanese pâtisserie","priceRange":"₫₫","address":{"@type":"PostalAddress","streetAddress":"34 Ngô Quang Huy, Phường An Khánh","addressLocality":"Thành phố Hồ Chí Minh","addressCountry":"VN"},"openingHoursSpecification":[{"@type":"OpeningHoursSpecification","dayOfWeek":["Monday","Tuesday","Wednesday","Thursday"],"opens":"10:00","closes":"21:30"},{"@type":"OpeningHoursSpecification","dayOfWeek":["Friday","Saturday","Sunday"],"opens":"10:00","closes":"22:00"}],"parentOrganization":{"@id":"https://banancakes.vn/#brand"},"potentialAction":{"@type":"OrderAction","target":"https://order.banancakes.vn/"}},{"@type":"Bakery","name":"Banan – Sư Vạn Hạnh","url":"https://banancakes.vn/","image":"https://banancakes.vn/img/strawberry-cake.jpg","telephone":"+84387835035","servesCuisine":"Japanese pâtisserie","priceRange":"₫₫","address":{"@type":"PostalAddress","streetAddress":"425A Sư Vạn Hạnh, Phường Hòa Hưng","addressLocality":"Thành phố Hồ Chí Minh","addressCountry":"VN"},"openingHoursSpecification":[{"@type":"OpeningHoursSpecification","dayOfWeek":["Monday","Tuesday","Wednesday","Thursday"],"opens":"10:00","closes":"21:30"},{"@type":"OpeningHoursSpecification","dayOfWeek":["Friday","Saturday","Sunday"],"opens":"10:00","closes":"22:00"}],"parentOrganization":{"@id":"https://banancakes.vn/#brand"},"potentialAction":{"@type":"OrderAction","target":"https://order.banancakes.vn/"}},{"@type":"Bakery","name":"Banan – Trường Sa","url":"https://banancakes.vn/","image":"https://banancakes.vn/img/strawberry-cake.jpg","telephone":"+84379555934","servesCuisine":"Japanese pâtisserie","priceRange":"₫₫","address":{"@type":"PostalAddress","streetAddress":"360 Trường Sa, Phường Cầu Kiệu","addressLocality":"Thành phố Hồ Chí Minh","addressCountry":"VN"},"openingHoursSpecification":[{"@type":"OpeningHoursSpecification","dayOfWeek":["Monday","Tuesday","Wednesday","Thursday"],"opens":"10:00","closes":"21:30"},{"@type":"OpeningHoursSpecification","dayOfWeek":["Friday","Saturday","Sunday"],"opens":"10:00","closes":"22:00"}],"parentOrganization":{"@id":"https://banancakes.vn/#brand"},"potentialAction":{"@type":"OrderAction","target":"https://order.banancakes.vn/"}}]}
 </script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Be+Vietnam+Pro:wght@400;500;600&family=Zen+Maru+Gothic:wght@700&display=swap">
 <style>
@@ -144,6 +143,21 @@ a{color:inherit}
 .shot img.on{opacity:1;transform:none}
 @media (max-width:720px){.list{grid-template-columns:1fr}.shot{position:relative;top:auto;order:-1;width:min(72vw,340px);justify-self:center}.list h2{order:-2}}
 
+/* ---------- stores ---------- */
+.stores{padding:clamp(48px,9vh,110px) var(--gutter);background:var(--matcha);color:var(--mochi);text-align:center}
+.stores h2{margin:0;font-family:var(--display);font-weight:800;font-size:clamp(2.2rem,6vw,4.6rem);line-height:.95;letter-spacing:-.03em}
+.hours{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 28px;margin:clamp(12px,2.4vh,24px) 0 clamp(20px,4vh,44px);font-size:1rem}
+.hours b{font-family:var(--display);font-weight:800;color:var(--kinako);margin-left:.4em;font-variant-numeric:tabular-nums}
+.store-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(12px,2vw,28px);max-width:1180px;margin-inline:auto;text-align:left}
+.store{font-style:normal;padding:clamp(14px,1.8vw,22px);border:2px solid rgba(255,246,233,.28);border-radius:18px}
+.store h3{margin:0 0 6px;font-family:var(--display);font-weight:800;font-size:clamp(1.05rem,1.7vw,1.45rem);line-height:1.1;text-transform:uppercase}
+.store p{margin:0;font-size:.92rem;line-height:1.45}
+.store p+p{margin-top:8px}
+.stores a{color:var(--kinako);text-underline-offset:3px;font-variant-numeric:tabular-nums}
+.stores .note{display:block;margin-top:clamp(18px,3.4vh,36px)}
+@media (max-width:899px){.store-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:380px){.store p{font-size:.84rem}}
+
 /* ---------- closing: bouncing letters + the one button ---------- */
 .end{padding:clamp(56px,11vh,130px) var(--gutter) clamp(40px,7vh,80px);text-align:center;background:var(--kinako);overflow:hidden}
 .bounce{margin:0;font-family:var(--display);font-weight:800;font-size:clamp(3.2rem,14vw,12rem);line-height:.95;letter-spacing:-.03em}
@@ -169,7 +183,9 @@ a{color:inherit}
 .deck.is-live #picks{z-index:4;display:flex;flex-direction:column;justify-content:center;padding-block:calc(var(--bar-h) + 28px) 24px}
 .deck.is-live #cats{z-index:5;display:flex;flex-direction:column;justify-content:center;padding-block:calc(var(--bar-h) + 28px) 20px}
 .deck.is-live #list{z-index:6;align-content:center;row-gap:clamp(8px,2svh,24px);padding-block:calc(var(--bar-h) + 28px) 20px}
-.deck.is-live #end{z-index:7;display:flex;flex-direction:column;justify-content:center;align-items:center;padding-block:calc(var(--bar-h) + 20px) 20px}
+.deck.is-live #stores{z-index:7;display:flex;flex-direction:column;justify-content:center;padding-block:calc(var(--bar-h) + 44px) 16px}
+.deck.is-live .stores h2{font-size:min(6vw,8svh)}
+.deck.is-live #end{z-index:8;display:flex;flex-direction:column;justify-content:center;align-items:center;padding-block:calc(var(--bar-h) + 20px) 20px}
 .deck.is-live .plate{will-change:transform}
 .deck.is-live .stage{position:absolute;inset:0}
 .deck.is-live .sense{position:absolute;inset:0;padding-top:calc(var(--bar-h) + 40px);padding-bottom:24px}
@@ -350,6 +366,34 @@ a{color:inherit}
     </div>
   </section>
 
+  <section class="stores" id="stores" aria-labelledby="storesTitle">
+    <h2 id="storesTitle">Ghé Banan</h2>
+    <p class="hours"><span>Thứ 2 – Thứ 5 <b>10:00 – 21:30</b></span><span>Thứ 6 – Chủ nhật <b>10:00 – 22:00</b></span></p>
+    <div class="store-grid">
+      <address class="store">
+        <h3>Lê Thánh Tôn</h3>
+        <p>15B8 Lê Thánh Tôn, P. Bến Nghé, TP.HCM</p>
+        <p><a href="tel:+84867540939">0867 540 939</a> · <a href="https://www.google.com/maps/search/?api=1&query=Banan%2015B8%20L%C3%AA%20Th%C3%A1nh%20T%C3%B4n%2C%20P.%20B%E1%BA%BFn%20Ngh%C3%A9%2C%20TP.HCM" target="_blank" rel="noopener">Chỉ đường</a></p>
+      </address>
+      <address class="store">
+        <h3>Ngô Quang Huy</h3>
+        <p>34 Ngô Quang Huy, P. An Khánh, TP.HCM</p>
+        <p><a href="tel:+84868897131">0868 897 131</a> · <a href="https://www.google.com/maps/search/?api=1&query=Banan%2034%20Ng%C3%B4%20Quang%20Huy%2C%20P.%20An%20Kh%C3%A1nh%2C%20TP.HCM" target="_blank" rel="noopener">Chỉ đường</a></p>
+      </address>
+      <address class="store">
+        <h3>Sư Vạn Hạnh</h3>
+        <p>425A Sư Vạn Hạnh, P. Hòa Hưng, TP.HCM</p>
+        <p><a href="tel:+84387835035">0387 835 035</a> · <a href="https://www.google.com/maps/search/?api=1&query=Banan%20425A%20S%C6%B0%20V%E1%BA%A1n%20H%E1%BA%A1nh%2C%20P.%20H%C3%B2a%20H%C6%B0ng%2C%20TP.HCM" target="_blank" rel="noopener">Chỉ đường</a></p>
+      </address>
+      <address class="store">
+        <h3>Trường Sa</h3>
+        <p>360 Trường Sa, P. Cầu Kiệu, TP.HCM</p>
+        <p><a href="tel:+84379555934">0379 555 934</a> · <a href="https://www.google.com/maps/search/?api=1&query=Banan%20360%20Tr%C6%B0%E1%BB%9Dng%20Sa%2C%20P.%20C%E1%BA%A7u%20Ki%E1%BB%87u%2C%20TP.HCM" target="_blank" rel="noopener">Chỉ đường</a></p>
+      </address>
+    </div>
+    <p class="note">Hotline <a href="tel:+84868897131">0868 897 131</a> · Công ty TNHH MTV Dịch vụ Vườn Chuối</p>
+  </section>
+
   <section class="end" id="end">
     <p class="end-strip" aria-hidden="true"><span>Mềm như mochi <i>●</i> Xanh như matcha <i>●</i> Đỏ như ichigo <i>●</i> </span><span>Mềm như mochi <i>●</i> Xanh như matcha <i>●</i> Đỏ như ichigo <i>●</i> </span><span>Mềm như mochi <i>●</i> Xanh như matcha <i>●</i> Đỏ như ichigo <i>●</i> </span></p>
     <p class="bounce" id="bounce" aria-label="Ăn bánh thôi">Ăn bánh thôi</p>
@@ -407,7 +451,7 @@ a{color:inherit}
 
     // The score, in timeline units (one unit = UNIT px of scrolling)
     var HERO=0, WALL=4, CUTS=plates.length, ZOOM=WALL+1+CUTS, LIFT=ZOOM+1, GRID=LIFT+.4,
-        PICKS=GRID+items.length, CATS=PICKS+3, LIST=CATS+5, STEP=.5, END=LIST+1+btns.length*STEP, TOTAL=END+2,
+        PICKS=GRID+items.length, CATS=PICKS+3, LIST=CATS+5, STEP=.5, STORES=LIST+1+btns.length*STEP, END=STORES+2.5, TOTAL=END+2,
         UNIT=c.wide?430:330;
 
     // hard cuts: short tweens of their own, fired when the playhead crosses a band, never scrubbed
@@ -460,7 +504,14 @@ a{color:inherit}
     // name list: the names step by on their own (see onTick)
     iris('list',LIST,'#cats');
     // closing
-    iris('end',END,'#list');
+    // stores: address, phone, hours
+    iris('stores',STORES,'#list');
+    // The floating order button sits on top of the last shop's phone and directions
+    // links on small phones; this scene has its own links, so it steps aside.
+    tl.to('.fab',{autoAlpha:0,duration:.3},STORES+.4);
+    tl.to('.fab',{autoAlpha:1,duration:.3},END+.6);
+    // closing
+    iris('end',END,'#stores');
     tl.to({},{duration:TOTAL-END-1},END+1);   // hold the last scene before the pin lets go
 
     return function(){
