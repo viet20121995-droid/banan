@@ -1,11 +1,12 @@
 # Deploy Banan
 
 Production is a single VPS running Docker Compose: NestJS backend, Postgres,
-Redis, and Caddy serving the four Flutter web apps as static files.
+Redis, and Caddy serving the four Flutter web apps and the brand site as static files.
 
 | Piece | Where |
 | --- | --- |
-| Customer | `https://banancakes.vn` |
+| Brand site (static, `web-intro/`) | `https://banancakes.vn` |
+| Customer ordering app | `https://order.banancakes.vn` |
 | Merchant | `https://merchant.banancakes.vn` |
 | Kitchen | `https://kitchen.banancakes.vn` |
 | Internal ops | `https://internal.banancakes.vn` |
@@ -14,8 +15,8 @@ Redis, and Caddy serving the four Flutter web apps as static files.
 | Env | `/opt/banan/infra/.env.prod` (see `infra/.env.prod.example`) |
 
 Caddy terminates TLS, proxies `api.*` to the backend container, and serves each
-app from `/opt/banan/web/{customer,merchant,kitchen,internal}`, bind-mounted
-read-only as `/srv/*`. Container names carry a `-1` suffix (`banan-backend-1`, …).
+app from `/opt/banan/web/{customer,merchant,kitchen,internal}` plus the brand
+site from `/opt/banan/web/intro`, bind-mounted read-only as `/srv/*`. Container names carry a `-1` suffix (`banan-backend-1`, …).
 
 ---
 
@@ -86,7 +87,7 @@ cd apps/banan_customer   # or banan_merchant / banan_kitchen
 flutter build web --release `
   --dart-define=BANAN_API_BASE_URL=$API `
   --dart-define=BANAN_WS_URL=$WS `
-  --dart-define=BANAN_CUSTOMER_APP_URL=https://banancakes.vn `
+  --dart-define=BANAN_CUSTOMER_APP_URL=https://order.banancakes.vn `
   --dart-define=BANAN_ENV=prod
 ```
 
@@ -102,6 +103,37 @@ other two:
 grep -c 'api.banancakes.vn' build/web/main.dart.js   # > 0
 grep -c 'localhost:3000'    build/web/main.dart.js   # 0
 grep -c 'wss://'            build/web/main.dart.js   # 0
+```
+
+### The brand site at the root domain
+
+`web-intro/` is plain HTML — no build. Ship it alone with:
+
+```bash
+ONLY=intro SERVER=banan bash infra/deploy-web.sh
+```
+
+The ordering app lived at the root domain until it moved to `order.*`. Three
+things in the root Caddy block exist only because of that, and removing any of
+them breaks returning customers:
+
+- `web-intro/flutter_service_worker.js` is a **kill switch**. Browsers that used
+  the app still hold its service worker for the root origin and would keep being
+  served the cached app. This file replaces that worker, clears its caches and
+  unregisters. Keep it permanently.
+- Every path that is not part of the brand site redirects to `order.*` with the
+  path intact — emailed `/track/<id>` links and printed `/survey` QRs rely on it.
+- `/firebase-messaging-sw.js` is still served from the app bundle so push
+  subscriptions taken on the old origin keep delivering.
+
+Moving origins also means customers are signed out once and their cart is
+empty on first visit to `order.*` (browser storage is per-origin).
+
+Caddy can only get a certificate for a hostname that resolves here. Validate a
+changed Caddyfile before restarting — a syntax error takes every site down:
+
+```bash
+docker compose --env-file infra/.env.prod -f docker-compose.prod.yml exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
 
 ### Shipping one app by hand

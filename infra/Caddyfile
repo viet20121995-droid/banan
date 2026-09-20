@@ -1,10 +1,13 @@
 # Banan all-in-one on one server (BizFly). Caddy auto-provisions Let's Encrypt
-# certs for all 4 hostnames and:
+# certs for every hostname below and:
 #   - proxies the API to the backend container
 #   - serves the 4 Flutter web builds as static SPAs
+#   - serves the static brand site at the root domain
 #
-# Set BASE_DOMAIN in infra/.env.prod (e.g. banan.com). DNS: point @, www,
-# api, merchant, kitchen, internal A-records at this server's public IP.
+# Set BASE_DOMAIN in infra/.env.prod (e.g. banan.com). DNS: point @, www, order,
+# api, merchant, kitchen, internal A-records at this server's public IP. A
+# hostname whose record is missing cannot get a certificate, so add the record
+# BEFORE deploying a Caddyfile that names it.
 
 # ── Flutter SPA serving + cache policy ────────────────────────────────────────
 # Flutter web does NOT content-hash main.dart.js / the service worker, so without
@@ -27,10 +30,48 @@ api.{$BASE_DOMAIN} {
 	reverse_proxy backend:3000
 }
 
-# ── Customer web (root + www) ─────────────────────────────────────────────────
-{$BASE_DOMAIN}, www.{$BASE_DOMAIN} {
+# ── Customer ordering app ─────────────────────────────────────────────────────
+order.{$BASE_DOMAIN} {
 	root * /srv/customer
 	import flutter_spa
+}
+
+# ── Brand site (root) ─────────────────────────────────────────────────────────
+# Static intro page from web-intro/. The ordering app lived here until it moved
+# to order.*, so every path that is not part of this site is an old app link
+# (emailed /track/<id>, printed /survey QRs, bookmarks) and is sent across with
+# its path intact.
+{$BASE_DOMAIN} {
+	encode gzip zstd
+
+	# Push subscriptions taken while the app lived on this origin belong to this
+	# worker. Keep serving it so those customers still get order updates; the
+	# click-through already lands on order.* via CUSTOMER_APP_BASE_URL.
+	handle /firebase-messaging-sw.js {
+		root * /srv/customer
+		file_server
+	}
+
+	@site path / /index.html /img/* /favicon.png /robots.txt /sitemap.xml /flutter_service_worker.js
+	handle @site {
+		root * /srv/intro
+		# flutter_service_worker.js here is a kill switch for the old app's worker;
+		# it and the page must never be served stale.
+		header /flutter_service_worker.js Cache-Control "no-cache, must-revalidate"
+		header /index.html Cache-Control "no-cache, must-revalidate"
+		header / Cache-Control "no-cache, must-revalidate"
+		file_server
+	}
+
+	# 302, not 308: browsers cache permanent redirects for good, which would make
+	# a rollback of this move impossible for anyone who had already followed one.
+	handle {
+		redir https://order.{$BASE_DOMAIN}{uri} 302
+	}
+}
+
+www.{$BASE_DOMAIN} {
+	redir https://{$BASE_DOMAIN}{uri} 308
 }
 
 # ── Merchant web ──────────────────────────────────────────────────────────────
@@ -53,6 +94,6 @@ internal.{$BASE_DOMAIN} {
 	# its trailing-slash twin) there permanently. Admin routes like
 	# /survey/reports must NOT match; they stay in this SPA behind ADMIN login.
 	@legacy_public_survey path /survey /survey/
-	redir @legacy_public_survey https://{$BASE_DOMAIN}/survey 308
+	redir @legacy_public_survey https://order.{$BASE_DOMAIN}/survey 308
 	import flutter_spa
 }

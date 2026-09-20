@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Banan Fukuoka Pâtisserie Saigon | Bánh Nhật: daifuku, mochi basque, bánh kem dâu</title>
+<meta name="description" content="Banan Fukuoka Pâtisserie Saigon: tiệm bánh Nhật tại Sài Gòn. Daifuku, mochi basque, bánh kem dâu, macaron và matcha đánh lạnh. Đặt bánh online tại order.banancakes.vn.">
+<link rel="canonical" href="https://banancakes.vn/">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta name="theme-color" content="#2F5B34">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="vi_VN">
+<meta property="og:site_name" content="Banan Fukuoka Pâtisserie Saigon">
+<meta property="og:title" content="Banan Fukuoka Pâtisserie Saigon">
+<meta property="og:description" content="Banan Fukuoka Pâtisserie Saigon: tiệm bánh Nhật tại Sài Gòn. Daifuku, mochi basque, bánh kem dâu, macaron và matcha đánh lạnh. Đặt bánh online tại order.banancakes.vn.">
+<meta property="og:url" content="https://banancakes.vn/">
+<meta property="og:image" content="https://banancakes.vn/img/strawberry-cake.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<!-- Address, opening hours and phone are deliberately absent: add them here as
+     "address", "openingHoursSpecification" and "telephone" once the owner supplies them.
+     Local search depends on these far more than on anything else on the page. -->
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Bakery","name":"Banan Fukuoka Pâtisserie Saigon","alternateName":"Banan","url":"https://banancakes.vn/","image":"https://banancakes.vn/img/strawberry-cake.jpg","servesCuisine":"Japanese pâtisserie","foundingDate":"2021","potentialAction":{"@type":"OrderAction","target":"https://order.banancakes.vn/"}}
+</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Be+Vietnam+Pro:wght@400;500;600&family=Zen+Maru+Gothic:wght@700&display=swap">
+<style>
+/* Single-look brand page: every color painted explicitly from these tokens. */
+:root{
+  --mochi:#FFF6E9;      /* ground */
+  --matcha:#2F5B34;     /* bar, order button */
+  --matcha-soft:#DDE8C9;
+  --azuki:#2A1614;      /* ink */
+  --ichigo:#E4536F;     /* accent */
+  --kinako:#E9B44C;
+  --ube:#6B4A8F;
+  --display:"Bricolage Grotesque","Be Vietnam Pro",system-ui,sans-serif;
+  --body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --jp:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+  --gutter:clamp(16px,4vw,56px);
+  --bar-h:64px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+body{background:var(--mochi);color:var(--azuki);font-family:var(--body);font-size:16px;line-height:1.6;overflow-x:clip}
+img{display:block}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--ichigo);outline-offset:3px;border-radius:6px}
+.note{font-size:.8rem;letter-spacing:.04em;opacity:.75}
+
+/* ---------- top bar: the rim of a big matcha disc ---------- */
+.bar{position:fixed;inset:0 0 auto 0;z-index:50;height:calc(var(--bar-h) + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) var(--gutter) 0;display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--mochi)}
+.bar::before{content:"";position:absolute;z-index:-1;left:-12%;right:-12%;top:-140px;height:calc(140px + var(--bar-h) + 34px + env(safe-area-inset-top,0px));background:var(--matcha);border-radius:0 0 50% 50% / 0 0 64px 64px}
+.bar-tag{font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.bar-tag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--kinako)}
+.brand{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:baseline;gap:8px;font-family:var(--display);font-weight:800;font-size:1.35rem;letter-spacing:.06em;text-decoration:none;white-space:nowrap}
+.brand span{font-family:var(--body);font-weight:500;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase}
+.bar-order{font-weight:600;font-size:.85rem;text-decoration:none;background:var(--mochi);color:var(--matcha);padding:8px 16px;border-radius:999px}
+.bar-order:hover{background:var(--kinako);color:var(--azuki)}
+@media (max-width:560px){.bar-tag{display:none}.brand{position:static;transform:none}.brand span{display:none}}
+
+/* ---------- hero: giant word slides sideways while pinned ---------- */
+.hero{position:relative;height:100svh;min-height:560px;overflow:hidden;display:flex;align-items:center;background:
+  radial-gradient(60vw 60vw at 85% 110%,var(--matcha-soft),transparent 60%),var(--mochi)}
+.hero-track{display:flex;align-items:center;gap:.12em;white-space:nowrap;font-family:var(--display);font-weight:800;font-size:clamp(9rem,46svh,30rem);line-height:.9;letter-spacing:-.04em;padding-left:var(--gutter);will-change:transform}
+.hero-track .lock{display:flex;flex-direction:column;font-size:.46em;line-height:.98;letter-spacing:-.02em;color:var(--matcha);text-transform:uppercase;padding-inline:.2em}
+.hero-track .lock i{font-style:normal}
+.hero-track .sgn{color:var(--ichigo);padding-right:var(--gutter)}
+.ring{position:relative;flex:none;width:.95em;height:.95em;margin-inline:.06em}
+.ring img{position:absolute;inset:11%;width:78%;height:78%;border-radius:50%;object-fit:cover}
+.ring svg{position:absolute;inset:0;width:100%;height:100%;animation:spin 22s linear infinite}
+.ring .disc{fill:var(--azuki)}
+.ring text{font-family:var(--body);font-weight:600;font-size:6.6px;fill:var(--mochi);text-transform:uppercase}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hero-blurb{position:absolute;left:var(--gutter);bottom:clamp(20px,5svh,56px);max-width:34ch;font-size:clamp(.92rem,1.1vw,1.05rem);font-style:italic}
+.hero-hint{position:absolute;left:var(--gutter);top:calc(var(--bar-h) + 56px);font-size:.75rem;letter-spacing:.04em}
+.hero-hint::before{content:"↓";display:block;font-size:1.4rem;line-height:1;animation:nudge 1.6s ease-in-out infinite}
+@keyframes nudge{50%{transform:translateY(8px)}}
+/* phones: same pinned travel, smaller type */
+@media (max-width:899px){
+  .hero-track{font-size:clamp(7rem,32svh,14rem)}
+  .hero-hint{top:calc(var(--bar-h) + 44px)}
+}
+
+/* ---------- wall of words with a filling circle ---------- */
+.wall{position:relative;padding-block:clamp(40px,8vh,96px);background:var(--mochi);overflow:hidden}
+.row{display:flex;white-space:nowrap;font-family:var(--display);font-weight:800;font-size:clamp(1.6rem,4.4vw,3.6rem);line-height:1.18;text-transform:uppercase;letter-spacing:-.01em}
+.row>span{flex:none;will-change:transform;padding-right:.6em;animation:slide 38s linear infinite}
+.row:nth-child(even)>span{animation-direction:reverse}
+.row:nth-child(3n)>span{color:var(--matcha)}
+@keyframes slide{to{transform:translateX(-100%)}}
+.plate{position:absolute;inset:0;margin:auto;width:clamp(200px,34vw,420px);height:fit-content;aspect-ratio:1;max-width:100%;border-radius:50%;overflow:hidden;border:10px solid var(--mochi);box-shadow:0 18px 50px rgba(42,22,20,.28)}
+.plate img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0}
+.plate img:first-child{opacity:1}
+/* ---------- circle grid, three themes ---------- */
+.senses{background:var(--mochi)}
+.sense{--tone:var(--matcha);display:grid;grid-template-columns:1fr minmax(0,1.4fr) 1fr;align-items:center;justify-items:center;gap:clamp(12px,3vw,40px);padding:clamp(40px,8vh,80px) var(--gutter)}
+.sense:nth-child(2){--tone:var(--ichigo)}
+.sense:nth-child(3){--tone:var(--ube)}
+.col{display:grid;gap:clamp(14px,3.4svh,34px);justify-items:center}
+.dot{width:clamp(44px,9svh,96px);aspect-ratio:1;max-width:100%;border-radius:50%;object-fit:cover;will-change:transform}
+.mid{display:grid;gap:clamp(12px,3svh,28px);justify-items:center;text-align:center}
+.mid h2{margin:0;font-family:var(--display);font-weight:800;font-size:clamp(1.3rem,3vw,2.4rem);line-height:1.05;text-transform:uppercase;text-wrap:balance;max-width:12ch}
+.arc{width:clamp(70px,10vw,130px);height:16px;stroke:var(--tone);stroke-width:7;fill:none;stroke-linecap:round}
+.mid p{margin:0;max-width:30ch;font-size:.92rem}
+/* ---------- house picks ---------- */
+.picks{position:relative;overflow:hidden;padding:clamp(56px,10vh,120px) var(--gutter);text-align:center;background:var(--matcha-soft)}
+.kicker{margin:0 0 8px;font-size:.78rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
+.picks-ghost{position:absolute;left:0;top:34%;white-space:nowrap;font-family:var(--display);font-weight:800;font-size:clamp(4rem,15vw,13rem);line-height:1;letter-spacing:-.03em;color:var(--azuki);will-change:transform}
+.pair{position:relative;display:flex;justify-content:center;margin-top:clamp(20px,4vh,40px)}
+.pair img{width:clamp(150px,30vw,380px);aspect-ratio:1;max-width:48%;border-radius:50%;object-fit:cover;border:8px solid var(--mochi);box-shadow:0 20px 50px rgba(42,22,20,.25)}
+.pair img+img{margin-left:-6%;margin-top:8%}
+.picks-names{position:relative;margin:clamp(28px,5vh,56px) auto 0;max-width:640px;display:grid;gap:6px;font-family:var(--display);font-weight:500;font-size:clamp(1.2rem,2.4vw,1.9rem);text-transform:uppercase}
+.picks-names span:first-child{justify-self:start}
+.picks-names span:last-child{justify-self:end}
+
+/* ---------- collections: vertical scroll, horizontal travel ---------- */
+.cats{position:relative;background:var(--mochi);padding-block:clamp(48px,8vh,96px) clamp(32px,6vh,72px);overflow:hidden}
+.cats-head{padding-inline:var(--gutter);display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 20px;margin-bottom:clamp(20px,4vh,40px)}
+.cats-head h2{margin:0;font-family:var(--display);font-weight:800;font-size:clamp(2.4rem,7vw,5.5rem);line-height:.95;letter-spacing:-.03em}
+.cats-track{display:flex;gap:clamp(16px,2.4vw,36px);padding-inline:var(--gutter);overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.cats-track::-webkit-scrollbar{display:none}
+.card{flex:none;width:clamp(220px,26vw,360px);scroll-snap-align:start;text-decoration:none;display:grid;gap:12px}
+.card:nth-child(even){margin-top:clamp(24px,7svh,80px)}
+.card-pic{position:relative;aspect-ratio:4/5;overflow:hidden;background:var(--matcha-soft)}
+.card:nth-child(3n+1) .card-pic{border-radius:999px 999px 18px 18px}
+.card:nth-child(3n+2) .card-pic{border-radius:18px}
+.card:nth-child(3n) .card-pic{border-radius:18px 18px 999px 999px}
+.card-pic img{width:100%;height:100%;object-fit:cover;transition:transform .7s cubic-bezier(.2,.7,.2,1)}
+.card:hover img,.card:focus-visible img{transform:scale(1.07)}
+.card-name{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-family:var(--display);font-weight:800;font-size:1.15rem;text-transform:uppercase;line-height:1.1}
+.card-name small{font-family:var(--body);font-weight:500;font-size:.78rem;color:var(--ichigo);text-transform:none;white-space:nowrap}
+
+/* ---------- name list, photo follows the pointer ---------- */
+.list{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:clamp(20px,5vw,80px);align-items:start;padding:clamp(48px,9vh,110px) var(--gutter);background:var(--azuki);color:var(--mochi)}
+.list h2{grid-column:1/-1;margin:0;font-family:var(--display);font-weight:800;font-size:clamp(2.2rem,6vw,4.6rem);line-height:.95;letter-spacing:-.03em}
+.names{list-style:none;margin:0;padding:0;display:grid}
+.names button{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer;padding:.42em 0;border-bottom:1px solid rgba(255,246,233,.22);font-family:var(--display);font-weight:500;font-size:clamp(1.15rem,2.3vw,1.9rem);line-height:1.15;opacity:.45;transition:opacity .25s,padding-left .25s,color .25s}
+.names button:hover,.names button.on{opacity:1;padding-left:.5em;color:var(--kinako)}
+.names button:focus-visible{outline:3px solid var(--ichigo);opacity:1}
+.shot{position:sticky;top:calc(var(--bar-h) + 40px);aspect-ratio:1;max-width:100%;border-radius:50%;overflow:hidden;background:#3a2421}
+.shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.06);transition:opacity .4s,transform .8s}
+.shot img.on{opacity:1;transform:none}
+@media (max-width:720px){.list{grid-template-columns:1fr}.shot{position:relative;top:auto;order:-1;width:min(72vw,340px);justify-self:center}.list h2{order:-2}}
+
+/* ---------- closing: bouncing letters + the one button ---------- */
+.end{padding:clamp(56px,11vh,130px) var(--gutter) clamp(40px,7vh,80px);text-align:center;background:var(--kinako);overflow:hidden}
+.bounce{margin:0;font-family:var(--display);font-weight:800;font-size:clamp(3.2rem,14vw,12rem);line-height:.95;letter-spacing:-.03em}
+.bounce span{display:inline-block;animation:bob 2.4s ease-in-out infinite;animation-delay:calc(var(--i)*-.17s)}
+.bounce span:nth-child(3n){color:var(--matcha)}
+.bounce span:nth-child(4n+1){color:var(--ichigo)}
+@keyframes bob{50%{transform:translateY(-.09em) rotate(-3deg)}}
+.cta{display:inline-flex;align-items:center;gap:12px;margin-top:clamp(24px,5vh,48px);padding:18px 34px;border-radius:999px;background:var(--azuki);color:var(--mochi);font-weight:600;font-size:1.1rem;text-decoration:none;transition:transform .2s,background .2s}
+.cta:hover{transform:translateY(-3px);background:var(--matcha)}
+.end .note{display:block;margin-top:clamp(28px,5vh,56px)}
+.end-strip{display:flex;margin:0 calc(var(--gutter)*-1) clamp(20px,4vh,44px);white-space:nowrap;font-family:var(--display);font-weight:800;font-size:clamp(1.4rem,3.4vw,2.6rem);line-height:1.1;border-block:2px solid var(--azuki);padding-block:.35em}
+.end-strip span{flex:none;padding-right:.4em;animation:slide 30s linear infinite}
+.end-strip i{font-style:normal;color:var(--ichigo)}
+
+/* ---------- live mode: the whole page is one pinned deck of full-screen scenes ----------
+   Each scene opens through a growing circle (the same gesture as the plate zoom).
+   Without JS or with reduced motion none of this applies and the sections simply stack. */
+.deck.is-live{position:relative;height:100svh;overflow:hidden}
+.deck.is-live>section{position:absolute;inset:0;overflow:hidden;will-change:clip-path}
+.deck.is-live #hero{z-index:1;min-height:0;height:auto}
+.deck.is-live #senses{z-index:2}
+.deck.is-live #wall{z-index:3;display:flex;flex-direction:column;justify-content:center;padding-top:var(--bar-h)}
+.deck.is-live #picks{z-index:4;display:flex;flex-direction:column;justify-content:center;padding-block:calc(var(--bar-h) + 28px) 24px}
+.deck.is-live #cats{z-index:5;display:flex;flex-direction:column;justify-content:center;padding-block:calc(var(--bar-h) + 28px) 20px}
+.deck.is-live #list{z-index:6;align-content:center;row-gap:clamp(8px,2svh,24px);padding-block:calc(var(--bar-h) + 28px) 20px}
+.deck.is-live #end{z-index:7;display:flex;flex-direction:column;justify-content:center;align-items:center;padding-block:calc(var(--bar-h) + 20px) 20px}
+.deck.is-live .plate{will-change:transform}
+.deck.is-live .stage{position:absolute;inset:0}
+.deck.is-live .sense{position:absolute;inset:0;padding-top:calc(var(--bar-h) + 40px);padding-bottom:24px}
+.deck.is-live .pair img{width:min(30vw,40svh)}
+.deck.is-live .picks-names{margin-top:clamp(16px,3svh,40px)}
+.deck.is-live .cats-head{margin-bottom:clamp(10px,2svh,28px)}
+.deck.is-live .cats-head h2{font-size:min(7vw,9svh)}
+.deck.is-live .cats-track{overflow:visible;width:max-content;will-change:transform}
+.deck.is-live .card{width:min(clamp(220px,26vw,360px),40svh)}
+.deck.is-live .card:nth-child(even){margin-top:clamp(12px,5svh,60px)}
+.deck.is-live .list h2{font-size:min(6vw,8svh)}
+.deck.is-live .names button{font-size:min(2.3vw,3.3svh);padding:.3em 0}
+.deck.is-live .shot{position:relative;top:auto;width:min(100%,62svh);justify-self:center}
+.deck.is-live .end-strip{align-self:stretch}
+.deck.is-live .bounce{font-size:min(14vw,22svh)}
+@media (max-width:899px){
+  .deck.is-live .row{font-size:min(12vw,7svh)}
+  .deck.is-live .plate{width:min(64vw,40svh)}
+  .deck.is-live .mid p{font-size:.84rem}
+  .deck.is-live .sense{gap:8px}
+  .deck.is-live .pair img{width:min(44vw,30svh)}
+  .deck.is-live .card{width:min(62vw,40svh)}
+  .deck.is-live .names{grid-template-columns:1fr 1fr;column-gap:16px}
+  .deck.is-live .names button{font-size:min(4vw,2.5svh)}
+  .deck.is-live .shot{width:min(56vw,26svh)}
+}
+
+/* ---------- floating round order button ---------- */
+.fab{position:fixed;z-index:40;right:clamp(14px,2.4vw,32px);bottom:calc(clamp(14px,2.4vw,32px) + env(safe-area-inset-bottom,0px));width:clamp(84px,9vw,118px);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;text-decoration:none;background:var(--ichigo);color:var(--mochi);box-shadow:0 10px 28px rgba(42,22,20,.3);transition:transform .25s}
+.fab:hover{transform:scale(1.08)}
+.fab svg{position:absolute;inset:0;width:100%;height:100%;animation:spin 14s linear infinite}
+.fab text{font-family:var(--body);font-weight:600;font-size:10.5px;fill:var(--mochi);text-transform:uppercase}
+.fab b{font-family:var(--display);font-weight:800;font-size:clamp(.78rem,1vw,.98rem);line-height:1.05;text-align:center;text-transform:uppercase}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <span class="bar-tag">Giới thiệu</span>
+  <a class="brand" href="https://order.banancakes.vn" target="_blank" rel="noopener">BANAN <span>Fukuoka Pâtisserie Saigon</span></a>
+  <a class="bar-order" href="https://order.banancakes.vn" target="_blank" rel="noopener">Đặt hàng</a>
+</header>
+
+<main>
+<div class="deck" id="deck">
+  <section class="hero" id="hero" aria-label="Banan Fukuoka Pâtisserie Saigon">
+    <span class="hero-hint">( Cuộn để khám phá )</span>
+    <div class="hero-track" id="heroTrack" aria-hidden="true">
+      <span>BANAN</span>
+      <span class="ring">
+        <svg viewBox="0 0 100 100"><circle class="disc" cx="50" cy="50" r="50"/><defs><path id="ringPath" d="M50 50 m-43 0 a43 43 0 1 1 86 0 a43 43 0 1 1 -86 0"/></defs><text><textPath href="#ringPath" textLength="264" lengthAdjust="spacing">Banan Fukuoka Pâtisserie Saigon · Since 2021 ·</textPath></text></svg>
+        <img src="img/ichigo-daifuku.jpg" alt="">
+      </span>
+      <span class="lock"><i>Fukuoka</i><i>Pâtisserie</i></span>
+      <span class="ring">
+        <svg viewBox="0 0 100 100"><circle class="disc" cx="50" cy="50" r="50"/><text><textPath href="#ringPath" textLength="264" lengthAdjust="spacing">Banan Fukuoka Pâtisserie Saigon · Since 2021 ·</textPath></text></svg>
+        <img src="img/mochi-basque-matcha.jpg" alt="">
+      </span>
+      <span class="sgn">SAIGON</span>
+    </div>
+    <h1 class="hero-blurb">Banan Fukuoka Pâtisserie Saigon. Tiệm bánh Nhật: daifuku, mochi basque, bánh kem dâu, macaron và matcha đánh lạnh. Mở từ 2021.</h1>
+  </section>
+
+  <section class="wall" id="wall" aria-label="Banan có gì">
+    <div class="row"><span>Banan Fukuoka Pâtisserie Saigon · Vỏ mochi mềm ·</span><span aria-hidden="true">Banan Fukuoka Pâtisserie Saigon · Vỏ mochi mềm ·</span><span aria-hidden="true">Banan Fukuoka Pâtisserie Saigon · Vỏ mochi mềm ·</span></div>
+    <div class="row"><span>Matcha đánh lạnh · Mochi Basque · Ichigo Daifuku ·</span><span aria-hidden="true">Matcha đánh lạnh · Mochi Basque · Ichigo Daifuku ·</span><span aria-hidden="true">Matcha đánh lạnh · Mochi Basque · Ichigo Daifuku ·</span></div>
+    <div class="row"><span>Premium Japanese Cakes · Since 2021 · パティスリー ·</span><span aria-hidden="true">Premium Japanese Cakes · Since 2021 · パティスリー ·</span><span aria-hidden="true">Premium Japanese Cakes · Since 2021 · パティスリー ·</span></div>
+    <div class="row"><span>Macaron · Can Cake · Pudding &amp; Flan · Basque Burnt ·</span><span aria-hidden="true">Macaron · Can Cake · Pudding &amp; Flan · Basque Burnt ·</span><span aria-hidden="true">Macaron · Can Cake · Pudding &amp; Flan · Basque Burnt ·</span></div>
+    <div class="row"><span>Kiwi vàng nguyên trái · Nhân đậu trắng · Ube · Kinako ·</span><span aria-hidden="true">Kiwi vàng nguyên trái · Nhân đậu trắng · Ube · Kinako ·</span><span aria-hidden="true">Kiwi vàng nguyên trái · Nhân đậu trắng · Ube · Kinako ·</span></div>
+    <div class="row"><span>Bánh sinh nhật · Dango Matcha · Yuzu Soda · Melon ·</span><span aria-hidden="true">Bánh sinh nhật · Dango Matcha · Yuzu Soda · Melon ·</span><span aria-hidden="true">Bánh sinh nhật · Dango Matcha · Yuzu Soda · Melon ·</span></div>
+    <div class="row"><span>Banan Fukuoka Pâtisserie Saigon · Vỏ mochi mềm ·</span><span aria-hidden="true">Banan Fukuoka Pâtisserie Saigon · Vỏ mochi mềm ·</span><span aria-hidden="true">Banan Fukuoka Pâtisserie Saigon · Vỏ mochi mềm ·</span></div>
+    <div class="plate" id="plate">
+      <img src="img/matcha-daifuku.jpg" alt="Matcha Daifuku">
+      <img src="img/ichigo-daifuku.jpg" alt="Ichigo Daifuku bổ đôi">
+      <img src="img/daifuku-kiwi.jpg" alt="Daifuku Kiwi">
+      <img src="img/mochi-berry-queen-l.jpg" alt="Mochi Berry Queen">
+    </div>
+  </section>
+  <section class="senses" id="senses" aria-label="Ba điều làm nên Banan">
+    <div class="stage">
+      <article class="sense on">
+        <div class="col"><img class="dot" src="img/mochi-basque-ube.jpg" alt=""><img class="dot" src="img/mochi-basque-ube.jpg" alt=""><img class="dot" src="img/mochi-basque-ube.jpg" alt=""></div>
+        <div class="mid">
+          <img class="dot" src="img/mochi-basque-matcha.jpg" alt="Mochi Basque Matcha bổ đôi">
+          <svg class="arc" viewBox="0 0 130 16"><path d="M4 4 Q65 20 126 4"/></svg>
+          <h2>Vỏ mochi ôm trọn nhân</h2>
+          <p>Mochi Basque và Daifuku: lớp vỏ mềm bọc nhân matcha, ube, đậu trắng.</p>
+          <svg class="arc" viewBox="0 0 130 16"><path d="M4 12 Q65 -4 126 12"/></svg>
+          <img class="dot" src="img/mochi-basque-matcha.jpg" alt="">
+        </div>
+        <div class="col"><img class="dot" src="img/matcha-daifuku.jpg" alt=""><img class="dot" src="img/matcha-daifuku.jpg" alt=""><img class="dot" src="img/matcha-daifuku.jpg" alt=""></div>
+      </article>
+      <article class="sense">
+        <div class="col"><img class="dot" src="img/ichigo-chocolate.jpg" alt=""><img class="dot" src="img/ichigo-chocolate.jpg" alt=""><img class="dot" src="img/ichigo-chocolate.jpg" alt=""></div>
+        <div class="mid">
+          <img class="dot" src="img/strawberry-cake.jpg" alt="Signature Strawberry Cake">
+          <svg class="arc" viewBox="0 0 130 16"><path d="M4 4 Q65 20 126 4"/></svg>
+          <h2>Dâu tươi trên từng chiếc bánh</h2>
+          <p>Từ Ichigo Daifuku nhỏ xíu đến bánh kem dâu cho sinh nhật.</p>
+          <svg class="arc" viewBox="0 0 130 16"><path d="M4 12 Q65 -4 126 12"/></svg>
+          <img class="dot" src="img/strawberry-cake.jpg" alt="">
+        </div>
+        <div class="col"><img class="dot" src="img/ichigo-matcha.jpg" alt=""><img class="dot" src="img/ichigo-matcha.jpg" alt=""><img class="dot" src="img/ichigo-matcha.jpg" alt=""></div>
+      </article>
+      <article class="sense">
+        <div class="col"><img class="dot" src="img/matcha-latte.jpg" alt=""><img class="dot" src="img/matcha-latte.jpg" alt=""><img class="dot" src="img/matcha-latte.jpg" alt=""></div>
+        <div class="mid">
+          <img class="dot" src="img/dango-ube-matcha.jpg" alt="Dango Ube Matcha">
+          <svg class="arc" viewBox="0 0 130 16"><path d="M4 4 Q65 20 126 4"/></svg>
+          <h2>Matcha đánh lạnh, xếp tầng</h2>
+          <p>Ube, xoài, dừa, kinako: mỗi ly một tầng màu, thêm xiên dango.</p>
+          <svg class="arc" viewBox="0 0 130 16"><path d="M4 12 Q65 -4 126 12"/></svg>
+          <img class="dot" src="img/dango-ube-matcha.jpg" alt="">
+        </div>
+        <div class="col"><img class="dot" src="img/mango-matcha.jpg" alt=""><img class="dot" src="img/mango-matcha.jpg" alt=""><img class="dot" src="img/mango-matcha.jpg" alt=""></div>
+      </article>
+    </div>
+  </section>
+
+
+
+
+  <section class="picks" id="picks">
+    <p class="kicker">Gợi ý của tiệm</p>
+    <div class="picks-ghost" id="ghost" aria-hidden="true">Ichigo Daifuku · Mochi Basque Matcha · Ichigo Daifuku ·</div>
+    <div class="pair">
+      <img src="img/ichigo-daifuku.jpg" alt="Ichigo Daifuku">
+      <img src="img/mochi-basque-matcha.jpg" alt="Mochi Basque Matcha">
+    </div>
+    <div class="picks-names"><span>Ichigo Daifuku</span><span>Mochi Basque Matcha</span></div>
+  </section>
+
+  <section class="cats" id="cats">
+    <div class="cats-head"><h2>Menu</h2><span class="note">( 10 nhóm · 50 món · chạm vào để đặt )</span></div>
+    <div class="cats-track" id="catsTrack">
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/mochi-basque-ube.jpg" alt="" loading="lazy"></div><div class="card-name">Mochi Collection <small>8 món</small></div></a>
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/matcha-daifuku.jpg" alt="" loading="lazy"></div><div class="card-name">Daifuku <small>2 món</small></div></a>
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/matcha-strawberry-cake.jpg" alt="" loading="lazy"></div><div class="card-name">Birthday Cakes <small>8 món</small></div></a>
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/mango-matcha.jpg" alt="" loading="lazy"></div><div class="card-name">Drink Menu <small>11 món</small></div></a>
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/ichigo-matcha.jpg" alt="" loading="lazy"></div><div class="card-name">Ichigo <small>3 món</small></div></a>
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/can-cake-matcha.jpg" alt="" loading="lazy"></div><div class="card-name">Can Cake <small>4 món</small></div></a>
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/macaron.jpg" alt="" loading="lazy"></div><div class="card-name">Macaron <small>3 món</small></div></a>
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/basque-ube.jpg" alt="" loading="lazy"></div><div class="card-name">Basque Burnt <small>2 món</small></div></a>
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/mango-pudding.jpg" alt="" loading="lazy"></div><div class="card-name">Pudding &amp; Flan <small>5 món</small></div></a>
+      <a class="card" href="https://order.banancakes.vn" target="_blank" rel="noopener"><div class="card-pic"><img src="img/choco-macadamia.jpg" alt="" loading="lazy"></div><div class="card-name">Nuts <small>4 món</small></div></a>
+    </div>
+  </section>
+
+  <section class="list" id="list">
+    <h2>Gọi tên từng món</h2>
+    <ul class="names" id="names">
+      <li><button type="button" class="on" data-i="0">Ichigo Daifuku</button></li>
+      <li><button type="button" data-i="1">Daifuku Kiwi</button></li>
+      <li><button type="button" data-i="2">Mochi Basque Ube</button></li>
+      <li><button type="button" data-i="3">Mochi Berry Queen</button></li>
+      <li><button type="button" data-i="4">Matcha Strawberry Cake</button></li>
+      <li><button type="button" data-i="5">Melon Can Cake</button></li>
+      <li><button type="button" data-i="6">Macaron</button></li>
+      <li><button type="button" data-i="7">Creme Flan</button></li>
+      <li><button type="button" data-i="8">Dango Ube Matcha</button></li>
+      <li><button type="button" data-i="9">Chocolate Macadamia</button></li>
+    </ul>
+    <div class="shot" id="shot" aria-live="polite">
+      <img class="on" src="img/ichigo-daifuku.jpg" alt="Ichigo Daifuku">
+      <img src="img/daifuku-kiwi.jpg" alt="Daifuku Kiwi" loading="lazy">
+      <img src="img/mochi-basque-ube.jpg" alt="Mochi Basque Ube" loading="lazy">
+      <img src="img/mochi-berry-queen.jpg" alt="Mochi Berry Queen" loading="lazy">
+      <img src="img/matcha-strawberry-cake.jpg" alt="Matcha Strawberry Cake" loading="lazy">
+      <img src="img/can-cake-melon.jpg" alt="Melon Can Cake" loading="lazy">
+      <img src="img/macaron.jpg" alt="Macaron" loading="lazy">
+      <img src="img/creme-flan.jpg" alt="Creme Flan" loading="lazy">
+      <img src="img/dango-ube-matcha.jpg" alt="Dango Ube Matcha" loading="lazy">
+      <img src="img/choco-macadamia.jpg" alt="Chocolate Macadamia" loading="lazy">
+    </div>
+  </section>
+
+  <section class="end" id="end">
+    <p class="end-strip" aria-hidden="true"><span>Mềm như mochi <i>●</i> Xanh như matcha <i>●</i> Đỏ như ichigo <i>●</i> </span><span>Mềm như mochi <i>●</i> Xanh như matcha <i>●</i> Đỏ như ichigo <i>●</i> </span><span>Mềm như mochi <i>●</i> Xanh như matcha <i>●</i> Đỏ như ichigo <i>●</i> </span></p>
+    <p class="bounce" id="bounce" aria-label="Ăn bánh thôi">Ăn bánh thôi</p>
+    <a class="cta" href="https://order.banancakes.vn" target="_blank" rel="noopener">Đặt hàng tại order.banancakes.vn →</a>
+    <span class="note">© Banan Fukuoka Pâtisserie Saigon · <a href="https://order.banancakes.vn/about">Thông tin doanh nghiệp</a> · <a href="https://order.banancakes.vn/privacy">Chính sách bảo mật</a> · <a href="https://order.banancakes.vn/contact">Liên hệ</a></span>
+  </section>
+</div>
+</main>
+
+<a class="fab" href="https://order.banancakes.vn" target="_blank" rel="noopener" aria-label="Đặt bánh tại order.banancakes.vn">
+  <svg viewBox="0 0 120 120" aria-hidden="true"><defs><path id="fabPath" d="M60 60 m-47 0 a47 47 0 1 1 94 0 a47 47 0 1 1 -94 0"/></defs><text><textPath href="#fabPath" textLength="288" lengthAdjust="spacing">order.banancakes.vn · đặt bánh ·</textPath></text></svg>
+  <b>Đặt<br>bánh</b>
+</a>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
+<script>
+(function(){
+  // closing line: one span per letter so each can bob on its own beat
+  var b=document.getElementById('bounce');
+  b.innerHTML=[...b.textContent].map(function(ch,i){return ch===' '?' ':'<span style="--i:'+i+'" aria-hidden="true">'+ch+'</span>'}).join('');
+
+  // name list: photo follows hover, focus or tap
+  var shots=document.querySelectorAll('#shot img'),btns=document.querySelectorAll('#names button');
+  function pick(btn){btns.forEach(function(x){x.classList.toggle('on',x===btn)});shots.forEach(function(im,i){im.classList.toggle('on',i==btn.dataset.i)})}
+  btns.forEach(function(btn){['mouseenter','focus','click'].forEach(function(ev){btn.addEventListener(ev,function(){pick(btn)})})});
+
+  if(!window.gsap||!window.ScrollTrigger)return;   // page reads fine without motion
+  gsap.registerPlugin(ScrollTrigger);
+  var SCRUB=0.9;   // seconds of catch-up: turns wheel notches and finger flicks into a glide
+  ScrollTrigger.config({ignoreMobileResize:true});   // the phone address bar sliding away must not re-measure pins
+
+  // Triggers are created top to bottom on purpose: a pinned section pushes
+  // everything after it down, so later triggers must be measured after it exists.
+  // Pins run on every screen size; only the pin distances and Lenis differ.
+  if(window.__bananMotion)window.__bananMotion.revert();   // page was hot-swapped: drop the old trigger first
+  var mm=window.__bananMotion=gsap.matchMedia();
+  mm.add({wide:'(min-width: 900px)',motion:'(prefers-reduced-motion: no-preference)',mouse:'(pointer: fine)'},function(ctx){
+    var c=ctx.conditions; if(!c.motion)return;
+    var $=function(id){return document.getElementById(id)},lenis=null,raf=null;
+    var deck=$('deck'),track=$('heroTrack'),plate=$('plate'),ct=$('catsTrack');
+    var plates=gsap.utils.toArray('#plate img'),items=gsap.utils.toArray('.sense');
+
+    if(c.wide&&c.mouse&&window.Lenis){   // touch screens keep native momentum scrolling
+      lenis=new Lenis({lerp:0.09,wheelMultiplier:0.9});
+      lenis.on('scroll',ScrollTrigger.update);
+      raf=function(t){lenis.raf(t*1000)};
+      gsap.ticker.add(raf); gsap.ticker.lagSmoothing(0);
+    }
+
+    deck.classList.add('is-live');
+    gsap.set(items.slice(1),{autoAlpha:0});
+    gsap.set('#senses',{autoAlpha:0});
+
+    // The score, in timeline units (one unit = UNIT px of scrolling)
+    var HERO=0, WALL=4, CUTS=plates.length, ZOOM=WALL+1+CUTS, LIFT=ZOOM+1, GRID=LIFT+.4,
+        PICKS=GRID+items.length, CATS=PICKS+3, LIST=CATS+5, STEP=.5, END=LIST+1+btns.length*STEP, TOTAL=END+2,
+        UNIT=c.wide?430:330;
+
+    // hard cuts: short tweens of their own, fired when the playhead crosses a band, never scrubbed
+    var shown=0,named=0,tl;
+    function cutTo(n){
+      if(n===shown)return;
+      var next=plates[n],prev=plates[shown]; shown=n;
+      gsap.killTweensOf(plates);
+      gsap.set(plates,{zIndex:0}); gsap.set(prev,{zIndex:1,opacity:1,scale:1}); gsap.set(next,{zIndex:2});
+      gsap.fromTo(next,{opacity:0,scale:1.18},{opacity:1,scale:1,duration:.28,ease:'power2.out',overwrite:true,onComplete:function(){plates.forEach(function(p){if(p!==next)gsap.set(p,{opacity:0})})}});
+    }
+    function onTick(){
+      var t=tl.time();
+      cutTo(gsap.utils.clamp(0,CUTS-1,Math.floor(t-(WALL+1))));
+      var n=gsap.utils.clamp(0,btns.length-1,Math.floor((t-(LIST+1))/STEP));
+      if(n!==named){named=n;pick(btns[n])}   // only when scrolling crosses a band, so hover still wins in between
+    }
+
+    tl=gsap.timeline({defaults:{ease:'none'},onUpdate:onTick,
+      scrollTrigger:{trigger:deck,pin:true,anticipatePin:1,start:'top top',end:function(){return '+='+TOTAL*UNIT},scrub:SCRUB,invalidateOnRefresh:true}});
+
+    // a scene opens through a growing circle, then the one underneath is switched off
+    function iris(id,at,under){
+      tl.fromTo('#'+id,{clipPath:'circle(0% at 50% 50%)'},{clipPath:'circle(75% at 50% 50%)',duration:1,ease:'power2.in'},at);
+      tl.set(under,{autoAlpha:0},at+1);
+    }
+
+    // hero: the full name travels across
+    tl.to(track,{x:function(){return -(track.scrollWidth-window.innerWidth)},duration:WALL-HERO},HERO);
+    // wall: four photos, then the plate grows until it covers the screen and the wall lifts away
+    iris('wall',WALL,'#hero');
+    tl.set('#senses',{autoAlpha:1},WALL+1);   // safe now: the wall covers everything beneath it
+    tl.fromTo(plate,{rotate:-6},{rotate:6,duration:CUTS},WALL+1);
+    tl.to(plate,{scale:function(){return Math.hypot(window.innerWidth,window.innerHeight)/plate.offsetWidth*1.06},borderWidth:0,rotate:0,duration:1,ease:'power2.in'},ZOOM);
+    tl.to('#wall .row',{opacity:0,duration:.5},ZOOM);
+    tl.to('#wall',{autoAlpha:0,duration:.4},LIFT);
+    // circle grid: three themes
+    items.forEach(function(el,i){
+      tl.fromTo(el.querySelectorAll('.dot'),{scale:.7},{scale:c.wide?1.4:1.15,duration:1},GRID+i);
+      if(i)tl.to(el,{autoAlpha:1,duration:.2},GRID+i-.1);
+      if(i<items.length-1)tl.to(el,{autoAlpha:0,duration:.2},GRID+i+.9);
+    });
+    // house picks
+    iris('picks',PICKS,'#senses');
+    tl.fromTo('#ghost',{xPercent:8},{xPercent:-45,duration:CATS-PICKS},PICKS);
+    tl.from('.pair img',{y:90,rotate:-10,scale:.8,stagger:.15,duration:.8,ease:'power2.out'},PICKS+.6);
+    // menu: cards travel sideways
+    iris('cats',CATS,'#picks');
+    tl.to(ct,{x:function(){return -(ct.scrollWidth-window.innerWidth)},duration:LIST-CATS-1},CATS+1);
+    // name list: the names step by on their own (see onTick)
+    iris('list',LIST,'#cats');
+    // closing
+    iris('end',END,'#list');
+    tl.to({},{duration:TOTAL-END-1},END+1);   // hold the last scene before the pin lets go
+
+    return function(){
+      deck.classList.remove('is-live');
+      if(lenis){gsap.ticker.remove(raf); lenis.destroy()}
+    };
+  });
+
+  // photos and webfonts change heights after first paint: measure again
+  window.addEventListener('load',function(){ScrollTrigger.refresh()});
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){ScrollTrigger.refresh()});
+})();
+</script>
+</body>
+</html>

@@ -22,6 +22,8 @@ services:
       - ./web/merchant:/srv/merchant:ro
       - ./web/kitchen:/srv/kitchen:ro
       - ./web/internal:/srv/internal:ro
+      # Static brand site for the root domain (web-intro/ in this repo).
+      - ./web/intro:/srv/intro:ro
       - caddy_data:/data
       - caddy_config:/config
     networks: [banan]

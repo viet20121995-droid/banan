@@ -14,7 +14,9 @@ REMOTE_DIR=${REMOTE_DIR:-/opt/banan/web}
 
 API="https://api.${BASE_DOMAIN}/api/v1"
 WS="https://api.${BASE_DOMAIN}"
-CUST="https://${BASE_DOMAIN}"
+# The ordering app lives on order.<domain>; the root domain is the static brand
+# site (web-intro/). Merchant builds its /track/<id> hand-out links from this.
+CUST="https://order.${BASE_DOMAIN}"
 
 # BANAN_ENV must be the literal "prod" — Env.isProd compares against it, and
 # anything else leaves Dio's LogInterceptor on, printing every request and
@@ -61,9 +63,44 @@ build_and_upload() {
   rm -f "/tmp/banan-web-$remoteName.tgz"
 }
 
+# The brand site is plain files — no build. Same stage-verify-swap as the apps.
+upload_intro() {
+  echo "▶ Uploading intro → $SERVER:$REMOTE_DIR/intro …"
+  tar czf /tmp/banan-web-intro.tgz -C web-intro .
+  scp /tmp/banan-web-intro.tgz "$SERVER:/tmp/"
+  ssh "$SERVER" "
+    set -e
+    d='$REMOTE_DIR/intro'
+    t=/tmp/banan-web-intro.tgz
+    test -s \"\$t\"
+    rm -rf \"\$d.new\" \"\$d.old\" && mkdir -p \"\$d.new\"
+    tar xzf \"\$t\" -C \"\$d.new\"
+    test -s \"\$d.new/index.html\"
+    # Without the kill switch, returning customers keep getting the old app's
+    # cached bundle at the root domain instead of this site.
+    test -s \"\$d.new/flutter_service_worker.js\"
+    if [ -e \"\$d\" ]; then mv \"\$d\" \"\$d.old\"; fi
+    mv \"\$d.new\" \"\$d\" || { mv \"\$d.old\" \"\$d\" 2>/dev/null; false; }
+    rm -rf \"\$d.old\"
+    rm -f \"\$t\"
+  " || {
+    echo "✖ intro failed to deploy — the live copy was left untouched" >&2
+    return 1
+  }
+  rm -f /tmp/banan-web-intro.tgz
+}
+
+# ONLY=intro ships just the brand site (no Flutter needed).
+if [ "${ONLY:-}" = "intro" ]; then
+  upload_intro
+  echo "✅ Done. Intro site uploaded."
+  exit 0
+fi
+
 build_and_upload banan_customer customer
 build_and_upload banan_merchant merchant
 build_and_upload banan_kitchen  kitchen
 build_and_upload banan_internal internal
+upload_intro
 
 echo "✅ Done. Caddy on $SERVER now serves the updated web apps."
