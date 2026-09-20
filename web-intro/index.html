@@ -32,6 +32,9 @@
   --ichigo:#E4536F;     /* accent */
   --kinako:#E9B44C;
   --ube:#6B4A8F;
+  --leaf:#5E8F35;       /* whisked matcha, lighter than the brand green */
+  --mango:#F6B93B;      /* the mango layer of Mango Matcha */
+  --ube-soft:#9B72C9;   /* the ube cream of Dango Ube Matcha */
   --display:"Bricolage Grotesque","Be Vietnam Pro",system-ui,sans-serif;
   --body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif;
   --jp:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
@@ -103,16 +106,48 @@ a{color:inherit}
 .mid h2{margin:0;font-family:var(--display);font-weight:800;font-size:clamp(1.3rem,3vw,2.4rem);line-height:1.05;text-transform:uppercase;text-wrap:balance;max-width:12ch}
 .arc{width:clamp(70px,10vw,130px);height:16px;stroke:var(--tone);stroke-width:7;fill:none;stroke-linecap:round}
 .mid p{margin:0;max-width:30ch;font-size:.92rem}
-/* ---------- house picks ---------- */
-.picks{position:relative;overflow:hidden;padding:clamp(56px,10vh,120px) var(--gutter);text-align:center;background:var(--matcha-soft)}
-.kicker{margin:0 0 8px;font-size:.78rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
-.picks-ghost{position:absolute;left:0;top:34%;white-space:nowrap;font-family:var(--display);font-weight:800;font-size:clamp(4rem,15vw,13rem);line-height:1;letter-spacing:-.03em;color:var(--azuki);will-change:transform}
-.pair{position:relative;display:flex;justify-content:center;margin-top:clamp(20px,4vh,40px)}
-.pair img{width:clamp(150px,30vw,380px);aspect-ratio:1;max-width:48%;border-radius:50%;object-fit:cover;border:8px solid var(--mochi);box-shadow:0 20px 50px rgba(42,22,20,.25)}
-.pair img+img{margin-left:-6%;margin-top:8%}
-.picks-names{position:relative;margin:clamp(28px,5vh,56px) auto 0;max-width:640px;display:grid;gap:6px;font-family:var(--display);font-weight:500;font-size:clamp(1.2rem,2.4vw,1.9rem);text-transform:uppercase}
-.picks-names span:first-child{justify-self:start}
-.picks-names span:last-child{justify-self:end}
+/* ---------- house picks: two cut-out drinks ----------
+   Geometry is set from where each GLASS BODY sits in its crop, not from the crop box: the ube
+   crop is widened by the dango skewer (body = 12.5%..75% of the box). --sh drives the stage
+   height and both cup offsets so the pair always scales together. */
+.picks{position:relative;overflow:hidden;background:var(--matcha-soft);text-align:center;padding:clamp(48px,9vh,100px) var(--gutter) clamp(28px,5vh,56px);display:flex;flex-direction:column;align-items:center}
+.picks-ghost{position:absolute;left:0;z-index:0;white-space:nowrap;font-family:var(--display);font-weight:800;font-size:clamp(3.6rem,14.5vw,12.5rem);line-height:.9;letter-spacing:-.035em;text-transform:uppercase;will-change:transform;pointer-events:none}
+.g1{top:22%;color:var(--azuki)}
+.g2{top:calc(22% + .92em);color:var(--ube)}
+.picks-stage{--sh:min(60svh,620px);position:relative;z-index:2;width:min(100%,980px);height:var(--sh)}
+.splash{position:absolute;z-index:0;overflow:visible;filter:drop-shadow(0 14px 22px rgba(42,22,20,.12))}
+.s-mango{left:4%;top:12%;width:56%;height:86%}
+.s-ube{right:0;top:8%;width:58%;height:88%}
+.cup{position:absolute;bottom:4%;z-index:2;display:block;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cup-mango{left:50%;height:86%;aspect-ratio:714/900;margin-left:calc(var(--sh) * -0.747)}
+.cup-ube{left:50%;height:94%;aspect-ratio:856/900;margin-left:calc(var(--sh) * -0.147);z-index:3}
+.cup-in{display:block;width:100%;height:100%;transform-origin:50% 92%}
+.cup-ube .cup-in{transform-origin:44% 92%}   /* pivot under the glass, not under the skewer */
+.cup img{width:100%;height:100%;max-width:none;object-fit:contain;filter:drop-shadow(0 22px 26px rgba(42,22,20,.28));animation:bob 5.2s ease-in-out infinite}
+.cup-ube img{animation-duration:6.1s;animation-delay:-2s}
+@keyframes bob{50%{transform:translateY(-1.6%) rotate(.6deg)}}
+.ground{position:absolute;left:8%;right:8%;bottom:-3%;height:9%;z-index:-1;border-radius:50%;background:radial-gradient(closest-side,rgba(42,22,20,.32),transparent)}
+.cup-ube .ground{left:4%;right:30%}
+.bit{position:absolute;z-index:1;left:0;top:0;width:0;height:0;pointer-events:none}
+.bit.front{z-index:4}
+.bit .shape{display:block;animation:drift var(--t,7s) ease-in-out infinite;animation-delay:var(--d,0s)}
+@keyframes drift{50%{transform:translate(var(--fx,6px),var(--fy,-10px)) rotate(var(--fr,8deg))}}
+.ice{width:var(--s);height:var(--s);margin:calc(var(--s) / -2);border-radius:24%;background:linear-gradient(135deg,rgba(255,255,255,.95),rgba(255,255,255,.35) 55%,rgba(210,235,240,.7));border:2px solid rgba(255,255,255,.95);box-shadow:inset -6px -6px 12px rgba(120,170,180,.25),0 8px 14px rgba(42,22,20,.12)}
+.dust{width:var(--s);height:var(--s);margin:calc(var(--s) / -2);border-radius:50%;background:var(--c,var(--leaf))}
+.cube{width:var(--s);height:var(--s);margin:calc(var(--s) / -2);border-radius:26%;background:linear-gradient(140deg,#FFD66B,var(--mango) 55%,#E79A1E);box-shadow:inset -5px -6px 10px rgba(170,95,0,.28),0 8px 14px rgba(42,22,20,.14)}
+.ball{width:var(--s);height:var(--s);margin:calc(var(--s) / -2);border-radius:50%;background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.85),transparent 42%),var(--c);box-shadow:inset -6px -8px 12px rgba(42,22,20,.12),0 8px 14px rgba(42,22,20,.14)}
+.bit svg{display:block;overflow:visible;width:var(--s);max-width:none;margin:calc(var(--s) / -2)}
+.picks-names{position:relative;z-index:3;width:min(100%,900px);display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:clamp(10px,2.4vh,26px);font-family:var(--display);font-weight:500;font-size:clamp(1.1rem,2.4vw,1.9rem);line-height:1.1;text-transform:uppercase}
+.picks-names span:first-child{text-align:left}
+.picks-names span:last-child{text-align:right}
+@media (max-width:899px){
+  /* the pair is ~1.37x as wide as the stage is tall, a little more once the cups are tilted:
+     cap the height by the screen WIDTH too, or the skewer's knot runs off a phone screen */
+  .picks-stage{--sh:min(46svh,65vw)}
+  .cup-mango{margin-left:calc(var(--sh) * -0.68)}
+  .cup-ube{margin-left:calc(var(--sh) * -0.20)}
+  .g1{top:26%}.g2{top:calc(26% + .92em)}
+}
 
 /* ---------- collections: vertical scroll, horizontal travel ---------- */
 .cats{position:relative;background:var(--mochi);padding-block:clamp(48px,8vh,96px) clamp(32px,6vh,72px);overflow:hidden}
@@ -180,7 +215,7 @@ a{color:inherit}
 .deck.is-live #hero{z-index:1;min-height:0;height:auto}
 .deck.is-live #senses{z-index:2}
 .deck.is-live #wall{z-index:3;display:flex;flex-direction:column;justify-content:center;padding-top:var(--bar-h)}
-.deck.is-live #picks{z-index:4;display:flex;flex-direction:column;justify-content:center;padding-block:calc(var(--bar-h) + 28px) 24px}
+.deck.is-live #picks{z-index:4;justify-content:center;padding-block:calc(var(--bar-h) + 30px) 18px}
 .deck.is-live #cats{z-index:5;display:flex;flex-direction:column;justify-content:center;padding-block:calc(var(--bar-h) + 28px) 20px}
 .deck.is-live #list{z-index:6;align-content:center;row-gap:clamp(8px,2svh,24px);padding-block:calc(var(--bar-h) + 28px) 20px}
 .deck.is-live #stores{z-index:7;display:flex;flex-direction:column;justify-content:center;padding-block:calc(var(--bar-h) + 44px) 16px}
@@ -189,8 +224,6 @@ a{color:inherit}
 .deck.is-live .plate{will-change:transform}
 .deck.is-live .stage{position:absolute;inset:0}
 .deck.is-live .sense{position:absolute;inset:0;padding-top:calc(var(--bar-h) + 40px);padding-bottom:24px}
-.deck.is-live .pair img{width:min(30vw,40svh)}
-.deck.is-live .picks-names{margin-top:clamp(16px,3svh,40px)}
 .deck.is-live .cats-head{margin-bottom:clamp(10px,2svh,28px)}
 .deck.is-live .cats-head h2{font-size:min(7vw,9svh)}
 .deck.is-live .cats-track{overflow:visible;width:max-content;will-change:transform}
@@ -206,7 +239,6 @@ a{color:inherit}
   .deck.is-live .plate{width:min(64vw,40svh)}
   .deck.is-live .mid p{font-size:.84rem}
   .deck.is-live .sense{gap:8px}
-  .deck.is-live .pair img{width:min(44vw,30svh)}
   .deck.is-live .card{width:min(62vw,40svh)}
   .deck.is-live .names{grid-template-columns:1fr 1fr;column-gap:16px}
   .deck.is-live .names button{font-size:min(4vw,2.5svh)}
@@ -312,14 +344,20 @@ a{color:inherit}
 
 
 
-  <section class="picks" id="picks">
-    <p class="kicker">Gợi ý của tiệm</p>
-    <div class="picks-ghost" id="ghost" aria-hidden="true">Ichigo Daifuku · Mochi Basque Matcha · Ichigo Daifuku ·</div>
-    <div class="pair">
-      <img src="img/ichigo-daifuku.jpg" alt="Ichigo Daifuku">
-      <img src="img/mochi-basque-matcha.jpg" alt="Mochi Basque Matcha">
+  <section class="picks" id="picks" aria-label="Gợi ý của tiệm">
+    <div class="picks-ghost g1" id="g1" aria-hidden="true">Mango Matcha · Mango Matcha · Mango Matcha ·</div>
+    <div class="picks-ghost g2" id="g2" aria-hidden="true">Dango Ube Matcha · Dango Ube Matcha ·</div>
+    <div class="picks-stage" id="picksStage">
+      <svg class="splash s-mango" id="splashMango" viewBox="-100 -100 200 200" aria-hidden="true"></svg>
+      <svg class="splash s-ube" id="splashUbe" viewBox="-100 -100 200 200" aria-hidden="true"></svg>
+      <a class="cup cup-mango" id="cupMango" data-cup="mango" href="https://order.banancakes.vn" target="_blank" rel="noopener" aria-label="Mango Matcha, đặt tại order.banancakes.vn">
+        <span class="cup-in"><img src="img/mango.webp" alt="Ly Mango Matcha" width="714" height="900"><i class="ground"></i></span>
+      </a>
+      <a class="cup cup-ube" id="cupUbe" data-cup="ube" href="https://order.banancakes.vn" target="_blank" rel="noopener" aria-label="Dango Ube Matcha, đặt tại order.banancakes.vn">
+        <span class="cup-in"><img src="img/ube.webp" alt="Ly Dango Ube Matcha có xiên dango" width="856" height="900"><i class="ground"></i></span>
+      </a>
     </div>
-    <div class="picks-names"><span>Ichigo Daifuku</span><span>Mochi Basque Matcha</span></div>
+    <div class="picks-names"><span>Mango Matcha</span><span>Dango Ube Matcha</span></div>
   </section>
 
   <section class="cats" id="cats">
@@ -422,8 +460,65 @@ a{color:inherit}
   function pick(btn){btns.forEach(function(x){x.classList.toggle('on',x===btn)});shots.forEach(function(im,i){im.classList.toggle('on',i==btn.dataset.i)})}
   btns.forEach(function(btn){['mouseenter','focus','click'].forEach(function(ev){btn.addEventListener(ev,function(){pick(btn)})})});
 
+  // ── house picks: splashes and loose ingredients are generated from numbers (crisp at any size)
+  var NS='http://www.w3.org/2000/svg',pstage=document.getElementById('picksStage'),bitEls=[];
+  var motionOK=!matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function rng(seed){return function(){seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296}}
+  function splash(svg,seed,fill,arms){   // closed blob with a few long arms (Catmull-Rom -> cubic) plus droplets
+    var r=rng(seed),n=18,pts=[],i;
+    for(i=0;i<n;i++){var a=i/n*Math.PI*2,arm=arms.indexOf(i)>-1,rad=(arm?78+r()*18:44+r()*14);pts.push([Math.cos(a)*rad*1.05,Math.sin(a)*rad*.92,arm])}
+    var d='M'+pts[0][0].toFixed(1)+' '+pts[0][1].toFixed(1);
+    for(i=0;i<n;i++){var p0=pts[(i-1+n)%n],p1=pts[i],p2=pts[(i+1)%n],p3=pts[(i+2)%n],t=.22;
+      d+=' C'+(p1[0]+(p2[0]-p0[0])*t).toFixed(1)+' '+(p1[1]+(p2[1]-p0[1])*t).toFixed(1)+' '+(p2[0]-(p3[0]-p1[0])*t).toFixed(1)+' '+(p2[1]-(p3[1]-p1[1])*t).toFixed(1)+' '+p2[0].toFixed(1)+' '+p2[1].toFixed(1)}
+    var path=document.createElementNS(NS,'path');path.setAttribute('d',d+'Z');path.setAttribute('fill',fill);svg.appendChild(path);
+    pts.forEach(function(pt){if(!pt[2])return;for(var k=1;k<=2;k++){var c=document.createElementNS(NS,'circle'),dist=1.12+k*.13+r()*.06;
+      c.setAttribute('cx',(pt[0]*dist).toFixed(1));c.setAttribute('cy',(pt[1]*dist).toFixed(1));c.setAttribute('r',(5.5-k*1.6+r()*1.5).toFixed(1));c.setAttribute('fill',fill);svg.appendChild(c)}});
+  }
+  splash(document.getElementById('splashMango'),7,'var(--mango)',[1,5,9,13,16]);
+  splash(document.getElementById('splashUbe'),23,'var(--ube-soft)',[0,3,7,11,15]);
+  var LEAF='<svg viewBox="0 0 52 30"><path d="M1 15C14 -2 40 0 51 15 40 30 14 32 1 15Z" fill="#3E7A2E"/><path d="M4 15H48" stroke="#DDE8C9" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>';
+  // [type, x%, y%, size px, depth, cup, rotation, in front of the cups?, colour]
+  var PINK='#F7B8C8',WHITE='#FFF8F0',GREEN='#A9CF6B',PURPLE='#9B72C9';
+  [['cube',13,26,44,.9,'mango',-18],['cube',3,60,34,.55,'mango',24],['cube',27,6,26,.35,'mango',12],['cube',22,80,50,.8,'mango',38,1],['cube',41,14,30,.4,'mango',-30],
+   ['ice',6,40,40,.7,'mango',15],['ice',36,92,30,.6,'mango',-20,1],
+   ['leaf',1,86,46,.65,'mango',-140],['dust',18,10,12,.3,'mango'],['dust',10,72,9,.5,'mango'],['dust',44,88,13,.55,'mango'],
+   ['ball',90,24,46,.85,'ube',0,0,PINK],['ball',98,58,38,.95,'ube',0,1,GREEN],['ball',74,2,28,.35,'ube',0,0,WHITE],['ball',64,90,34,.7,'ube',0,1,PINK],
+   ['ice',84,44,36,.6,'ube',-14],['ice',95,84,28,.5,'ube',26],
+   ['leaf',60,8,38,.4,'ube',60],['dust',80,12,15,.45,'ube',0,0,PURPLE],['dust',88,70,11,.6,'ube',0,0,PURPLE],['dust',70,94,17,.75,'ube',0,1,PURPLE],['dust',99,36,9,.3,'ube',0,0,PURPLE],['dust',56,80,10,.5,'ube']
+  ].forEach(function(bt){
+    var r2=rng(bt[1]*97+bt[2]),el=document.createElement('span');el.className='bit'+(bt[7]?' front':'');el.style.left=bt[1]+'%';el.style.top=bt[2]+'%';
+    el.innerHTML='<span class="par"><span class="burst" style="transform:rotate('+(bt[6]||0)+'deg)"><span class="shape '+(bt[0]==='leaf'?'':bt[0])+'" style="'+(bt[8]?'--c:'+bt[8]+';':'')+'--s:'+bt[3]+'px;--t:'+(5+r2()*5).toFixed(1)+'s;--d:-'+(r2()*6).toFixed(1)+'s;--fx:'+Math.round(-8+r2()*16)+'px;--fy:'+Math.round(-14+r2()*10)+'px;--fr:'+Math.round(-14+r2()*28)+'deg">'+(bt[0]==='leaf'?LEAF:'')+'</span></span></span>';
+    pstage.appendChild(el);bitEls.push({el:el,par:el.querySelector('.par'),burst:el.querySelector('.burst'),z:bt[4],cup:bt[5],x:bt[1],y:bt[2],rot:bt[6]||0});
+  });
+  // hover / focus / tap: the cup rattles, its ingredients jump, its splash swells
+  var shaking={};
+  function shake(cup){
+    var id=cup.dataset.cup; if(shaking[id]||!motionOK||!window.gsap)return; shaking[id]=true;
+    var inEl=cup.querySelector('.cup-in'),sp=document.getElementById(id==='mango'?'splashMango':'splashUbe');
+    gsap.timeline({onComplete:function(){shaking[id]=false}})
+      .to(inEl,{keyframes:[{rotation:-9,x:-10,duration:.08},{rotation:8,x:9,duration:.09},{rotation:-7,x:-7,duration:.09},{rotation:6,x:6,duration:.09},{rotation:-3,x:-3,duration:.09}],ease:'sine.inOut'})
+      .to(inEl,{rotation:0,x:0,duration:.9,ease:'elastic.out(1,.35)'});
+    gsap.fromTo(sp,{scale:1},{scale:1.09,duration:.18,yoyo:true,repeat:1,ease:'power2.out',transformOrigin:'50% 50%',overwrite:'auto'});
+    bitEls.forEach(function(b){ if(b.cup!==id)return;
+      var cx=id==='mango'?28:70,dx=b.x-cx,dy=b.y-55,len=Math.hypot(dx,dy)||1,push=26+b.z*34;
+      gsap.timeline().to(b.burst,{x:dx/len*push,y:dy/len*push-10,rotation:b.rot+(dx>0?50:-50),duration:.22,ease:'power2.out'})
+        .to(b.burst,{x:0,y:0,rotation:b.rot,duration:1,ease:'elastic.out(1,.4)'});
+    });
+  }
+  document.querySelectorAll('.cup').forEach(function(cup){
+    ['mouseenter','focus'].forEach(function(ev){cup.addEventListener(ev,function(){shake(cup)})});
+    cup.addEventListener('touchstart',function(){shake(cup)},{passive:true});
+  });
+
   if(!window.gsap||!window.ScrollTrigger)return;   // page reads fine without motion
   gsap.registerPlugin(ScrollTrigger);
+  if(motionOK&&matchMedia('(pointer: fine)').matches){   // nearer ingredients travel further with the pointer
+    var movers=bitEls.map(function(b){return {x:gsap.quickTo(b.par,'x',{duration:.9,ease:'power3'}),y:gsap.quickTo(b.par,'y',{duration:.9,ease:'power3'}),z:b.z}});
+    document.getElementById('picks').addEventListener('pointermove',function(e){
+      var nx=e.clientX/innerWidth-.5,ny=e.clientY/innerHeight-.5;
+      movers.forEach(function(m){m.x(-nx*70*m.z);m.y(-ny*50*m.z)});
+    });
+  }
   var SCRUB=0.9;   // seconds of catch-up: turns wheel notches and finger flicks into a glide
   ScrollTrigger.config({ignoreMobileResize:true});   // the phone address bar sliding away must not re-measure pins
 
@@ -451,7 +546,7 @@ a{color:inherit}
 
     // The score, in timeline units (one unit = UNIT px of scrolling)
     var HERO=0, WALL=4, CUTS=plates.length, ZOOM=WALL+1+CUTS, LIFT=ZOOM+1, GRID=LIFT+.4,
-        PICKS=GRID+items.length, CATS=PICKS+3, LIST=CATS+5, STEP=.5, STORES=LIST+1+btns.length*STEP, END=STORES+2.5, TOTAL=END+2,
+        PICKS=GRID+items.length, CATS=PICKS+4.5, LIST=CATS+5, STEP=.5, STORES=LIST+1+btns.length*STEP, END=STORES+2.5, TOTAL=END+2,
         UNIT=c.wide?430:330;
 
     // hard cuts: short tweens of their own, fired when the playhead crosses a band, never scrubbed
@@ -496,8 +591,17 @@ a{color:inherit}
     });
     // house picks
     iris('picks',PICKS,'#senses');
-    tl.fromTo('#ghost',{xPercent:8},{xPercent:-45,duration:CATS-PICKS},PICKS);
-    tl.from('.pair img',{y:90,rotate:-10,scale:.8,stagger:.15,duration:.8,ease:'power2.out'},PICKS+.6);
+    tl.fromTo('#g1',{xPercent:6},{xPercent:-46,duration:CATS-PICKS+1},PICKS);            // names cross in opposite directions
+    tl.fromTo('#g2',{xPercent:-52},{xPercent:-4,duration:CATS-PICKS+1},PICKS);
+    tl.fromTo('#picks .splash',{scale:0,rotation:-40,transformOrigin:'50% 50%'},{scale:1,rotation:0,duration:1,stagger:.18,ease:'back.out(1.6)'},PICKS+.7);
+    tl.fromTo('#cupMango',{yPercent:70,rotation:-26,scale:.6,autoAlpha:0},{yPercent:0,rotation:-6,scale:1,autoAlpha:1,duration:1.2,ease:'back.out(1.5)'},PICKS+.6);
+    tl.fromTo('#cupUbe',{yPercent:80,rotation:24,scale:.6,autoAlpha:0},{yPercent:0,rotation:5,scale:1,autoAlpha:1,duration:1.2,ease:'back.out(1.5)'},PICKS+.95);
+    bitEls.forEach(function(b,i){   // ingredients burst out from behind their cup
+      var cx=b.cup==='mango'?28:70;
+      tl.fromTo(b.el,{x:function(){return (cx-b.x)/100*pstage.offsetWidth},y:function(){return (60-b.y)/100*pstage.offsetHeight},scale:0,autoAlpha:0},
+        {x:0,y:0,scale:1,autoAlpha:1,duration:1,ease:'back.out(1.4)'},PICKS+1.5+i*.035);
+    });
+    tl.fromTo('.picks-names span',{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.6,stagger:.12,ease:'power2.out'},PICKS+2.1);
     // menu: cards travel sideways
     iris('cats',CATS,'#picks');
     tl.to(ct,{x:function(){return -(ct.scrollWidth-window.innerWidth)},duration:LIST-CATS-1},CATS+1);
