@@ -12,6 +12,7 @@ class ProductCard extends StatelessWidget {
     required this.name,
     required this.minPrice,
     required this.hasPriceRange,
+    this.wasPrice,
     this.imageUrl,
     this.tagline,
     this.tags = const [],
@@ -36,6 +37,9 @@ class ProductCard extends StatelessWidget {
   final String name;
   final double minPrice;
   final bool hasPriceRange;
+
+  /// Struck-through "was" price; null = no markdown.
+  final double? wasPrice;
   final String? imageUrl;
   final String? tagline;
   final List<String> tags;
@@ -221,8 +225,20 @@ class ProductCard extends StatelessWidget {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Expanded(
-                          child: Text(
-                            priceLabel,
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(text: priceLabel),
+                                if (wasPrice != null)
+                                  TextSpan(
+                                    text: '  ${fmt.format(wasPrice)}',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.outline,
+                                      decoration: TextDecoration.lineThrough,
+                                    ),
+                                  ),
+                              ],
+                            ),
                             style: theme.textTheme.titleSmall?.copyWith(
                               color: theme.colorScheme.primary,
                             ),

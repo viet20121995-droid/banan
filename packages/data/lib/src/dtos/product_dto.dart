@@ -25,6 +25,7 @@ class ProductDto {
     this.availableDaysOfWeek = const [],
     this.dailyMaxQuantity,
     this.excludedStoreIds = const [],
+    this.compareAtPrice,
     this.averageRating = 0,
     this.reviewCount = 0,
     this.isBirthdayCake = false,
@@ -55,6 +56,9 @@ class ProductDto {
       dailyMaxQuantity: (json['dailyMaxQuantity'] as num?)?.toInt(),
       excludedStoreIds:
           ((json['excludedStoreIds'] as List?) ?? const []).cast<String>(),
+      compareAtPrice: json['compareAtPrice'] == null
+          ? null
+          : _toDouble(json['compareAtPrice']),
       averageRating: (json['averageRating'] as num?)?.toDouble() ?? 0,
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       isBirthdayCake: json['isBirthdayCake'] as bool? ?? false,
@@ -90,6 +94,7 @@ class ProductDto {
   final List<int> availableDaysOfWeek;
   final int? dailyMaxQuantity;
   final List<String> excludedStoreIds;
+  final double? compareAtPrice;
   final double averageRating;
   final int reviewCount;
   final bool isBirthdayCake;
@@ -118,6 +123,7 @@ class ProductDto {
         availableDaysOfWeek: availableDaysOfWeek,
         dailyMaxQuantity: dailyMaxQuantity,
         excludedStoreIds: excludedStoreIds,
+        compareAtPrice: compareAtPrice,
         averageRating: averageRating,
         reviewCount: reviewCount,
         isBirthdayCake: isBirthdayCake,

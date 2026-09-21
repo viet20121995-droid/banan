@@ -27,6 +27,7 @@ class Product extends Equatable {
     this.availableDaysOfWeek = const [],
     this.dailyMaxQuantity,
     this.excludedStoreIds = const [],
+    this.compareAtPrice,
     this.averageRating = 0,
     this.reviewCount = 0,
     this.isBirthdayCake = false,
@@ -66,6 +67,15 @@ class Product extends Equatable {
 
   /// Branches that do NOT serve this product. Empty = every branch.
   final List<String> excludedStoreIds;
+
+  /// Display-only "was" price. Only meaningful when above [basePrice].
+  final double? compareAtPrice;
+
+  /// The struck-through price to show, or null when there is no markdown.
+  double? get wasPrice =>
+      compareAtPrice != null && compareAtPrice! > minPrice && !hasPriceRange
+          ? compareAtPrice
+          : null;
 
   /// Average star rating across all PUBLISHED reviews (0..5). 0 means no
   /// reviews yet (use [reviewCount] == 0 to distinguish from "rated 0").
@@ -163,6 +173,7 @@ class Product extends Equatable {
         availableDaysOfWeek,
         dailyMaxQuantity,
         excludedStoreIds,
+        compareAtPrice,
         averageRating,
         reviewCount,
         isBirthdayCake,

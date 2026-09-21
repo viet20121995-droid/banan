@@ -381,6 +381,35 @@ class _Details extends StatelessWidget {
                 color: theme.colorScheme.primary,
               ),
             ),
+            if (product.wasPrice != null) ...[
+              const SizedBox(width: BananSpacing.sm),
+              Text(
+                NumberFormat.currency(
+                  locale: 'vi_VN',
+                  symbol: '₫',
+                  decimalDigits: 0,
+                ).format(product.wasPrice),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.outline,
+                  decoration: TextDecoration.lineThrough,
+                ),
+              ),
+              const SizedBox(width: BananSpacing.sm),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.errorContainer,
+                  borderRadius: BananRadii.rPill,
+                ),
+                child: Text(
+                  '-${((1 - product.minPrice / product.wasPrice!) * 100).round()}%',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onErrorContainer,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
             const Spacer(),
             Text(
               s.readyInMin(product.preparationMinutes),

@@ -334,6 +334,8 @@ model Product {
   slug               String
   description        String    @db.Text
   basePrice          Decimal   @db.Decimal(12, 2)
+  /// Display-only "was" price (struck through). Null / <= basePrice = no sale badge.
+  compareAtPrice     Decimal?  @db.Decimal(12, 2)
   // Cover image is images[0]; gallery is images[1..].
   images             String[]
   // Free-form merchant-set badges shown on the customer card.
