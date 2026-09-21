@@ -176,6 +176,24 @@ literal search returns nothing even on a correct build.
 
 ## Payments (9Pay)
 
+### Portal returns 431 after redirect
+
+On 2026-09-21 the same signed test URL returned 431 with
+`Referer: https://order.banancakes.vn/`, but 302 without that header. This
+was a gateway response, not an order API rejection. Keep both the customer
+HTML `meta name="referrer"` and Caddy `Referrer-Policy` set to `no-referrer`.
+Do not increase backend header limits to address this particular failure.
+
+After deploying, check `/`, `/checkout`, and `/orders/<id>` on the order
+domain: HTML responses must include `Referrer-Policy: no-referrer` and
+`Cache-Control: no-cache, must-revalidate`. Build the full customer bundle so
+the generated service-worker manifest matches the changed HTML; editing only
+the live HTML leaves existing service-worker clients on the old version.
+An already-open checkout must be reloaded before retrying payment. Verify
+Instagram's in-app browser on a device too; desktop HTTP checks alone cannot
+prove that browser's behavior. Never include signed payment URLs in logs or
+test fixtures.
+
 `NINEPAY_ENDPOINT` defaults to the sandbox. Take a real sandbox payment first,
 then switch to `https://payment.9pay.vn`. 9Pay support must register both URLs
 against the merchant account, and the merchant key differs between sandbox and

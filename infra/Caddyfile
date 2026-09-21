@@ -17,11 +17,13 @@
 # assets/ + canvaskit/ keep their normal long caching.
 (flutter_spa) {
 	encode gzip zstd
-	@entry path /index.html /flutter_service_worker.js /flutter_bootstrap.js /version.json /main.dart.js /manifest.json
-	header @entry Cache-Control "no-cache, must-revalidate"
-	# SPA fallback — deep links (/faq, /product/..) served by index.html.
-	try_files {path} /index.html
-	file_server
+	# Match the rewritten path so / and SPA deep links revalidate index.html too.
+	route {
+		try_files {path} /index.html
+		@entry path / /index.html /flutter_service_worker.js /flutter_bootstrap.js /version.json /main.dart.js /manifest.json
+		header @entry Cache-Control "no-cache, must-revalidate"
+		file_server
+	}
 }
 
 # ── API ───────────────────────────────────────────────────────────────────────
@@ -33,6 +35,8 @@ api.{$BASE_DOMAIN} {
 # ── Customer ordering app ─────────────────────────────────────────────────────
 order.{$BASE_DOMAIN} {
 	root * /srv/customer
+	# Match the HTML policy even when an older document is revalidated.
+	header Referrer-Policy "no-referrer"
 	import flutter_spa
 }
 
