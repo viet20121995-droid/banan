@@ -3549,12 +3549,13 @@ export class OrdersService {
       select: { id: true, claimed: true, role: true },
     });
     if (existing) {
-      // Anti-takeover: only an UNCLAIMED, CUSTOMER-role stub (a prior guest or
-      // a merchant-created phone customer) is safe to reuse, so a returning
-      // guest's orders still aggregate. A claimed account, or any staff /
-      // kitchen / admin account, must never be bound to an unverified guest
-      // order — force the shopper to log in instead.
-      if (existing.claimed || existing.role !== 'CUSTOMER') {
+      // A CUSTOMER phone — guest stub or a registered (claimed) account — is
+      // reused so a shopper who forgot their password can still order. It is
+      // safe because the caller treats it as `guestBoundToExisting`: no
+      // session is issued and the account's points, coupons and member
+      // benefits stay untouched; the order merely lands in its history.
+      // A staff / kitchen / admin phone is never bound to a guest order.
+      if (existing.role !== 'CUSTOMER') {
         throw new BadRequestException({
           code: 'PHONE_HAS_ACCOUNT',
           message: 'Số điện thoại này đã có tài khoản. Vui lòng đăng nhập để đặt hàng.',

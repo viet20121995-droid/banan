@@ -110,7 +110,7 @@ describe('OrdersService.upsertGuestCustomer (anti-takeover)', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('REFUSES a phone that belongs to a CLAIMED account', async () => {
+  it('binds a CLAIMED customer account without creating or logging in (forgot-password shopper)', async () => {
     const create = jest.fn();
     const { svc } = makeService({
       findUnique: findUniqueRouter({
@@ -119,7 +119,10 @@ describe('OrdersService.upsertGuestCustomer (anti-takeover)', () => {
       create,
     });
 
-    await expectPhoneHasAccount(upsert(svc, { fullName: 'Kẻ Gian', phone: '0900111222' }));
+    const res = await upsert(svc, { fullName: 'Khách Quên Mật Khẩu', phone: '0900111222' });
+    // createdNew=false → the caller sets guestBoundToExisting: no session,
+    // no points / coupon / member benefits from the account.
+    expect(res).toEqual({ userId: 'real-1', createdNew: false });
     expect(create).not.toHaveBeenCalled();
   });
 
