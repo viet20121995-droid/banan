@@ -69,6 +69,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (status >= 500) this.notifyOps(exception, request, status);
+    // Rejected writes (a checkout that won't go through, a refused coupon…):
+    // the access log only has the status, so record WHY. 401/404/429 are noise.
+    else if (request.method !== 'GET' && ![401, 404, 429].includes(status)) {
+      const who = (request as Request & { user?: AuthPrincipal }).user?.sub ?? 'guest';
+      this.logger.warn(
+        `${request.method} ${request.url.split('?')[0]} → ${status} ${body.error.code}: ` +
+          `${body.error.message} (user ${who})`,
+      );
+    }
 
     response.status(status).json({
       ...body,
