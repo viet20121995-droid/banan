@@ -181,6 +181,7 @@ class CatalogRepositoryImpl implements CatalogRepository {
       'slug': d.slug,
       'description': d.description,
       'basePrice': d.basePrice,
+      if (d.compareAtPrice != null) 'compareAtPrice': d.compareAtPrice,
       'images': d.images,
       'tags': d.tags,
       if (d.preparationMinutes != null)

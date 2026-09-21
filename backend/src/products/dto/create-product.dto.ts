@@ -42,6 +42,12 @@ export class CreateProductDto {
   @Min(0)
   basePrice!: number;
 
+  /** Display-only struck-through "was" price. 0 / omitted = none. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  compareAtPrice?: number;
+
   @IsArray()
   @IsString({ each: true })
   @ArrayMaxSize(10)

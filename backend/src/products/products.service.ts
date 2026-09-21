@@ -354,6 +354,7 @@ export class ProductsService {
           slug: dto.slug,
           description: dto.description,
           basePrice: new Prisma.Decimal(dto.basePrice),
+          compareAtPrice: dto.compareAtPrice ? new Prisma.Decimal(dto.compareAtPrice) : null,
           images: dto.images,
           tags: dto.tags ?? [],
           preparationMinutes: dto.preparationMinutes ?? 60,
@@ -416,6 +417,10 @@ export class ProductsService {
           ...(dto.description !== undefined && { description: dto.description }),
           ...(dto.basePrice !== undefined && {
             basePrice: new Prisma.Decimal(dto.basePrice),
+          }),
+          // 0 clears the "was" price.
+          ...(dto.compareAtPrice !== undefined && {
+            compareAtPrice: dto.compareAtPrice ? new Prisma.Decimal(dto.compareAtPrice) : null,
           }),
           ...(dto.images && { images: dto.images }),
           ...(dto.tags !== undefined && { tags: dto.tags }),

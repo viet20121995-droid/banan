@@ -12,6 +12,7 @@ class ProductDraft {
     required this.slug,
     required this.description,
     required this.basePrice,
+    this.compareAtPrice,
     required this.variants,
     this.images = const [],
     this.tags = const [],
@@ -33,6 +34,9 @@ class ProductDraft {
   String slug;
   String description;
   double basePrice;
+
+  /// Struck-through "was" price; 0 clears it, null leaves it untouched.
+  double? compareAtPrice;
   List<String> images;
 
   /// Free-form merchant-set badges. E.g. ["Vegan", "Bestseller", "New"].

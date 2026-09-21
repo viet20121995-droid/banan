@@ -47,6 +47,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
   late final TextEditingController _slug;
   late final TextEditingController _description;
   late final TextEditingController _basePrice;
+  final _compareAtPrice = TextEditingController();
   late final TextEditingController _prep;
   late final TextEditingController _leadHours;
   late final TextEditingController _dailyMax;
@@ -88,6 +89,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _slug.dispose();
     _description.dispose();
     _basePrice.dispose();
+    _compareAtPrice.dispose();
     _prep.dispose();
     _leadHours.dispose();
     _dailyMax.dispose();
@@ -102,6 +104,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _slug.text = p.slug;
     _description.text = p.description;
     _basePrice.text = p.basePrice.toStringAsFixed(0);
+    _compareAtPrice.text = p.compareAtPrice?.toStringAsFixed(0) ?? '';
     _prep.text = p.preparationMinutes.toString();
     _categoryId = p.categoryId;
     _available = p.isAvailable;
@@ -204,6 +207,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       slug: _slug.text.trim(),
       description: _description.text.trim(),
       basePrice: double.tryParse(_basePrice.text) ?? 0,
+      // Empty = 0 = clear the "was" price.
+      compareAtPrice: double.tryParse(_compareAtPrice.text) ?? 0,
       images: _images,
       tags: _tags,
       variants: _variants,
@@ -384,7 +389,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                                   decimal: true,
                                 ),
                                 decoration: const InputDecoration(
-                                  labelText: 'Giá gốc (₫)',
+                                  labelText: 'Giá bán (₫)',
                                 ),
                                 validator: (v) {
                                   final n = double.tryParse(v ?? '');
@@ -406,6 +411,23 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                        TextFormField(
+                          controller: _compareAtPrice,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Giá niêm yết gạch ngang (₫)',
+                            helperText: 'Để trống nếu không giảm giá. Phải cao '
+                                'hơn giá bán thì mới hiện cho khách.',
+                          ),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return null;
+                            final n = double.tryParse(v);
+                            return n == null || n < 0
+                                ? 'Nhập giá hợp lệ'
+                                : null;
+                          },
                         ),
                         const SizedBox(height: BananSpacing.md),
                         SwitchListTile.adaptive(
