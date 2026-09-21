@@ -1130,6 +1130,38 @@ export class OrdersService {
     );
   }
 
+  /**
+   * "Thanh toán lại" — a fresh gateway link for a checkout the customer never
+   * paid (bank app failed, tab closed, card declined). The order id is the
+   * capability, like `/track`. Older open attempts are VOIDED first so only one
+   * link is live; if a voided one is paid anyway, `applyCapture`'s stranded-
+   * VOIDED branch auto-refunds it.
+   */
+  async repay(orderId: string, customerIp?: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...AWAITING_ONLINE_PAYMENT },
+      include: ORDER_INCLUDE,
+    });
+    if (!order) {
+      throw new BadRequestException({
+        code: 'ORDER_NOT_PAYABLE',
+        message: 'Đơn này đã được thanh toán hoặc đã huỷ. Vui lòng đặt đơn mới.',
+      });
+    }
+    const last = order.payments.find((p) =>
+      (ONLINE_GATEWAY_PROVIDERS as readonly string[]).includes(p.provider),
+    );
+    await this.prisma.payment.updateMany({
+      where: { orderId, status: 'INITIATED', provider: { in: [...ONLINE_GATEWAY_PROVIDERS] } },
+      data: { status: 'VOIDED' },
+    });
+    return this.payments.initiate({
+      order,
+      paymentMethod: last?.provider ?? 'NINEPAY',
+      customerIp: customerIp ?? '',
+    });
+  }
+
   async findOne(
     id: string,
     principal: { sub: string; role: Role; storeId?: string | null; kitchenId?: string | null },

@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { OrderSource, OrderStatus, Role } from '@prisma/client';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -77,6 +78,15 @@ export class OrdersController {
   @Get(':id/track')
   track(@Param('id') id: string) {
     return this.orders.trackByCapability(id);
+  }
+
+  /** New payment link for an unpaid online order (order id = capability). */
+  @Public()
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
+  @Post(':id/repay')
+  @HttpCode(HttpStatus.OK)
+  repay(@Param('id') id: string, @Req() req: Request) {
+    return this.orders.repay(id, req.ip);
   }
 
   @Roles(Role.CUSTOMER)
