@@ -37,7 +37,8 @@ export class CouponsService {
     code: string;
     subtotalVnd: number;
     deliveryFeeVnd: number;
-    userId: string;
+    /** Absent for a guest preview — the per-user limit is checked at order time. */
+    userId?: string;
     storeId?: string;
   }): Promise<CouponValidation> {
     const coupon = await this.prisma.coupon.findUnique({
@@ -46,7 +47,7 @@ export class CouponsService {
     if (!coupon || !coupon.isActive) {
       throw new BadRequestException({
         code: 'COUPON_INVALID',
-        message: 'This coupon is not valid.',
+        message: 'Mã giảm giá không hợp lệ.',
       });
     }
     // Store-scoped coupons only work at their owning store. Chain-wide
@@ -54,20 +55,20 @@ export class CouponsService {
     if (coupon.storeId !== null && args.storeId !== undefined && coupon.storeId !== args.storeId) {
       throw new BadRequestException({
         code: 'COUPON_WRONG_STORE',
-        message: 'This coupon is not valid at this store.',
+        message: 'Mã giảm giá không áp dụng tại chi nhánh này.',
       });
     }
     const now = new Date();
     if (now < coupon.startsAt || now > coupon.endsAt) {
       throw new BadRequestException({
         code: 'COUPON_EXPIRED',
-        message: 'This coupon is not active right now.',
+        message: 'Mã giảm giá chưa đến hạn hoặc đã hết hạn.',
       });
     }
     if (coupon.maxRedemptions !== null && coupon.redemptions >= coupon.maxRedemptions) {
       throw new BadRequestException({
         code: 'COUPON_LIMIT_REACHED',
-        message: 'This coupon has been fully claimed.',
+        message: 'Mã giảm giá đã hết lượt sử dụng.',
       });
     }
     if (coupon.minSubtotal !== null) {
@@ -75,18 +76,18 @@ export class CouponsService {
       if (args.subtotalVnd < min) {
         throw new BadRequestException({
           code: 'COUPON_MIN_SUBTOTAL',
-          message: `Minimum subtotal of ${min.toLocaleString('vi-VN')}₫ not met.`,
+          message: `Mã này áp dụng cho đơn từ ${min.toLocaleString('vi-VN')} ₫.`,
         });
       }
     }
-    if (coupon.perUserLimit > 0) {
+    if (coupon.perUserLimit > 0 && args.userId) {
       const used = await this.prisma.couponRedemption.count({
         where: { couponId: coupon.id, userId: args.userId },
       });
       if (used >= coupon.perUserLimit) {
         throw new BadRequestException({
           code: 'COUPON_USER_LIMIT',
-          message: 'You have already used this coupon.',
+          message: 'Bạn đã dùng mã giảm giá này rồi.',
         });
       }
     }
@@ -138,13 +139,13 @@ export class CouponsService {
     if (!coupon.isActive || now < coupon.startsAt || now > coupon.endsAt) {
       throw new BadRequestException({
         code: 'COUPON_EXPIRED',
-        message: 'This coupon is not active right now.',
+        message: 'Mã giảm giá chưa đến hạn hoặc đã hết hạn.',
       });
     }
     if (coupon.maxRedemptions !== null && coupon.redemptions >= coupon.maxRedemptions) {
       throw new BadRequestException({
         code: 'COUPON_LIMIT_REACHED',
-        message: 'This coupon has been fully claimed.',
+        message: 'Mã giảm giá đã hết lượt sử dụng.',
       });
     }
     if (coupon.perUserLimit > 0) {
@@ -154,7 +155,7 @@ export class CouponsService {
       if (used >= coupon.perUserLimit) {
         throw new BadRequestException({
           code: 'COUPON_USER_LIMIT',
-          message: 'You have already used this coupon.',
+          message: 'Bạn đã dùng mã giảm giá này rồi.',
         });
       }
     }

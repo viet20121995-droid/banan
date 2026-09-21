@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   IsBoolean,
   IsDateString,
@@ -13,6 +14,7 @@ import {
 } from 'class-validator';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 import { CouponType, Role } from '@prisma/client';
@@ -37,18 +39,23 @@ class ValidateCouponDto {
 @ApiBearerAuth()
 @ApiTags('coupons')
 @Controller({ path: 'coupons', version: '1' })
-@Roles(Role.CUSTOMER, Role.ADMIN)
 export class CouponsController {
   constructor(private readonly coupons: CouponsService) {}
 
-  /** Customer enters a code at checkout — server validates + returns the discount. */
+  /**
+   * Customer enters a code at checkout — server validates + returns the
+   * discount. Open to guests (a promo code usually targets NEW customers); the
+   * per-user limit is then enforced when the order is placed.
+   */
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('validate')
-  async validate(@CurrentUser() user: AuthPrincipal, @Body() dto: ValidateCouponDto) {
+  async validate(@CurrentUser() user: AuthPrincipal | null, @Body() dto: ValidateCouponDto) {
     const result = await this.coupons.validate({
       code: dto.code,
       subtotalVnd: dto.subtotal,
       deliveryFeeVnd: dto.deliveryFee,
-      userId: user.sub,
+      userId: user?.sub,
     });
     return {
       code: result.coupon.code,
@@ -61,6 +68,7 @@ export class CouponsController {
 
   /** Voucher wallet — the customer's coupons grouped into
    *  available / used / expired. */
+  @Roles(Role.CUSTOMER, Role.ADMIN)
   @Get('mine')
   async mine(@CurrentUser() user: AuthPrincipal) {
     return this.coupons.listForCustomer(user.sub);

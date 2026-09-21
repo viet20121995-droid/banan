@@ -229,7 +229,7 @@ export class OrdersService {
     if (dto.fulfillmentType === 'DELIVERY' && !dto.address) {
       throw new BadRequestException({
         code: 'ADDRESS_REQUIRED',
-        message: 'Delivery orders require an address.',
+        message: 'Vui lòng nhập địa chỉ giao hàng.',
       });
     }
     this.payments.validate(dto.paymentMethod, dto.fulfillmentType);
@@ -367,7 +367,10 @@ export class OrdersService {
 
     // Anything that's neither a product nor an active bundle is unknown.
     if (requestedIds.some((id) => !productById.has(id) && !bundleById.has(id))) {
-      throw new BadRequestException({ code: 'PRODUCT_NOT_FOUND' });
+      throw new BadRequestException({
+        code: 'PRODUCT_NOT_FOUND',
+        message: 'Có món trong giỏ không còn tồn tại. Vui lòng tải lại trang và chọn lại.',
+      });
     }
 
     // Merge each bundle's constituent products into productById so the
@@ -387,7 +390,7 @@ export class OrdersService {
     if (productStoreIds.size !== 1) {
       throw new BadRequestException({
         code: 'CART_MULTI_STORE',
-        message: 'All items must be from the same store.',
+        message: 'Các món trong giỏ phải thuộc cùng một cửa hàng.',
       });
     }
     // Pickup orders route to the customer-chosen branch.
@@ -405,7 +408,7 @@ export class OrdersService {
       if (!pickupStore) {
         throw new BadRequestException({
           code: 'PICKUP_STORE_NOT_FOUND',
-          message: 'The selected pickup branch is no longer available.',
+          message: 'Chi nhánh lấy hàng đã chọn không còn khả dụng. Vui lòng chọn chi nhánh khác.',
         });
       }
       storeId = pickupStore.id;
@@ -418,7 +421,7 @@ export class OrdersService {
         if (!dStore) {
           throw new BadRequestException({
             code: 'DELIVERY_STORE_NOT_FOUND',
-            message: 'The selected delivery branch is no longer available.',
+            message: 'Chi nhánh giao hàng không còn khả dụng. Vui lòng chọn lại phường/xã.',
           });
         }
         storeId = dStore.id;
@@ -493,7 +496,7 @@ export class OrdersService {
       if (!product.isAvailable) {
         throw new BadRequestException({
           code: 'PRODUCT_UNAVAILABLE',
-          message: `${product.name} is no longer available.`,
+          message: `"${product.name}" vừa ngừng bán — vui lòng bỏ món này khỏi giỏ.`,
         });
       }
       const variant = input.variantId
@@ -502,7 +505,7 @@ export class OrdersService {
       if (!variant || !variant.isAvailable) {
         throw new BadRequestException({
           code: 'VARIANT_UNAVAILABLE',
-          message: `Selected option for ${product.name} is unavailable.`,
+          message: `Lựa chọn của "${product.name}" vừa ngừng bán — vui lòng chọn lại.`,
         });
       }
       // Stock check for LIMITED variants. The hard race-safe decrement
@@ -674,6 +677,16 @@ export class OrdersService {
     let couponDiscountVnd = 0;
     let couponAppliesToDelivery = false;
     let couponId: string | null = null;
+    // A guest order bound to an existing account can't spend that account's
+    // per-user coupon allowance (phone unverified). Say so instead of silently
+    // charging more than the checkout showed.
+    if (dto.couponCode && guestBoundToExisting) {
+      throw new BadRequestException({
+        code: 'COUPON_LOGIN_REQUIRED',
+        message:
+          'Số điện thoại này đã có tài khoản — vui lòng đăng nhập để dùng mã giảm giá, hoặc bỏ mã để đặt tiếp.',
+      });
+    }
     if (dto.couponCode && !guestBoundToExisting) {
       const v = await this.coupons.validate({
         code: dto.couponCode,
@@ -801,7 +814,10 @@ export class OrdersService {
         });
         const expired = card?.expiresAt != null && card.expiresAt.getTime() < Date.now();
         if (!card || !card.isActive || expired || card.balanceVnd <= 0) {
-          throw new BadRequestException({ code: 'GIFT_CARD_INVALID' });
+          throw new BadRequestException({
+            code: 'GIFT_CARD_INVALID',
+            message: 'Mã thẻ quà tặng không hợp lệ, đã hết hạn hoặc hết số dư.',
+          });
         }
         // Floor, not round: cap the gift-card debit to the integer VND owed.
         // Prices are Decimal(12,2) so totalAfterPoints can be fractional; a
@@ -814,7 +830,10 @@ export class OrdersService {
             data: { balanceVnd: { decrement: giftCardAmountVnd } },
           });
           if (dec.count === 0) {
-            throw new BadRequestException({ code: 'GIFT_CARD_INVALID' });
+            throw new BadRequestException({
+              code: 'GIFT_CARD_INVALID',
+              message: 'Mã thẻ quà tặng không hợp lệ, đã hết hạn hoặc hết số dư.',
+            });
           }
           total = totalAfterPoints.minus(new Prisma.Decimal(giftCardAmountVnd));
         }
@@ -2013,12 +2032,15 @@ export class OrdersService {
     });
     const productById = new Map(products.map((p) => [p.id, p]));
     if (requestedIds.some((id) => !productById.has(id))) {
-      throw new BadRequestException({ code: 'PRODUCT_NOT_FOUND' });
+      throw new BadRequestException({
+        code: 'PRODUCT_NOT_FOUND',
+        message: 'Có món trong giỏ không còn tồn tại. Vui lòng tải lại trang và chọn lại.',
+      });
     }
     if (new Set(products.map((p) => p.storeId)).size > 1) {
       throw new BadRequestException({
         code: 'CART_MULTI_STORE',
-        message: 'All items must be from the same store.',
+        message: 'Các món trong giỏ phải thuộc cùng một cửa hàng.',
       });
     }
 
@@ -2039,7 +2061,7 @@ export class OrdersService {
       if (!product.isAvailable && !opts.allowUnavailable) {
         throw new BadRequestException({
           code: 'PRODUCT_UNAVAILABLE',
-          message: `${product.name} is no longer available.`,
+          message: `"${product.name}" vừa ngừng bán — vui lòng bỏ món này khỏi giỏ.`,
         });
       }
       const variant = input.variantId
@@ -2048,7 +2070,7 @@ export class OrdersService {
       if (!variant || (!variant.isAvailable && !opts.allowUnavailable)) {
         throw new BadRequestException({
           code: 'VARIANT_UNAVAILABLE',
-          message: `Selected option for ${product.name} is unavailable.`,
+          message: `Lựa chọn của "${product.name}" vừa ngừng bán — vui lòng chọn lại.`,
         });
       }
       if ((opts.enforceLimitedStock ?? true) && variant.stockMode === 'LIMITED') {
@@ -3285,17 +3307,11 @@ export class OrdersService {
       for (const [o] of wins) {
         const openMin = toMin(o);
         if (i === 0 && openMin <= minutes) continue; // already past today
-        const dayName = [
-          'Sunday',
-          'Monday',
-          'Tuesday',
-          'Wednesday',
-          'Thursday',
-          'Friday',
-          'Saturday',
-        ][probe.getUTCDay()];
-        const when = i === 0 ? 'today' : i === 1 ? 'tomorrow' : dayName;
-        nextLabel = `${when} at ${o}`;
+        // Absolute day (dd/MM): "today" would be relative to the CHOSEN
+        // time, which misleads a customer scheduling for another day.
+        const dd = String(probe.getUTCDate()).padStart(2, '0');
+        const mm = String(probe.getUTCMonth() + 1).padStart(2, '0');
+        nextLabel = `${o} ngày ${dd}/${mm}`;
         break;
       }
     }
@@ -3305,9 +3321,11 @@ export class OrdersService {
       : `${store.name} hiện đang đóng cửa`;
     throw new BadRequestException({
       code: 'STORE_CLOSED',
-      message: nextLabel
-        ? `${subject}. Mở cửa lại: ${nextLabel}. Mẹo: dùng "Đặt trước theo lịch" để hẹn giờ.`
-        : `${subject}.`,
+      message: !nextLabel
+        ? `${subject}.`
+        : scheduled
+          ? `${subject}. Mở cửa lại lúc ${nextLabel} — vui lòng chọn giờ trong khung mở cửa.`
+          : `${subject}. Mở cửa lại lúc ${nextLabel}. Hãy chọn "Đặt trước theo lịch" để hẹn giờ nhận.`,
     });
   }
 
@@ -3347,7 +3365,11 @@ export class OrdersService {
       let regularTotal = new Prisma.Decimal(0);
       for (const bi of bundle.items) {
         const prod = bi.product;
-        if (!prod) throw new BadRequestException({ code: 'PRODUCT_NOT_FOUND' });
+        if (!prod)
+          throw new BadRequestException({
+            code: 'PRODUCT_NOT_FOUND',
+            message: 'Có món trong giỏ không còn tồn tại. Vui lòng tải lại trang và chọn lại.',
+          });
         const variant = bi.variant ?? prod.variants[0];
         if (!variant) {
           throw new BadRequestException({
