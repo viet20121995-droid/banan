@@ -1407,9 +1407,9 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
     final width = MediaQuery.sizeOf(context).width;
     // Uploaded banners are 16:6 (1600×600): the hero keeps that shape so they
     // show whole. The campaign slide carries a headline + CTA and needs its
-    // own minimum height; banners then letterbox (contain) instead of cropping.
+    // own minimum height; banners then centre-crop to fill.
     final ratioHeight =
-        ((width - BananSpacing.xl * 2) * 6 / 16).clamp(120.0, 560.0);
+        ((width - BananSpacing.xl * 2) * 6 / 16).clamp(120.0, 600.0);
     final campaignMin = width < 700 ? 220.0 : 360.0;
     final height = fullmoonAutumnCampaignEnabled && ratioHeight < campaignMin
         ? campaignMin
@@ -1541,10 +1541,14 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                                 )
                               : Image.network(
                                   slide.image!,
-                                  // Banners show whole; feed photos fill.
-                                  fit: slide.isBanner
-                                      ? BoxFit.contain
-                                      : BoxFit.cover,
+                                  // Fill the frame (centre crop) — letterboxing left
+                                  // the banner floating on the page. Explicit
+                                  // size: AnimatedSwitcher's Stack hands down
+                                  // loose constraints, so without it the image
+                                  // shrinks to its own ratio and never covers.
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  fit: BoxFit.cover,
                                   errorBuilder: (_, __, ___) =>
                                       const SizedBox.expand(),
                                 ),
