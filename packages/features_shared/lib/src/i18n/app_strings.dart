@@ -768,6 +768,11 @@ abstract class AppStrings {
 
   // Checkout validation
   String get checkMarkedFields;
+  String get storeClosedPickTime;
+  String get storeClosedAtTime;
+  String get sessionExpiredGuest;
+  String get taxCodeTooShort;
+  String get retry;
   String get wardRequired;
   String get wardNotServiceable;
   String get wardReselectRequired;
@@ -2264,6 +2269,19 @@ class _Vi extends AppStrings {
   // Checkout validation
   @override
   String get checkMarkedFields => 'Vui lòng kiểm tra thông tin được đánh dấu';
+  @override
+  String get storeClosedPickTime =>
+      'Tiệm đang đóng cửa — vui lòng chọn "Đặt trước theo lịch" để hẹn giờ nhận.';
+  @override
+  String get storeClosedAtTime =>
+      'Tiệm đóng cửa vào giờ bạn chọn — vui lòng chọn giờ khác.';
+  @override
+  String get sessionExpiredGuest =>
+      'Phiên đăng nhập đã hết hạn. Bạn vẫn đặt được ngay: nhập họ tên và số điện thoại bên dưới rồi bấm Đặt hàng.';
+  @override
+  String get taxCodeTooShort => 'Mã số thuế gồm ít nhất 8 ký tự';
+  @override
+  String get retry => 'Thử lại';
   @override
   String get wardRequired => 'Vui lòng chọn phường/xã';
   @override
@@ -3827,6 +3845,19 @@ class _En extends AppStrings {
   // Checkout validation
   @override
   String get checkMarkedFields => 'Please check the highlighted fields';
+  @override
+  String get storeClosedPickTime =>
+      'The shop is closed right now — choose "Schedule" to pick a time.';
+  @override
+  String get storeClosedAtTime =>
+      'The shop is closed at the time you picked — please choose another.';
+  @override
+  String get sessionExpiredGuest =>
+      'Your session expired. You can still order now: enter your name and phone below, then press Place order.';
+  @override
+  String get taxCodeTooShort => 'Tax code needs at least 8 characters';
+  @override
+  String get retry => 'Retry';
   @override
   String get wardRequired => 'Please pick a ward';
   @override

@@ -38,11 +38,8 @@ class CheckoutCrossSell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final async = ref.watch(_recommendationsProvider(seedProductId));
-    final inCart = ref
-        .watch(cartControllerProvider)
-        .items
-        .map((i) => i.productId)
-        .toSet();
+    final inCart =
+        ref.watch(cartControllerProvider).items.map((i) => i.productId).toSet();
 
     return async.maybeWhen(
       orElse: () => const SizedBox.shrink(),

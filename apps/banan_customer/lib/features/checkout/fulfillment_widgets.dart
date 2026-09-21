@@ -485,18 +485,34 @@ class _SavedAddressTile extends ConsumerWidget {
 /// (weekdays 0=Sun..6=Sat the cart can be fulfilled), the slot is advanced to
 /// the first allowed day — opening at [openHour] on any day after today — so
 /// the default never lands on a day the order would be rejected.
+///
+/// With [hours] (the fulfilling branch's `openingHours`) the result is snapped
+/// onto the first 30-minute slot the branch is actually open for — the backend
+/// rejects anything else with STORE_CLOSED.
 DateTime earliestScheduleSlot(
   Duration lead, {
   Set<int>? allowedDays,
   int openHour = 8,
+  OpeningHours? hours,
 }) {
   final t = DateTime.now().add(lead);
   final base = DateTime(t.year, t.month, t.day, t.hour);
   final slot = (t.minute / 15).ceil() * 15;
   var earliest = base.add(Duration(minutes: slot));
-  if (allowedDays == null || allowedDays.isEmpty || allowedDays.length >= 7) {
-    return earliest;
+  final anyDay =
+      allowedDays == null || allowedDays.isEmpty || allowedDays.length >= 7;
+  if (hours != null && hours.isNotEmpty) {
+    for (var i = 0; i < 14; i++) {
+      final day = DateTime(earliest.year, earliest.month, earliest.day)
+          .add(Duration(days: i));
+      if (!anyDay && !allowedDays.contains(day.weekday % 7)) continue;
+      for (final s in openSlotsFor(day, hours)) {
+        if (!s.isBefore(earliest)) return s;
+      }
+    }
+    return earliest; // closed for two weeks — let the backend explain
   }
+  if (anyDay) return earliest;
   for (var i = 0; i < 14; i++) {
     if (allowedDays.contains(earliest.weekday % 7)) return earliest;
     final next = DateTime(earliest.year, earliest.month, earliest.day)
@@ -504,6 +520,34 @@ DateTime earliestScheduleSlot(
     earliest = DateTime(next.year, next.month, next.day, openHour);
   }
   return earliest; // no allowed day within two weeks — fall back gracefully
+}
+
+/// `Store.openingHours`: weekday key (sun..sat) → list of [open, close] HH:mm.
+typedef OpeningHours = Map<String, List<List<String>>>;
+
+/// The 30-minute slots a branch can take on [day]: each window's opening time
+/// up to 30 minutes before it closes. No [hours] → the legacy 08:00–20:30 grid.
+List<DateTime> openSlotsFor(DateTime day, OpeningHours? hours) {
+  const keys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  int toMin(String hhmm) {
+    final p = hhmm.split(':');
+    return int.parse(p[0]) * 60 + int.parse(p[1]);
+  }
+
+  final windows = (hours == null || hours.isEmpty)
+      ? const [
+          ['08:00', '21:00'],
+        ]
+      : (hours[keys[day.weekday % 7]] ?? const <List<String>>[]);
+  final out = <DateTime>[];
+  for (final w in windows) {
+    if (w.length < 2) continue;
+    final last = toMin(w[1]) - 30;
+    for (var m = (toMin(w[0]) / 30).ceil() * 30; m <= last; m += 30) {
+      out.add(DateTime(day.year, day.month, day.day, m ~/ 60, m % 60));
+    }
+  }
+  return out;
 }
 
 /// Builds the "sold only on certain days" notice, or null when the cart isn't
@@ -550,6 +594,8 @@ class LeadAwareSchedule extends StatefulWidget {
     required this.leadHours,
     this.leadNote,
     this.allowedDays = const [],
+    this.hours,
+    this.closedNote,
     super.key,
   });
 
@@ -561,6 +607,13 @@ class LeadAwareSchedule extends StatefulWidget {
   /// Weekdays (0=Sun..6=Sat) the whole cart can be fulfilled on. Empty / all =
   /// no restriction. Drives both the pre-filled default and the picker.
   final List<int> allowedDays;
+
+  /// Opening hours of the branch that will fulfil the order (null = unknown).
+  final OpeningHours? hours;
+
+  /// Shown under the toggle while "soonest" is selected but the branch is
+  /// closed right now — the customer has to pick a time.
+  final String? closedNote;
 
   @override
   State<LeadAwareSchedule> createState() => _LeadAwareScheduleState();
@@ -585,6 +638,7 @@ class _LeadAwareScheduleState extends State<LeadAwareSchedule> {
             earliestScheduleSlot(
               Duration(hours: widget.leadHours),
               allowedDays: _allowed,
+              hours: widget.hours,
             ),
           );
         }
@@ -602,6 +656,8 @@ class _LeadAwareScheduleState extends State<LeadAwareSchedule> {
           : const Duration(minutes: 30),
       leadNote: widget.leadNote,
       allowedDays: widget.allowedDays,
+      hours: widget.hours,
+      closedNote: widget.closedNote,
     );
   }
 }
@@ -616,12 +672,16 @@ class ScheduleSection extends ConsumerWidget {
     this.minLead = const Duration(minutes: 30),
     this.leadNote,
     this.allowedDays = const [],
+    this.hours,
+    this.closedNote,
     super.key,
   });
   final DateTime? value;
   final ValueChanged<DateTime?> onChanged;
   final Duration minLead;
   final String? leadNote;
+  final OpeningHours? hours;
+  final String? closedNote;
 
   /// Weekdays (0=Sun..6=Sat) the cart can be fulfilled on. Empty / all = no
   /// restriction; otherwise the picker hides disallowed days.
@@ -632,7 +692,8 @@ class ScheduleSection extends ConsumerWidget {
       : allowedDays.toSet();
 
   Future<void> _pick(BuildContext context) async {
-    final earliest = earliestScheduleSlot(minLead, allowedDays: _allowed);
+    final earliest =
+        earliestScheduleSlot(minLead, allowedDays: _allowed, hours: hours);
     final initial =
         (value != null && value!.isAfter(earliest)) ? value : earliest;
     final picked = await showModalBottomSheet<DateTime>(
@@ -643,6 +704,7 @@ class ScheduleSection extends ConsumerWidget {
         earliest: earliest,
         initial: initial,
         allowedDays: _allowed,
+        hours: hours,
       ),
     );
     if (picked != null) onChanged(picked);
@@ -654,7 +716,8 @@ class ScheduleSection extends ConsumerWidget {
     final s = ref.watch(stringsProvider);
     final isScheduled = value != null;
     final fmt = DateFormat('HH:mm · dd/MM');
-    final earliest = earliestScheduleSlot(minLead, allowedDays: _allowed);
+    final earliest =
+        earliestScheduleSlot(minLead, allowedDays: _allowed, hours: hours);
 
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
@@ -692,6 +755,14 @@ class ScheduleSection extends ConsumerWidget {
               }
             },
           ),
+          if (!isScheduled && closedNote != null) ...[
+            const SizedBox(height: BananSpacing.sm),
+            Text(
+              closedNote!,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+          ],
           if (!isScheduled && leadNote != null) ...[
             const SizedBox(height: BananSpacing.sm),
             Row(
@@ -811,9 +882,11 @@ class _SchedulePickerSheet extends ConsumerStatefulWidget {
     required this.earliest,
     this.initial,
     this.allowedDays,
+    this.hours,
   });
   final DateTime earliest;
   final DateTime? initial;
+  final OpeningHours? hours;
 
   /// Weekdays (0=Sun..6=Sat) to keep. Null = every day.
   final Set<int>? allowedDays;
@@ -823,8 +896,6 @@ class _SchedulePickerSheet extends ConsumerStatefulWidget {
 }
 
 class _SchedulePickerSheetState extends ConsumerState<_SchedulePickerSheet> {
-  static const _openHour = 8;
-  static const _closeHour = 20; // last slot 20:30
   late DateTime _day;
   DateTime? _selected;
 
@@ -854,14 +925,10 @@ class _SchedulePickerSheetState extends ConsumerState<_SchedulePickerSheet> {
   }
 
   List<DateTime> _slotsFor(DateTime day) {
-    final out = <DateTime>[];
-    for (var h = _openHour; h <= _closeHour; h++) {
-      for (final m in const [0, 30]) {
-        final dt = DateTime(day.year, day.month, day.day, h, m);
-        if (!dt.isBefore(widget.earliest)) out.add(dt);
-      }
-    }
-    return out;
+    return [
+      for (final dt in openSlotsFor(day, widget.hours))
+        if (!dt.isBefore(widget.earliest)) dt,
+    ];
   }
 
   String _dayLabel(AppStrings s, DateTime d) {

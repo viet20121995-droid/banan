@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:banan_core/banan_core.dart';
 import 'package:equatable/equatable.dart';
 
@@ -96,7 +98,14 @@ class NewOrder {
     this.giftRecipientPhone,
     this.giftWrap = false,
     this.hidePrice = false,
+    this.clientRequestNonce,
   });
+
+  /// Random per-checkout-visit value. With it, [toJson] sends a
+  /// `clientRequestId` = nonce + payload hash: re-submitting the SAME order
+  /// (lost response on a slow connection) replays it server-side, while any
+  /// edit to the cart or form makes it a new order.
+  final String? clientRequestNonce;
 
   final List<NewOrderItem> items;
   final FulfillmentType fulfillmentType;
@@ -145,7 +154,16 @@ class NewOrder {
   final bool giftWrap;
   final bool hidePrice;
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson() {
+    final body = _body();
+    if (clientRequestNonce != null) {
+      body['clientRequestId'] =
+          '$clientRequestNonce-${jsonEncode(body).hashCode}';
+    }
+    return body;
+  }
+
+  Map<String, dynamic> _body() => {
         'items': items.map((i) => i.toJson()).toList(),
         'fulfillmentType': fulfillmentType.wire,
         'paymentMethod': paymentMethod.wire,

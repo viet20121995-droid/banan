@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:banan_core/banan_core.dart';
 import 'package:banan_data/banan_data.dart';
@@ -6,6 +7,7 @@ import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_domain/banan_domain.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/analytics.dart';
 import '../addresses/addresses_screen.dart' show myAddressesProvider;
 import '../cart/cart_controller.dart';
+import '../locations/locations_screen.dart' show storesListProvider;
 import 'checkout_cross_sell.dart';
 import 'fulfillment_preference.dart';
 import 'fulfillment_widgets.dart';
@@ -110,6 +113,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   // order. `Scrollable.ensureVisible` needs a context, so each key is
   // attached to the section's widget.
   final _guestKey = GlobalKey();
+  final _errorKey = GlobalKey();
+
+  /// Random half of the idempotency key (the other half hashes the payload,
+  /// so editing the cart or the form makes it a NEW order).
+  final _checkoutNonce =
+      '${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(1 << 31)}';
   final _pickupKey = GlobalKey();
   final _scheduleKey = GlobalKey();
   final _addressKey = GlobalKey();
@@ -370,6 +379,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         _scheduledFor!.isBefore(DateTime.now())) {
       scheduleError = s.pickEarliest;
       add(_scheduleKey);
+    } else {
+      // The backend refuses a closed branch (STORE_CLOSED) — catch it here.
+      final store = _fulfilStore(cart);
+      if (store != null &&
+          store.openingHours.isNotEmpty &&
+          !store.isOpenAt(_scheduledFor)) {
+        scheduleError =
+            _scheduledFor == null ? s.storeClosedPickTime : s.storeClosedAtTime;
+        add(_scheduleKey);
+      }
     }
     // 4. Delivery address + ward.
     if (_fulfillment == FulfillmentType.delivery) {
@@ -455,6 +474,33 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     return first;
   }
 
+  /// The branch that will fulfil this order — the picked pickup branch, or the
+  /// one the delivery quote routed to. Before either is known, any branch
+  /// (they keep the same hours) so the schedule picker still follows real
+  /// opening hours.
+  Store? _fulfilStore(CartState cart) {
+    final stores = ref.read(storesListProvider).valueOrNull ?? const <Store>[];
+    if (stores.isEmpty) return null;
+    final id = _fulfillment == FulfillmentType.pickup
+        ? _pickupStoreId
+        : ref
+            .read(
+              _deliveryQuoteProvider(
+                (
+                  wardCode: _wardCode,
+                  productIdsCsv: cart.orderedProductIds.join(','),
+                ),
+              ),
+            )
+            .valueOrNull
+            ?.store
+            ?.id;
+    for (final st in stores) {
+      if (st.id == id) return st;
+    }
+    return stores.first;
+  }
+
   /// Smooth-scrolls the failing section into view and focuses its first
   /// invalid input. `ensureVisible` walks up from the section's own context,
   /// so it works in both the narrow single-column and wide two-column
@@ -531,6 +577,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final pointsToRedeem = _pointsToRedeem.clamp(0, maxRedeemable);
 
     final draft = NewOrder(
+      clientRequestNonce: _checkoutNonce,
       items: cart.items
           .map(
             (i) => NewOrderItem(
@@ -601,7 +648,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       giftRecipientName: _isGift && _giftRecipientName.text.trim().isNotEmpty
           ? _giftRecipientName.text.trim()
           : null,
-      giftRecipientPhone: _isGift && _giftRecipientPhone.text.trim().isNotEmpty
+      // Optional field; the API refuses numbers under 7 digits.
+      giftRecipientPhone: _isGift && _giftRecipientPhone.text.trim().length >= 7
           ? _giftRecipientPhone.text.trim()
           : null,
       giftWrap: _isGift && _giftWrap,
@@ -609,15 +657,40 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
 
     final repo = ref.read(orderRepositoryProvider);
-    final result = await repo.placeOrder(draft);
+    final Result<PlaceOrderResult, AppFailure> result;
+    try {
+      result = await repo.placeOrder(draft);
+    } catch (e) {
+      // A parse error must not leave the button spinning forever.
+      if (mounted) {
+        setState(() => _placing = false);
+        await _showPlaceError(UnknownFailure(message: e.toString(), cause: e));
+      }
+      return;
+    }
 
     if (!mounted) return;
     setState(() => _placing = false);
 
     result.when(
       success: (placed) async {
+        // Order exists but the gateway isn't configured: say so while the
+        // cart (and this screen) are still here.
+        if (placed.payment.configurationError != null) {
+          await _showPlaceError(
+            ServerFailure(
+              code: 'PAYMENT_CONFIG',
+              message: placed.payment.configurationError,
+            ),
+          );
+          return;
+        }
         Analytics.orderPlaced();
-        ref.read(cartControllerProvider.notifier).clear();
+        // Gateway payments keep the cart until the payment comes back paid —
+        // a declined card / closed tab must not cost the customer their cart.
+        if (!placed.payment.hasRedirect) {
+          ref.read(cartControllerProvider.notifier).clear();
+        }
 
         // Guest checkout for a NEW phone gets fresh tokens from the backend —
         // adopt them so the customer is logged in for order tracking. A
@@ -627,11 +700,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           await ref
               .read(authRepositoryProvider)
               .adoptSession(placed.guestSession!);
-        }
-
-        if (placed.payment.configurationError != null) {
-          setState(() => _error = placed.payment.configurationError);
-          return;
         }
 
         // Redirect-based payment (9Pay / MoMo / Stripe): navigate the SAME
@@ -665,16 +733,43 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           context.go('/track/${placed.order.id}');
         }
       },
-      failure: (f) => setState(() {
-        if (f is OrderTimelineFailure) {
-          // Per-item rejection — show the structured panel, not the banner.
-          _timeline = f;
-          _error = null;
-        } else {
-          _timeline = null;
-          _error = authFailureMessage(f);
-        }
-      }),
+      failure: _showPlaceError,
+    );
+  }
+
+  /// A refused order must be impossible to miss: banner + snackbar + scroll to
+  /// it (the button sits at the bottom, the banner at the top — a silent
+  /// failure read as "the button does nothing").
+  Future<void> _showPlaceError(AppFailure f) async {
+    final s = ref.read(stringsProvider);
+    // 401 here = the stored session died; the guest form has just appeared.
+    final expired = f is AuthFailure;
+    final message = expired ? s.sessionExpiredGuest : authFailureMessage(f, s);
+    setState(() {
+      if (f is OrderTimelineFailure) {
+        // Per-item rejection — show the structured panel, not the banner.
+        _timeline = f;
+        _error = null;
+      } else {
+        _timeline = null;
+        _error = message;
+      }
+    });
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    await _revealIssue(
+      (
+        anchor: expired ? _guestKey : _errorKey,
+        focus: expired ? _guestNameFocus : null,
+      ),
     );
   }
 
@@ -714,6 +809,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       _scheduledFor = earliestScheduleSlot(
         Duration(hours: lead),
         allowedDays: set,
+        hours: _fulfilStore(cart)?.openingHours,
       );
       _timeline = null;
       _error = null;
@@ -736,6 +832,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final cart = ref.watch(cartControllerProvider);
     final session = ref.watch(authSessionProvider).valueOrNull;
     final isGuest = session == null;
+    // Keep the branch list loaded — its opening hours drive the schedule
+    // picker and the "closed right now" notice (delivery included).
+    ref.watch(storesListProvider);
+    final fulfilStore = _fulfilStore(cart);
     final membership =
         isGuest ? null : ref.watch(membershipSummaryProvider).valueOrNull;
     final theme = Theme.of(context);
@@ -868,6 +968,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       )
                     else if (_error != null)
                       Container(
+                        key: _errorKey,
                         padding: const EdgeInsets.all(BananSpacing.md),
                         margin: const EdgeInsets.only(bottom: BananSpacing.lg),
                         decoration: BoxDecoration(
@@ -959,6 +1060,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         leadHours: cart.maxLeadHours,
                         leadNote: _scheduleNote(cart),
                         allowedDays: cart.allowedDaysOfWeek,
+                        hours: fulfilStore?.openingHours,
+                        closedNote: fulfilStore != null &&
+                                fulfilStore.openingHours.isNotEmpty &&
+                                !fulfilStore.isOpenNow
+                            ? s.storeClosedPickTime
+                            : null,
                       ),
                     ),
                     if (_scheduleError != null)
@@ -992,6 +1099,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         key: _addressKey,
                         controller: _recipient,
                         focusNode: _recipientFocus,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(120)
+                        ],
                         decoration: InputDecoration(labelText: s.recipient),
                         onChanged: (_) => _clearSavedSelection(),
                         validator: (v) =>
@@ -1002,6 +1112,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         controller: _phone,
                         focusNode: _phoneFocus,
                         keyboardType: TextInputType.phone,
+                        inputFormatters: [LengthLimitingTextInputFormatter(20)],
                         decoration: InputDecoration(labelText: s.phone),
                         onChanged: (_) => _clearSavedSelection(),
                         validator: (v) =>
@@ -1011,6 +1122,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       TextFormField(
                         controller: _line1,
                         focusNode: _line1Focus,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(160)
+                        ],
                         decoration: InputDecoration(
                           labelText: s.addressLine,
                           helperText: s.addressHelperEx,
@@ -1072,6 +1186,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     TextFormField(
                       controller: _notes,
                       maxLines: 2,
+                      inputFormatters: [LengthLimitingTextInputFormatter(280)],
                       decoration: InputDecoration(
                         labelText: s.notesOptional,
                       ),
@@ -1342,6 +1457,7 @@ class _VatInvoiceSection extends ConsumerWidget {
             TextFormField(
               controller: company,
               focusNode: companyFocus,
+              inputFormatters: [LengthLimitingTextInputFormatter(160)],
               decoration: InputDecoration(
                 labelText: s.companyName,
               ),
@@ -1353,18 +1469,23 @@ class _VatInvoiceSection extends ConsumerWidget {
               controller: taxId,
               focusNode: taxIdFocus,
               keyboardType: TextInputType.number,
+              inputFormatters: [LengthLimitingTextInputFormatter(20)],
               decoration: InputDecoration(
                 labelText: s.taxCode,
                 helperText: s.taxCodeHelper,
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? s.required : null,
+              validator: (v) {
+                final val = (v ?? '').trim();
+                if (val.isEmpty) return s.required;
+                return val.length < 8 ? s.taxCodeTooShort : null;
+              },
             ),
             const SizedBox(height: BananSpacing.sm),
             TextFormField(
               controller: address,
               focusNode: addressFocus,
               maxLines: 2,
+              inputFormatters: [LengthLimitingTextInputFormatter(240)],
               decoration: InputDecoration(
                 labelText: s.companyAddress,
               ),
@@ -1467,6 +1588,7 @@ class _GiftSection extends ConsumerWidget {
             TextField(
               controller: recipientName,
               textCapitalization: TextCapitalization.words,
+              inputFormatters: [LengthLimitingTextInputFormatter(120)],
               decoration: InputDecoration(
                 labelText: s.giftRecipientName,
                 helperText: s.giftRecipientHelper,
@@ -1476,6 +1598,7 @@ class _GiftSection extends ConsumerWidget {
             TextField(
               controller: recipientPhone,
               keyboardType: TextInputType.phone,
+              inputFormatters: [LengthLimitingTextInputFormatter(20)],
               decoration: InputDecoration(
                 labelText: s.giftRecipientPhone,
                 helperText: s.giftPhoneHelper,
@@ -2123,6 +2246,7 @@ class _GuestContactSection extends ConsumerWidget {
           TextFormField(
             controller: nameController,
             focusNode: nameFocus,
+            inputFormatters: [LengthLimitingTextInputFormatter(120)],
             textCapitalization: TextCapitalization.words,
             decoration: InputDecoration(labelText: t.fullName),
             validator: (v) =>
@@ -2133,6 +2257,7 @@ class _GuestContactSection extends ConsumerWidget {
             controller: phoneController,
             focusNode: phoneFocus,
             keyboardType: TextInputType.phone,
+            inputFormatters: [LengthLimitingTextInputFormatter(20)],
             decoration: InputDecoration(
               labelText: t.phone,
               hintText: '+84…',
