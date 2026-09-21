@@ -79,8 +79,17 @@ class BananCustomerApp extends ConsumerWidget {
                     child: Stack(
                       children: [
                         child ?? const SizedBox.shrink(),
-                        // App-wide cookie-consent bar (renders nothing once chosen).
-                        const CookieConsentBanner(),
+                        // App-wide cookie-consent bar (renders nothing once
+                        // chosen). Not on checkout: docked to the bottom it
+                        // covered the "Đặt hàng" button on small screens.
+                        ListenableBuilder(
+                          listenable: router.routerDelegate,
+                          builder: (_, __) => router
+                                  .routerDelegate.currentConfiguration.uri.path
+                                  .startsWith('/checkout')
+                              ? const SizedBox.shrink()
+                              : const CookieConsentBanner(),
+                        ),
                       ],
                     ),
                   ),

@@ -52,7 +52,14 @@ class WardPickerField extends ConsumerWidget {
           labelText: s.wardLabel,
           errorText: s.wardLoadError,
         ),
-        child: const Text('—'),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => ref.invalidate(hcmWardsProvider),
+            icon: const Icon(Icons.refresh, size: 18),
+            label: Text(s.retry),
+          ),
+        ),
       ),
       data: (wards) {
         final selected = wards.cast<HcmWard?>().firstWhere(

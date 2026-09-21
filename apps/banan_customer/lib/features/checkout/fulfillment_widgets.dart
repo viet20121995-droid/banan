@@ -48,9 +48,20 @@ class _PickupStorePickerState extends ConsumerState<PickupStorePicker> {
         padding: EdgeInsets.symmetric(vertical: BananSpacing.md),
         child: LinearProgressIndicator(),
       ),
-      error: (e, _) => Text(
-        s.couldNotLoadBranches,
-        style: theme.textTheme.bodySmall,
+      error: (e, _) => Row(
+        children: [
+          Expanded(
+            child: Text(
+              s.couldNotLoadBranches,
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          TextButton.icon(
+            onPressed: () => ref.invalidate(storesListProvider),
+            icon: const Icon(Icons.refresh, size: 18),
+            label: Text(s.retry),
+          ),
+        ],
       ),
       data: (stores) {
         // Auto-select the first *available* branch the first time we see
@@ -59,11 +70,10 @@ class _PickupStorePickerState extends ConsumerState<PickupStorePicker> {
         // if every branch is paused (so the picker still renders something).
         bool canPick(Store st) =>
             st.acceptsPickup && !widget.blocked.containsKey(st.id);
-        if (widget.selectedId == null && stores.isNotEmpty) {
-          final firstOpen = stores.firstWhere(
-            canPick,
-            orElse: () => stores.first,
-          );
+        // Every branch paused → select nothing, so checkout asks for a branch
+        // instead of submitting one the API will refuse.
+        if (widget.selectedId == null && stores.any(canPick)) {
+          final firstOpen = stores.firstWhere(canPick);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) widget.onSelect(firstOpen.id);
           });

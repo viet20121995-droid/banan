@@ -442,6 +442,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             error: (_, __) {
               wardError = s.quoteFailed;
               add(_wardKey);
+              // A failed quote is cached by the provider; re-fetch so the
+              // next press can succeed without reloading the page.
+              ref.invalidate(
+                _deliveryQuoteProvider(
+                  (
+                    wardCode: _wardCode,
+                    productIdsCsv: cart.orderedProductIds.join(','),
+                  ),
+                ),
+              );
             },
           );
         }
