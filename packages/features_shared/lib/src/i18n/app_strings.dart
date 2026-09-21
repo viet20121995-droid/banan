@@ -342,6 +342,9 @@ abstract class AppStrings {
   String get giftInvalid;
   String get fillMissing;
   String get orderSuccess;
+  String get unpaidBadge;
+  String unpaidNotice(String until);
+  String get payNow;
   String get mixedDaysError;
   String get addressHelperEx;
   String get cityHelper;
@@ -772,7 +775,6 @@ abstract class AppStrings {
   String get storeClosedAtTime;
   String get sessionExpiredGuest;
   String get taxCodeTooShort;
-  String get retry;
   String get wardRequired;
   String get wardNotServiceable;
   String get wardReselectRequired;
@@ -1375,6 +1377,13 @@ class _Vi extends AppStrings {
   @override
   String get orderSuccess =>
       'Đặt hàng thành công! Chúng tôi sẽ liên hệ xác nhận đơn của bạn.';
+  @override
+  String get unpaidBadge => 'Chưa thanh toán';
+  @override
+  String unpaidNotice(String until) =>
+      'Đơn này CHƯA được thanh toán nên tiệm chưa nhận đơn. Vui lòng thanh toán trước $until, quá giờ đơn sẽ tự huỷ.';
+  @override
+  String get payNow => 'Thanh toán ngay';
   @override
   String get mixedDaysError =>
       'Các món trong giỏ không bán cùng một ngày. Vui lòng bỏ bớt món để '
@@ -2281,8 +2290,6 @@ class _Vi extends AppStrings {
   @override
   String get taxCodeTooShort => 'Mã số thuế gồm ít nhất 8 ký tự';
   @override
-  String get retry => 'Thử lại';
-  @override
   String get wardRequired => 'Vui lòng chọn phường/xã';
   @override
   String get wardNotServiceable => 'Hiện chưa hỗ trợ giao đến khu vực này';
@@ -2907,6 +2914,13 @@ class _En extends AppStrings {
   String get fillMissing => 'Please fill in the missing details above.';
   @override
   String get orderSuccess => 'Order placed! We will contact you to confirm it.';
+  @override
+  String get unpaidBadge => 'Unpaid';
+  @override
+  String unpaidNotice(String until) =>
+      'This order has NOT been paid, so the shop has not received it yet. Pay before $until or it is cancelled automatically.';
+  @override
+  String get payNow => 'Pay now';
   @override
   String get mixedDaysError =>
       'Items in your cart are not sold on the same day. Remove some items '
@@ -3856,8 +3870,6 @@ class _En extends AppStrings {
       'Your session expired. You can still order now: enter your name and phone below, then press Place order.';
   @override
   String get taxCodeTooShort => 'Tax code needs at least 8 characters';
-  @override
-  String get retry => 'Retry';
   @override
   String get wardRequired => 'Please pick a ward';
   @override

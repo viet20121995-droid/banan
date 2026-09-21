@@ -317,6 +317,27 @@ class Order extends Equatable {
   PaymentSummary? get currentPayment =>
       payments.isEmpty ? null : payments.first;
 
+  /// An online checkout the customer never paid: still PENDING, its latest
+  /// payment is a gateway attempt that is open or failed, nothing captured.
+  /// The shop does not see (or bake) such an order; the server cancels it
+  /// after 30 minutes. Mirrors the backend's AWAITING_ONLINE_PAYMENT.
+  bool get isAwaitingOnlinePayment {
+    if (status != OrderStatus.pending || payments.isEmpty) return false;
+    final paid = payments.any(
+      (p) =>
+          p.status == PaymentStatus.captured ||
+          p.status == PaymentStatus.authorized,
+    );
+    if (paid) return false;
+    return payments.any(
+      (p) =>
+          p.provider != PaymentMethod.cash &&
+          (p.status == PaymentStatus.initiated ||
+              p.status == PaymentStatus.failed ||
+              p.status == PaymentStatus.voided),
+    );
+  }
+
   /// Most recent active refund — used by the order detail screen.
   Refund? get currentRefund => refunds.isEmpty ? null : refunds.first;
 

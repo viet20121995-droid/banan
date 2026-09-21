@@ -237,8 +237,12 @@ class _OrderRow extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 StatusBadge(
-                  label: s.orderStatusLabel(order.status),
-                  intent: intentForStatus(order.status),
+                  label: order.isAwaitingOnlinePayment
+                      ? s.unpaidBadge
+                      : s.orderStatusLabel(order.status),
+                  intent: order.isAwaitingOnlinePayment
+                      ? StatusIntent.warning
+                      : intentForStatus(order.status),
                   dense: true,
                 ),
                 const SizedBox(height: 4),

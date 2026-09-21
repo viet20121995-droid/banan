@@ -25,7 +25,8 @@ class OrderRepositoryImpl implements OrderRepository {
   final OrdersApi _api;
 
   @override
-  Future<Result<PlaceOrderResult, AppFailure>> placeOrder(NewOrder draft) async {
+  Future<Result<PlaceOrderResult, AppFailure>> placeOrder(
+      NewOrder draft) async {
     final res = await _api.place(draft.toJson());
     return res.map(
       (apiResult) => PlaceOrderResult(
@@ -63,6 +64,9 @@ class OrderRepositoryImpl implements OrderRepository {
     final res = await _api.track(id);
     return res.map((d) => d.toDomain());
   }
+
+  @override
+  Future<Result<String, AppFailure>> repay(String id) => _api.repay(id);
 
   @override
   Future<Result<Order, AppFailure>> cancel(String id, {String? reason}) async {
@@ -107,7 +111,8 @@ class OrderRepositoryImpl implements OrderRepository {
     String? kitchenId,
     String? note,
   }) async {
-    final res = await _api.transferToKitchen(id, kitchenId: kitchenId, note: note);
+    final res =
+        await _api.transferToKitchen(id, kitchenId: kitchenId, note: note);
     return res.map((d) => d.toDomain());
   }
 

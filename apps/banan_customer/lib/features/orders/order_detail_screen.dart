@@ -6,8 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/alert_sound.dart';
+import '../cart/cart_controller.dart';
 import '../product_detail/cake_wizard.dart';
 import 'order_status_visuals.dart';
 import 'orders_list_screen.dart';
@@ -186,6 +188,14 @@ class _Body extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final s = ref.watch(stringsProvider);
+    // Back from the gateway and the order is paid → the cart kept for a
+    // possible retry is done. (No-op for any other order.)
+    if (!order.isAwaitingOnlinePayment &&
+        order.status != OrderStatus.cancelled) {
+      Future.microtask(
+        () => ref.read(cartControllerProvider.notifier).settle(order.id),
+      );
+    }
     return ListView(
       padding: const EdgeInsets.all(BananSpacing.lg),
       children: [
@@ -195,6 +205,10 @@ class _Body extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (order.isAwaitingOnlinePayment) ...[
+                  _UnpaidBanner(order: order),
+                  const SizedBox(height: BananSpacing.lg),
+                ],
                 OrderReceipt(
                   order: order,
                   reload: () async {
@@ -218,8 +232,14 @@ class _Body extends ConsumerWidget {
                       ),
                     ),
                     StatusBadge(
-                      label: s.orderStatusLabel(order.status),
-                      intent: intentForStatus(order.status),
+                      // An unpaid checkout isn't "awaiting confirmation" —
+                      // the shop hasn't even received it.
+                      label: order.isAwaitingOnlinePayment
+                          ? s.unpaidBadge
+                          : s.orderStatusLabel(order.status),
+                      intent: order.isAwaitingOnlinePayment
+                          ? StatusIntent.warning
+                          : intentForStatus(order.status),
                     ),
                   ],
                 ),
@@ -232,9 +252,10 @@ class _Body extends ConsumerWidget {
                         label: s.kitchenBadge(
                           s.kitchenStatusLabel(order.kitchenStatus!),
                         ),
-                        intent: order.kitchenStatus == KitchenStatus.readyDispatch
-                            ? StatusIntent.success
-                            : StatusIntent.progress,
+                        intent:
+                            order.kitchenStatus == KitchenStatus.readyDispatch
+                                ? StatusIntent.success
+                                : StatusIntent.progress,
                         dense: true,
                       ),
                     ],
@@ -382,6 +403,78 @@ class _Body extends ConsumerWidget {
   }
 }
 
+/// Unpaid online checkout: says plainly that the shop has NOT received the
+/// order, until when it can still be paid, and offers a fresh payment link.
+class _UnpaidBanner extends ConsumerStatefulWidget {
+  const _UnpaidBanner({required this.order});
+  final Order order;
+
+  @override
+  ConsumerState<_UnpaidBanner> createState() => _UnpaidBannerState();
+}
+
+class _UnpaidBannerState extends ConsumerState<_UnpaidBanner> {
+  bool _busy = false;
+
+  Future<void> _pay() async {
+    setState(() => _busy = true);
+    final res = await ref.read(orderRepositoryProvider).repay(widget.order.id);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    final s = ref.read(stringsProvider);
+    await res.when(
+      success: (url) => launchUrl(Uri.parse(url), webOnlyWindowName: '_self'),
+      failure: (f) async {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(authFailureMessage(f, s))),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final s = ref.watch(stringsProvider);
+    // The server reaps unpaid checkouts 30 minutes after they were placed.
+    final until = DateFormat('HH:mm').format(
+      widget.order.createdAt.toLocal().add(const Duration(minutes: 30)),
+    );
+    return Container(
+      padding: const EdgeInsets.all(BananSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BananRadii.rmd,
+        color: BananColors.gold.withValues(alpha: 0.14),
+        border: Border.all(color: BananColors.gold.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.error_outline, color: BananColors.gold),
+              const SizedBox(width: BananSpacing.sm),
+              Expanded(
+                child: Text(
+                  s.unpaidNotice(until),
+                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: BananSpacing.md),
+          FilledButton.icon(
+            onPressed: _busy ? null : _pay,
+            icon: const Icon(Icons.credit_card),
+            label: Text(s.payNow),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PaymentBanner extends ConsumerWidget {
   const _PaymentBanner({required this.payment, required this.fmt});
   final PaymentSummary payment;
@@ -423,7 +516,8 @@ class _PaymentBanner extends ConsumerWidget {
             ),
           ),
           StatusBadge(
-            label: ref.watch(stringsProvider).paymentStatusLabel(payment.status),
+            label:
+                ref.watch(stringsProvider).paymentStatusLabel(payment.status),
             intent: intent,
             dense: true,
           ),
@@ -567,7 +661,6 @@ class _ScheduledForBanner extends ConsumerWidget {
       ),
     );
   }
-
 }
 
 /// Tells the customer which department is preparing the order — counter
@@ -589,9 +682,8 @@ class _PrepDepartmentBanner extends ConsumerWidget {
     // Once the order has moved past prep, this banner stops being useful.
     if (!isPreparing) return const SizedBox.shrink();
 
-    final icon = wentToKitchen
-        ? Icons.factory_outlined
-        : Icons.storefront_outlined;
+    final icon =
+        wentToKitchen ? Icons.factory_outlined : Icons.storefront_outlined;
     final headline =
         wentToKitchen ? s.prepKitchenHeadline : s.prepCounterHeadline;
     final detail = wentToKitchen
@@ -708,8 +800,11 @@ class _DeliveryStatusBanner extends ConsumerWidget {
                     const SizedBox(height: BananSpacing.sm),
                     Row(
                       children: [
-                        Icon(Icons.location_on_outlined,
-                            size: 14, color: theme.colorScheme.outline,),
+                        Icon(
+                          Icons.location_on_outlined,
+                          size: 14,
+                          color: theme.colorScheme.outline,
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
@@ -754,8 +849,11 @@ class _OrderProgressTracker extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.cancel_outlined,
-                color: BananColors.danger, size: 18,),
+            const Icon(
+              Icons.cancel_outlined,
+              color: BananColors.danger,
+              size: 18,
+            ),
             const SizedBox(width: BananSpacing.sm),
             Text(
               s.orderStatusLabel(order.status),
@@ -771,10 +869,16 @@ class _OrderProgressTracker extends ConsumerWidget {
         order.statusEvents.any((e) => e.toStatus == OrderStatus.sentToKitchen);
 
     final steps = <_Step>[
-      _Step(s.stepPlaced, Icons.shopping_bag_outlined,
-          _reached(order.status, OrderStatus.pending),),
-      _Step(s.stepAccepted, Icons.check_circle_outline,
-          _reached(order.status, OrderStatus.accepted),),
+      _Step(
+        s.stepPlaced,
+        Icons.shopping_bag_outlined,
+        _reached(order.status, OrderStatus.pending),
+      ),
+      _Step(
+        s.stepAccepted,
+        Icons.check_circle_outline,
+        _reached(order.status, OrderStatus.accepted),
+      ),
       _Step(
         wentToKitchen ? s.stepKitchen : s.stepCounter,
         wentToKitchen ? Icons.factory_outlined : Icons.storefront_outlined,
@@ -786,11 +890,16 @@ class _OrderProgressTracker extends ConsumerWidget {
         isDelivery
             ? Icons.delivery_dining_outlined
             : Icons.takeout_dining_outlined,
-        _reached(order.status,
-            isDelivery ? OrderStatus.delivering : OrderStatus.readyForPickup,),
+        _reached(
+          order.status,
+          isDelivery ? OrderStatus.delivering : OrderStatus.readyForPickup,
+        ),
       ),
-      _Step(s.stepCompleted, Icons.task_alt,
-          _reached(order.status, OrderStatus.completed),),
+      _Step(
+        s.stepCompleted,
+        Icons.task_alt,
+        _reached(order.status, OrderStatus.completed),
+      ),
     ];
 
     return Container(
@@ -807,8 +916,7 @@ class _OrderProgressTracker extends ConsumerWidget {
         children: [
           for (var i = 0; i < steps.length; i++) ...[
             Expanded(child: _StepCell(step: steps[i])),
-            if (i < steps.length - 1)
-              _Connector(reached: steps[i + 1].reached),
+            if (i < steps.length - 1) _Connector(reached: steps[i + 1].reached),
           ],
         ],
       ),
@@ -1241,20 +1349,28 @@ class _VatInvoiceBlock extends ConsumerWidget {
             children: [
               const Icon(Icons.receipt_long_outlined, size: 18),
               const SizedBox(width: BananSpacing.xs),
-              Text(s.vatInvoiceInfo,
-                  style: theme.textTheme.titleSmall,),
+              Text(
+                s.vatInvoiceInfo,
+                style: theme.textTheme.titleSmall,
+              ),
             ],
           ),
           const SizedBox(height: BananSpacing.xs),
           if (order.invoiceCompanyName != null)
-            Text(order.invoiceCompanyName!,
-                style: theme.textTheme.bodyLarge,),
+            Text(
+              order.invoiceCompanyName!,
+              style: theme.textTheme.bodyLarge,
+            ),
           if (order.invoiceTaxId != null)
-            Text(s.taxIdShort(order.invoiceTaxId!),
-                style: theme.textTheme.bodySmall,),
+            Text(
+              s.taxIdShort(order.invoiceTaxId!),
+              style: theme.textTheme.bodySmall,
+            ),
           if (order.invoiceAddress != null)
-            Text(order.invoiceAddress!,
-                style: theme.textTheme.bodySmall,),
+            Text(
+              order.invoiceAddress!,
+              style: theme.textTheme.bodySmall,
+            ),
           if (order.invoiceEmail != null)
             Text(
               order.invoiceEmail!,
@@ -1303,8 +1419,7 @@ class _GiftBlock extends ConsumerWidget {
               ],
             ],
           ),
-          if (order.giftMessage != null &&
-              order.giftMessage!.isNotEmpty) ...[
+          if (order.giftMessage != null && order.giftMessage!.isNotEmpty) ...[
             const SizedBox(height: BananSpacing.sm),
             Text(
               '“${order.giftMessage!}”',
@@ -1418,8 +1533,11 @@ class _PersonalizationSummary extends ConsumerWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.cake_outlined,
-                  size: 14, color: BananColors.primary,),
+              const Icon(
+                Icons.cake_outlined,
+                size: 14,
+                color: BananColors.primary,
+              ),
               const SizedBox(width: 4),
               Text(
                 s.personalization,
@@ -1433,16 +1551,20 @@ class _PersonalizationSummary extends ConsumerWidget {
           if (text != null && text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(s.textOnCakeLine(text),
-                  style: theme.textTheme.bodySmall,),
+              child: Text(
+                s.textOnCakeLine(text),
+                style: theme.textTheme.bodySmall,
+              ),
             ),
           if (candle != null)
             Text(s.candleLine(candle), style: theme.textTheme.bodySmall),
           if (flavorLine != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(s.flavorLine(flavorLine),
-                  style: theme.textTheme.bodySmall,),
+              child: Text(
+                s.flavorLine(flavorLine),
+                style: theme.textTheme.bodySmall,
+              ),
             ),
           if (note != null && note.isNotEmpty)
             Text(s.noteLine(note), style: theme.textTheme.bodySmall),

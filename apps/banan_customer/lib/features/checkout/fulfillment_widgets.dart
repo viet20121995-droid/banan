@@ -499,6 +499,10 @@ DateTime earliestScheduleSlot(
   final base = DateTime(t.year, t.month, t.day, t.hour);
   final slot = (t.minute / 15).ceil() * 15;
   var earliest = base.add(Duration(minutes: slot));
+  // On an exact boundary (14:30:20) the rounded slot is a few seconds in the
+  // past — the API would refuse it.
+  if (earliest.isBefore(t))
+    earliest = earliest.add(const Duration(minutes: 15));
   final anyDay =
       allowedDays == null || allowedDays.isEmpty || allowedDays.length >= 7;
   if (hours != null && hours.isNotEmpty) {

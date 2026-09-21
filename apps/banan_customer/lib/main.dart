@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:banan_core/banan_core.dart';
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
@@ -8,6 +10,8 @@ import 'package:intl/intl.dart';
 
 import 'app/app.dart';
 import 'app/locale_store.dart';
+import 'features/cart/cart_controller.dart';
+import 'shared/web_storage.dart' as web_storage;
 import 'app/url_strategy.dart'
     if (dart.library.html) 'app/url_strategy_web.dart';
 
@@ -38,6 +42,18 @@ Future<void> main() async {
   // correct on launch — no flashes of the login screen for already-logged-in users.
   final container = ProviderContainer(
     overrides: [
+      // Cart survives reloads and the trip to the payment gateway. Base64 so
+      // the JSON needs no escaping inside the storage shim's JS literal.
+      cartControllerProvider.overrideWith(
+        (ref) => CartController(
+          restore: () {
+            final raw = web_storage.read('banan_cart');
+            return raw == null ? null : utf8.decode(base64Decode(raw));
+          },
+          persist: (json) =>
+              web_storage.write('banan_cart', base64Encode(utf8.encode(json))),
+        ),
+      ),
       if (catalogCache != null)
         catalogCacheProvider.overrideWithValue(catalogCache),
       if (savedLocale != null)

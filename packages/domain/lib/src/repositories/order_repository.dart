@@ -246,6 +246,10 @@ abstract class OrderRepository {
   /// so a guest (or anyone with the link) can view the order without signing in.
   Future<Result<Order, AppFailure>> tracking(String id);
 
+  /// "Thanh toán lại" — a fresh gateway URL for an unpaid online order.
+  /// Works without a session (the order id is the capability).
+  Future<Result<String, AppFailure>> repay(String id);
+
   Future<Result<Order, AppFailure>> cancel(String id, {String? reason});
 
   // Merchant-side

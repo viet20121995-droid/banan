@@ -184,6 +184,23 @@ class OrdersApi {
   }
 
   /// Public tracking — `/orders/:id/track` is guest-accessible (no bearer).
+  /// New gateway link for an unpaid online order → the redirect URL.
+  Future<Result<String, AppFailure>> repay(String id) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>('/orders/$id/repay');
+      final data = res.data?['data'] as Map<String, dynamic>?;
+      final url = data?['redirectUrl'] as String?;
+      if (url == null || url.isEmpty) {
+        return Result.failure(mapHttpStatusToFailure(res));
+      }
+      return Result.success(url);
+    } on DioException catch (e) {
+      return Result.failure(mapDioErrorToFailure(e));
+    } catch (e) {
+      return Result.failure(UnknownFailure(cause: e));
+    }
+  }
+
   Future<Result<OrderDto, AppFailure>> track(String id) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/orders/$id/track');

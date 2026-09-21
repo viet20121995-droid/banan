@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -81,6 +83,44 @@ class CartItem {
   }
 
   double get lineTotal => unitPrice * quantity;
+
+  Map<String, dynamic> toJson() => {
+        'productId': productId,
+        'variantId': variantId,
+        'productName': productName,
+        'variantLabel': variantLabel,
+        'coverImage': coverImage,
+        'unitPrice': unitPrice,
+        'quantity': quantity,
+        'customMessage': customMessage,
+        'personalization': personalization,
+        'isBirthdayCake': isBirthdayCake,
+        'leadTimeHours': leadTimeHours,
+        'availableDaysOfWeek': availableDaysOfWeek,
+        'isBundle': isBundle,
+        'bundleProductIds': bundleProductIds,
+      };
+
+  factory CartItem.fromJson(Map<String, dynamic> j) => CartItem(
+        productId: j['productId'] as String,
+        variantId: j['variantId'] as String,
+        productName: j['productName'] as String,
+        variantLabel: (j['variantLabel'] as String?) ?? '',
+        coverImage: j['coverImage'] as String?,
+        unitPrice: (j['unitPrice'] as num).toDouble(),
+        quantity: (j['quantity'] as num).toInt(),
+        customMessage: j['customMessage'] as String?,
+        personalization:
+            (j['personalization'] as Map?)?.cast<String, dynamic>(),
+        isBirthdayCake: (j['isBirthdayCake'] as bool?) ?? false,
+        leadTimeHours: (j['leadTimeHours'] as num?)?.toInt(),
+        availableDaysOfWeek: ((j['availableDaysOfWeek'] as List?) ?? const [])
+            .map((e) => (e as num).toInt())
+            .toList(),
+        isBundle: (j['isBundle'] as bool?) ?? false,
+        bundleProductIds:
+            ((j['bundleProductIds'] as List?) ?? const []).cast<String>(),
+      );
 
   CartItem copyWith({int? quantity, String? customMessage}) => CartItem(
         productId: productId,
@@ -183,16 +223,64 @@ class CartState {
   /// from "unconstrained" (which yields all 7 days), so the UI can warn instead
   /// of silently treating it as "any day".
   bool get hasDayConflict {
-    final anyConstrained =
-        items.any((i) => i.availableDaysOfWeek.isNotEmpty);
+    final anyConstrained = items.any((i) => i.availableDaysOfWeek.isNotEmpty);
     return anyConstrained && allowedDaysOfWeek.isEmpty;
   }
 }
 
-/// In-memory cart. Lost on app refresh / restart — Hive persistence lands
-/// alongside offline mode in the hardening milestone.
+/// The cart. With [restore]/[persist] wired (main.dart → localStorage) it
+/// survives a reload, a closed tab and the round-trip to the payment gateway;
+/// without them (tests) it is in-memory. Prices are re-checked by the server
+/// at order time, so a stale stored price can't undercharge.
 class CartController extends StateNotifier<CartState> {
-  CartController() : super(const CartState());
+  CartController({String? Function()? restore, void Function(String)? persist})
+      : _persist = persist,
+        super(const CartState()) {
+    try {
+      final raw = restore?.call();
+      if (raw != null && raw.isNotEmpty) {
+        final j = (jsonDecode(raw) as Map).cast<String, dynamic>();
+        _pendingOrderId = j['pendingOrderId'] as String?;
+        state = CartState(
+          items: [
+            for (final e in (j['items'] as List?) ?? const [])
+              CartItem.fromJson((e as Map).cast<String, dynamic>()),
+          ],
+        );
+      }
+    } catch (_) {
+      // corrupt / old format — start empty
+    }
+    addListener((_) => _save(), fireImmediately: false);
+  }
+
+  final void Function(String)? _persist;
+
+  /// The gateway checkout this cart is waiting on (see [markPending]).
+  String? _pendingOrderId;
+
+  void _save() => _persist?.call(
+        jsonEncode({
+          'items': [for (final i in state.items) i.toJson()],
+          'pendingOrderId': _pendingOrderId,
+        }),
+      );
+
+  /// Checkout is handing over to the payment gateway: keep the cart until that
+  /// order is seen paid — a declined card must not cost the customer the cart.
+  void markPending(String orderId) {
+    _pendingOrderId = orderId;
+    _save();
+  }
+
+  /// [orderId] is confirmed paid. If it's the checkout this cart was waiting
+  /// on, the cart has done its job.
+  void settle(String orderId) {
+    if (_pendingOrderId != orderId) return;
+    _pendingOrderId = null;
+    state = const CartState();
+    _save();
+  }
 
   void add(CartItem item) {
     Analytics.addToCart(item.productName);
@@ -269,16 +357,18 @@ class CartController extends StateNotifier<CartState> {
   ///
   /// Returns the number of distinct lines that were added.
   int reorder({
-    required List<({
-      String productId,
-      String? variantId,
-      String productName,
-      String? variantLabel,
-      double unitPrice,
-      int quantity,
-      String? customMessage,
-      Map<String, dynamic>? personalization,
-    })> items,
+    required List<
+            ({
+              String productId,
+              String? variantId,
+              String productName,
+              String? variantLabel,
+              double unitPrice,
+              int quantity,
+              String? customMessage,
+              Map<String, dynamic>? personalization,
+            })>
+        items,
   }) {
     var added = 0;
     for (final i in items) {

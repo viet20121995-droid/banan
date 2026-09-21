@@ -688,7 +688,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         Analytics.orderPlaced();
         // Gateway payments keep the cart until the payment comes back paid —
         // a declined card / closed tab must not cost the customer their cart.
-        if (!placed.payment.hasRedirect) {
+        if (placed.payment.hasRedirect) {
+          ref
+              .read(cartControllerProvider.notifier)
+              .markPending(placed.order.id);
+        } else {
           ref.read(cartControllerProvider.notifier).clear();
         }
 

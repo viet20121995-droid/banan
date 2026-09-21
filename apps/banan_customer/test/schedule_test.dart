@@ -4,14 +4,40 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Vietnamese string table — the notes' wording asserted below is VI.
-final AppStrings _vi =
-    ProviderContainer().read(stringsProvider);
+final AppStrings _vi = ProviderContainer().read(stringsProvider);
 
 /// The schedule helpers pick the time the order is submitted with. Get them
 /// wrong and the backend rejects the order at the last step, after the customer
 /// has already filled everything in.
 
 void main() {
+  group('opening hours', () {
+    final hours = <String, List<List<String>>>{
+      for (final d in ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'])
+        d: [
+          ['10:00', '21:30'],
+        ],
+    };
+
+    test('slots start at opening and end 30 minutes before close', () {
+      final slots = openSlotsFor(DateTime(2026, 9, 24), hours);
+      expect(slots.first, DateTime(2026, 9, 24, 10));
+      expect(slots.last, DateTime(2026, 9, 24, 21));
+    });
+
+    test('a closed weekday has no slots', () {
+      expect(openSlotsFor(DateTime(2026, 9, 24), const {'mon': []}), isEmpty);
+    });
+
+    test('the earliest slot always lands inside opening hours', () {
+      for (final lead in [Duration.zero, const Duration(hours: 13)]) {
+        final slot = earliestScheduleSlot(lead, hours: hours);
+        final minutes = slot.hour * 60 + slot.minute;
+        expect(minutes, inInclusiveRange(10 * 60, 21 * 60));
+      }
+    });
+  });
+
   group('earliestScheduleSlot', () {
     test('rounds up to the next 15-minute boundary', () {
       final slot = earliestScheduleSlot(Duration.zero);
@@ -54,7 +80,10 @@ void main() {
 
     test('an empty or full allowed-days set means no restriction', () {
       final now = DateTime.now();
-      for (final days in [<int>{}, {0, 1, 2, 3, 4, 5, 6}]) {
+      for (final days in [
+        <int>{},
+        {0, 1, 2, 3, 4, 5, 6}
+      ]) {
         final slot = earliestScheduleSlot(Duration.zero, allowedDays: days);
         expect(
           slot.difference(now).inHours < 24,
