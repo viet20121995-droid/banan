@@ -310,7 +310,7 @@ export class OrdersService {
       if (!dto.guestFullName || !dto.guestPhone) {
         throw new BadRequestException({
           code: 'GUEST_INFO_REQUIRED',
-          message: 'Guest checkout requires a name and phone number.',
+          message: 'Vui lòng nhập họ tên và số điện thoại để đặt hàng.',
         });
       }
       const guest = await this.upsertGuestCustomer({

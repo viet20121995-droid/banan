@@ -1,4 +1,4 @@
-import { ExecutionContext, Injectable } from '@nestjs/common';
+import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -33,8 +33,21 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       context.getClass(),
     ]);
     if (isPublic) {
-      // Public routes never throw — `req.user` is `null` when there's no
-      // token (or the token is invalid).
+      // An EXPIRED token on an optional-auth route must not silently demote a
+      // logged-in customer to a guest (checkout then failed with
+      // GUEST_INFO_REQUIRED because the app sends no guest fields). Answer 401
+      // so the client refreshes and retries. `/auth/*` is exempt — the refresh
+      // call itself may still carry the stale bearer.
+      const req = context.switchToHttp().getRequest<{ url?: string }>();
+      const expired = (info as { name?: string } | undefined)?.name === 'TokenExpiredError';
+      if (!user && expired && !(req.url ?? '').includes('/auth/')) {
+        throw new UnauthorizedException({
+          code: 'AUTH_TOKEN_EXPIRED',
+          message: 'Phiên đăng nhập đã hết hạn.',
+        });
+      }
+      // Otherwise public routes never throw — `req.user` is `null` when
+      // there's no token (or the token is malformed).
       return (user ?? null) as TUser;
     }
     return super.handleRequest(err, user, info, context);
