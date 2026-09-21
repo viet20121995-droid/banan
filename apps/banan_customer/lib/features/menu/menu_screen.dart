@@ -1405,35 +1405,64 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
     final s = ref.watch(stringsProvider);
     final ctaDismissed = ref.watch(heroCtaDismissedProvider);
     final width = MediaQuery.sizeOf(context).width;
-    final height = width < 700 ? 220.0 : 360.0;
+    // Uploaded banners are 16:6 (1600×600): the hero keeps that shape so they
+    // show whole. The campaign slide carries a headline + CTA and needs its
+    // own minimum height; banners then letterbox (contain) instead of cropping.
+    final ratioHeight =
+        ((width - BananSpacing.xl * 2) * 6 / 16).clamp(120.0, 560.0);
+    final campaignMin = width < 700 ? 220.0 : 360.0;
+    final height = fullmoonAutumnCampaignEnabled && ratioHeight < campaignMin
+        ? campaignMin
+        : ratioHeight;
 
     // Prefer merchant-managed banners; otherwise fall back to promo posts;
     // finally a branded slide so the hero is never empty.
     final banners = ref.watch(homeBannersProvider).valueOrNull ?? const [];
     final threads = ref.watch(homeThreadsProvider).valueOrNull ?? const [];
-    final slides = <({String? image, bool isAsset, String title})>[
+    final slides =
+        <({String? image, bool isAsset, bool isBanner, String title})>[
       if (fullmoonAutumnCampaignEnabled)
         (
           image: fullmoonAutumnBannerAsset,
           isAsset: true,
+          isBanner: false,
           title: 'Fullmoon Autumn',
         ),
       if (banners.isNotEmpty)
         for (final b in banners)
-          (image: b.imageUrl, isAsset: false, title: b.title ?? '')
+          (
+            image: b.imageUrl,
+            isAsset: false,
+            isBanner: true,
+            title: b.title ?? '',
+          )
       else ...[
         for (final t in threads)
           if (t.gallery.isNotEmpty)
-            (image: t.gallery.first, isAsset: false, title: t.title),
+            (
+              image: t.gallery.first,
+              isAsset: false,
+              isBanner: false,
+              title: t.title,
+            ),
       ],
     ];
     if (slides.isEmpty) {
       slides.add(
-        (image: null, isAsset: false, title: 'Banan Fukuoka Saigon'),
+        (
+          image: null,
+          isAsset: false,
+          isBanner: false,
+          title: 'Banan Fukuoka Saigon',
+        ),
       );
     }
     _ensureTimer(slides.length);
-    final title = slides[_page.clamp(0, slides.length - 1)].title;
+    final current = slides[_page.clamp(0, slides.length - 1)];
+    final title = current.title;
+    // The campaign headline/CTA/parade belong to the campaign art only — an
+    // uploaded banner has its own copy and stays clean.
+    final onCampaignArt = fullmoonAutumnCampaignEnabled && current.isAsset;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: BananSpacing.lg),
@@ -1467,8 +1496,12 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                       decoration: BoxDecoration(
                         // Campaign art is pinned right at full height, so
                         // the cream ground has to be solid behind it.
-                        color: slide.isAsset ? const Color(0xFFF3DDA6) : null,
-                        gradient: slide.isAsset
+                        color: slide.isAsset
+                            ? const Color(0xFFF3DDA6)
+                            : slide.isBanner
+                                ? const Color(0xFFFBEDE0)
+                                : null,
+                        gradient: slide.isAsset || slide.isBanner
                             ? null
                             : LinearGradient(
                                 begin: Alignment.topLeft,
@@ -1508,7 +1541,10 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                                 )
                               : Image.network(
                                   slide.image!,
-                                  fit: BoxFit.cover,
+                                  // Banners show whole; feed photos fill.
+                                  fit: slide.isBanner
+                                      ? BoxFit.contain
+                                      : BoxFit.cover,
                                   errorBuilder: (_, __, ___) =>
                                       const SizedBox.expand(),
                                 ),
@@ -1518,7 +1554,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
               ),
               // Seasonal overlay keeps every carousel slide coherent with the
               // warm moonlight, washi-paper Fullmoon Autumn art direction.
-              if (fullmoonAutumnCampaignEnabled) ...[
+              if (onCampaignArt) ...[
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -1561,7 +1597,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                     color: Color(0xFF4A1727),
                   ),
                 ),
-              ] else
+              ] else if (!fullmoonAutumnCampaignEnabled && !current.isBanner)
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -1573,7 +1609,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                 ),
               // Decorative wave + kanji accents removed for a cleaner
               // banner — peach-cream theme reads softer without them.
-              if (fullmoonAutumnCampaignEnabled)
+              if (onCampaignArt)
                 _FullmoonAutumnHeroContent(
                   compact: width < 700,
                   ctaDismissed: ctaDismissed,
@@ -1594,7 +1630,7 @@ class _HeroCarouselState extends ConsumerState<_HeroCarousel> {
                     widget.onOrderTap();
                   },
                 )
-              else
+              else if (!fullmoonAutumnCampaignEnabled)
                 Padding(
                   // Hug the top edge so the CTA sits high on the banner rather
                   // than centred (small top inset keeps it off the very edge).
