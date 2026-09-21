@@ -329,6 +329,42 @@ export class OrdersService {
       }
     }
 
+    // Idempotent re-submit: the app sends one `clientRequestId` per checkout
+    // visit. A customer who pressed "Đặt hàng" again after a lost response
+    // (slow 4G) gets their existing order back, not a second one.
+    // ponytail: sequential replays only — two truly concurrent POSTs can still
+    // both pass; add a partial unique index if that ever shows up.
+    if (dto.clientRequestId) {
+      const prior = await this.prisma.order.findFirst({
+        where: { customerId, source: 'WEB', clientRequestId: dto.clientRequestId },
+        include: ORDER_INCLUDE,
+      });
+      if (prior) {
+        const awaiting = await this.prisma.order.count({
+          where: { id: prior.id, ...AWAITING_ONLINE_PAYMENT },
+        });
+        const last = prior.payments[0];
+        return {
+          order: prior,
+          payment: awaiting
+            ? await this.repay(prior.id, customerIp)
+            : { provider: last?.provider ?? dto.paymentMethod, paymentId: last?.id ?? '' },
+        };
+      }
+    }
+
+    // A customer who abandoned the gateway and is ordering again: release
+    // their own unpaid checkouts first, so the stock / daily cap those still
+    // hold doesn't reject the retry as "hết hàng". Best-effort — a capture
+    // racing in makes cancelUnpayableOrder throw and the order stays alive.
+    const stale = await this.prisma.order.findMany({
+      where: { customerId, source: 'WEB', ...AWAITING_ONLINE_PAYMENT },
+      select: { id: true },
+    });
+    for (const o of stale) {
+      await this.cancelUnpayableOrder(o.id, 'Tự huỷ: khách đặt lại đơn mới').catch(() => undefined);
+    }
+
     // An item references either a Product directly or a Bundle (combo). Fetch
     // both: products carry leadTimeHours/availableDaysOfWeek (scalars `include`
     // brings in automatically) for the timeline check; bundles bring their
@@ -933,6 +969,7 @@ export class OrdersService {
           fulfillmentType: dto.fulfillmentType,
           scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
           addressId,
+          clientRequestId: dto.clientRequestId ?? null,
           status: 'PENDING',
           subtotal,
           deliveryFee,

@@ -84,6 +84,12 @@ export class OrderAddressInputDto {
 export type FulfillmentTypeWire = 'PICKUP' | 'DELIVERY';
 
 export class CreateOrderDto {
+  /** One UUID per checkout visit — a re-submit returns the same order. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  clientRequestId?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(40)

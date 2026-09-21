@@ -3013,3 +3013,18 @@ model CukcukSync {
 
   @@index([kind, startedAt])
 }
+
+/// Why a web checkout (`POST /orders`) was refused — container logs are lost
+/// on every deploy, so rejections are kept here for diagnosis.
+model OrderRejection {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  status    Int
+  code      String
+  message   String
+  userId    String?
+  ip        String?
+  userAgent String?
+
+  @@index([createdAt])
+}
