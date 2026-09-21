@@ -129,7 +129,12 @@ function basePrisma(orderCreate: jest.Mock, paymentCreate: jest.Mock): PrismaMoc
       findUnique: jest.fn().mockResolvedValue({ id: 'cust1', role: 'CUSTOMER' }),
       create: jest.fn(),
     },
-    product: { findMany: jest.fn().mockResolvedValue([productFixture()]) },
+    product: {
+      // The branch-exclusion lookup (assertStoreCanServe) finds nothing blocked.
+      findMany: jest.fn((args?: { where?: { excludedStoreIds?: unknown } }) =>
+        Promise.resolve(args?.where?.excludedStoreIds ? [] : [productFixture()]),
+      ),
+    },
     $transaction: jest.fn((cb: (tx: unknown) => unknown) =>
       cb(makeTxMock(orderCreate, paymentCreate)),
     ),
@@ -177,6 +182,20 @@ describe('createCounterOrder (STAFF_COUNTER)', () => {
     );
   });
 
+  it('sells a menu-hidden product (isAvailable=false) — the switch only governs the storefront', async () => {
+    const orderCreate = jest.fn().mockResolvedValue(orderRowFixture());
+    const prisma = basePrisma(orderCreate, jest.fn());
+    prisma.product.findMany = jest.fn((args?: { where?: { excludedStoreIds?: unknown } }) =>
+      Promise.resolve(
+        args?.where?.excludedStoreIds ? [] : [{ ...productFixture(), isAvailable: false }],
+      ),
+    );
+    const { svc } = makeService(prisma);
+
+    await expect(svc.createCounterOrder(staff, counterDto)).resolves.toBeDefined();
+    expect(orderCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('unpaid counter order records NO payment row', async () => {
     const orderCreate = jest.fn().mockResolvedValue(orderRowFixture());
     const paymentCreate = jest.fn();
@@ -194,9 +213,11 @@ describe('createCounterOrder (STAFF_COUNTER)', () => {
     const prisma = basePrisma(orderCreate, jest.fn());
     // A 36h cake, wanted in 2 hours: the web checkout rejects this
     // (ORDER_ITEMS_TIMELINE); the counter must not.
-    prisma.product.findMany = jest
-      .fn()
-      .mockResolvedValue([{ ...productFixture(), leadTimeHours: 36 }]);
+    prisma.product.findMany = jest.fn((args?: { where?: { excludedStoreIds?: unknown } }) =>
+      Promise.resolve(
+        args?.where?.excludedStoreIds ? [] : [{ ...productFixture(), leadTimeHours: 36 }],
+      ),
+    );
     const { svc } = makeService(prisma);
 
     await expect(

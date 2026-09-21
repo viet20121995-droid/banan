@@ -73,8 +73,9 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
     setState(() {
       _loading = false;
       res.when(
-        success: (page) =>
-            _all = page.items.where((p) => p.isAvailable).toList(),
+        // Every product, shown to customers or not — "Hiển thị cho khách"
+        // only governs the storefront, the counter sells the whole menu.
+        success: (page) => _all = page.items,
         failure: (_) {},
       );
     });

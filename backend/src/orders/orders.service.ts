@@ -2268,7 +2268,11 @@ export class OrdersService {
       !!dto.scheduledFor,
       { skipLeadTime: true },
     );
-    const { products, lineCreates, subtotal } = await this.buildChannelLines(dto.items);
+    // `isAvailable` is the customer-menu switch only — staff at the counter
+    // can sell anything on the menu, shown to customers or not.
+    const { products, lineCreates, subtotal } = await this.buildChannelLines(dto.items, {
+      allowUnavailable: true,
+    });
     await this.assertStoreCanServe(
       storeId,
       products.map((p) => p.id),
@@ -2282,7 +2286,9 @@ export class OrdersService {
     let created: OrderWithIncludes;
     try {
       created = await this.prisma.$transaction(async (tx) => {
-        await this.reserveChannelStock(tx, products, lineCreates, targetAt);
+        await this.reserveChannelStock(tx, products, lineCreates, targetAt, {
+          allowUnavailable: true,
+        });
         let addressId: string | undefined;
         if (fulfillmentType === 'DELIVERY' && dto.address) {
           const addr = await tx.address.create({
