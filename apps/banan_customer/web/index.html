@@ -17,6 +17,9 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <!-- No Referer on outgoing navigations: the 9Pay portal answers HTTP 431 when
+       the Referer is order.banancakes.vn (only the root domain passes). -->
+  <meta name="referrer" content="no-referrer">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Japanese Patisserie In Saigon">
 
