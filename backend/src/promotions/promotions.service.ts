@@ -102,6 +102,12 @@ export class PromotionsService {
     storeId?: string;
     subtotalVnd: number;
     customerId?: string;
+    /**
+     * Guest preview for a phone with no account yet: at order time such a
+     * guest becomes a brand-new customer, so first-order campaigns apply.
+     * Ignored when `customerId` is set.
+     */
+    newCustomer?: boolean;
     now?: Date;
   }): Promise<PromoResult> {
     const now = input.now ?? new Date();
@@ -245,8 +251,10 @@ export class PromotionsService {
 
     // 3. Order-level customer-targeted (best single one).
     const orderCampaigns = eligible.filter((c) => ORDER_TYPES.includes(c.type));
-    if (orderCampaigns.length > 0 && input.customerId) {
-      const ctx = await this.customerContext(input.customerId);
+    if (orderCampaigns.length > 0 && (input.customerId || input.newCustomer)) {
+      const ctx: CustomerContext = input.customerId
+        ? await this.customerContext(input.customerId)
+        : { orderCount: 0, lastOrderAt: null, birthday: null, tier: null };
       let bestDiscount = 0;
       let best: Campaign | null = null;
       for (const c of orderCampaigns) {

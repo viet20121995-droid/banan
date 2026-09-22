@@ -147,6 +147,17 @@ export class QuotePromotionsDto {
   @Type(() => QuoteLineDto)
   lines!: QuoteLineDto[];
 
+  /**
+   * Guest checkout: the phone typed so far. Lets the preview match what the
+   * order will do — a phone with an account gets no customer-targeted
+   * campaign (the order is bound to that account unverified), a new phone
+   * is a first order.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  guestPhone?: string;
+
   /** Goods subtotal after combo pricing — the base the engine discounts. */
   @IsNumber()
   @Min(0)

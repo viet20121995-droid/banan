@@ -189,6 +189,19 @@ describe('PromotionsService.evaluate — gift with purchase + birthday exclusion
     expect(r.hints).toMatchObject([{ campaignId: 'gift', shortVnd: 250_000 }]);
   });
 
+  it('a guest preview flagged newCustomer gets the first-order campaign (matches the order path)', async () => {
+    const r = await makeEvalService([GIFT, FIRST]).evaluate({
+      lines: [
+        { productId: 'mochi', quantity: 2, lineTotalVnd: 420_000 },
+        { productId: 'flan', quantity: 1, lineTotalVnd: 55_000 },
+      ],
+      subtotalVnd: 475_000,
+      newCustomer: true,
+    });
+    // 15% of 475k = 71 250 beats the 55k gift — exactly what the order charges.
+    expect(r.applied.map((a) => [a.id, a.discountVnd])).toEqual([['first', 71_250]]);
+  });
+
   it('first-order 15% ignores birthday-cake lines; campaigns never stack — the best one wins', async () => {
     const r = await makeEvalService([GIFT, FIRST]).evaluate({
       lines: [

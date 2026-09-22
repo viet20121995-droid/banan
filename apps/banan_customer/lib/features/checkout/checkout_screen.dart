@@ -158,6 +158,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    // The promo preview depends on the guest phone (first-order or not).
+    _guestPhone.addListener(() => setState(() {}));
     // Pre-fill from the cart's order draft so the customer doesn't re-pick
     // branch / schedule they already chose on the cart screen.
     final draft = ref.read(orderDraftProvider);
@@ -887,6 +889,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           )
           .join('|'),
       storeId: _fulfillment == FulfillmentType.pickup ? _pickupStoreId : null,
+      // A guest's phone decides first-order eligibility (see the API) — only
+      // once it looks complete, so typing doesn't fire a quote per keystroke.
+      guestPhone: isGuest && _guestPhone.text.trim().length >= 9
+          ? _guestPhone.text.trim()
+          : null,
     );
     final promoQuote = ref.watch(_promoQuoteProvider(promoKey)).valueOrNull ??
         PromoQuote.empty;
@@ -2550,7 +2557,7 @@ final _blockedStoresProvider = FutureProvider.autoDispose
   return out;
 });
 
-typedef _PromoKey = ({String linesKey, String? storeId});
+typedef _PromoKey = ({String linesKey, String? storeId, String? guestPhone});
 
 /// Auto-campaign preview for the current cart. Re-runs when the cart lines,
 /// the picked branch or the auth session change (a first-order promo depends
@@ -2573,6 +2580,7 @@ final _promoQuoteProvider =
     ],
     subtotalVnd: cart.subtotal,
     storeId: key.storeId,
+    guestPhone: key.guestPhone,
   );
   return res.when(success: (q) => q, failure: (_) => PromoQuote.empty);
 });

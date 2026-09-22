@@ -123,6 +123,7 @@ class PromoQuoteApi {
     required List<PromoQuoteLine> lines,
     required double subtotalVnd,
     String? storeId,
+    String? guestPhone,
   }) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
@@ -131,6 +132,8 @@ class PromoQuoteApi {
           'lines': lines.map((l) => l.toJson()).toList(),
           'subtotalVnd': subtotalVnd,
           if (storeId != null) 'storeId': storeId,
+          if (guestPhone != null && guestPhone.isNotEmpty)
+            'guestPhone': guestPhone,
         },
       );
       final data = res.data?['data'] as Map<String, dynamic>?;
