@@ -21,6 +21,19 @@ import {
 
 import { VariantInputDto } from './variant.dto';
 
+export class OptionGroupDto {
+  @IsString()
+  @MaxLength(40)
+  label!: string;
+
+  @IsArray()
+  @ArrayMinSize(2)
+  @ArrayMaxSize(12)
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  choices!: string[];
+}
+
 export class CreateProductDto {
   @IsUUID()
   categoryId!: string;
@@ -126,6 +139,14 @@ export class CreateProductDto {
   @IsString({ each: true })
   @ArrayMaxSize(50)
   flavorOptions?: string[];
+
+  /** Single-choice groups: `[{ label: 'Đường', choices: ['Bình thường', 'Ít đường'] }]`. [] clears. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => OptionGroupDto)
+  optionGroups?: OptionGroupDto[];
 
   @IsArray()
   @ValidateNested({ each: true })

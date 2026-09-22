@@ -368,6 +368,7 @@ export class ProductsService {
           excludedStoreIds: dto.excludedStoreIds ?? [],
           flavorPickCount: dto.flavorPickCount ?? null,
           flavorOptions: dto.flavorOptions ?? [],
+          optionGroups: (dto.optionGroups ?? []) as unknown as Prisma.InputJsonValue,
           variants: {
             create: dto.variants.map((v) => ({
               size: v.size,
@@ -449,6 +450,9 @@ export class ProductsService {
           }),
           ...(dto.flavorPickCount !== undefined && {
             flavorPickCount: dto.flavorPickCount,
+          }),
+          ...(dto.optionGroups !== undefined && {
+            optionGroups: dto.optionGroups as unknown as Prisma.InputJsonValue,
           }),
           ...(dto.flavorOptions !== undefined && {
             flavorOptions: dto.flavorOptions,

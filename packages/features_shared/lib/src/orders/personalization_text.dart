@@ -45,5 +45,14 @@ String personalizationText(Map<String, dynamic> p) {
       'Vị: ${flavors.entries.map((e) => '${e.value}× ${e.key}').join(', ')}',
     );
   }
+  final opts = optionsText(p);
+  if (opts != null) parts.add(opts);
   return parts.join(' · ');
+}
+
+/// Drink options as `Đường: Ít đường · Đá: Không đá`, or null when none.
+String? optionsText(Map<String, dynamic> p) {
+  final options = p['options'];
+  if (options is! Map || options.isEmpty) return null;
+  return options.entries.map((e) => '${e.key}: ${e.value}').join(' · ');
 }

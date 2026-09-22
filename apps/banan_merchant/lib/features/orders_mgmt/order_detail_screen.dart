@@ -196,9 +196,11 @@ class _Body extends ConsumerWidget {
                             : Icons.photo_camera_outlined,
                         size: 18,
                       ),
-                      label: Text(order.source == 'INTERNAL_TRANSFER'
-                          ? 'In phiếu'
-                          : 'Hóa đơn / Chụp ảnh',),
+                      label: Text(
+                        order.source == 'INTERNAL_TRANSFER'
+                            ? 'In phiếu'
+                            : 'Hóa đơn / Chụp ảnh',
+                      ),
                     ),
                     OutlinedButton.icon(
                       onPressed: () => printKitchenTicket(order),
@@ -1197,6 +1199,15 @@ class _MerchantPersonalizationBlock extends StatelessWidget {
                   ],
                 ),
                 style: theme.textTheme.bodySmall,
+              ),
+            ),
+          if (optionsText(payload) != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                optionsText(payload)!,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
           if (note != null && note.isNotEmpty)

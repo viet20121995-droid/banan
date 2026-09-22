@@ -202,6 +202,7 @@ class CatalogRepositoryImpl implements CatalogRepository {
       // Always sent (like availableDaysOfWeek): an empty array explicitly
       // clears a previously-saved flavour list when the composer is turned off.
       'flavorOptions': d.flavorOptions,
+      'optionGroups': [for (final g in d.optionGroups) g.toJson()],
       'variants': d.variants
           .map(
             (v) => {

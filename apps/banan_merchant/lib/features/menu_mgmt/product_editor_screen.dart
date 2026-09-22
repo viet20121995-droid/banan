@@ -65,6 +65,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
 
   /// Macaron flavour-composer options. Empty = composer off.
   List<String> _flavorOptions = [];
+  // One text line per group: "Đường: Bình thường, Ít đường, Không đường".
+  final _optionGroups = TextEditingController();
   List<VariantDraft> _variants = [VariantDraft(size: '6"', flavor: 'Classic')];
   bool _saving = false;
   bool _initialized = false;
@@ -94,6 +96,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _leadHours.dispose();
     _dailyMax.dispose();
     _flavorPick.dispose();
+    _optionGroups.dispose();
     super.dispose();
   }
 
@@ -119,6 +122,9 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _tags = List.of(p.tags);
     _flavorPick.text = p.flavorPickCount?.toString() ?? '';
     _flavorOptions = List.of(p.flavorOptions);
+    _optionGroups.text = [
+      for (final g in p.optionGroups) '${g.label}: ${g.choices.join(', ')}',
+    ].join('\n');
     _variants = p.variants
         .map(
           (v) => VariantDraft(
@@ -223,6 +229,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       // skipped (@IsOptional). A count is only sent for a real macaron set.
       flavorPickCount: composerOn ? flavorPick : null,
       flavorOptions: composerOn ? List.of(_flavorOptions) : const [],
+      optionGroups: _parseOptionGroups(_optionGroups.text),
     );
 
     final repo = ref.read(catalogRepositoryProvider);
@@ -656,6 +663,39 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                           options: _flavorOptions,
                           onChanged: (next) =>
                               setState(() => _flavorOptions = next),
+                        ),
+                      ],
+                    ),
+                    _Section(
+                      title: 'Tuỳ chọn (đường / đá / kem…)',
+                      children: [
+                        Text(
+                          'Mỗi dòng một nhóm, dạng "Tên nhóm: lựa chọn 1, lựa '
+                          'chọn 2". Lựa chọn đầu là mặc định. Khách bắt buộc '
+                          'chọn mỗi nhóm; bếp thấy lựa chọn trên phiếu.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                        TextFormField(
+                          controller: _optionGroups,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                            labelText: 'Nhóm tuỳ chọn',
+                            hintText:
+                                'Đường: Bình thường, Ít đường, Không đường\n'
+                                'Đá: Bình thường, Ít đá, Không đá',
+                          ),
+                          validator: (v) {
+                            for (final line in (v ?? '').split('\n')) {
+                              if (line.trim().isEmpty) continue;
+                              final g = _parseOptionGroups(line);
+                              if (g.isEmpty) {
+                                return 'Dòng "$line" cần dạng "Tên: a, b" '
+                                    '(ít nhất 2 lựa chọn)';
+                              }
+                            }
+                            return null;
+                          },
                         ),
                       ],
                     ),
@@ -1169,4 +1209,24 @@ class _DowChips extends StatelessWidget {
       ],
     );
   }
+}
+
+/// "Đường: Bình thường, Ít đường" per line → option groups. Lines that don't
+/// parse (no colon, fewer than 2 choices) are dropped.
+List<ProductOptionGroup> _parseOptionGroups(String text) {
+  final out = <ProductOptionGroup>[];
+  for (final line in text.split('\n')) {
+    final i = line.indexOf(':');
+    if (i <= 0) continue;
+    final label = line.substring(0, i).trim();
+    final choices = line
+        .substring(i + 1)
+        .split(',')
+        .map((c) => c.trim())
+        .where((c) => c.isNotEmpty)
+        .toList();
+    if (label.isEmpty || choices.length < 2) continue;
+    out.add(ProductOptionGroup(label: label, choices: choices));
+  }
+  return out;
 }

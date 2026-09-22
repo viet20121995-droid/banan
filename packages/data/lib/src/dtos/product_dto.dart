@@ -31,6 +31,7 @@ class ProductDto {
     this.isBirthdayCake = false,
     this.flavorPickCount,
     this.flavorOptions = const [],
+    this.optionGroups = const [],
   });
 
   factory ProductDto.fromJson(Map<String, dynamic> json) {
@@ -65,6 +66,10 @@ class ProductDto {
       flavorPickCount: (json['flavorPickCount'] as num?)?.toInt(),
       flavorOptions:
           ((json['flavorOptions'] as List?) ?? const []).cast<String>(),
+      optionGroups: [
+        for (final g in (json['optionGroups'] as List?) ?? const [])
+          if (g is Map) ProductOptionGroup.fromJson(g.cast<String, dynamic>()),
+      ],
       variants: ((json['variants'] as List?) ?? const [])
           .map((e) => ProductVariantDto.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -100,6 +105,7 @@ class ProductDto {
   final bool isBirthdayCake;
   final int? flavorPickCount;
   final List<String> flavorOptions;
+  final List<ProductOptionGroup> optionGroups;
 
   Product toDomain() => Product(
         id: id,
@@ -129,6 +135,7 @@ class ProductDto {
         isBirthdayCake: isBirthdayCake,
         flavorPickCount: flavorPickCount,
         flavorOptions: flavorOptions,
+        optionGroups: optionGroups,
       );
 }
 

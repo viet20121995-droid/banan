@@ -47,6 +47,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   /// before the add-to-cart button enables.
   final Map<String, int> _flavorPicks = {};
 
+  /// Option-group picks (sugar / ice / cream), pre-filled with each group's
+  /// first choice so a customer who touches nothing still gets a valid order.
+  final Map<String, String> _optionPicks = {};
+
   @override
   Widget build(BuildContext context) {
     final productAsync = ref.watch(productProvider(widget.productId));
@@ -107,6 +111,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   _flavorPicks.values.fold(0, (s, n) => s + n) ==
                       product.flavorPickCount;
 
+              for (final g in product.optionGroups) {
+                if (g.choices.isNotEmpty) {
+                  _optionPicks.putIfAbsent(g.label, () => g.choices.first);
+                }
+              }
               final details = _Details(
                 product: product,
                 selected: selected,
@@ -122,6 +131,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     ..clear()
                     ..addAll(next);
                 }),
+                optionPicks: _optionPicks,
+                onOptionPicked: (label, choice) =>
+                    setState(() => _optionPicks[label] = choice),
                 composerComplete: composerComplete,
                 onOpenWizard: !product.isBirthdayCake
                     ? null
@@ -146,6 +158,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           ...?_personalization?.toMap(),
                           if (product.hasFlavorComposer)
                             'flavors': Map<String, int>.from(_flavorPicks),
+                          if (product.optionGroups.isNotEmpty)
+                            'options': Map<String, String>.from(_optionPicks),
                         };
                         ref.read(cartControllerProvider.notifier).add(
                               CartItem(
@@ -246,6 +260,8 @@ class _Details extends StatelessWidget {
     required this.onOpenWizard,
     required this.flavorPicks,
     required this.onFlavorsChanged,
+    required this.optionPicks,
+    required this.onOptionPicked,
     required this.composerComplete,
   });
 
@@ -275,6 +291,8 @@ class _Details extends StatelessWidget {
   /// has a composer; [composerComplete] gates the add-to-cart button.
   final Map<String, int> flavorPicks;
   final ValueChanged<Map<String, int>> onFlavorsChanged;
+  final Map<String, String> optionPicks;
+  final void Function(String label, String choice) onOptionPicked;
   final bool composerComplete;
 
   @override
@@ -329,6 +347,24 @@ class _Details extends StatelessWidget {
           ),
           const SizedBox(height: BananSpacing.xl),
         ],
+        for (final g in product.optionGroups)
+          if (g.choices.isNotEmpty) ...[
+            Text(g.label, style: theme.textTheme.titleSmall),
+            const SizedBox(height: BananSpacing.sm),
+            Wrap(
+              spacing: BananSpacing.sm,
+              runSpacing: BananSpacing.sm,
+              children: [
+                for (final c in g.choices)
+                  ChoiceChip(
+                    label: Text(c),
+                    selected: optionPicks[g.label] == c,
+                    onSelected: (_) => onOptionPicked(g.label, c),
+                  ),
+              ],
+            ),
+            const SizedBox(height: BananSpacing.xl),
+          ],
         if (product.hasFlavorComposer) ...[
           FlavorComposer(
             options: product.flavorOptions,

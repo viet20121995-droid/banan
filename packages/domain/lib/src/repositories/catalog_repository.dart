@@ -27,6 +27,7 @@ class ProductDraft {
     this.excludedStoreIds,
     this.flavorPickCount,
     this.flavorOptions = const [],
+    this.optionGroups = const [],
   });
 
   String categoryId;
@@ -66,6 +67,9 @@ class ProductDraft {
 
   /// Selectable flavour names for the composer. Empty = no composer.
   List<String> flavorOptions;
+
+  /// Sugar / ice / cream style choice groups. Always sent; [] clears.
+  List<ProductOptionGroup> optionGroups;
 }
 
 class VariantDraft {

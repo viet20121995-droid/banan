@@ -673,6 +673,7 @@ abstract class AppStrings {
 
   // Flavor composer
   String get flavorPickTitle;
+  String get optionsTitle;
   String flavorPicked(int n, int total);
   String get flavorComplete;
   String flavorRemaining(int n);
@@ -2082,6 +2083,8 @@ class _Vi extends AppStrings {
   // Flavor composer
   @override
   String get flavorPickTitle => 'Chọn vị macaron';
+  @override
+  String get optionsTitle => 'Tuỳ chọn';
   @override
   String flavorPicked(int n, int total) => 'Đã chọn $n/$total';
   @override
@@ -3663,6 +3666,8 @@ class _En extends AppStrings {
   // Flavor composer
   @override
   String get flavorPickTitle => 'Pick macaron flavors';
+  @override
+  String get optionsTitle => 'Options';
   @override
   String flavorPicked(int n, int total) => 'Picked $n/$total';
   @override

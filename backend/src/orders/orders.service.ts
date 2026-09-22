@@ -594,6 +594,22 @@ export class OrdersService {
         }
       }
 
+      // Option groups (sugar / ice / cream): every group needs a pick from its
+      // own choices — the kitchen reads these off the ticket verbatim.
+      const groups = (product.optionGroups ?? []) as { label: string; choices: string[] }[];
+      if (!input.fromBundle && Array.isArray(groups) && groups.length > 0) {
+        const picks = (input.personalization?.options ?? {}) as Record<string, unknown>;
+        for (const g of groups) {
+          const pick = picks[g.label];
+          if (typeof pick !== 'string' || !g.choices.includes(pick)) {
+            throw new BadRequestException({
+              code: 'OPTION_REQUIRED',
+              message: `"${product.name}": vui lòng chọn ${g.label} (${g.choices.join(' / ')}).`,
+            });
+          }
+        }
+      }
+
       const unitPrice = new Prisma.Decimal(product.basePrice).plus(variant.priceDelta);
       const lineTotal = unitPrice.times(input.quantity);
       subtotal = subtotal.plus(lineTotal);

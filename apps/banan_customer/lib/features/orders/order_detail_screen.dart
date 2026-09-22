@@ -1566,6 +1566,12 @@ class _PersonalizationSummary extends ConsumerWidget {
                 style: theme.textTheme.bodySmall,
               ),
             ),
+          if (optionsText(payload) != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child:
+                  Text(optionsText(payload)!, style: theme.textTheme.bodySmall),
+            ),
           if (note != null && note.isNotEmpty)
             Text(s.noteLine(note), style: theme.textTheme.bodySmall),
         ],

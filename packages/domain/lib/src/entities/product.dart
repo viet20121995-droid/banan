@@ -33,6 +33,7 @@ class Product extends Equatable {
     this.isBirthdayCake = false,
     this.flavorPickCount,
     this.flavorOptions = const [],
+    this.optionGroups = const [],
   });
 
   final String id;
@@ -98,6 +99,11 @@ class Product extends Equatable {
       flavorPickCount != null &&
       flavorPickCount! > 0 &&
       flavorOptions.isNotEmpty;
+
+  /// Single-choice groups picked on the product page (drinks: sugar / ice /
+  /// cream). The picks travel as `personalization['options']`
+  /// (`{ 'Đường': 'Ít đường' }`). First choice of each group = default.
+  final List<ProductOptionGroup> optionGroups;
 
   /// Sum of remaining stock across every LIMITED variant. `null` when
   /// every variant is UNLIMITED — the UI then knows to hide the indicator
@@ -179,6 +185,7 @@ class Product extends Equatable {
         isBirthdayCake,
         flavorPickCount,
         flavorOptions,
+        optionGroups,
       ];
 }
 
@@ -199,4 +206,23 @@ class ProductPage extends Equatable {
 
   @override
   List<Object?> get props => [items, page, perPage, total];
+}
+
+/// One option group on a product: `label` ("Đường") + its `choices`.
+class ProductOptionGroup extends Equatable {
+  const ProductOptionGroup({required this.label, required this.choices});
+
+  final String label;
+  final List<String> choices;
+
+  factory ProductOptionGroup.fromJson(Map<String, dynamic> j) =>
+      ProductOptionGroup(
+        label: (j['label'] as String?) ?? '',
+        choices: ((j['choices'] as List?) ?? const []).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => {'label': label, 'choices': choices};
+
+  @override
+  List<Object?> get props => [label, choices];
 }

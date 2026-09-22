@@ -370,6 +370,12 @@ model Product {
   flavorPickCount Int?
   flavorOptions   String[] @default([])
 
+  /// Single-choice option groups the customer picks on the product page
+  /// (drinks: sugar / ice / cream). `[{ label, choices }]`, first choice =
+  /// default. The picks land on `OrderItem.personalization.options` as
+  /// `{ "Đường": "Ít đường", "Đá": "Không đá" }`. Null / [] = none.
+  optionGroups    Json?
+
   variants          ProductVariant[]
   orderItems        OrderItem[]
   collectionItems   CollectionItem[]
