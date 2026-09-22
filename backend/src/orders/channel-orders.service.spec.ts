@@ -196,6 +196,39 @@ describe('createCounterOrder (STAFF_COUNTER)', () => {
     expect(orderCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('a drink with option groups needs every pick (OPTION_REQUIRED), then stores them', async () => {
+    const drink = {
+      ...productFixture(),
+      optionGroups: [{ label: 'Đường', choices: ['Bình thường', 'Ít đường'] }],
+    };
+    const mock = () =>
+      jest.fn((args?: { where?: { excludedStoreIds?: unknown } }) =>
+        Promise.resolve(args?.where?.excludedStoreIds ? [] : [drink]),
+      );
+    const orderCreate = jest.fn().mockResolvedValue(orderRowFixture());
+    const prisma = basePrisma(orderCreate, jest.fn());
+    prisma.product.findMany = mock();
+    const { svc } = makeService(prisma);
+
+    await expect(svc.createCounterOrder(staff, counterDto)).rejects.toMatchObject({
+      response: { code: 'OPTION_REQUIRED' },
+    });
+    expect(orderCreate).not.toHaveBeenCalled();
+
+    // Fresh mocks: the store lookup above is a one-shot resolved value.
+    const orderCreate2 = jest.fn().mockResolvedValue(orderRowFixture());
+    const prisma2 = basePrisma(orderCreate2, jest.fn());
+    prisma2.product.findMany = mock();
+    await makeService(prisma2).svc.createCounterOrder(staff, {
+      ...counterDto,
+      items: [
+        { productId: 'p1', quantity: 1, personalization: { options: { Đường: 'Ít đường' } } },
+      ],
+    });
+    const line = orderCreate2.mock.calls[0][0].data.items.createMany.data[0];
+    expect(line.personalization).toEqual({ options: { Đường: 'Ít đường' } });
+  });
+
   it('unpaid counter order records NO payment row', async () => {
     const orderCreate = jest.fn().mockResolvedValue(orderRowFixture());
     const paymentCreate = jest.fn();

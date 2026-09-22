@@ -184,6 +184,29 @@ const TRACK_INCLUDE = {
 
 type OrderTrackPayload = Prisma.OrderGetPayload<{ include: typeof TRACK_INCLUDE }>;
 
+/**
+ * Option groups (sugar / ice / cream): every group needs a pick from its own
+ * choices — the kitchen reads these off the ticket verbatim. Web and counter
+ * orders alike.
+ */
+function assertOptionPicks(
+  product: { name: string; optionGroups: unknown },
+  personalization?: Record<string, unknown> | null,
+): void {
+  const groups = product.optionGroups as { label: string; choices: string[] }[] | null;
+  if (!Array.isArray(groups) || groups.length === 0) return;
+  const picks = (personalization?.options ?? {}) as Record<string, unknown>;
+  for (const g of groups) {
+    const pick = picks[g.label];
+    if (typeof pick !== 'string' || !g.choices.includes(pick)) {
+      throw new BadRequestException({
+        code: 'OPTION_REQUIRED',
+        message: `"${product.name}": vui lòng chọn ${g.label} (${g.choices.join(' / ')}).`,
+      });
+    }
+  }
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -594,21 +617,7 @@ export class OrdersService {
         }
       }
 
-      // Option groups (sugar / ice / cream): every group needs a pick from its
-      // own choices — the kitchen reads these off the ticket verbatim.
-      const groups = (product.optionGroups ?? []) as { label: string; choices: string[] }[];
-      if (!input.fromBundle && Array.isArray(groups) && groups.length > 0) {
-        const picks = (input.personalization?.options ?? {}) as Record<string, unknown>;
-        for (const g of groups) {
-          const pick = picks[g.label];
-          if (typeof pick !== 'string' || !g.choices.includes(pick)) {
-            throw new BadRequestException({
-              code: 'OPTION_REQUIRED',
-              message: `"${product.name}": vui lòng chọn ${g.label} (${g.choices.join(' / ')}).`,
-            });
-          }
-        }
-      }
+      if (!input.fromBundle) assertOptionPicks(product, input.personalization);
 
       const unitPrice = new Prisma.Decimal(product.basePrice).plus(variant.priceDelta);
       const lineTotal = unitPrice.times(input.quantity);
@@ -2171,6 +2180,7 @@ export class OrdersService {
           });
         }
       }
+      assertOptionPicks(product, input.personalization);
       const unitPrice = new Prisma.Decimal(product.basePrice).plus(variant.priceDelta);
       const lineTotal = unitPrice.times(input.quantity);
       subtotal = subtotal.plus(lineTotal);

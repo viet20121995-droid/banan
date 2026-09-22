@@ -20,10 +20,17 @@ import '../../shared/shell/merchant_shell.dart';
 final _money = NumberFormat.decimalPattern('vi_VN');
 
 class _CartLine {
-  _CartLine(this.product, this.variant, this.qty);
+  _CartLine(this.product, this.variant, this.qty)
+      : options = {
+          for (final g in product.optionGroups)
+            if (g.choices.isNotEmpty) g.label: g.choices.first,
+        };
   final Product product;
   final ProductVariant variant;
   int qty;
+
+  /// Sugar / ice / cream picks (Product.optionGroups), default = first choice.
+  final Map<String, String> options;
 
   /// Cake name tag / message piped ("Happy Birthday Mẹ") — the kitchen
   /// reads it on the order row.
@@ -262,6 +269,29 @@ class _CartSection extends StatelessWidget {
               ),
             ],
           ),
+          for (final g in line.product.optionGroups)
+            if (g.choices.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: BananSpacing.xs),
+                child: Wrap(
+                  spacing: BananSpacing.xs,
+                  runSpacing: BananSpacing.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text('${g.label}:', style: theme.textTheme.bodySmall),
+                    for (final c in g.choices)
+                      ChoiceChip(
+                        label: Text(c),
+                        visualDensity: VisualDensity.compact,
+                        selected: line.options[g.label] == c,
+                        onSelected: (_) {
+                          line.options[g.label] = c;
+                          onChanged();
+                        },
+                      ),
+                  ],
+                ),
+              ),
           Padding(
             padding: const EdgeInsets.only(bottom: BananSpacing.sm),
             child: TextFormField(
@@ -406,9 +436,11 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
   }
 
   void _addToCart(Product p, ProductVariant v) {
-    final existing = cart.where(
-      (l) => l.product.id == p.id && l.variant.id == v.id,
-    );
+    // A product with options always gets its own line — the staff then set
+    // the picks per line (two lattes, one no-sugar).
+    final existing = p.optionGroups.isEmpty
+        ? cart.where((l) => l.product.id == p.id && l.variant.id == v.id)
+        : const Iterable<_CartLine>.empty();
     if (existing.isNotEmpty) {
       existing.first.qty++;
     } else {
@@ -454,6 +486,7 @@ class _CounterOrderScreenState extends ConsumerState<CounterOrderScreen> {
             'quantity': l.qty,
             if (l.customMessage.trim().isNotEmpty)
               'customMessage': l.customMessage.trim(),
+            if (l.options.isNotEmpty) 'personalization': {'options': l.options},
           },
       ],
       customerName: _name.text.trim(),
