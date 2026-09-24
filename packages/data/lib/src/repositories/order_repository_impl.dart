@@ -77,11 +77,13 @@ class OrderRepositoryImpl implements OrderRepository {
   @override
   Future<Result<OrderPage, AppFailure>> storeOrders({
     OrderStatus? status,
+    bool scheduled = false,
     int page = 1,
     int perPage = 30,
   }) async {
     final res = await _api.storeOrders(
       status: status?.wire,
+      scheduled: scheduled,
       page: page,
       perPage: perPage,
     );

@@ -80,12 +80,14 @@ class OrdersApi {
           AppFailure>> storeOrders({
     String? status,
     String? source,
+    bool scheduled = false,
     int page = 1,
     int perPage = 30,
   }) =>
       _list('/merchant/orders', {
         if (status != null) 'status': status,
         if (source != null) 'source': source,
+        if (scheduled) 'scheduled': 'true',
         'page': page,
         'perPage': perPage,
       });

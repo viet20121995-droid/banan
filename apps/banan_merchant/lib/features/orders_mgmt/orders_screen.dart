@@ -93,7 +93,14 @@ class StoreOrdersController extends StateNotifier<StoreOrdersState> {
 
   Future<void> refresh() async {
     state = state.copyWith(loading: true, failure: null);
-    final res = await _repo.storeOrders(status: state.statusFilter);
+    // 100 per page: a board that only showed the 30 newest rows lost every
+    // pre-order older than the last 30 walk-ins. The scheduled view asks the
+    // server for open pre-orders sorted by their date instead.
+    final res = await _repo.storeOrders(
+      status: state.statusFilter,
+      scheduled: state.scheduledOnly,
+      perPage: 100,
+    );
     res.when(
       success: (page) =>
           state = state.copyWith(orders: page.items, loading: false),
@@ -118,13 +125,10 @@ class StoreOrdersController extends StateNotifier<StoreOrdersState> {
     await refresh();
   }
 
-  /// Toggle the "Scheduled" pseudo-filter. We don't have a backend `scheduled`
-  /// query param, so we fetch all PENDING orders and filter client-side.
+  /// Toggle the "Scheduled" view: every OPEN order with a scheduled time
+  /// (pending, accepted, at the kitchen…), soonest first — server-side.
   Future<void> setScheduledOnly(bool on) async {
-    state = state.copyWith(
-      statusFilter: on ? OrderStatus.pending : null,
-      scheduledOnly: on,
-    );
+    state = state.copyWith(statusFilter: null, scheduledOnly: on);
     await refresh();
   }
 
@@ -352,6 +356,7 @@ class _Filter extends StatelessWidget {
       ('Chờ duyệt', OrderStatus.pending),
       ('Đã nhận', OrderStatus.accepted),
       ('Đang làm', OrderStatus.inPreparation),
+      ('Ở bếp', OrderStatus.sentToKitchen),
       ('Sẵn sàng', OrderStatus.readyForPickup),
       ('Đang giao', OrderStatus.delivering),
       ('Hoàn thành', OrderStatus.completed),
@@ -398,8 +403,7 @@ class _OrdersSkeleton extends StatelessWidget {
     Widget block(double width, double height) => Container(
           width: width,
           height: height,
-          decoration:
-              BoxDecoration(color: ghost, borderRadius: BananRadii.rsm),
+          decoration: BoxDecoration(color: ghost, borderRadius: BananRadii.rsm),
         );
     return ListView.separated(
       physics: const NeverScrollableScrollPhysics(),

@@ -255,6 +255,9 @@ abstract class OrderRepository {
   // Merchant-side
   Future<Result<OrderPage, AppFailure>> storeOrders({
     OrderStatus? status,
+
+    /// Only open orders with a scheduled time, soonest first.
+    bool scheduled = false,
     int page = 1,
     int perPage = 30,
   });

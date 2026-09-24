@@ -1269,7 +1269,15 @@ export class OrdersService {
 
   async listForStore(
     storeId: string | null,
-    opts: { status?: OrderStatus; source?: OrderSource; page?: number; perPage?: number },
+    opts: {
+      status?: OrderStatus;
+      source?: OrderSource;
+      /** Open orders with a scheduled time, soonest first — a pre-order never
+       *  falls off the board just because newer walk-ins pushed it past page 1. */
+      scheduled?: boolean;
+      page?: number;
+      perPage?: number;
+    },
   ) {
     const page = opts.page ?? 1;
     const perPage = opts.perPage ?? 30;
@@ -1283,6 +1291,10 @@ export class OrdersService {
       }),
       ...(opts.status && { status: opts.status }),
       ...(opts.source && { source: opts.source }),
+      ...(opts.scheduled && {
+        scheduledFor: { not: null },
+        status: opts.status ?? { notIn: ['COMPLETED', 'CANCELLED', 'REFUNDED'] },
+      }),
       // Unpaid online checkouts are invisible to staff (see the const's doc).
       NOT: AWAITING_ONLINE_PAYMENT,
     };
@@ -1290,7 +1302,7 @@ export class OrdersService {
       this.prisma.order.findMany({
         where,
         include: ORDER_INCLUDE,
-        orderBy: { createdAt: 'desc' },
+        orderBy: opts.scheduled ? { scheduledFor: 'asc' } : { createdAt: 'desc' },
         skip: (page - 1) * perPage,
         take: perPage,
       }),
