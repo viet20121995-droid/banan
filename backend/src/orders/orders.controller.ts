@@ -127,6 +127,8 @@ export class MerchantOrdersController {
     @Query('perPage') perPage?: string,
     /** "true" → only orders with a scheduled time that are still open, soonest first. */
     @Query('scheduled') scheduled?: string,
+    /** YYYY-MM-DD (Vietnam day): orders due that day — scheduledFor, else createdAt. */
+    @Query('day') day?: string,
   ) {
     if (!user.storeId && user.role !== Role.ADMIN) {
       throw new BadRequestException({ code: 'NO_STORE_ASSIGNED' });
@@ -137,6 +139,7 @@ export class MerchantOrdersController {
       status,
       source,
       scheduled: scheduled === 'true',
+      day: /^\d{4}-\d{2}-\d{2}$/.test(day ?? '') ? day : undefined,
       page: Number(page) || 1,
       perPage: Math.min(Number(perPage) || 30, 200),
     });

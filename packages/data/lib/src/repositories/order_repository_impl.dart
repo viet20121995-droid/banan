@@ -78,12 +78,17 @@ class OrderRepositoryImpl implements OrderRepository {
   Future<Result<OrderPage, AppFailure>> storeOrders({
     OrderStatus? status,
     bool scheduled = false,
+    DateTime? day,
     int page = 1,
     int perPage = 30,
   }) async {
     final res = await _api.storeOrders(
       status: status?.wire,
       scheduled: scheduled,
+      day: day == null
+          ? null
+          : '${day.year}-${day.month.toString().padLeft(2, '0')}-'
+              '${day.day.toString().padLeft(2, '0')}',
       page: page,
       perPage: perPage,
     );

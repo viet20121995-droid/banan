@@ -81,6 +81,7 @@ class OrdersApi {
     String? status,
     String? source,
     bool scheduled = false,
+    String? day,
     int page = 1,
     int perPage = 30,
   }) =>
@@ -88,6 +89,7 @@ class OrdersApi {
         if (status != null) 'status': status,
         if (source != null) 'source': source,
         if (scheduled) 'scheduled': 'true',
+        if (day != null) 'day': day,
         'page': page,
         'perPage': perPage,
       });

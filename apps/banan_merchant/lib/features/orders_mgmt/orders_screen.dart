@@ -20,6 +20,7 @@ class StoreOrdersState {
     this.failure,
     this.statusFilter,
     this.scheduledOnly = false,
+    this.day,
     this.newOrderCount = 0,
     this.storeIdFilter,
   });
@@ -32,6 +33,10 @@ class StoreOrdersState {
   /// When true, only orders with `scheduledFor != null` are shown — sorted
   /// by upcoming pickup/delivery time.
   final bool scheduledOnly;
+
+  /// Calendar-day filter (server-side): orders due that day — the scheduled
+  /// slot when set, else the day the order came in. Null = any day.
+  final DateTime? day;
 
   /// Orders that arrived via realtime since the merchant last acknowledged.
   /// Drives the attention banner; cleared when the merchant taps it.
@@ -64,6 +69,7 @@ class StoreOrdersState {
     Object? failure = _sentinel,
     Object? statusFilter = _sentinel,
     bool? scheduledOnly,
+    Object? day = _sentinel,
     int? newOrderCount,
     Object? storeIdFilter = _sentinel,
   }) =>
@@ -75,6 +81,7 @@ class StoreOrdersState {
             ? this.statusFilter
             : statusFilter as OrderStatus?,
         scheduledOnly: scheduledOnly ?? this.scheduledOnly,
+        day: day == _sentinel ? this.day : day as DateTime?,
         newOrderCount: newOrderCount ?? this.newOrderCount,
         storeIdFilter: storeIdFilter == _sentinel
             ? this.storeIdFilter
@@ -99,6 +106,7 @@ class StoreOrdersController extends StateNotifier<StoreOrdersState> {
     final res = await _repo.storeOrders(
       status: state.statusFilter,
       scheduled: state.scheduledOnly,
+      day: state.day,
       perPage: 100,
     );
     res.when(
@@ -129,6 +137,12 @@ class StoreOrdersController extends StateNotifier<StoreOrdersState> {
   /// (pending, accepted, at the kitchen…), soonest first — server-side.
   Future<void> setScheduledOnly(bool on) async {
     state = state.copyWith(statusFilter: null, scheduledOnly: on);
+    await refresh();
+  }
+
+  /// Calendar-day filter; null clears it. Combines with the status chips.
+  Future<void> setDay(DateTime? day) async {
+    state = state.copyWith(day: day);
     await refresh();
   }
 
@@ -207,9 +221,20 @@ class MerchantOrdersScreen extends ConsumerWidget {
           _Filter(
             selected: state.statusFilter,
             scheduledOnly: state.scheduledOnly,
+            day: state.day,
             onSelect: controller.setFilter,
             onScheduledToggle: () =>
                 controller.setScheduledOnly(!state.scheduledOnly),
+            onPickDay: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: state.day ?? DateTime.now(),
+                firstDate: DateTime(2025),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null) await controller.setDay(picked);
+            },
+            onClearDay: () => controller.setDay(null),
           ),
           const SizedBox(height: BananSpacing.lg),
           Expanded(
@@ -341,13 +366,19 @@ class _Filter extends StatelessWidget {
   const _Filter({
     required this.selected,
     required this.scheduledOnly,
+    required this.day,
     required this.onSelect,
     required this.onScheduledToggle,
+    required this.onPickDay,
+    required this.onClearDay,
   });
   final OrderStatus? selected;
   final bool scheduledOnly;
+  final DateTime? day;
   final ValueChanged<OrderStatus?> onSelect;
   final VoidCallback onScheduledToggle;
+  final VoidCallback onPickDay;
+  final VoidCallback onClearDay;
 
   @override
   Widget build(BuildContext context) {
@@ -366,6 +397,19 @@ class _Filter extends StatelessWidget {
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
+          // Day filter: due date (scheduled slot, else order date).
+          Padding(
+            padding: const EdgeInsets.only(right: BananSpacing.sm),
+            child: InputChip(
+              avatar: const Icon(Icons.calendar_today_outlined, size: 18),
+              label: Text(
+                day == null ? 'Ngày' : DateFormat('dd/MM').format(day!),
+              ),
+              selected: day != null,
+              onPressed: onPickDay,
+              onDeleted: day == null ? null : onClearDay,
+            ),
+          ),
           // Distinct pseudo-filter — pickups & deliveries scheduled for later.
           Padding(
             padding: const EdgeInsets.only(right: BananSpacing.sm),

@@ -207,6 +207,16 @@ function assertOptionPicks(
   }
 }
 
+/** Orders due on a Vietnam calendar day: scheduled ones by their slot, walk-ins by creation. */
+function dueOnVnDay(day: string): Prisma.OrderWhereInput {
+  const start = new Date(`${day}T00:00:00+07:00`);
+  const end = new Date(start.getTime() + 24 * 3600 * 1000);
+  const range = { gte: start, lt: end };
+  return {
+    OR: [{ scheduledFor: range }, { scheduledFor: null, createdAt: range }],
+  };
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -1275,6 +1285,8 @@ export class OrdersService {
       /** Open orders with a scheduled time, soonest first — a pre-order never
        *  falls off the board just because newer walk-ins pushed it past page 1. */
       scheduled?: boolean;
+      /** Vietnam calendar day (YYYY-MM-DD) the order is due: scheduledFor when set, else createdAt. */
+      day?: string;
       page?: number;
       perPage?: number;
     },
@@ -1295,6 +1307,7 @@ export class OrdersService {
         scheduledFor: { not: null },
         status: opts.status ?? { notIn: ['COMPLETED', 'CANCELLED', 'REFUNDED'] },
       }),
+      ...(opts.day && { AND: [dueOnVnDay(opts.day)] }),
       // Unpaid online checkouts are invisible to staff (see the const's doc).
       NOT: AWAITING_ONLINE_PAYMENT,
     };

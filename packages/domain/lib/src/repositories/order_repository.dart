@@ -258,6 +258,9 @@ abstract class OrderRepository {
 
     /// Only open orders with a scheduled time, soonest first.
     bool scheduled = false,
+
+    /// Orders due on this (Vietnam) calendar day.
+    DateTime? day,
     int page = 1,
     int perPage = 30,
   });
