@@ -393,7 +393,7 @@ export class ProductsService {
    * incoming list are deleted. Atomic via a Prisma transaction.
    */
   async update(id: string, storeId: string | null, dto: UpdateProductDto) {
-    const existing = await this.findOne(id);
+    const existing = await this.findOne(id, Role.ADMIN);
     if (storeId && existing.storeId !== storeId) {
       throw new BadRequestException({
         code: 'PRODUCT_NOT_IN_STORE',
@@ -638,7 +638,7 @@ export class ProductsService {
 
   /// Brings an archived product back to the menu. Idempotent.
   async restore(id: string, storeId: string | null) {
-    const existing = await this.findOne(id);
+    const existing = await this.findOne(id, Role.ADMIN);
     if (storeId && existing.storeId !== storeId) {
       throw new BadRequestException({ code: 'PRODUCT_NOT_IN_STORE' });
     }
