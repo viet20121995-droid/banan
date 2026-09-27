@@ -147,4 +147,16 @@ void main() {
       expect(note, contains('Cake'));
     });
   });
+
+  test('slots are Vietnam wall-clock whatever the phone timezone', () {
+    // 10:30 in the shop = 03:30 UTC, even on a JST / EDT phone.
+    expect(
+      vnInstant(DateTime(2026, 9, 29, 10, 30)),
+      DateTime.utc(2026, 9, 29, 3, 30),
+    );
+    final v = vnNow();
+    final real = DateTime.now().toUtc().add(const Duration(hours: 7));
+    expect(v.hour, real.hour);
+    expect(v.day, real.day);
+  });
 }

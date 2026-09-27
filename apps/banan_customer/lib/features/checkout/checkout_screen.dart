@@ -377,12 +377,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (cart.hasDayConflict) {
       scheduleError = s.mixedDaysError;
       add(_scheduleKey);
-    } else if (_scheduledFor != null &&
-        _scheduledFor!.isBefore(DateTime.now())) {
+    } else if (_scheduledFor != null && _scheduledFor!.isBefore(vnNow())) {
       scheduleError = s.pickEarliest;
       add(_scheduleKey);
     } else if (cart.minCutoffHour != null &&
-        DateTime.now().hour >= cart.minCutoffHour! &&
+        vnNow().hour >= cart.minCutoffHour! &&
         (_scheduledFor == null ||
             DateTime(
                   _scheduledFor!.year,
@@ -390,9 +389,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   _scheduledFor!.day,
                 ) ==
                 DateTime(
-                  DateTime.now().year,
-                  DateTime.now().month,
-                  DateTime.now().day,
+                  vnNow().year,
+                  vnNow().month,
+                  vnNow().day,
                 ))) {
       scheduleError = s.cutoffPassed(cart.minCutoffHour!);
       add(_scheduleKey);
@@ -401,7 +400,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       final store = _fulfilStore(cart);
       if (store != null &&
           store.openingHours.isNotEmpty &&
-          !store.isOpenAt(_scheduledFor)) {
+          !store.isOpenAt(
+            _scheduledFor == null ? null : vnInstant(_scheduledFor!),
+          )) {
         scheduleError =
             _scheduledFor == null ? s.storeClosedPickTime : s.storeClosedAtTime;
         add(_scheduleKey);
@@ -653,7 +654,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       giftCardCode: _giftCode,
       pointsToRedeem: pointsToRedeem > 0 ? pointsToRedeem : null,
       useMemberDiscount: useMemberDiscount,
-      scheduledFor: _scheduledFor,
+      // Picker slots are Vietnam wall-clock; send the real instant.
+      scheduledFor: _scheduledFor == null ? null : vnInstant(_scheduledFor!),
       guestFullName: isGuest ? _guestName.text.trim() : null,
       guestPhone: isGuest ? _guestPhone.text.trim() : null,
       guestEmail: isGuest && _guestEmail.text.trim().isNotEmpty

@@ -499,6 +499,25 @@ class _SavedAddressTile extends ConsumerWidget {
 /// With [hours] (the fulfilling branch's `openingHours`) the result is snapped
 /// onto the first 30-minute slot the branch is actually open for — the backend
 /// rejects anything else with STORE_CLOSED.
+/// Vietnam wall clock as a plain local DateTime. Slots, "today" and cut-offs
+/// are all in shop time: a customer abroad (phone on JST, EDT…) must see the
+/// shop's 10:00–21:30, not their own.
+// ponytail: fixed +7, Vietnam has no DST. Local DST jumps inside the 14-day
+// window can skew a slot by an hour on such phones — acceptable.
+DateTime vnNow() {
+  final v = DateTime.now().toUtc().add(const Duration(hours: 7));
+  return DateTime(v.year, v.month, v.day, v.hour, v.minute, v.second);
+}
+
+/// The real instant of a Vietnam wall-clock [wall] built by the picker.
+DateTime vnInstant(DateTime wall) => DateTime.utc(
+      wall.year,
+      wall.month,
+      wall.day,
+      wall.hour,
+      wall.minute,
+    ).subtract(const Duration(hours: 7));
+
 DateTime earliestScheduleSlot(
   Duration lead, {
   Set<int>? allowedDays,
@@ -508,7 +527,7 @@ DateTime earliestScheduleSlot(
   /// Same-day cut-off: once the local hour reaches it, start from tomorrow.
   int? cutoffHour,
 }) {
-  final now = DateTime.now();
+  final now = vnNow();
   var t = now.add(lead);
   if (cutoffHour != null && now.hour >= cutoffHour) {
     final tomorrow = DateTime(now.year, now.month, now.day + 1);
@@ -657,7 +676,7 @@ class _LeadAwareScheduleState extends State<LeadAwareSchedule> {
     // One-shot: if prep time or a day restriction applies and the customer
     // hasn't chosen a time yet, pre-fill the soonest valid slot.
     final cutoffPassed =
-        widget.cutoffHour != null && DateTime.now().hour >= widget.cutoffHour!;
+        widget.cutoffHour != null && vnNow().hour >= widget.cutoffHour!;
     final constrained =
         widget.leadHours > 0 || _allowed != null || cutoffPassed;
     if (constrained && widget.value == null) {
@@ -876,7 +895,7 @@ class ScheduleSection extends ConsumerWidget {
   }
 
   String _relativeLabel(DateTime when, AppStrings s) =>
-      relativeDayLabel(s, when, DateTime.now());
+      relativeDayLabel(s, when, vnNow());
 }
 
 /// Amber "needs preparation time" banner shown above the schedule toggle.
@@ -973,7 +992,7 @@ class _SchedulePickerSheetState extends ConsumerState<_SchedulePickerSheet> {
   }
 
   String _dayLabel(AppStrings s, DateTime d) {
-    final now = DateTime.now();
+    final now = vnNow();
     final t0 = DateTime(now.year, now.month, now.day);
     final diff = DateTime(d.year, d.month, d.day).difference(t0).inDays;
     if (diff == 0) return s.today;
