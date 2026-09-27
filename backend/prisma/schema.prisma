@@ -354,6 +354,10 @@ model Product {
   ///   dailyMaxQuantity    — null = unlimited. Else a daily order cap
   ///                          enforced across all customers for that date.
   leadTimeHours       Int?
+  /// Same-day cut-off (Vietnam hour, 0–23): an order placed at/after this
+  /// hour can only be fulfilled from the NEXT day — e.g. 14 = "đặt trước
+  /// 14:00 mới nhận trong ngày". Null = no cut-off (lead time only).
+  orderCutoffHour     Int?
   availableDaysOfWeek Int[] @default([])
   dailyMaxQuantity    Int?
   /// Branches that do NOT serve this product (e.g. a drink only some

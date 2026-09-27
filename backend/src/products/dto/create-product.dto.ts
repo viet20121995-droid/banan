@@ -101,6 +101,13 @@ export class CreateProductDto {
   @Max(720)
   leadTimeHours?: number | null;
 
+  /// Same-day cut-off hour (Vietnam, 0–23). Null = none.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  orderCutoffHour?: number | null;
+
   /// Days of week the product is sold. Empty = every day. Int values follow
   /// JS Date.getDay() (0=Sun..6=Sat). Used for "trà chiều chỉ T2-T6" kind of
   /// rules.

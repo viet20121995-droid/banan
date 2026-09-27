@@ -504,8 +504,16 @@ DateTime earliestScheduleSlot(
   Set<int>? allowedDays,
   int openHour = 8,
   OpeningHours? hours,
+
+  /// Same-day cut-off: once the local hour reaches it, start from tomorrow.
+  int? cutoffHour,
 }) {
-  final t = DateTime.now().add(lead);
+  final now = DateTime.now();
+  var t = now.add(lead);
+  if (cutoffHour != null && now.hour >= cutoffHour) {
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    if (t.isBefore(tomorrow)) t = tomorrow;
+  }
   final base = DateTime(t.year, t.month, t.day, t.hour);
   final slot = (t.minute / 15).ceil() * 15;
   var earliest = base.add(Duration(minutes: slot));
@@ -610,6 +618,7 @@ class LeadAwareSchedule extends StatefulWidget {
     this.allowedDays = const [],
     this.hours,
     this.closedNote,
+    this.cutoffHour,
     super.key,
   });
 
@@ -629,6 +638,9 @@ class LeadAwareSchedule extends StatefulWidget {
   /// closed right now — the customer has to pick a time.
   final String? closedNote;
 
+  /// Same-day cut-off hour of the cart (null = none).
+  final int? cutoffHour;
+
   @override
   State<LeadAwareSchedule> createState() => _LeadAwareScheduleState();
 }
@@ -644,7 +656,10 @@ class _LeadAwareScheduleState extends State<LeadAwareSchedule> {
     super.initState();
     // One-shot: if prep time or a day restriction applies and the customer
     // hasn't chosen a time yet, pre-fill the soonest valid slot.
-    final constrained = widget.leadHours > 0 || _allowed != null;
+    final cutoffPassed =
+        widget.cutoffHour != null && DateTime.now().hour >= widget.cutoffHour!;
+    final constrained =
+        widget.leadHours > 0 || _allowed != null || cutoffPassed;
     if (constrained && widget.value == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && widget.value == null) {
@@ -653,6 +668,7 @@ class _LeadAwareScheduleState extends State<LeadAwareSchedule> {
               Duration(hours: widget.leadHours),
               allowedDays: _allowed,
               hours: widget.hours,
+              cutoffHour: widget.cutoffHour,
             ),
           );
         }
@@ -672,6 +688,7 @@ class _LeadAwareScheduleState extends State<LeadAwareSchedule> {
       allowedDays: widget.allowedDays,
       hours: widget.hours,
       closedNote: widget.closedNote,
+      cutoffHour: widget.cutoffHour,
     );
   }
 }
@@ -688,6 +705,7 @@ class ScheduleSection extends ConsumerWidget {
     this.allowedDays = const [],
     this.hours,
     this.closedNote,
+    this.cutoffHour,
     super.key,
   });
   final DateTime? value;
@@ -696,6 +714,7 @@ class ScheduleSection extends ConsumerWidget {
   final String? leadNote;
   final OpeningHours? hours;
   final String? closedNote;
+  final int? cutoffHour;
 
   /// Weekdays (0=Sun..6=Sat) the cart can be fulfilled on. Empty / all = no
   /// restriction; otherwise the picker hides disallowed days.
@@ -706,8 +725,12 @@ class ScheduleSection extends ConsumerWidget {
       : allowedDays.toSet();
 
   Future<void> _pick(BuildContext context) async {
-    final earliest =
-        earliestScheduleSlot(minLead, allowedDays: _allowed, hours: hours);
+    final earliest = earliestScheduleSlot(
+      minLead,
+      allowedDays: _allowed,
+      hours: hours,
+      cutoffHour: cutoffHour,
+    );
     final initial =
         (value != null && value!.isAfter(earliest)) ? value : earliest;
     final picked = await showModalBottomSheet<DateTime>(
@@ -730,8 +753,12 @@ class ScheduleSection extends ConsumerWidget {
     final s = ref.watch(stringsProvider);
     final isScheduled = value != null;
     final fmt = DateFormat('HH:mm · dd/MM');
-    final earliest =
-        earliestScheduleSlot(minLead, allowedDays: _allowed, hours: hours);
+    final earliest = earliestScheduleSlot(
+      minLead,
+      allowedDays: _allowed,
+      hours: hours,
+      cutoffHour: cutoffHour,
+    );
 
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),

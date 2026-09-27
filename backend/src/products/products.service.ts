@@ -363,6 +363,7 @@ export class ProductsService {
           seasonStart: dto.seasonStart ? new Date(dto.seasonStart) : null,
           seasonEnd: dto.seasonEnd ? new Date(dto.seasonEnd) : null,
           leadTimeHours: dto.leadTimeHours ?? null,
+          orderCutoffHour: dto.orderCutoffHour ?? null,
           availableDaysOfWeek: dto.availableDaysOfWeek ?? [],
           dailyMaxQuantity: dto.dailyMaxQuantity ?? null,
           excludedStoreIds: dto.excludedStoreIds ?? [],
@@ -436,6 +437,7 @@ export class ProductsService {
           ...(dto.seasonEnd !== undefined && {
             seasonEnd: dto.seasonEnd ? new Date(dto.seasonEnd) : null,
           }),
+          ...(dto.orderCutoffHour !== undefined && { orderCutoffHour: dto.orderCutoffHour }),
           ...(dto.leadTimeHours !== undefined && {
             leadTimeHours: dto.leadTimeHours,
           }),

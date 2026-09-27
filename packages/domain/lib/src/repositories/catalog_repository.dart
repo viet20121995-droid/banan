@@ -22,6 +22,7 @@ class ProductDraft {
     this.seasonStart,
     this.seasonEnd,
     this.leadTimeHours,
+    this.orderCutoffHour,
     this.availableDaysOfWeek = const [],
     this.dailyMaxQuantity,
     this.excludedStoreIds,
@@ -55,6 +56,9 @@ class ProductDraft {
   ///                          Empty = every day.
   ///   dailyMaxQuantity    — hard daily order cap; null = unlimited.
   int? leadTimeHours;
+
+  /// Same-day cut-off hour (Vietnam, 0–23); null = none. Always sent.
+  int? orderCutoffHour;
   List<int> availableDaysOfWeek;
   int? dailyMaxQuantity;
 

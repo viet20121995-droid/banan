@@ -24,6 +24,7 @@ class Product extends Equatable {
     this.seasonStart,
     this.seasonEnd,
     this.leadTimeHours,
+    this.orderCutoffHour,
     this.availableDaysOfWeek = const [],
     this.dailyMaxQuantity,
     this.excludedStoreIds = const [],
@@ -58,6 +59,9 @@ class Product extends Equatable {
   /// Minimum advance notice (hours) the merchant requires for this product.
   /// Null = use the store-wide default.
   final int? leadTimeHours;
+
+  /// Same-day cut-off (Vietnam hour): ordered at/after it → next day.
+  final int? orderCutoffHour;
 
   /// Days of week (0=Sun..6=Sat, matches JS Date.getDay()) when this product
   /// is sold. Empty = every day. Used for things like "Trà chiều chỉ T2-T6".
@@ -176,6 +180,7 @@ class Product extends Equatable {
         seasonStart,
         seasonEnd,
         leadTimeHours,
+        orderCutoffHour,
         availableDaysOfWeek,
         dailyMaxQuantity,
         excludedStoreIds,

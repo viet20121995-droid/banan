@@ -2486,6 +2486,7 @@ void _confirmAddToCart({
               : personalization,
           isBirthdayCake: isBirthdayCake,
           leadTimeHours: product.leadTimeHours,
+          orderCutoffHour: product.orderCutoffHour,
           availableDaysOfWeek: product.availableDaysOfWeek,
         ),
       );

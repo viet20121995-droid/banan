@@ -400,6 +400,8 @@ abstract class AppStrings {
   String feeDistanceKm(String km);
   String get feePickWard;
   String needLeadHours(int h);
+  String cutoffPassed(int h);
+  String cutoffNote(int h);
   String onlySoldOnDays(String days);
   String get itemsDontFit;
   String get pickEarliest;
@@ -1505,6 +1507,12 @@ class _Vi extends AppStrings {
   String get feePickWard => '• Chọn phường ở trên để tính chính xác';
   @override
   String needLeadHours(int h) => 'cần đặt trước $h giờ';
+  @override
+  String cutoffPassed(int h) =>
+      'chỉ nhận đơn trong ngày trước $h:00 — chọn ngày mai';
+  @override
+  String cutoffNote(int h) =>
+      'Đơn trong ngày nhận trước $h:00. Đặt sau giờ đó, bánh sẵn sàng từ ngày hôm sau.';
   @override
   String onlySoldOnDays(String days) => 'chỉ bán $days';
   @override
@@ -3043,6 +3051,12 @@ class _En extends AppStrings {
   String get feePickWard => '• Pick a ward above for an exact fee';
   @override
   String needLeadHours(int h) => 'needs $h hours notice';
+  @override
+  String cutoffPassed(int h) =>
+      'same-day orders close at $h:00 — pick tomorrow';
+  @override
+  String cutoffNote(int h) =>
+      'Same-day orders are taken until $h:00. After that, the cake is ready from the next day.';
   @override
   String onlySoldOnDays(String days) => 'only sold on $days';
   @override

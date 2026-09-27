@@ -381,6 +381,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         _scheduledFor!.isBefore(DateTime.now())) {
       scheduleError = s.pickEarliest;
       add(_scheduleKey);
+    } else if (cart.minCutoffHour != null &&
+        DateTime.now().hour >= cart.minCutoffHour! &&
+        (_scheduledFor == null ||
+            DateTime(
+                  _scheduledFor!.year,
+                  _scheduledFor!.month,
+                  _scheduledFor!.day,
+                ) ==
+                DateTime(
+                  DateTime.now().year,
+                  DateTime.now().month,
+                  DateTime.now().day,
+                ))) {
+      scheduleError = s.cutoffPassed(cart.minCutoffHour!);
+      add(_scheduleKey);
     } else {
       // The backend refuses a closed branch (STORE_CLOSED) — catch it here.
       final store = _fulfilStore(cart);
@@ -799,6 +814,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         leadHours: cart.maxLeadHours,
         names: cart.leadProductNames,
       ),
+      if (cart.minCutoffHour != null) s.cutoffNote(cart.minCutoffHour!),
       // Conflicting day constraints (no single day works for the whole cart):
       // warn up front instead of letting the picker show every day and only
       // failing at checkout. Otherwise show the normal allowed-days note.
@@ -826,6 +842,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         Duration(hours: lead),
         allowedDays: set,
         hours: _fulfilStore(cart)?.openingHours,
+        cutoffHour: cart.minCutoffHour,
       );
       _timeline = null;
       _error = null;
@@ -1082,6 +1099,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         leadNote: _scheduleNote(cart),
                         allowedDays: cart.allowedDaysOfWeek,
                         hours: fulfilStore?.openingHours,
+                        cutoffHour: cart.minCutoffHour,
                         closedNote: fulfilStore != null &&
                                 fulfilStore.openingHours.isNotEmpty &&
                                 !fulfilStore.isOpenNow
@@ -2609,6 +2627,7 @@ Future<void> _addGift(BuildContext context, WidgetRef ref, String id) async {
               coverImage: p.coverImage,
               isBirthdayCake: p.isBirthdayCake,
               leadTimeHours: p.leadTimeHours,
+              orderCutoffHour: p.orderCutoffHour,
               availableDaysOfWeek: p.availableDaysOfWeek,
             ),
           );

@@ -195,6 +195,7 @@ class CatalogRepositoryImpl implements CatalogRepository {
       // Availability rules. Sending an empty array is meaningful — it
       // explicitly clears any previous restriction.
       'leadTimeHours': d.leadTimeHours,
+      'orderCutoffHour': d.orderCutoffHour,
       'availableDaysOfWeek': d.availableDaysOfWeek,
       'dailyMaxQuantity': d.dailyMaxQuantity,
       if (d.excludedStoreIds != null) 'excludedStoreIds': d.excludedStoreIds,

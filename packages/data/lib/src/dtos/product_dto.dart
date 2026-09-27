@@ -22,6 +22,7 @@ class ProductDto {
     this.seasonStart,
     this.seasonEnd,
     this.leadTimeHours,
+    this.orderCutoffHour,
     this.availableDaysOfWeek = const [],
     this.dailyMaxQuantity,
     this.excludedStoreIds = const [],
@@ -51,6 +52,7 @@ class ProductDto {
       seasonStart: json['seasonStart'] as String?,
       seasonEnd: json['seasonEnd'] as String?,
       leadTimeHours: (json['leadTimeHours'] as num?)?.toInt(),
+      orderCutoffHour: (json['orderCutoffHour'] as num?)?.toInt(),
       availableDaysOfWeek: ((json['availableDaysOfWeek'] as List?) ?? const [])
           .map((e) => (e as num).toInt())
           .toList(),
@@ -96,6 +98,7 @@ class ProductDto {
   final String? seasonStart;
   final String? seasonEnd;
   final int? leadTimeHours;
+  final int? orderCutoffHour;
   final List<int> availableDaysOfWeek;
   final int? dailyMaxQuantity;
   final List<String> excludedStoreIds;
@@ -126,6 +129,7 @@ class ProductDto {
             seasonStart == null ? null : DateTime.tryParse(seasonStart!),
         seasonEnd: seasonEnd == null ? null : DateTime.tryParse(seasonEnd!),
         leadTimeHours: leadTimeHours,
+        orderCutoffHour: orderCutoffHour,
         availableDaysOfWeek: availableDaysOfWeek,
         dailyMaxQuantity: dailyMaxQuantity,
         excludedStoreIds: excludedStoreIds,

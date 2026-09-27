@@ -142,6 +142,7 @@ class _Card extends ConsumerWidget {
             quantity: 1,
             isBirthdayCake: product.isBirthdayCake,
             leadTimeHours: product.leadTimeHours,
+            orderCutoffHour: product.orderCutoffHour,
             availableDaysOfWeek: product.availableDaysOfWeek,
           ),
         );

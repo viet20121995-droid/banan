@@ -173,6 +173,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 personalization: pers.isEmpty ? null : pers,
                                 isBirthdayCake: product.isBirthdayCake,
                                 leadTimeHours: product.leadTimeHours,
+                                orderCutoffHour: product.orderCutoffHour,
                                 availableDaysOfWeek:
                                     product.availableDaysOfWeek,
                               ),

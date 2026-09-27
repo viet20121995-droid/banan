@@ -19,6 +19,7 @@ class CartItem {
     this.personalization,
     this.isBirthdayCake = false,
     this.leadTimeHours,
+    this.orderCutoffHour,
     this.availableDaysOfWeek = const [],
     this.isBundle = false,
     this.bundleProductIds = const [],
@@ -39,6 +40,9 @@ class CartItem {
   /// and default the schedule to the earliest valid time, matching the
   /// backend's PRODUCT_LEAD_TIME guard so they never hit a rejected order.
   final int? leadTimeHours;
+
+  /// Same-day cut-off (Vietnam hour) — mirrors `Product.orderCutoffHour`.
+  final int? orderCutoffHour;
 
   /// Days of week (0=Sun..6=Sat) this product is sold — mirrors
   /// `Product.availableDaysOfWeek`. Empty = sold every day. The cart
@@ -96,6 +100,7 @@ class CartItem {
         'personalization': personalization,
         'isBirthdayCake': isBirthdayCake,
         'leadTimeHours': leadTimeHours,
+        'orderCutoffHour': orderCutoffHour,
         'availableDaysOfWeek': availableDaysOfWeek,
         'isBundle': isBundle,
         'bundleProductIds': bundleProductIds,
@@ -114,6 +119,7 @@ class CartItem {
             (j['personalization'] as Map?)?.cast<String, dynamic>(),
         isBirthdayCake: (j['isBirthdayCake'] as bool?) ?? false,
         leadTimeHours: (j['leadTimeHours'] as num?)?.toInt(),
+        orderCutoffHour: (j['orderCutoffHour'] as num?)?.toInt(),
         availableDaysOfWeek: ((j['availableDaysOfWeek'] as List?) ?? const [])
             .map((e) => (e as num).toInt())
             .toList(),
@@ -134,6 +140,7 @@ class CartItem {
         personalization: personalization,
         isBirthdayCake: isBirthdayCake,
         leadTimeHours: leadTimeHours,
+        orderCutoffHour: orderCutoffHour,
         availableDaysOfWeek: availableDaysOfWeek,
         isBundle: isBundle,
         bundleProductIds: bundleProductIds,
@@ -153,6 +160,7 @@ class CartItem {
         customMessage: customMessage,
         isBirthdayCake: isBirthdayCake,
         leadTimeHours: leadTimeHours,
+        orderCutoffHour: orderCutoffHour,
         availableDaysOfWeek: availableDaysOfWeek,
         isBundle: isBundle,
         bundleProductIds: bundleProductIds,
@@ -184,6 +192,17 @@ class CartState {
         0,
         (m, i) => (i.leadTimeHours ?? 0) > m ? (i.leadTimeHours ?? 0) : m,
       );
+
+  /// Earliest same-day cut-off hour across the cart (null = none): once the
+  /// local hour reaches it, the whole order moves to tomorrow.
+  int? get minCutoffHour {
+    int? out;
+    for (final i in items) {
+      final h = i.orderCutoffHour;
+      if (h != null && (out == null || h < out)) out = h;
+    }
+    return out;
+  }
 
   /// Distinct product names that need advance notice — used to tell the
   /// customer exactly which cakes require preparation time.

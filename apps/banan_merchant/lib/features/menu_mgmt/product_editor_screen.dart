@@ -50,6 +50,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
   final _compareAtPrice = TextEditingController();
   late final TextEditingController _prep;
   late final TextEditingController _leadHours;
+  final _cutoffHour = TextEditingController();
   late final TextEditingController _dailyMax;
   late final TextEditingController _flavorPick;
   String? _categoryId;
@@ -94,6 +95,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _compareAtPrice.dispose();
     _prep.dispose();
     _leadHours.dispose();
+    _cutoffHour.dispose();
     _dailyMax.dispose();
     _flavorPick.dispose();
     _optionGroups.dispose();
@@ -116,6 +118,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       ..clear()
       ..addAll(p.excludedStoreIds);
     _leadHours.text = p.leadTimeHours?.toString() ?? '';
+    _cutoffHour.text = p.orderCutoffHour?.toString() ?? '';
     _dailyMax.text = p.dailyMaxQuantity?.toString() ?? '';
     _availableDow = List.of(p.availableDaysOfWeek);
     _images = List.of(p.images);
@@ -223,6 +226,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
       isSeasonal: _seasonal,
       excludedStoreIds: _excludedStoreIds.toList()..sort(),
       leadTimeHours: leadRaw.isEmpty ? null : int.tryParse(leadRaw),
+      orderCutoffHour: int.tryParse(_cutoffHour.text.trim()),
       availableDaysOfWeek: List.of(_availableDow)..sort(),
       dailyMaxQuantity: dailyRaw.isEmpty ? null : int.tryParse(dailyRaw),
       // null (not 0) when the composer is off, so the @Min(2) backend rule is
@@ -574,6 +578,25 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                             final n = int.tryParse(t);
                             if (n == null || n < 0 || n > 720) {
                               return 'Nhập số giờ từ 0 đến 720';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: BananSpacing.md),
+                        TextFormField(
+                          controller: _cutoffHour,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Giờ chốt đơn trong ngày (0–23)',
+                            helperText: 'Ví dụ 14: đặt từ 14:00 trở đi thì chỉ '
+                                'nhận từ ngày mai. Bỏ trống = không chốt.',
+                          ),
+                          validator: (v) {
+                            final t = (v ?? '').trim();
+                            if (t.isEmpty) return null;
+                            final n = int.tryParse(t);
+                            if (n == null || n < 0 || n > 23) {
+                              return 'Nhập giờ từ 0 đến 23';
                             }
                             return null;
                           },
