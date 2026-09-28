@@ -31,6 +31,7 @@ import { KitchenModule } from './kitchen/kitchen.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { ManufacturingModule } from './manufacturing/manufacturing.module';
 import { MarketingModule } from './marketing/marketing.module';
+import { MetaInboxModule } from './meta-inbox/meta-inbox.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -102,6 +103,7 @@ import { WishlistModule } from './wishlist/wishlist.module';
     CouponsModule,
     PromotionsModule,
     MarketingModule,
+    MetaInboxModule,
     ManufacturingModule,
     MetricsModule,
     NewsletterModule,
