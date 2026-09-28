@@ -1561,6 +1561,66 @@ export class OrdersService {
     return updated;
   }
 
+  /** Admin hand-fix: scheduled slot and/or customer name, logged to history. */
+  async adminEdit(
+    id: string,
+    actorId: string,
+    dto: { scheduledFor?: string | null; customerName?: string },
+  ): Promise<OrderWithIncludes> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: { customer: { select: { id: true, fullName: true, role: true } } },
+    });
+    if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
+    const vn = (d: Date | null) =>
+      d
+        ? new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 16).replace('T', ' ')
+        : 'làm ngay';
+    const notes: string[] = [];
+    const data: Prisma.OrderUpdateInput = {};
+    if (dto.scheduledFor !== undefined) {
+      const next = dto.scheduledFor === null ? null : new Date(dto.scheduledFor);
+      if ((next?.getTime() ?? null) !== (order.scheduledFor?.getTime() ?? null)) {
+        data.scheduledFor = next;
+        data.dueSoonNotifiedAt = null; // re-surface on the board for the new slot
+        notes.push(`giờ hẹn ${vn(order.scheduledFor)} → ${vn(next)}`);
+      }
+    }
+    const name = dto.customerName?.trim();
+    if (name && name !== order.customer.fullName) {
+      // Staff accounts are never renamed from an order.
+      if (order.customer.role !== Role.CUSTOMER) {
+        throw new BadRequestException({
+          code: 'NOT_A_CUSTOMER',
+          message: 'Chỉ sửa được tên khách hàng.',
+        });
+      }
+      await this.prisma.user.update({ where: { id: order.customerId }, data: { fullName: name } });
+      notes.push(`tên khách "${order.customer.fullName}" → "${name}"`);
+    }
+    if (notes.length > 0) {
+      data.statusEvents = {
+        create: {
+          fromStatus: order.status,
+          toStatus: order.status,
+          actorId,
+          note: `Admin sửa: ${notes.join('; ')}`,
+        },
+      };
+    }
+    const updated = await this.prisma.order.update({
+      where: { id },
+      data,
+      include: ORDER_INCLUDE,
+    });
+    this.realtime.emit(
+      [`store:${updated.storeId}`, `user:${updated.customerId}`, `order:${updated.id}`],
+      'order.status_changed',
+      this.toEventPayload(updated),
+    );
+    return updated;
+  }
+
   async transferToKitchen(
     id: string,
     actor: { sub: string; role: Role; storeId?: string | null },

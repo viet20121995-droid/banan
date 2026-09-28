@@ -154,6 +154,22 @@ class OrdersApi {
         if (clientRequestId != null) 'clientRequestId': clientRequestId,
       });
 
+  /// Admin: move the scheduled slot ([clearSchedule] = "làm ngay") and/or
+  /// fix the customer's name. Logged to the order history server-side.
+  Future<Result<OrderDto, AppFailure>> adminEdit(
+    String id, {
+    DateTime? scheduledFor,
+    bool clearSchedule = false,
+    String? customerName,
+  }) =>
+      _postOrder('/merchant/orders/$id/admin-edit', {
+        if (clearSchedule)
+          'scheduledFor': null
+        else if (scheduledFor != null)
+          'scheduledFor': scheduledFor.toUtc().toIso8601String(),
+        if (customerName != null) 'customerName': customerName,
+      });
+
   Future<Result<OrderDto, AppFailure>> markCounterPaid(String id) =>
       _postOrder('/merchant/orders/$id/counter-paid', const {});
 

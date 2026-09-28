@@ -113,6 +113,116 @@ class _Body extends ConsumerWidget {
     );
   }
 
+  /// Admin hand-fix: scheduled slot (date + time, or "làm ngay") and the
+  /// customer's name. Times are shop (Vietnam) time.
+  Future<void> _adminEdit(BuildContext context, WidgetRef ref) async {
+    final name = TextEditingController(text: order.customerName ?? '');
+    // Show / edit in Vietnam wall-clock, whatever the admin's PC is set to.
+    DateTime? toVn(DateTime? d) {
+      if (d == null) return null;
+      final v = d.toUtc().add(const Duration(hours: 7));
+      return DateTime(v.year, v.month, v.day, v.hour, v.minute);
+    }
+
+    var slot = toVn(order.scheduledFor);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: Text('Sửa đơn ${order.code}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: name,
+                decoration: const InputDecoration(labelText: 'Tên khách'),
+              ),
+              const SizedBox(height: BananSpacing.md),
+              Text('Giờ hẹn (giờ VN)',
+                  style: Theme.of(ctx).textTheme.bodySmall),
+              const SizedBox(height: BananSpacing.xs),
+              Wrap(
+                spacing: BananSpacing.sm,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.event, size: 18),
+                    label: Text(
+                      slot == null
+                          ? 'Làm ngay (chưa hẹn)'
+                          : DateFormat('HH:mm · dd/MM/yyyy').format(slot!),
+                    ),
+                    onPressed: () async {
+                      final base = slot ?? toVn(DateTime.now())!;
+                      final d = await showDatePicker(
+                        context: ctx,
+                        initialDate: base,
+                        firstDate: DateTime(2025),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (d == null || !ctx.mounted) return;
+                      final t = await showTimePicker(
+                        context: ctx,
+                        initialTime: TimeOfDay.fromDateTime(base),
+                      );
+                      if (t == null) return;
+                      setState(
+                        () => slot =
+                            DateTime(d.year, d.month, d.day, t.hour, t.minute),
+                      );
+                    },
+                  ),
+                  if (slot != null)
+                    TextButton(
+                      onPressed: () => setState(() => slot = null),
+                      child: const Text('Bỏ hẹn'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Huỷ'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Lưu'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final s = slot;
+    final res = await ref.read(ordersApiProvider).adminEdit(
+          order.id,
+          // Vietnam wall-clock → real instant.
+          scheduledFor: s == null
+              ? null
+              : DateTime.utc(s.year, s.month, s.day, s.hour, s.minute)
+                  .subtract(const Duration(hours: 7)),
+          clearSchedule: s == null && order.scheduledFor != null,
+          customerName: name.text.trim().isEmpty ? null : name.text.trim(),
+        );
+    if (!context.mounted) return;
+    res.when(
+      success: (_) {
+        ref
+          ..invalidate(_orderProvider(order.id))
+          ..invalidate(storeOrdersControllerProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã lưu thay đổi.')),
+        );
+      },
+      failure: (f) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(authFailureMessage(f))),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -207,6 +317,20 @@ class _Body extends ConsumerWidget {
                       icon: const Icon(Icons.soup_kitchen_outlined, size: 18),
                       label: const Text('Phiếu bếp'),
                     ),
+                    if ((ref
+                                .watch(authSessionProvider)
+                                .valueOrNull
+                                ?.user
+                                .role
+                                .isAdmin ??
+                            false) &&
+                        order.source != 'INTERNAL_TRANSFER')
+                      OutlinedButton.icon(
+                        onPressed: () => _adminEdit(context, ref),
+                        icon:
+                            const Icon(Icons.edit_calendar_outlined, size: 18),
+                        label: const Text('Sửa đơn'),
+                      ),
                   ],
                 ),
                 // Orderer contact — the only customer info a PICKUP order

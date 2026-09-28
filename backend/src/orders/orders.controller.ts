@@ -23,6 +23,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthPrincipal } from '../auth/types/jwt-payload';
 
 import { CounterOrderDto, InternalTransferDto, ReceiveTransferDto } from './dto/channel-order.dto';
+import { AdminEditOrderDto } from './dto/admin-edit-order.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { TransferToKitchenDto } from './dto/transfer-order.dto';
@@ -201,5 +202,17 @@ export class MerchantOrdersController {
     @Body() dto: IssueInvoiceDto,
   ) {
     return this.orders.issueInvoice(id, user, dto.invoiceFileUrl);
+  }
+
+  /** Admin: move the scheduled slot / fix the customer's name. */
+  @Post(':id/admin-edit')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  adminEdit(
+    @CurrentUser() user: AuthPrincipal,
+    @Param('id') id: string,
+    @Body() dto: AdminEditOrderDto,
+  ) {
+    return this.orders.adminEdit(id, user.sub, dto);
   }
 }
