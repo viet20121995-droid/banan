@@ -161,8 +161,14 @@ class OrdersApi {
     DateTime? scheduledFor,
     bool clearSchedule = false,
     String? customerName,
+    String? recipient,
+    String? recipientPhone,
+    String? addressLine,
   }) =>
       _postOrder('/merchant/orders/$id/admin-edit', {
+        if (recipient != null) 'recipient': recipient,
+        if (recipientPhone != null) 'recipientPhone': recipientPhone,
+        if (addressLine != null) 'addressLine': addressLine,
         if (clearSchedule)
           'scheduledFor': null
         else if (scheduledFor != null)

@@ -117,6 +117,10 @@ class _Body extends ConsumerWidget {
   /// customer's name. Times are shop (Vietnam) time.
   Future<void> _adminEdit(BuildContext context, WidgetRef ref) async {
     final name = TextEditingController(text: order.customerName ?? '');
+    final addr = order.address;
+    final recipient = TextEditingController(text: addr?.recipient ?? '');
+    final recipientPhone = TextEditingController(text: addr?.phone ?? '');
+    final line1 = TextEditingController(text: addr?.line1 ?? '');
     // Show / edit in Vietnam wall-clock, whatever the admin's PC is set to.
     DateTime? toVn(DateTime? d) {
       if (d == null) return null;
@@ -138,6 +142,27 @@ class _Body extends ConsumerWidget {
                 controller: name,
                 decoration: const InputDecoration(labelText: 'Tên khách'),
               ),
+              if (addr != null) ...[
+                const SizedBox(height: BananSpacing.sm),
+                TextField(
+                  controller: recipient,
+                  decoration: const InputDecoration(labelText: 'Người nhận'),
+                ),
+                TextField(
+                  controller: recipientPhone,
+                  keyboardType: TextInputType.phone,
+                  decoration:
+                      const InputDecoration(labelText: 'SĐT người nhận'),
+                ),
+                TextField(
+                  controller: line1,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Địa chỉ (số nhà, đường)',
+                    helperText: 'Phường và phí ship giữ nguyên',
+                  ),
+                ),
+              ],
               const SizedBox(height: BananSpacing.md),
               Text('Giờ hẹn (giờ VN)',
                   style: Theme.of(ctx).textTheme.bodySmall),
@@ -197,6 +222,11 @@ class _Body extends ConsumerWidget {
     );
     if (ok != true || !context.mounted) return;
     final s = slot;
+    String? changed(TextEditingController c, String? was) {
+      final v = c.text.trim();
+      return v.isEmpty || v == was ? null : v;
+    }
+
     final res = await ref.read(ordersApiProvider).adminEdit(
           order.id,
           // Vietnam wall-clock → real instant.
@@ -206,6 +236,9 @@ class _Body extends ConsumerWidget {
                   .subtract(const Duration(hours: 7)),
           clearSchedule: s == null && order.scheduledFor != null,
           customerName: name.text.trim().isEmpty ? null : name.text.trim(),
+          recipient: changed(recipient, addr?.recipient),
+          recipientPhone: changed(recipientPhone, addr?.phone),
+          addressLine: changed(line1, addr?.line1),
         );
     if (!context.mounted) return;
     res.when(

@@ -1565,11 +1565,20 @@ export class OrdersService {
   async adminEdit(
     id: string,
     actorId: string,
-    dto: { scheduledFor?: string | null; customerName?: string },
+    dto: {
+      scheduledFor?: string | null;
+      customerName?: string;
+      recipient?: string;
+      recipientPhone?: string;
+      addressLine?: string;
+    },
   ): Promise<OrderWithIncludes> {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { customer: { select: { id: true, fullName: true, role: true } } },
+      include: {
+        customer: { select: { id: true, fullName: true, role: true } },
+        address: true,
+      },
     });
     if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND' });
     const vn = (d: Date | null) =>
@@ -1597,6 +1606,45 @@ export class OrdersService {
       }
       await this.prisma.user.update({ where: { id: order.customerId }, data: { fullName: name } });
       notes.push(`tên khách "${order.customer.fullName}" → "${name}"`);
+    }
+    // Delivery address: text fixes only. The Address row may be the
+    // customer's saved address used by other orders too — then this order
+    // gets its own copy so their history stays as it was.
+    const addr = order.address;
+    const fix = {
+      recipient: dto.recipient?.trim(),
+      phone: dto.recipientPhone?.trim(),
+      line1: dto.addressLine?.trim(),
+    };
+    const addrChanges = addr
+      ? (Object.keys(fix) as (keyof typeof fix)[]).filter((k) => fix[k] && fix[k] !== addr[k])
+      : [];
+    if (!addr && (fix.recipient || fix.phone || fix.line1)) {
+      throw new BadRequestException({
+        code: 'NO_ADDRESS',
+        message: 'Đơn này không có địa chỉ giao hàng.',
+      });
+    }
+    if (addr && addrChanges.length > 0) {
+      const next = Object.fromEntries(addrChanges.map((k) => [k, fix[k]!]));
+      const shared = await this.prisma.order.count({ where: { addressId: addr.id } });
+      if (shared > 1) {
+        const { userId, ...rest } = addr;
+        const copy = await this.prisma.address.create({
+          data: {
+            ...rest,
+            id: undefined,
+            ...next,
+            isDefault: false,
+            user: { connect: { id: userId } },
+          },
+        });
+        data.address = { connect: { id: copy.id } };
+      } else {
+        await this.prisma.address.update({ where: { id: addr.id }, data: next });
+      }
+      const label = { recipient: 'người nhận', phone: 'SĐT nhận', line1: 'địa chỉ' } as const;
+      for (const k of addrChanges) notes.push(`${label[k]} "${addr[k]}" → "${fix[k]}"`);
     }
     if (notes.length > 0) {
       data.statusEvents = {

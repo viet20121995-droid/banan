@@ -14,4 +14,23 @@ export class AdminEditOrderDto {
   @MinLength(1)
   @MaxLength(120)
   customerName?: string;
+
+  /** Delivery address fixes (text only — the ward and fee stay as quoted). */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  recipient?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(20)
+  recipientPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(300)
+  addressLine?: string;
 }
