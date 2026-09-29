@@ -56,9 +56,11 @@ order.{$BASE_DOMAIN} {
 		file_server
 	}
 
-	@site path / /index.html /img/* /favicon.png /robots.txt /sitemap.xml /flutter_service_worker.js
+	@site path / /index.html /review /review.html /img/* /favicon.png /robots.txt /sitemap.xml /flutter_service_worker.js
 	handle @site {
 		root * /srv/intro
+		# In-store QR → the four Google review listings.
+		rewrite /review /review.html
 		# flutter_service_worker.js here is a kill switch for the old app's worker;
 		# it and the page must never be served stale.
 		header /flutter_service_worker.js Cache-Control "no-cache, must-revalidate"
