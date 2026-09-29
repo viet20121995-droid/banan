@@ -1,11 +1,5 @@
-/// 2026 Mid-Autumn "Fullmoon Autumn" campaign: explicit VN-time window so
-/// the theme retires itself after the festival period.
-bool get fullmoonAutumnCampaignEnabled {
-  final vnNow = DateTime.now().toUtc().add(const Duration(hours: 7));
-  final day = DateTime.utc(vnNow.year, vnNow.month, vnNow.day);
-  return !day.isBefore(DateTime.utc(2026, 9, 3)) &&
-      day.isBefore(DateTime.utc(2026, 10, 1));
-}
+/// Retired on 2026-09-29. Merchant-managed banners remain available.
+bool get fullmoonAutumnCampaignEnabled => false;
 
 const fullmoonAutumnBannerAsset =
     'assets/campaigns/fullmoon-daifuku-original-scene.webp';
