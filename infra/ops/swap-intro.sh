@@ -4,7 +4,7 @@
 set -e
 cd /opt/banan
 # Refuse before touching anything if the (pulled) Caddyfile would not load.
-docker compose --env-file infra/.env.prod -f docker-compose.prod.yml exec -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || { echo "Caddyfile invalid"; exit 1; }
+docker compose --env-file infra/.env.prod -f docker-compose.prod.yml exec -T caddy caddy validate --config /dev/stdin --adapter caddyfile < infra/Caddyfile >/dev/null 2>&1 || { echo "Caddyfile invalid"; exit 1; }
 d=/opt/banan/web/intro
 t=/tmp/banan-web-intro.tgz
 test -s "$t"
