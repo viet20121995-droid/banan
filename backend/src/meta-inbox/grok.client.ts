@@ -7,7 +7,7 @@ export interface ChatTurn {
 
 /**
  * Thin client for xAI's Grok (OpenAI-compatible chat completions). Configure
- * with XAI_API_KEY; XAI_MODEL / XAI_BASE_URL override the defaults. Returns
+ * with XAI_API_KEY; XAI_MODEL (default: fast non-reasoning Grok) / XAI_BASE_URL override the defaults. Returns
  * null on any failure so the caller can fall back to a human handoff instead
  * of leaving the customer unanswered.
  */
@@ -24,7 +24,7 @@ export class GrokClient {
   }
 
   private get model(): string {
-    return process.env.XAI_MODEL ?? 'grok-4';
+    return process.env.XAI_MODEL ?? 'grok-4.20-0309-non-reasoning';
   }
 
   async reply(systemPrompt: string, history: ChatTurn[]): Promise<string | null> {
