@@ -660,19 +660,14 @@ export class OrdersService {
     await this.assertStoreCanServe(storeId, orderedProductIds);
     const deliveryFeeVndRaw =
       dto.fulfillmentType === 'DELIVERY'
-        ? await this.computeDeliveryFee(
-            storeId,
-            dto.address?.wardCode,
-            orderedProductIds,
-            // Goods total as the cart shows it (combos at their flat price).
-            Number(subtotal.toString()) - Number(bundleDiscount.toString()),
-          )
+        ? await this.computeDeliveryFee(storeId, dto.address?.wardCode, orderedProductIds)
         : 0;
-    const deliveryFee = new Prisma.Decimal(deliveryFeeVndRaw);
+    // `let`: waived below once the discounted goods total is known.
+    let deliveryFee = new Prisma.Decimal(deliveryFeeVndRaw);
 
     // ── Coupon validation (no DB write yet — that happens in the tx below).
     const subtotalVnd = Number(subtotal.toString());
-    const deliveryFeeVnd = Number(deliveryFee.toString());
+    let deliveryFeeVnd = Number(deliveryFee.toString());
     const bundleDiscountVnd = Math.round(Number(bundleDiscount.toString()));
     // Goods total the customer actually owes once the combo deal is applied —
     // combos drop to their flat price, everything else stays at menu price.
@@ -776,6 +771,17 @@ export class OrdersService {
       couponDiscountVnd = v.discountVnd;
       couponAppliesToDelivery = v.appliesToDelivery;
       couponId = v.coupon.id;
+    }
+
+    // Free shipping from 1,000,000 ₫ of goods AFTER every discount (combo,
+    // campaign, member, goods coupon) — points and gift cards are payment,
+    // not discount. A free-delivery coupon has nothing left to cover then.
+    const goodsAfterDiscountsVnd =
+      subtotalAfterCampaign - (couponAppliesToDelivery ? 0 : couponDiscountVnd);
+    if (deliveryFeeVnd > 0 && goodsAfterDiscountsVnd >= FREE_SHIP_MIN_SUBTOTAL_VND) {
+      deliveryFeeVnd = 0;
+      deliveryFee = new Prisma.Decimal(0);
+      if (couponAppliesToDelivery) couponDiscountVnd = 0;
     }
 
     // Gift-card pre-check (friendly early rejection). The atomic decrement +
@@ -3759,13 +3765,11 @@ export class OrdersService {
     storeId: string,
     wardCode: string | null | undefined,
     productIds: string[],
-    subtotalVnd = 0,
   ): Promise<number> {
     const cfg = await this.deliveryConfig.get();
     const hasBirthdayCake = await this.deliveryConfig.cartHasBirthdayCake(productIds, cfg);
     // No customer ward → treat as "other ward" so we never undercharge.
     if (!wardCode) {
-      if (subtotalVnd >= FREE_SHIP_MIN_SUBTOTAL_VND) return 0;
       return hasBirthdayCake ? cfg.birthdayCakeFeeOtherWardVnd : cfg.standardFeeOtherWardVnd;
     }
     const store = await this.prisma.store.findUnique({
@@ -3784,7 +3788,6 @@ export class OrdersService {
       store?.wardCode ?? null,
       hasBirthdayCake,
       distanceKm,
-      subtotalVnd,
     );
   }
 

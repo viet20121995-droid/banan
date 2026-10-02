@@ -42,13 +42,11 @@ class GeoApi {
   Future<Result<DeliveryQuote, AppFailure>> deliveryQuote({
     String? wardCode,
     List<String> productIds = const [],
-    int? subtotalVnd,
   }) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/geo/delivery-quote',
         data: {
-          if (subtotalVnd != null) 'subtotalVnd': subtotalVnd,
           if (wardCode != null && wardCode.isNotEmpty) 'wardCode': wardCode,
           if (productIds.isNotEmpty) 'productIds': productIds,
         },

@@ -897,8 +897,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       final qAsync = ref.watch(_deliveryQuoteProvider(quoteKey));
       deliveryFee = qAsync.valueOrNull?.totalVnd.toDouble() ?? 0;
     }
-    final fee = _fulfillment == FulfillmentType.delivery ? deliveryFee : 0.0;
-    final couponDiscount = _appliedCoupon?.discount ?? 0.0;
+    final couponDiscountRaw = _appliedCoupon?.discount ?? 0.0;
+    final couponIsDelivery = _appliedCoupon?.appliesToDelivery ?? false;
     // Automatic campaigns (first order, gift with purchase, …) — same engine
     // the order transaction runs, so the total shown is the total charged.
     final promoKey = (
@@ -929,6 +929,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final memberDiscount = _useMemberDiscount && memberEligible
         ? ((cart.subtotal - campaignDiscount) * memberRate).floorToDouble()
         : 0.0;
+    // Free shipping keys off the goods total after discounts (points and gift
+    // cards are payment, not discount) — same rule the backend applies.
+    final goodsAfterDiscounts = cart.subtotal -
+        campaignDiscount -
+        (couponIsDelivery ? 0.0 : couponDiscountRaw) -
+        memberDiscount;
+    final freeShip = goodsAfterDiscounts >= _freeShipMinVnd;
+    final fee = _fulfillment == FulfillmentType.delivery && !freeShip
+        ? deliveryFee
+        : 0.0;
+    // A free-delivery coupon has nothing left to cover once shipping is free.
+    final couponDiscount =
+        freeShip && couponIsDelivery ? 0.0 : couponDiscountRaw;
     final subtotalAfterCoupon =
         (cart.subtotal - campaignDiscount - couponDiscount - memberDiscount)
             .clamp(0.0, double.infinity);
@@ -1213,6 +1226,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       _DeliveryQuoteBox(
                         wardCode: _wardCode,
                         productIds: cart.orderedProductIds,
+                        freeShip: freeShip,
                       ),
                     ],
                     const SizedBox(height: BananSpacing.xl),
@@ -2341,9 +2355,13 @@ class _DeliveryQuoteBox extends ConsumerWidget {
   const _DeliveryQuoteBox({
     required this.wardCode,
     required this.productIds,
+    this.freeShip = false,
   });
   final String? wardCode;
   final List<String> productIds;
+
+  /// Goods after discounts reached the free-shipping floor.
+  final bool freeShip;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2493,12 +2511,14 @@ class _DeliveryQuoteBox extends ConsumerWidget {
                   const SizedBox(width: BananSpacing.sm),
                   Expanded(
                     child: Text(
-                      q.totalVnd == 0 ? s.freeDelivery : s.estimatedFee,
+                      q.totalVnd == 0 || freeShip
+                          ? s.freeDelivery
+                          : s.estimatedFee,
                       style: theme.textTheme.titleSmall,
                     ),
                   ),
                   Text(
-                    fmt.format(q.totalVnd),
+                    fmt.format(freeShip ? 0 : q.totalVnd),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -2728,6 +2748,10 @@ class _PromoHints extends ConsumerWidget {
 
 typedef _QuoteKey = ({String? wardCode, String productIdsCsv});
 
+/// Free shipping from this much goods after discounts — mirrors the backend
+/// (FREE_SHIP_MIN_SUBTOTAL_VND) so the total shown is the total charged.
+const _freeShipMinVnd = 1000000;
+
 /// Cached by (wardCode + cart hash) — re-fetched only when the customer
 /// changes the ward or the cart contents.
 final _deliveryQuoteProvider = FutureProvider.autoDispose
@@ -2736,14 +2760,9 @@ final _deliveryQuoteProvider = FutureProvider.autoDispose
   final ids = key.productIdsCsv.isEmpty
       ? const <String>[]
       : key.productIdsCsv.split(',');
-  // Goods total drives free shipping (≥ 1,000,000 ₫) — re-quote when it moves.
-  final subtotal = ref.watch(
-    cartControllerProvider.select((c) => c.subtotal.round()),
-  );
   final res = await api.deliveryQuote(
     wardCode: key.wardCode,
     productIds: ids,
-    subtotalVnd: subtotal,
   );
   return res.when(
     success: (q) => q,
