@@ -208,9 +208,10 @@ class AuthRepositoryImpl implements AuthRepository {
         return Result<AuthSession, AppFailure>.success(session);
       },
       failure: (f) async {
-        // Only a real refusal ends the session. A timeout / dropped
-        // connection keeps the tokens so the next call can retry.
-        if (f is! NetworkFailure && f is! TimeoutFailure) {
+        // Only a real refusal (401/403/400 from the API) ends the session.
+        // A timeout, dropped connection or 5xx — e.g. a 502 while the backend
+        // restarts on deploy — keeps the tokens so the next call can retry.
+        if (f is AuthFailure || f is ValidationFailure) {
           await _storage.clear();
           _emit(null);
         }
