@@ -29,6 +29,12 @@ import {
 import { StoreRouterService } from './store-router.service';
 
 class QuoteRequestDto {
+  /// Cart goods total — at 1,000,000 ₫ or more delivery is free.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  subtotalVnd?: number;
+
   /// HCMC ward catalog code. Omit for a base-only quote.
   @IsOptional()
   @IsString()
@@ -173,7 +179,14 @@ export class GeoController {
         noStoreAvailable: true,
       };
     }
-    const fee = this.config.feeFor(cfg, dto.wardCode, routed.storeWardCode, hasBirthdayCake);
+    const fee = this.config.feeFor(
+      cfg,
+      dto.wardCode,
+      routed.storeWardCode,
+      hasBirthdayCake,
+      routed.distanceKm,
+      dto.subtotalVnd ?? 0,
+    );
     // Compare via canonical codes so a saved address carrying a legacy alias
     // (e.g. `cau-kho`) still counts as "same ward" as a store in the merged
     // ward (`cau-ong-lanh`).

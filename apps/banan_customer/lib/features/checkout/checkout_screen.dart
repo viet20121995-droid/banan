@@ -2736,9 +2736,14 @@ final _deliveryQuoteProvider = FutureProvider.autoDispose
   final ids = key.productIdsCsv.isEmpty
       ? const <String>[]
       : key.productIdsCsv.split(',');
+  // Goods total drives free shipping (≥ 1,000,000 ₫) — re-quote when it moves.
+  final subtotal = ref.watch(
+    cartControllerProvider.select((c) => c.subtotal.round()),
+  );
   final res = await api.deliveryQuote(
     wardCode: key.wardCode,
     productIds: ids,
+    subtotalVnd: subtotal,
   );
   return res.when(
     success: (q) => q,

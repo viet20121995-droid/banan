@@ -21,6 +21,19 @@ import { canonicalWardCode } from './hcm-wards';
  * Tier picked when *any* item in the cart belongs to the collection
  * identified by `birthdayCakeCollectionSlug`.
  */
+/**
+ * Far-zone surcharge and free-ship floor (owner decision 02/10/2026).
+ * "Far" = estimated road distance over 5 km, road ≈ straight-line × 1.3 —
+ * the same estimate the delivery-zone review used.
+ */
+// ponytail: constants, not DeliveryConfig columns — move them there when the
+// shop wants to tune them from the admin screen.
+export const FAR_ROAD_KM = 5;
+export const ROAD_FACTOR = 1.3;
+export const FAR_FEE_STANDARD_VND = 50_000;
+export const FAR_FEE_BIRTHDAY_VND = 100_000;
+export const FREE_SHIP_MIN_SUBTOTAL_VND = 1_000_000;
+
 @Injectable()
 export class DeliveryConfigService {
   constructor(private readonly prisma: PrismaService) {}
@@ -60,7 +73,15 @@ export class DeliveryConfigService {
     customerWardCode: string | null | undefined,
     storeWardCode: string | null | undefined,
     hasBirthdayCake: boolean,
+    /** Straight-line km routed store → ward centroid (null = unknown). */
+    distanceKm: number | null = null,
+    /** Goods total; at or above FREE_SHIP_MIN_SUBTOTAL_VND delivery is free. */
+    subtotalVnd = 0,
   ): number {
+    if (subtotalVnd >= FREE_SHIP_MIN_SUBTOTAL_VND) return 0;
+    if (distanceKm != null && distanceKm * ROAD_FACTOR > FAR_ROAD_KM) {
+      return hasBirthdayCake ? FAR_FEE_BIRTHDAY_VND : FAR_FEE_STANDARD_VND;
+    }
     // Normalize both sides through the alias map so a saved address that
     // still carries a pre-reform code (e.g. `cau-kho`) matches a store in
     // the ward that absorbed it (`cau-ong-lanh`).

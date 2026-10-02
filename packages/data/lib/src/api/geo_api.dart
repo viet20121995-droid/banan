@@ -15,23 +15,20 @@ class GeoApi {
       final res = await _dio.get<Map<String, dynamic>>('/geo/hcm-wards');
       final list = (res.data?['data'] as List?) ?? const [];
       return Result.success(
-        list
-            .map((e) {
-              final m = e as Map<String, dynamic>;
-              return HcmWard(
-                code: m['code'] as String,
-                name: m['name'] as String,
-                lat: (m['lat'] as num?)?.toDouble(),
-                lng: (m['lng'] as num?)?.toDouble(),
-                oldArea: m['oldArea'] as String?,
-                serviceable: m['serviceable'] as bool? ?? m['lat'] != null,
-                legacyCodes: (m['legacyCodes'] as List?)
-                        ?.map((c) => c as String)
-                        .toList() ??
+        list.map((e) {
+          final m = e as Map<String, dynamic>;
+          return HcmWard(
+            code: m['code'] as String,
+            name: m['name'] as String,
+            lat: (m['lat'] as num?)?.toDouble(),
+            lng: (m['lng'] as num?)?.toDouble(),
+            oldArea: m['oldArea'] as String?,
+            serviceable: m['serviceable'] as bool? ?? m['lat'] != null,
+            legacyCodes:
+                (m['legacyCodes'] as List?)?.map((c) => c as String).toList() ??
                     const [],
-              );
-            })
-            .toList(),
+          );
+        }).toList(),
       );
     } on DioException catch (e) {
       return Result.failure(mapDioErrorToFailure(e));
@@ -45,11 +42,13 @@ class GeoApi {
   Future<Result<DeliveryQuote, AppFailure>> deliveryQuote({
     String? wardCode,
     List<String> productIds = const [],
+    int? subtotalVnd,
   }) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/geo/delivery-quote',
         data: {
+          if (subtotalVnd != null) 'subtotalVnd': subtotalVnd,
           if (wardCode != null && wardCode.isNotEmpty) 'wardCode': wardCode,
           if (productIds.isNotEmpty) 'productIds': productIds,
         },
@@ -141,15 +140,12 @@ class GeoApi {
   }
 
   DeliveryConfig _configFromJson(Map<String, dynamic> m) => DeliveryConfig(
-        standardFeeSameWardVnd:
-            (m['standardFeeSameWardVnd'] as num).toInt(),
-        standardFeeOtherWardVnd:
-            (m['standardFeeOtherWardVnd'] as num).toInt(),
+        standardFeeSameWardVnd: (m['standardFeeSameWardVnd'] as num).toInt(),
+        standardFeeOtherWardVnd: (m['standardFeeOtherWardVnd'] as num).toInt(),
         birthdayCakeFeeSameWardVnd:
             (m['birthdayCakeFeeSameWardVnd'] as num).toInt(),
         birthdayCakeFeeOtherWardVnd:
             (m['birthdayCakeFeeOtherWardVnd'] as num).toInt(),
-        birthdayCakeCollectionSlug:
-            m['birthdayCakeCollectionSlug'] as String,
+        birthdayCakeCollectionSlug: m['birthdayCakeCollectionSlug'] as String,
       );
 }

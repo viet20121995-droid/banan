@@ -15,10 +15,11 @@ import { randomBytes } from 'node:crypto';
 
 import { AuthService } from '../auth/auth.service';
 import { CouponsService } from '../coupons/coupons.service';
-import { DeliveryConfigService } from '../geo/delivery-config.service';
+import { DeliveryConfigService, FREE_SHIP_MIN_SUBTOTAL_VND } from '../geo/delivery-config.service';
 import { kitchenQueueWhere, type KitchenQueueOpts } from '../kitchen/kitchen-queue-where';
 import {
   findWard,
+  haversineKm,
   isAmbiguousLegacyWard,
   isFormerHcmcWard,
   isWardServiceable,
@@ -659,7 +660,13 @@ export class OrdersService {
     await this.assertStoreCanServe(storeId, orderedProductIds);
     const deliveryFeeVndRaw =
       dto.fulfillmentType === 'DELIVERY'
-        ? await this.computeDeliveryFee(storeId, dto.address?.wardCode, orderedProductIds)
+        ? await this.computeDeliveryFee(
+            storeId,
+            dto.address?.wardCode,
+            orderedProductIds,
+            // Goods total as the cart shows it (combos at their flat price).
+            Number(subtotal.toString()) - Number(bundleDiscount.toString()),
+          )
         : 0;
     const deliveryFee = new Prisma.Decimal(deliveryFeeVndRaw);
 
@@ -3752,18 +3759,33 @@ export class OrdersService {
     storeId: string,
     wardCode: string | null | undefined,
     productIds: string[],
+    subtotalVnd = 0,
   ): Promise<number> {
     const cfg = await this.deliveryConfig.get();
     const hasBirthdayCake = await this.deliveryConfig.cartHasBirthdayCake(productIds, cfg);
     // No customer ward → treat as "other ward" so we never undercharge.
     if (!wardCode) {
+      if (subtotalVnd >= FREE_SHIP_MIN_SUBTOTAL_VND) return 0;
       return hasBirthdayCake ? cfg.birthdayCakeFeeOtherWardVnd : cfg.standardFeeOtherWardVnd;
     }
     const store = await this.prisma.store.findUnique({
       where: { id: storeId },
-      select: { wardCode: true },
+      select: { wardCode: true, lat: true, lng: true },
     });
-    return this.deliveryConfig.feeFor(cfg, wardCode, store?.wardCode ?? null, hasBirthdayCake);
+    // Same straight-line distance the quote used (store → ward centroid).
+    const ward = findWard(wardCode);
+    const distanceKm =
+      store?.lat != null && store.lng != null && ward?.lat != null && ward.lng != null
+        ? haversineKm({ lat: store.lat, lng: store.lng }, { lat: ward.lat, lng: ward.lng })
+        : null;
+    return this.deliveryConfig.feeFor(
+      cfg,
+      wardCode,
+      store?.wardCode ?? null,
+      hasBirthdayCake,
+      distanceKm,
+      subtotalVnd,
+    );
   }
 
   /// Enforces store's minimum order subtotal (₫). 0 = no minimum.
