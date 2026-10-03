@@ -66,6 +66,9 @@ order.{$BASE_DOMAIN} {
 		header /flutter_service_worker.js Cache-Control "no-cache, must-revalidate"
 		header /index.html Cache-Control "no-cache, must-revalidate"
 		header / Cache-Control "no-cache, must-revalidate"
+		# Photos and the hero clip (2 MB) keep their names when replaced, so a week,
+		# not forever; without this every visit re-asks for all of them.
+		header /img/* Cache-Control "public, max-age=604800"
 		file_server
 	}
 

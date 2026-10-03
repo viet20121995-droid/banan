@@ -238,7 +238,10 @@ def layout(slug, title, desc, crumb, body, extra_ld=(), og_image='/img/strawberr
 <meta property="og:url" content="{url}">
 <meta property="og:image" content="{SITE}{og_image}">
 {ld(crumbs)}
-{''.join(ld(x) + chr(10) for x in extra_ld)}<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Be+Vietnam+Pro:wght@400;500;600&display=swap">
+{''.join(ld(x) + chr(10) for x in extra_ld)}<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Be+Vietnam+Pro:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Be+Vietnam+Pro:wght@400;500;600&display=swap"></noscript>
 <style>
 {CSS}
 </style>
@@ -481,7 +484,7 @@ def pages(P, cats):
         f'    <p class="note">Giá cập nhật {TODAY}. Giá cuối cùng hiển thị khi đặt tại {order}.</p>',
         stores_block()])
     yield 'menu', layout('menu', 'Menu Banan Fukuoka Patisserie: giá bánh & đồ uống',
-                         f'Menu đầy đủ kèm giá của Banan Fukuoka Pâtisserie Saigon: daifuku, mochi basque, flan, pudding, bánh sinh nhật, macaron và matcha. Đặt online hoặc ghé 4 cửa hàng ở TP.HCM.',
+                         'Menu kèm giá của Banan Fukuoka Pâtisserie Saigon: daifuku, mochi basque, flan, pudding, bánh sinh nhật, macaron, matcha. Đặt online hoặc ghé 4 cửa hàng.',
                          'Menu', body, og_image='/img/strawberry-cake.jpg')
 
     # One page per shop.
