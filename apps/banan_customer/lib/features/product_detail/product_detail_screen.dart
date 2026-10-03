@@ -63,7 +63,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
 
     return Scaffold(
-      appBar: AppBar(leading: const BackButton()),
+      appBar: AppBar(
+        // Opened straight from a link (banancakes.vn/menu, Google, a share)
+        // there is nothing to pop, so go to the menu instead of doing nothing.
+        leading: BackButton(
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
+        ),
+      ),
       body: productAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ErrorState(
