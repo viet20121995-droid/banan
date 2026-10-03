@@ -162,6 +162,8 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 .brand span{font:800 20px/1 var(--display)}
 .pill{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 18px;border-radius:999px;background:var(--green);color:var(--on-green);font-weight:600;font-size:15px;text-decoration:none}
 .pill.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.top{display:flex;gap:8px}
+@media (max-width:400px){header .brand span{display:none}}
 .crumbs{font-size:13px;color:var(--muted);margin:8px 0 0}
 .crumbs a{text-decoration:none}
 h1{font:800 clamp(34px,8vw,60px)/1.02 var(--display);margin:10px 0 14px;color:var(--red);letter-spacing:-.01em}
@@ -245,7 +247,7 @@ def layout(slug, title, desc, crumb, body, extra_ld=(), og_image='/img/strawberr
 <div class="wrap">
   <header>
     <a class="brand" href="/"><img src="/favicon.png" alt="" width="40" height="40"><span>Banan</span></a>
-    <a class="pill" href="{ORDER}/">Đặt bánh</a>
+    <nav class="top" aria-label="Chính">{'' if slug == 'menu' else '<a class="pill ghost" href="/menu">Xem menu</a>'}<a class="pill" href="{ORDER}/">Đặt bánh</a></nav>
   </header>
   <main>
     <p class="crumbs"><a href="/">Banan</a> › {e(crumb)}</p>

@@ -57,13 +57,21 @@ a{color:inherit}
 /* ---------- top bar: the rim of a big matcha disc ---------- */
 .bar{position:fixed;inset:0 0 auto 0;z-index:50;height:calc(var(--bar-h) + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) var(--gutter) 0;display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--mochi)}
 .bar::before{content:"";position:absolute;z-index:-1;left:-12%;right:-12%;top:-140px;height:calc(140px + var(--bar-h) + 34px + env(safe-area-inset-top,0px));background:var(--matcha);border-radius:0 0 50% 50% / 0 0 64px 64px}
-.bar-tag{font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
-.bar-tag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--lime)}
+.bar-nav{display:flex;gap:24px;font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.bar-nav a{display:flex;align-items:center;gap:8px;min-height:40px;text-decoration:none}
+.bar-nav a:first-child::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--lime)}
+.bar-nav a:hover{color:var(--lime)}
+.bar-cta{display:flex;gap:8px;margin-left:auto}
+.bar-menu{font-weight:600;font-size:.85rem;text-decoration:none;color:var(--mochi);box-shadow:inset 0 0 0 1.5px var(--mochi);padding:8px 16px;border-radius:999px}
+.bar-menu:hover{background:var(--mochi);color:var(--matcha)}
 .brand{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:baseline;gap:8px;font-family:var(--display);font-weight:800;font-size:1.35rem;letter-spacing:.06em;text-decoration:none;white-space:nowrap}
 .brand span{font-family:var(--body);font-weight:500;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase}
 .bar-order{font-weight:600;font-size:.85rem;text-decoration:none;background:var(--mochi);color:var(--matcha);padding:8px 16px;border-radius:999px}
 .bar-order:hover{background:var(--lime);color:var(--ink)}
-@media (max-width:560px){.bar-tag{display:none}.brand{position:static;transform:none}.brand span{display:none}}
+/* The centred brand needs the room: the left links go first, then the subtitle. */
+@media (max-width:900px){.bar-nav,.brand span{display:none}}
+@media (max-width:640px){.brand{position:static;transform:none}}
+@media (max-width:400px){.bar-menu,.bar-order{padding:8px 12px;font-size:.8rem}}
 
 /* ---------- hero: giant word slides sideways while pinned ---------- */
 /* Footage behind the name. The file is cropped to drop the caption burned into the source, has no
@@ -195,7 +203,7 @@ a{color:inherit}
 .store h3{margin:0 0 6px;font-family:var(--display);font-weight:800;font-size:clamp(1.05rem,1.7vw,1.45rem);line-height:1.1;text-transform:uppercase}
 .store p{margin:0;font-size:.92rem;line-height:1.45}
 .store p+p{margin-top:8px}
-.stores a{color:var(--cream);text-underline-offset:3px;font-variant-numeric:tabular-nums}
+.stores a{color:var(--cream);text-underline-offset:3px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .stores .note{display:block;margin-top:clamp(18px,3.4vh,36px)}
 @media (max-width:899px){.store-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:380px){.store p{font-size:.84rem}}
@@ -266,9 +274,9 @@ a{color:inherit}
 <body>
 
 <header class="bar">
-  <span class="bar-tag">Giới thiệu</span>
+  <nav class="bar-nav" aria-label="Trang"><a href="/banh-sinh-nhat">Bánh sinh nhật</a><a href="#stores">Cửa hàng</a></nav>
   <a class="brand" href="https://order.banancakes.vn" target="_blank" rel="noopener">BANAN <span>Fukuoka Pâtisserie Saigon</span></a>
-  <a class="bar-order" href="https://order.banancakes.vn" target="_blank" rel="noopener">Đặt hàng</a>
+  <div class="bar-cta"><a class="bar-menu" href="/menu">Xem menu</a><a class="bar-order" href="https://order.banancakes.vn" target="_blank" rel="noopener">Đặt hàng</a></div>
 </header>
 
 <main>
@@ -641,7 +649,20 @@ a{color:inherit}
     iris('end',END,'#stores');
     tl.to({},{duration:TOTAL-END-1},END+1);   // hold the last scene before the pin lets go
 
+    // "Cửa hàng" in the bar: #stores lives inside the pinned deck, so a plain anchor
+    // lands on the hero. Jump to where the stores scene is open instead.
+    var storeLinks=document.querySelectorAll('a[href="#stores"]');
+    function toStores(e){
+      e.preventDefault();
+      var st=tl.scrollTrigger,at=STORES+1.3;
+      var y=st.start+(st.end-st.start)*at/TOTAL;
+      if(lenis)lenis.scrollTo(y,{immediate:true});else window.scrollTo(0,y);
+      tl.time(at);   // skip the fast-forward through every scene in between
+    }
+    storeLinks.forEach(function(a){a.addEventListener('click',toStores)});
+
     return function(){
+      storeLinks.forEach(function(a){a.removeEventListener('click',toStores)});
       deck.classList.remove('is-live');
       if(lenis){gsap.ticker.remove(raf); lenis.destroy()}
     };
