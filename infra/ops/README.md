@@ -11,3 +11,9 @@ Live on the VPS at `/opt/banan/infra/ops/` (the git checkout — survives reboot
 | `run-products.sh` | run `/tmp/products.sql` inside the postgres container (`psql -f`) |
 
 The tarball / SQL inputs still go through `/tmp` (scp them right before running).
+
+Brand-site landing pages (`/menu`, `/matcha`, `/le-thanh-ton` …) are generated
+on your machine by `python infra/intro-pages.py` from the live catalog. Re-run
+it after a menu or price change, then ship `web-intro/` with `swap-intro.sh`.
+A Caddyfile change must be pushed and `git pull`ed on the VPS before the swap
+(the script validates the pulled copy; the caddy restart loads it).
