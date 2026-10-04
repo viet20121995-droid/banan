@@ -3995,7 +3995,9 @@ class _En extends AppStrings {
   String get taxCodeShort => 'Tax code';
 }
 
-class _Ja extends AppStrings {
+/// Extends the English table: a string not translated yet shows in English
+/// instead of breaking the build.
+class _Ja extends _En {
   const _Ja();
 
   @override
