@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:js_interop';
 
 import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 @JS('eval')
 external JSAny? _jsEval(String code);
@@ -12,11 +14,9 @@ external JSAny? _jsEval(String code);
 AppLocale? readSavedLocale() {
   if (!kIsWeb) return null;
   try {
-    final r = _jsEval('window.__bananGetLocale ? window.__bananGetLocale() : ""');
-    final code = r?.dartify();
-    if (code == 'en') return AppLocale.en;
-    if (code == 'vi') return AppLocale.vi;
-    return null;
+    final r =
+        _jsEval('window.__bananGetLocale ? window.__bananGetLocale() : ""');
+    return AppLocale.tryParse(r?.dartify() as String?);
   } catch (_) {
     return null;
   }
@@ -26,7 +26,27 @@ AppLocale? readSavedLocale() {
 void saveLocale(AppLocale locale) {
   if (!kIsWeb) return;
   try {
-    final code = locale == AppLocale.en ? 'en' : 'vi';
-    _jsEval("window.__bananSetLocale && window.__bananSetLocale('$code')");
+    _jsEval(
+      "window.__bananSetLocale && window.__bananSetLocale('${locale.name}')",
+    );
   } catch (_) {}
+}
+
+/// Loads the catalog dictionary (assets/i18n/catalog.json). A missing or
+/// broken file just leaves catalog copy in Vietnamese.
+Future<Map<String, Map<String, String>>> loadCatalogTranslations() async {
+  try {
+    final raw = jsonDecode(
+      await rootBundle.loadString('assets/i18n/catalog.json'),
+    ) as Map<String, dynamic>;
+    return {
+      for (final e in raw.entries)
+        e.key: {
+          for (final t in (e.value as Map<String, dynamic>).entries)
+            t.key: t.value as String,
+        },
+    };
+  } catch (_) {
+    return const {};
+  }
 }

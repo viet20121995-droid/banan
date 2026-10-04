@@ -188,9 +188,14 @@ final customerRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: wrongAppPath,
-        builder: (_, __) => const WrongAppScreen(
-          expected: 'khách hàng',
-          actual: 'tài khoản nhân sự',
+        builder: (_, __) => Consumer(
+          builder: (_, ref, __) {
+            final s = ref.watch(stringsProvider);
+            return WrongAppScreen(
+              expected: s.wrongAppCustomers,
+              actual: s.wrongAppStaff,
+            );
+          },
         ),
       ),
     ],

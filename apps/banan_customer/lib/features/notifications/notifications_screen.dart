@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
 
@@ -49,7 +48,7 @@ class _Body extends ConsumerWidget {
     }
     if (state.failure != null && state.items.isEmpty) {
       return ErrorState(
-        message: authFailureMessage(state.failure!),
+        message: authFailureMessage(state.failure!, s),
         onRetry: controller.refresh,
       );
     }
@@ -85,15 +84,16 @@ class _Body extends ConsumerWidget {
   }
 }
 
-class _Tile extends StatelessWidget {
+class _Tile extends ConsumerWidget {
   const _Tile({required this.notification, required this.onTap});
   final NotificationEntry notification;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final relTime = _formatTimestamp(notification.createdAt);
+    final relTime =
+        _formatTimestamp(notification.createdAt, ref.watch(stringsProvider));
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -109,7 +109,8 @@ class _Tile extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
+              backgroundColor:
+                  theme.colorScheme.primary.withValues(alpha: 0.12),
               child: Icon(
                 _iconFor(notification.type),
                 color: theme.colorScheme.primary,
@@ -177,13 +178,13 @@ class _Tile extends StatelessWidget {
     }
   }
 
-  String _formatTimestamp(DateTime created) {
+  String _formatTimestamp(DateTime created, AppStrings s) {
     final now = DateTime.now();
     final diff = now.difference(created);
-    if (diff.inSeconds < 60) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-    if (diff.inHours < 24) return '${diff.inHours}h';
-    if (diff.inDays < 7) return '${diff.inDays}d';
+    if (diff.inSeconds < 60) return s.justNow;
+    if (diff.inMinutes < 60) return s.minutesAgo(diff.inMinutes);
+    if (diff.inHours < 24) return s.hoursAgo(diff.inHours);
+    if (diff.inDays < 7) return s.daysAgo(diff.inDays);
     return DateFormat.yMMMd().format(created.toLocal());
   }
 }

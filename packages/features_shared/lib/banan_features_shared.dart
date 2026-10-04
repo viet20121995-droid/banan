@@ -10,6 +10,7 @@ export 'src/auth/login_screen.dart';
 export 'src/auth/register_screen.dart';
 export 'src/auth/wrong_app_screen.dart';
 export 'src/i18n/app_strings.dart';
+export 'src/i18n/catalog_text.dart';
 export 'src/i18n/relative_day_label.dart';
 export 'src/notifications/notification_bell.dart';
 export 'src/notifications/notifications_controller.dart';

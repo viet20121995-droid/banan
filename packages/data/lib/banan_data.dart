@@ -19,6 +19,7 @@ export 'src/api/display_config_api.dart';
 export 'src/api/promo_quote_api.dart';
 export 'src/api/spend_lookup_api.dart';
 export 'src/api/errors.dart';
+export 'src/api/server_error_text.dart' show apiLocale;
 export 'src/api/geo_api.dart';
 export 'src/api/gift_cards_api.dart';
 export 'src/api/health_api.dart';

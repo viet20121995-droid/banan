@@ -1111,12 +1111,12 @@ class _OrderItemRow extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${item.quantity}× ${item.productName}',
+                  '${item.quantity}× ${catalogText(context, item.productName)}',
                   style: theme.textTheme.bodyLarge,
                 ),
                 if (item.variantLabel != null)
                   Text(
-                    item.variantLabel!,
+                    catalogText(context, item.variantLabel!),
                     style: theme.textTheme.bodySmall,
                   ),
                 if (item.personalization != null &&
@@ -1507,6 +1507,7 @@ class _PersonalizationSummary extends ConsumerWidget {
       candleType: payload['candleType'] as String?,
       candleCount: (payload['candleCount'] as num?)?.toInt(),
       candleNumber: (payload['candleNumber'] as num?)?.toInt(),
+      s: s,
     );
     final note = payload['note'] as String?;
     final flavors = payload['flavors'] as Map<String, dynamic>?;
@@ -1569,8 +1570,10 @@ class _PersonalizationSummary extends ConsumerWidget {
           if (optionsText(payload) != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child:
-                  Text(optionsText(payload)!, style: theme.textTheme.bodySmall),
+              child: Text(
+                catalogText(context, optionsText(payload)!),
+                style: theme.textTheme.bodySmall,
+              ),
             ),
           if (note != null && note.isNotEmpty)
             Text(s.noteLine(note), style: theme.textTheme.bodySmall),

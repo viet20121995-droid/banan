@@ -142,9 +142,8 @@ class CartScreen extends ConsumerWidget {
                       draftCtrl.setFulfillment(next);
                       // Keep the session-wide preference in sync so the menu
                       // toggle reflects a change made here too.
-                      ref
-                          .read(fulfillmentPreferenceProvider.notifier)
-                          .state = next;
+                      ref.read(fulfillmentPreferenceProvider.notifier).state =
+                          next;
                     },
                   ),
 
@@ -281,17 +280,13 @@ class _CrossSellSection extends ConsumerWidget {
     final theme = Theme.of(context);
     final async = ref.watch(_cartRecommendationsProvider(seedProductId));
     // Don't surface the cart's own lines as "suggestions".
-    final inCart = ref
-        .watch(cartControllerProvider)
-        .items
-        .map((i) => i.productId)
-        .toSet();
+    final inCart =
+        ref.watch(cartControllerProvider).items.map((i) => i.productId).toSet();
 
     return async.maybeWhen(
       orElse: () => const SizedBox.shrink(),
       data: (items) {
-        final suggestions =
-            items.where((p) => !inCart.contains(p.id)).toList();
+        final suggestions = items.where((p) => !inCart.contains(p.id)).toList();
         if (suggestions.isEmpty) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,8 +371,7 @@ class _CrossSellCard extends ConsumerWidget {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BananRadii.rlg,
-          border:
-              Border.all(color: theme.dividerTheme.color ?? Colors.black12),
+          border: Border.all(color: theme.dividerTheme.color ?? Colors.black12),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -413,7 +407,7 @@ class _CrossSellCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    product.name,
+                    catalogText(context, product.name),
                     style: theme.textTheme.titleSmall,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -492,7 +486,7 @@ class _Row extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final s = ref.watch(stringsProvider);
-    final summary = _personalizationSummary(item.personalization);
+    final summary = _personalizationSummary(item.personalization, s);
     return Container(
       padding: const EdgeInsets.all(BananSpacing.md),
       decoration: BoxDecoration(
@@ -524,10 +518,13 @@ class _Row extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.productName, style: theme.textTheme.titleSmall),
+                    Text(
+                      catalogText(context, item.productName),
+                      style: theme.textTheme.titleSmall,
+                    ),
                     if (item.variantLabel.isNotEmpty)
                       Text(
-                        item.variantLabel,
+                        catalogText(context, item.variantLabel),
                         style: theme.textTheme.bodySmall,
                       ),
                     const SizedBox(height: BananSpacing.xs),
@@ -680,10 +677,10 @@ class _ConstraintChip extends StatelessWidget {
 /// Builds a one-line human summary of a cart line's personalization, merging
 /// the cake-wizard fields (text / candles / note) and any macaron flavour
 /// composition. Returns null when there's nothing to show.
-String? _personalizationSummary(Map<String, dynamic>? p) {
+String? _personalizationSummary(Map<String, dynamic>? p, AppStrings s) {
   if (p == null || p.isEmpty) return null;
   final parts = <String>[];
-  final cake = CakePersonalization.fromMap(p).summarize();
+  final cake = CakePersonalization.fromMap(p).summarize(s: s);
   if (cake != null) parts.add(cake);
   final flavors = p['flavors'];
   if (flavors is Map && flavors.isNotEmpty) {

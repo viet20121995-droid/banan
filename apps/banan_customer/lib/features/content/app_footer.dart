@@ -33,16 +33,13 @@ class AppFooter extends ConsumerWidget {
 
     // Marketing links appear only when the admin enabled that program.
     final marketingLinks = <MapEntry<String, String>>[
-      if (mkt?.referral.enabled ?? false)
-        MapEntry(s.footReferral, '/referral'),
+      if (mkt?.referral.enabled ?? false) MapEntry(s.footReferral, '/referral'),
       if (mkt?.giftCard.enabled ?? false)
         MapEntry(s.footGiftCards, '/gift-cards'),
       if (mkt?.subscription.enabled ?? false)
         MapEntry(s.footSubscription, '/subscription'),
-      if (mkt?.catering.enabled ?? false)
-        MapEntry(s.footCatering, '/catering'),
-      if (mkt?.rewards.enabled ?? false)
-        MapEntry(s.footRewards, '/rewards'),
+      if (mkt?.catering.enabled ?? false) MapEntry(s.footCatering, '/catering'),
+      if (mkt?.rewards.enabled ?? false) MapEntry(s.footRewards, '/rewards'),
     ];
 
     return Padding(
@@ -83,7 +80,7 @@ class AppFooter extends ConsumerWidget {
             child: Column(
               children: [
                 const Text(LegalInfo.businessName),
-                const Text('MST: ${LegalInfo.taxCode}'),
+                Text('${s.taxCodeShort}: ${LegalInfo.taxCode}'),
                 Text(s.bizReg(LegalInfo.bizRegNo)),
                 Text(s.bizAddress(LegalInfo.address)),
                 const Text(

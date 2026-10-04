@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:banan_data/banan_data.dart' show apiLocale;
 import 'package:banan_design_system/banan_design_system.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../features/content/cookie_consent.dart';
 import '../features/menu/fullmoon_autumn.dart';
@@ -26,6 +28,12 @@ class BananCustomerApp extends ConsumerWidget {
       localeProvider,
       (_, next) => saveLocale(next),
     );
+    // Dates (DateFormat without an explicit locale) follow the UI language.
+    final appLocale = ref.watch(localeProvider);
+    Intl.defaultLocale = appLocale.intlLocale;
+    // API error texts and design-system labels follow the same language.
+    apiLocale = appLocale.name;
+    bananUiLang = appLocale.name;
     final locale = ref.watch(localeProvider).locale;
     return MaterialApp.router(
       title: 'Banan',
@@ -37,7 +45,7 @@ class BananCustomerApp extends ConsumerWidget {
       // out product photos and brand colors. (darkTheme kept for a future toggle.)
       themeMode: ThemeMode.light,
       locale: locale,
-      supportedLocales: const [Locale('vi'), Locale('en')],
+      supportedLocales: [for (final l in AppLocale.values) l.locale],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

@@ -3,6 +3,8 @@ import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../i18n/app_strings.dart';
+
 import 'survey_draft.dart';
 import 'survey_flow.dart';
 import 'survey_public_api.dart';
@@ -36,7 +38,8 @@ class MemorySurveyDraftStore implements SurveyDraftStore {
 /// (`<customer domain>/survey`) — mobile-first, no login, branch picked on
 /// the form itself (never inferred from the QR).
 class PublicSurveyScreen extends ConsumerStatefulWidget {
-  const PublicSurveyScreen({super.key, this.draftStore = const SurveyDraftStore()});
+  const PublicSurveyScreen(
+      {super.key, this.draftStore = const SurveyDraftStore()});
   final SurveyDraftStore draftStore;
 
   @override
@@ -83,7 +86,8 @@ class _PublicSurveyScreenState extends ConsumerState<PublicSurveyScreen> {
     draft.choices.forEach((code, v) => add(code, {'optionValues': v}));
     draft.texts.forEach((code, v) => add(code, {'textValue': v}));
 
-    final wantsContact = draft.numbers['contact_request'] == 1 && draft.contactConsent;
+    final wantsContact =
+        draft.numbers['contact_request'] == 1 && draft.contactConsent;
     final res = await ref.read(surveyPublicApiProvider).surveySubmit({
       'templateId': template.id,
       'storeId': draft.storeId,
@@ -93,8 +97,10 @@ class _PublicSurveyScreenState extends ConsumerState<PublicSurveyScreen> {
       'answers': answers,
       if (wantsContact)
         'contact': {
-          if (draft.contactName.trim().isNotEmpty) 'name': draft.contactName.trim(),
-          if (draft.contactPhone.trim().isNotEmpty) 'phone': draft.contactPhone.trim(),
+          if (draft.contactName.trim().isNotEmpty)
+            'name': draft.contactName.trim(),
+          if (draft.contactPhone.trim().isNotEmpty)
+            'phone': draft.contactPhone.trim(),
           'consent': true,
         },
     });
@@ -129,12 +135,15 @@ class _PublicSurveyScreenState extends ConsumerState<PublicSurveyScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Chưa tải được khảo sát — kiểm tra kết nối mạng.',
+              ref.watch(stringsProvider).surveyLoadFailed,
               style: Theme.of(context).textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: BananSpacing.md),
-            OutlinedButton(onPressed: _load, child: const Text('Thử lại')),
+            OutlinedButton(
+              onPressed: _load,
+              child: Text(ref.watch(stringsProvider).retry),
+            ),
           ],
         ),
       ),
@@ -143,7 +152,7 @@ class _PublicSurveyScreenState extends ConsumerState<PublicSurveyScreen> {
         if (template == null) {
           return Center(
             child: Text(
-              'Khảo sát đang được chuẩn bị — quay lại sau nhé!',
+              ref.watch(stringsProvider).surveyNotReady,
               style: Theme.of(context).textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),
@@ -154,7 +163,8 @@ class _PublicSurveyScreenState extends ConsumerState<PublicSurveyScreen> {
           template: template,
           stores: data.stores,
           reward: data.reward,
-          initialDraft: saved != null ? SurveyDraft.fromJsonString(saved) : null,
+          initialDraft:
+              saved != null ? SurveyDraft.fromJsonString(saved) : null,
           onDraftChanged: (d) => widget.draftStore.write(d.toJsonString()),
           onSubmit: (d) => _submit(template, d),
         );

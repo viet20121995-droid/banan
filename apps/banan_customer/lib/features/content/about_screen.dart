@@ -1,6 +1,9 @@
 // Fallback content uses multi-line implicit string concatenation inside the
 // section lists — deliberate, not a missing comma.
+// Japanese copy has no spaces between words, so adjacent JA strings join
+// without whitespace on purpose.
 // ignore_for_file: no_adjacent_strings_in_list, require_trailing_commas
+// ignore_for_file: missing_whitespace_between_adjacent_strings
 import 'package:banan_data/banan_data.dart';
 import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
@@ -39,6 +42,20 @@ const _fallbackSectionsEn = <ContentSection>[
   ]),
 ];
 
+const _fallbackIntroJa = 'Banan Fukuoka Saigonは、日本の喫茶店の心をサイゴンにお届けします。'
+    'ケーキはすべて手作りで、毎日焼き上げています。';
+
+const _fallbackSectionsJa = <ContentSection>[
+  ContentSection('私たちの物語', [
+    '福岡の小さな喫茶店や洋菓子店への愛から生まれたBananは、'
+        'その繊細な味わいをベトナムにお届けしています。',
+  ]),
+  ContentSection('店舗のご案内', [
+    'Bananはホーチミン市内に複数の店舗があり、店頭でのお受け取りと'
+        '配達の両方に対応しています。詳しくは店舗一覧ページをご覧ください。',
+  ]),
+];
+
 /// Câu chuyện thương hiệu Banan — nội dung do merchant quản lý
 /// (Cài đặt → Nội dung trang); fallback nội dung mặc định.
 class AboutScreen extends ConsumerWidget {
@@ -48,27 +65,42 @@ class AboutScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(aboutContentProvider);
     final str = ref.watch(stringsProvider);
-    final en = ref.watch(localeProvider) == AppLocale.en;
-    final fallbackIntro = en ? _fallbackIntroEn : _fallbackIntroVi;
-    final fallbackSections = en ? _fallbackSectionsEn : _fallbackSectionsVi;
+    final loc = ref.watch(localeProvider);
+    final fallbackIntro = switch (loc) {
+      AppLocale.en => _fallbackIntroEn,
+      AppLocale.ja => _fallbackIntroJa,
+      AppLocale.vi => _fallbackIntroVi,
+    };
+    final fallbackSections = switch (loc) {
+      AppLocale.en => _fallbackSectionsEn,
+      AppLocale.ja => _fallbackSectionsJa,
+      AppLocale.vi => _fallbackSectionsVi,
+    };
 
-    final (intro, sections) = async.maybeWhen(
-      data: (c) {
-        final secs = c.aboutSections
-            .map((s) => ContentSection(
-                  s.heading,
-                  s.body
-                      .split('\n\n')
-                      .map((p) => p.trim())
-                      .where((p) => p.isNotEmpty)
-                      .toList(),
-                ))
-            .toList();
-        final intro = c.aboutIntro.isNotEmpty ? c.aboutIntro : fallbackIntro;
-        return (intro, secs.isNotEmpty ? secs : fallbackSections);
-      },
-      orElse: () => (fallbackIntro, fallbackSections),
-    );
+    // Merchant-managed content is written in Vietnamese only, so it is
+    // shown only for the Vietnamese locale; EN/JA use the built-in text.
+    final (intro, sections) = loc != AppLocale.vi
+        ? (fallbackIntro, fallbackSections)
+        : async.maybeWhen(
+            data: (c) {
+              final secs = c.aboutSections
+                  .map(
+                    (s) => ContentSection(
+                      s.heading,
+                      s.body
+                          .split('\n\n')
+                          .map((p) => p.trim())
+                          .where((p) => p.isNotEmpty)
+                          .toList(),
+                    ),
+                  )
+                  .toList();
+              final intro =
+                  c.aboutIntro.isNotEmpty ? c.aboutIntro : fallbackIntro;
+              return (intro, secs.isNotEmpty ? secs : fallbackSections);
+            },
+            orElse: () => (fallbackIntro, fallbackSections),
+          );
 
     return ContentPage(
       title: str.aboutTitle,

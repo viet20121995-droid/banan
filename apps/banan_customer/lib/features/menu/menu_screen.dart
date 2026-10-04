@@ -260,10 +260,9 @@ class MenuScreen extends ConsumerWidget {
         tooltip: s.language,
         onSelected: (value) {
           switch (value) {
-            case 'lang_vi':
-              ref.read(localeProvider.notifier).state = AppLocale.vi;
-            case 'lang_en':
-              ref.read(localeProvider.notifier).state = AppLocale.en;
+            case final v when v.startsWith('lang_'):
+              ref.read(localeProvider.notifier).state =
+                  AppLocale.tryParse(v.substring(5)) ?? AppLocale.vi;
             case 'install':
               pwaPromptInstall();
             case 'locations':
@@ -291,16 +290,12 @@ class MenuScreen extends ConsumerWidget {
           }
         },
         itemBuilder: (_) => [
-          CheckedPopupMenuItem(
-            value: 'lang_vi',
-            checked: activeLocale == AppLocale.vi,
-            child: const Text('Tiếng Việt'),
-          ),
-          CheckedPopupMenuItem(
-            value: 'lang_en',
-            checked: activeLocale == AppLocale.en,
-            child: const Text('English'),
-          ),
+          for (final l in AppLocale.values)
+            CheckedPopupMenuItem(
+              value: 'lang_${l.name}',
+              checked: activeLocale == l,
+              child: Text(l.label),
+            ),
           const PopupMenuDivider(),
           if (pwaCanInstall())
             PopupMenuItem(
@@ -1228,7 +1223,10 @@ class _BodyState extends ConsumerState<_Body> {
           else if (errored)
             filler(
               ErrorState(
-                message: authFailureMessage(state.failure!),
+                message: authFailureMessage(
+                  state.failure!,
+                  ref.watch(stringsProvider),
+                ),
                 onRetry: onRetry,
               ),
             )
@@ -1278,9 +1276,9 @@ class _BodyState extends ConsumerState<_Body> {
                           ?.showStockToCustomers ??
                       false;
                   return ProductCard(
-                    name: p.name,
+                    name: catalogText(context, p.name),
                     imageUrl: p.coverImage,
-                    tagline: p.description,
+                    tagline: catalogText(context, p.description),
                     tags: [for (final t in p.tags) s.localizeTag(t)],
                     minPrice: p.minPrice,
                     hasPriceRange: p.hasPriceRange,
@@ -2143,7 +2141,7 @@ class _ThreadCardState extends ConsumerState<_ThreadCard> {
                     label: Text(
                       thread.productName == null
                           ? s.shopThisProduct
-                          : 'Shop: ${thread.productName}',
+                          : s.shopProductNamed(thread.productName!),
                     ),
                   ),
                 ],
@@ -2155,7 +2153,7 @@ class _ThreadCardState extends ConsumerState<_ThreadCard> {
                       onPressed: _openCta,
                       child: Text(
                         (thread.ctaLabel ?? '').isEmpty
-                            ? 'Learn more'
+                            ? s.learnMore
                             : thread.ctaLabel!,
                       ),
                     ),
@@ -2258,7 +2256,7 @@ class _OrderAgainCard extends ConsumerWidget {
       symbol: '₫',
       decimalDigits: 0,
     );
-    final dateLabel = DateFormat('d MMM', 'vi_VN').format(
+    final dateLabel = DateFormat.MMMd().format(
       order.createdAt.toLocal(),
     );
 
@@ -2541,7 +2539,7 @@ class _CategoryStrip extends ConsumerWidget {
                 return SizedBox(
                   width: 180,
                   child: ProductCard(
-                    name: p.name,
+                    name: catalogText(context, p.name),
                     imageUrl: p.coverImage,
                     minPrice: p.minPrice,
                     hasPriceRange: p.hasPriceRange,
@@ -2653,7 +2651,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.product.name,
+                      catalogText(context, widget.product.name),
                       style: theme.textTheme.titleMedium,
                     ),
                     Text(
@@ -2681,8 +2679,9 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                 ChoiceChip(
                   label: Text(
                     v.priceDelta == 0
-                        ? '${v.size} · ${v.flavor}'
-                        : '${v.size} · ${v.flavor} (+${fmt.format(v.priceDelta)})',
+                        ? catalogText(context, '${v.size} · ${v.flavor}')
+                        : '${catalogText(context, '${v.size} · ${v.flavor}')} '
+                            '(+${fmt.format(v.priceDelta)})',
                   ),
                   selected: v.id == _selected.id,
                   onSelected: v.isAvailable

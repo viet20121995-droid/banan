@@ -313,7 +313,10 @@ class _Details extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(product.name, style: theme.textTheme.displaySmall),
+        Text(
+          catalogText(context, product.name),
+          style: theme.textTheme.displaySmall,
+        ),
         if (product.category != null) ...[
           const SizedBox(height: BananSpacing.sm),
           Text(
@@ -325,7 +328,10 @@ class _Details extends StatelessWidget {
           ),
         ],
         const SizedBox(height: BananSpacing.lg),
-        Text(product.description, style: theme.textTheme.bodyLarge),
+        Text(
+          catalogText(context, product.description),
+          style: theme.textTheme.bodyLarge,
+        ),
         const SizedBox(height: BananSpacing.xl),
         if (product.variants.isNotEmpty) ...[
           Text(s.chooseSizeFlavor, style: theme.textTheme.titleSmall),
@@ -343,14 +349,15 @@ class _Details extends StatelessWidget {
                   v.stockMode == StockMode.limited &&
                   (v.stockQty ?? 0) <= 0;
               final disabled = !v.isAvailable || isLimitedOut;
+              final vLabel = catalogText(context, v.label);
               final label = showStock &&
                       v.stockMode == StockMode.limited &&
                       (v.stockQty ?? 0) > 0 &&
                       (v.stockQty ?? 0) <= 5
-                  ? s.variantStock(v.label, v.stockQty!)
+                  ? s.variantStock(vLabel, v.stockQty!)
                   : isLimitedOut
-                      ? s.variantSoldOut(v.label)
-                      : v.label;
+                      ? s.variantSoldOut(vLabel)
+                      : vLabel;
               return ChoiceChip(
                 label: Text(label),
                 selected: selected?.id == v.id,
@@ -362,7 +369,10 @@ class _Details extends StatelessWidget {
         ],
         for (final g in product.optionGroups)
           if (g.choices.isNotEmpty) ...[
-            Text(g.label, style: theme.textTheme.titleSmall),
+            Text(
+              catalogText(context, g.label),
+              style: theme.textTheme.titleSmall,
+            ),
             const SizedBox(height: BananSpacing.sm),
             Wrap(
               spacing: BananSpacing.sm,
@@ -370,7 +380,7 @@ class _Details extends StatelessWidget {
               children: [
                 for (final c in g.choices)
                   ChoiceChip(
-                    label: Text(c),
+                    label: Text(catalogText(context, c)),
                     selected: optionPicks[g.label] == c,
                     onSelected: (_) => onOptionPicked(g.label, c),
                   ),
@@ -897,7 +907,7 @@ class _PersonalizationPanel extends ConsumerWidget {
                   ),
                   Text(
                     hasValue
-                        ? personalization!.summarize() ?? ''
+                        ? personalization!.summarize(s: s) ?? ''
                         : s.personalizeSub,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,

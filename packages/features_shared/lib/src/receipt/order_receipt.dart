@@ -6,8 +6,10 @@ import 'dart:ui' as ui;
 import 'package:banan_domain/banan_domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../i18n/app_strings.dart';
 import 'receipt_download.dart';
 
 /// Payment truth comes from the API snapshot, never a gateway return parameter.
@@ -21,20 +23,87 @@ bool receiptIsPaid(Order order) =>
     !order.payments.any((p) => p.status == PaymentStatus.refunded) &&
     !order.refunds.any((r) => r.status != RefundStatus.rejected);
 
-String receiptPaymentLabel(Order order) {
+/// Receipt wording in [lang] (`vi` / `en` / `ja`); the staff apps run in
+/// Vietnamese, the customer app in the customer's language.
+String receiptText(String vi, String lang) => switch (lang) {
+      'en' => _receiptText[vi]?.$1 ?? vi,
+      'ja' => _receiptText[vi]?.$2 ?? vi,
+      _ => vi,
+    };
+
+/// The customer app's chosen language; Vietnamese wherever there is none
+/// (staff apps keep the default, widget tests have no ProviderScope).
+String _lang(BuildContext context) {
+  try {
+    return ProviderScope.containerOf(context, listen: false)
+        .read(localeProvider)
+        .name;
+  } catch (_) {
+    return 'vi';
+  }
+}
+
+const Map<String, (String, String)> _receiptText = {
+  'Có giao dịch hoàn tiền': ('Refunded', '返金あり'),
+  'Đang xử lý hoàn tiền': ('Refund in progress', '返金処理中'),
+  'Đơn đã hủy': ('Order cancelled', 'キャンセル済み'),
+  'Đã thanh toán': ('Paid', 'お支払い済み'),
+  'Thanh toán chưa thành công': ('Payment failed', 'お支払い未完了'),
+  'Chưa thanh toán': ('Unpaid', '未払い'),
+  'Đóng hóa đơn': ('Close receipt', 'レシートを閉じる'),
+  'Chưa lưu được ảnh hóa đơn. Vui lòng thử lại.': (
+    "Couldn't save the receipt image. Please try again.",
+    'レシート画像を保存できませんでした。もう一度お試しください。'
+  ),
+  'Đang chờ xác nhận từ cổng thanh toán.': (
+    'Waiting for the payment gateway to confirm.',
+    '決済代行会社からの確認を待っています。'
+  ),
+  'Cảm ơn bạn đã chọn Banan.': (
+    'Thank you for choosing Banan.',
+    'Bananをお選びいただきありがとうございます。'
+  ),
+  'Đang tạo ảnh…': ('Creating image…', '画像を作成中…'),
+  'Chụp hóa đơn': ('Save receipt image', 'レシートを保存'),
+  'Kiểm tra thanh toán': ('Check payment', 'お支払いを確認'),
+  'PHIẾU THANH TOÁN': ('PAYMENT RECEIPT', 'お支払い明細'),
+  'ĐT': ('Tel', 'TEL'),
+  'Mã đơn': ('Order', '注文番号'),
+  'Đặt lúc': ('Placed', '注文日時'),
+  'Nhận hàng': ('Fulfilment', '受け取り方法'),
+  'Tại cửa hàng': ('Pickup in store', '店頭受け取り'),
+  'Giao hàng': ('Delivery', '配達'),
+  'Hẹn nhận': ('Scheduled', 'ご予約日時'),
+  'món': ('item', '点'),
+  'Tạm tính': ('Subtotal', '小計'),
+  'Giảm combo': ('Set discount', 'セット割引'),
+  'Khuyến mãi': ('Promotion', 'キャンペーン割引'),
+  'Mã giảm giá': ('Discount code', 'クーポン割引'),
+  'Đổi điểm': ('Points redeemed', 'ポイント利用'),
+  'Thẻ quà tặng': ('Gift card', 'ギフトカード'),
+  'Phí giao hàng': ('Delivery fee', '配達料'),
+  'TỔNG CỘNG': ('TOTAL', '合計'),
+  'Phiếu xác nhận đơn hàng, không thay thế hóa đơn VAT.': (
+    'Order confirmation — not a VAT invoice.',
+    'ご注文確認書です。VATインボイスではありません。'
+  ),
+};
+
+String receiptPaymentLabel(Order order, [String lang = 'vi']) {
+  String t(String vi) => receiptText(vi, lang);
   if (order.refunds.any((r) => r.status == RefundStatus.completed) ||
       order.payments.any((p) => p.status == PaymentStatus.refunded)) {
-    return 'Có giao dịch hoàn tiền';
+    return t('Có giao dịch hoàn tiền');
   }
   if (order.refunds.any((r) => r.status != RefundStatus.rejected)) {
-    return 'Đang xử lý hoàn tiền';
+    return t('Đang xử lý hoàn tiền');
   }
-  if (order.status == OrderStatus.cancelled) return 'Đơn đã hủy';
-  if (receiptIsPaid(order)) return 'Đã thanh toán';
+  if (order.status == OrderStatus.cancelled) return t('Đơn đã hủy');
+  if (receiptIsPaid(order)) return t('Đã thanh toán');
   if (order.payments.any((p) => p.status == PaymentStatus.failed)) {
-    return 'Thanh toán chưa thành công';
+    return t('Thanh toán chưa thành công');
   }
-  return 'Chưa thanh toán';
+  return t('Chưa thanh toán');
 }
 
 Future<void> showOrderReceipt(BuildContext context, Order order) =>
@@ -53,7 +122,7 @@ Future<void> showOrderReceipt(BuildContext context, Order order) =>
                 Align(
                   alignment: Alignment.centerRight,
                   child: IconButton(
-                    tooltip: 'Đóng hóa đơn',
+                    tooltip: receiptText('Đóng hóa đơn', _lang(context)),
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
                   ),
@@ -191,8 +260,13 @@ class _OrderReceiptState extends State<OrderReceipt>
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Chưa lưu được ảnh hóa đơn. Vui lòng thử lại.'),
+          SnackBar(
+            content: Text(
+              receiptText(
+                'Chưa lưu được ảnh hóa đơn. Vui lòng thử lại.',
+                _lang(context),
+              ),
+            ),
           ),
         );
       }
@@ -260,15 +334,18 @@ class _OrderReceiptState extends State<OrderReceipt>
             ),
             const SizedBox(height: 8),
             Text(
-              receiptPaymentLabel(_order),
+              receiptPaymentLabel(_order, _lang(context)),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             Text(
-              _pending
-                  ? 'Đang chờ xác nhận từ cổng thanh toán.'
-                  : 'Cảm ơn bạn đã chọn Banan.',
+              receiptText(
+                _pending
+                    ? 'Đang chờ xác nhận từ cổng thanh toán.'
+                    : 'Cảm ơn bạn đã chọn Banan.',
+                _lang(context),
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -277,13 +354,18 @@ class _OrderReceiptState extends State<OrderReceipt>
               icon: Icon(
                 _saving ? Icons.hourglass_top : Icons.photo_camera_outlined,
               ),
-              label: Text(_saving ? 'Đang tạo ảnh…' : 'Chụp hóa đơn'),
+              label: Text(
+                receiptText(
+                  _saving ? 'Đang tạo ảnh…' : 'Chụp hóa đơn',
+                  _lang(context),
+                ),
+              ),
             ),
             if (_pending && widget.reload != null)
               TextButton.icon(
                 onPressed: _refreshing ? null : _refresh,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Kiểm tra thanh toán'),
+                label: Text(receiptText('Kiểm tra thanh toán', _lang(context))),
               ),
           ],
         ),
@@ -298,6 +380,8 @@ class ReceiptPaper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = _lang(context);
+    String t(String vi) => receiptText(vi, lang);
     final money =
         NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0);
     final paid = receiptIsPaid(order);
@@ -366,8 +450,8 @@ class ReceiptPaper extends StatelessWidget {
                 ),
                 const Text('FUKUOKA · SAIGON', textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                const Text(
-                  'PHIẾU THANH TOÁN',
+                Text(
+                  t('PHIẾU THANH TOÁN'),
                   textAlign: TextAlign.center,
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
@@ -381,22 +465,22 @@ class ReceiptPaper extends StatelessWidget {
                   ),
                 if ((order.storePhone ?? '').isNotEmpty)
                   Text(
-                    'ĐT: ${order.storePhone}',
+                    '${t('ĐT')}: ${order.storePhone}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 11),
                   ),
                 divider,
-                row('Mã đơn', order.code),
-                row('Đặt lúc', DateFormat('dd/MM/yyyy HH:mm').format(date)),
+                row(t('Mã đơn'), order.code),
+                row(t('Đặt lúc'), DateFormat('dd/MM/yyyy HH:mm').format(date)),
                 row(
-                  'Nhận hàng',
+                  t('Nhận hàng'),
                   order.fulfillmentType == FulfillmentType.pickup
-                      ? 'Tại cửa hàng'
-                      : 'Giao hàng',
+                      ? t('Tại cửa hàng')
+                      : t('Giao hàng'),
                 ),
                 if (order.scheduledFor != null)
                   row(
-                    'Hẹn nhận',
+                    t('Hẹn nhận'),
                     DateFormat('dd/MM/yyyy HH:mm').format(
                       order.scheduledFor!.toUtc().add(const Duration(hours: 7)),
                     ),
@@ -411,7 +495,7 @@ class ReceiptPaper extends StatelessWidget {
                   if (item.variantLabel?.isNotEmpty ?? false)
                     Text(item.variantLabel!),
                   Text(
-                    '${money.format(item.unitPrice)} / món',
+                    '${money.format(item.unitPrice)} / ${t('món')}',
                     style: const TextStyle(color: Color(0xff69746d)),
                   ),
                   if (item.customMessage?.isNotEmpty ?? false)
@@ -419,30 +503,33 @@ class ReceiptPaper extends StatelessWidget {
                   const SizedBox(height: 8),
                 ],
                 divider,
-                row('Tạm tính', money.format(order.subtotal)),
+                row(t('Tạm tính'), money.format(order.subtotal)),
                 if (order.bundleDiscount > 0)
-                  row('Giảm combo', '-${money.format(order.bundleDiscount)}'),
+                  row(t('Giảm combo'),
+                      '-${money.format(order.bundleDiscount)}'),
                 if (order.campaignDiscount > 0)
-                  row('Khuyến mãi', '-${money.format(order.campaignDiscount)}'),
+                  row(t('Khuyến mãi'),
+                      '-${money.format(order.campaignDiscount)}'),
                 if (order.couponDiscount > 0)
-                  row('Mã giảm giá', '-${money.format(order.couponDiscount)}'),
+                  row(t('Mã giảm giá'),
+                      '-${money.format(order.couponDiscount)}'),
                 if (order.pointsDiscount > 0)
-                  row('Đổi điểm', '-${money.format(order.pointsDiscount)}'),
+                  row(t('Đổi điểm'), '-${money.format(order.pointsDiscount)}'),
                 if (order.giftCardAmountVnd > 0)
                   row(
-                    'Thẻ quà tặng',
+                    t('Thẻ quà tặng'),
                     '-${money.format(order.giftCardAmountVnd)}',
                   ),
                 if (order.deliveryFee > 0)
-                  row('Phí giao hàng', money.format(order.deliveryFee)),
+                  row(t('Phí giao hàng'), money.format(order.deliveryFee)),
                 divider,
                 DefaultTextStyle.merge(
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                   ),
-                  child:
-                      row('TỔNG CỘNG', money.format(order.total), strong: true),
+                  child: row(t('TỔNG CỘNG'), money.format(order.total),
+                      strong: true),
                 ),
                 const SizedBox(height: 14),
                 Container(
@@ -455,7 +542,7 @@ class ReceiptPaper extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    receiptPaymentLabel(order).toUpperCase(),
+                    receiptPaymentLabel(order, lang).toUpperCase(),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
@@ -468,8 +555,8 @@ class ReceiptPaper extends StatelessWidget {
                 const SizedBox(height: 18),
                 const Text('banancakes.vn', textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                const Text(
-                  'Phiếu xác nhận đơn hàng, không thay thế hóa đơn VAT.',
+                Text(
+                  t('Phiếu xác nhận đơn hàng, không thay thế hóa đơn VAT.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 10, color: Color(0xff69746d)),
                 ),

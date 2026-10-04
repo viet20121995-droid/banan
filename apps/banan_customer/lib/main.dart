@@ -28,6 +28,9 @@ Future<void> main() async {
   // "Jul 15" instead of "15 thg 7".
   Intl.defaultLocale = 'vi_VN';
   await initializeDateFormatting('vi_VN', null);
+  // The UI language switcher re-points Intl.defaultLocale (see app.dart).
+  await initializeDateFormatting('en', null);
+  await initializeDateFormatting('ja', null);
 
   // Hive backs the offline catalog cache. On web this is IndexedDB; on
   // mobile it's app-documents files. Returns null on init failure — we
@@ -37,6 +40,7 @@ Future<void> main() async {
   // Restore the language the customer last chose (persisted to
   // localStorage). Falls back to the provider default (Vietnamese).
   final savedLocale = readSavedLocale();
+  final catalogTranslations = await loadCatalogTranslations();
 
   // Restore the session before the first frame so the router redirect is
   // correct on launch — no flashes of the login screen for already-logged-in users.
@@ -56,6 +60,7 @@ Future<void> main() async {
       ),
       if (catalogCache != null)
         catalogCacheProvider.overrideWithValue(catalogCache),
+      catalogTranslationsProvider.overrideWithValue(catalogTranslations),
       if (savedLocale != null)
         localeProvider.overrideWith((ref) => savedLocale),
     ],

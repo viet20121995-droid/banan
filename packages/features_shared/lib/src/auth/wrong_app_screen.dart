@@ -2,6 +2,7 @@ import 'package:banan_design_system/banan_design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../i18n/app_strings.dart';
 import 'auth_controller.dart';
 
 /// Shown when an authenticated user opens the wrong app for their role
@@ -19,6 +20,7 @@ class WrongAppScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
     return AppScaffold(
       body: Center(
         child: ConstrainedBox(
@@ -33,20 +35,19 @@ class WrongAppScreen extends ConsumerWidget {
               ),
               const SizedBox(height: BananSpacing.lg),
               Text(
-                'Nhầm trang đăng nhập',
+                s.wrongAppTitle,
                 style: Theme.of(context).textTheme.headlineSmall,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: BananSpacing.sm),
               Text(
-                'Trang này dành cho $expected, còn tài khoản của bạn là '
-                '$actual. Hãy đăng xuất rồi vào đúng trang của bạn.',
+                s.wrongAppBody(expected, actual),
                 style: Theme.of(context).textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: BananSpacing.xl),
               PrimaryButton(
-                label: 'Đăng xuất',
+                label: s.signOut,
                 expand: true,
                 onPressed: () =>
                     ref.read(authControllerProvider.notifier).logout(),

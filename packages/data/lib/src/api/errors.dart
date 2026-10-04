@@ -1,6 +1,8 @@
 import 'package:banan_core/banan_core.dart';
 import 'package:dio/dio.dart';
 
+import 'server_error_text.dart';
+
 /// Maps a Dio response (4xx/5xx) — already passed through Dio's
 /// `validateStatus` — to a typed [AppFailure]. Reads our `{ error: { code, message } }`
 /// envelope when present.
@@ -20,6 +22,7 @@ AppFailure mapHttpStatusToFailure(Response<dynamic> res) {
       if (d is Map<String, dynamic>) details = d;
     }
   }
+  message = localizeServerMessage(code, message);
 
   // Structured per-item timeline rejection — preserve the offending cakes so
   // the checkout UI can highlight each one and offer a fix, instead of
@@ -38,7 +41,7 @@ AppFailure mapHttpStatusToFailure(Response<dynamic> res) {
     return AuthFailure.forbidden();
   }
   if (status == 422 || status == 400) {
-    return ValidationFailure(message: message);
+    return ValidationFailure(message: message, serverCode: code);
   }
   return ServerFailure(
     code: code ?? 'HTTP_$status',

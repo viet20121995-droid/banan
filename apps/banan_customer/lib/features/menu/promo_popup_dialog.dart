@@ -26,7 +26,7 @@ class PromoPopupDialog extends ConsumerStatefulWidget {
     return showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Đóng popup',
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       transitionDuration: const Duration(milliseconds: 380),
       pageBuilder: (_, __, ___) => PromoPopupDialog(popup: popup),
@@ -163,8 +163,8 @@ class _PromoPopupDialogState extends ConsumerState<PromoPopupDialog> {
                         // (now-retired) seigaiha wave decoration.
                         Container(
                           height: 12,
-                          color: theme.colorScheme.primary
-                              .withValues(alpha: 0.18),
+                          color:
+                              theme.colorScheme.primary.withValues(alpha: 0.18),
                         ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(

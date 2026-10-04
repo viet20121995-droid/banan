@@ -298,7 +298,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         },
         failure: (f) {
           _appliedCoupon = null;
-          _couponError = authFailureMessage(f);
+          _couponError = authFailureMessage(f, ref.read(stringsProvider));
         },
       );
     });
@@ -1200,7 +1200,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                           helperText: s.cityHelper,
                         ),
                         child: Text(
-                          'Thành phố Hồ Chí Minh',
+                          s.cityHcmName,
                           style: theme.textTheme.bodyMedium,
                         ),
                       ),
@@ -2073,7 +2073,12 @@ class _PaymentRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(method.label, style: theme.textTheme.titleSmall),
+                  Text(
+                    ProviderScope.containerOf(context, listen: false)
+                        .read(stringsProvider)
+                        .paymentMethodLabel(method),
+                    style: theme.textTheme.titleSmall,
+                  ),
                   Text(hint, style: theme.textTheme.bodySmall),
                 ],
               ),
@@ -2139,7 +2144,7 @@ class _Summary extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      item.productName,
+                      catalogText(context, item.productName),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -2177,7 +2182,7 @@ class _Summary extends ConsumerWidget {
           for (final c in campaigns)
             if (c.discountVnd > 0)
               _Line(
-                label: '${s.promoLine} · ${c.name}',
+                label: '${s.promoLine} · ${catalogText(context, c.name)}',
                 value: '−${fmt.format(c.discountVnd)}',
                 accent: true,
               ),
@@ -2715,7 +2720,10 @@ class _PromoHints extends ConsumerWidget {
                                         .map((g) => g.name)
                                         .join(' / '),
                                   ))
-                            : s.promoHintShort(h.name, fmt.format(h.shortVnd)),
+                            : s.promoHintShort(
+                                catalogText(context, h.name),
+                                fmt.format(h.shortVnd),
+                              ),
                         style: theme.textTheme.bodySmall,
                       ),
                     ),

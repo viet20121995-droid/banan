@@ -53,6 +53,26 @@ const _fallbackEn = <_Qa>[
   ),
 ];
 
+const _fallbackJa = <_Qa>[
+  _Qa(
+    'バースデーケーキはどのくらい前に注文すればよいですか？',
+    'バースデーケーキやオーダーメイドのセットは、商品ページに表示されている'
+        '準備期間（通常1〜2日）に合わせて事前にご注文ください。'
+        'お受け取りの日時はお会計の際にお選びいただけます。',
+  ),
+  _Qa(
+    'ケーキにメッセージを入れたり、ろうそくを選んだりできますか？',
+    'はい、できます。バースデーコレクションのケーキは、「+」をタップするか'
+        '商品ページを開いて、ケーキへのメッセージ、ろうそくの本数、'
+        'パティシエへのメモをカスタマイズいただけます。',
+  ),
+  _Qa(
+    '注文をキャンセルするにはどうすればよいですか？',
+    '「注文履歴」から該当の注文を開き、ステータスが「確認待ち」または'
+        '「受付済み」の間に「キャンセル」をタップしてください。',
+  ),
+];
+
 /// Trung tâm trợ giúp — câu hỏi thường gặp (FAQ). Nội dung do merchant
 /// quản lý (Cài đặt → Nội dung trang); fallback nội dung mặc định.
 class FaqScreen extends ConsumerWidget {
@@ -63,16 +83,23 @@ class FaqScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final async = ref.watch(faqContentProvider);
     final s = ref.watch(stringsProvider);
-    final fallback = ref.watch(localeProvider) == AppLocale.en
-        ? _fallbackEn
-        : _fallbackVi;
+    final loc = ref.watch(localeProvider);
+    final fallback = switch (loc) {
+      AppLocale.en => _fallbackEn,
+      AppLocale.ja => _fallbackJa,
+      AppLocale.vi => _fallbackVi,
+    };
 
-    final items = async.maybeWhen(
-      data: (c) => c.faqItems.isNotEmpty
-          ? c.faqItems.map((e) => _Qa(e.q, e.a)).toList()
-          : fallback,
-      orElse: () => fallback,
-    );
+    // Merchant-managed FAQ is written in Vietnamese only, so it is shown
+    // only for the Vietnamese locale; EN/JA use the built-in text.
+    final items = loc != AppLocale.vi
+        ? fallback
+        : async.maybeWhen(
+            data: (c) => c.faqItems.isNotEmpty
+                ? c.faqItems.map((e) => _Qa(e.q, e.a)).toList()
+                : fallback,
+            orElse: () => fallback,
+          );
 
     return Scaffold(
       appBar: AppBar(title: Text(s.faqTitle)),
@@ -82,10 +109,7 @@ class FaqScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.all(BananSpacing.lg),
             children: [
-              Text(
-                s.faqTitle,
-                style: theme.textTheme.headlineMedium,
-              ),
+              Text(s.faqTitle, style: theme.textTheme.headlineMedium),
               const SizedBox(height: BananSpacing.md),
               for (final qa in items)
                 Card(
@@ -103,8 +127,9 @@ class FaqScreen extends ConsumerWidget {
                     children: [
                       Text(
                         qa.a,
-                        style:
-                            theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          height: 1.6,
+                        ),
                       ),
                     ],
                   ),

@@ -5,7 +5,6 @@ import 'package:banan_features_shared/banan_features_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-
 /// The signed-in customer's saved delivery addresses.
 final myAddressesProvider =
     FutureProvider.autoDispose<List<Address>>((ref) async {
@@ -48,7 +47,11 @@ class AddressesScreen extends ConsumerWidget {
             onRefresh: () async => ref.invalidate(myAddressesProvider),
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(
-                  BananSpacing.lg, BananSpacing.lg, BananSpacing.lg, 96,),
+                BananSpacing.lg,
+                BananSpacing.lg,
+                BananSpacing.lg,
+                96,
+              ),
               itemCount: addresses.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(height: BananSpacing.md),
@@ -104,8 +107,11 @@ class _AddressCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.location_on_outlined,
-                  size: 18, color: theme.colorScheme.primary,),
+              Icon(
+                Icons.location_on_outlined,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: BananSpacing.xs),
               Text(address.label, style: theme.textTheme.titleSmall),
               if (address.isDefault) ...[
@@ -187,8 +193,7 @@ class _DefaultBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: BananColors.gold,
         borderRadius: BorderRadius.circular(6),
@@ -196,7 +201,10 @@ class _DefaultBadge extends StatelessWidget {
       child: Text(
         label,
         style: const TextStyle(
-            color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600,),
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -221,6 +229,7 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
   late final TextEditingController _city;
   late final TextEditingController _district;
   late final TextEditingController _postal;
+
   /// Selected HCMC ward code from the catalog dropdown (post-2025 reform).
   String? _wardCode;
   bool _isDefault = false;
@@ -271,11 +280,9 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
       line1: _line1.text.trim(),
       line2: _line2.text.trim().isEmpty ? null : _line2.text.trim(),
       city: _city.text.trim(),
-      district:
-          _district.text.trim().isEmpty ? null : _district.text.trim(),
+      district: _district.text.trim().isEmpty ? null : _district.text.trim(),
       wardCode: _wardCode,
-      postalCode:
-          _postal.text.trim().isEmpty ? null : _postal.text.trim(),
+      postalCode: _postal.text.trim().isEmpty ? null : _postal.text.trim(),
       isDefault: _isDefault,
     );
     final repo = ref.read(addressesRepositoryProvider);
@@ -299,7 +306,11 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(
-          BananSpacing.lg, 0, BananSpacing.lg, bottom + BananSpacing.lg,),
+        BananSpacing.lg,
+        0,
+        BananSpacing.lg,
+        bottom + BananSpacing.lg,
+      ),
       child: Form(
         key: _formKey,
         child: ListView(
@@ -316,15 +327,20 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
                 margin: const EdgeInsets.only(bottom: BananSpacing.md),
                 decoration: BoxDecoration(
                   borderRadius: BananRadii.rmd,
-                  color: theme.colorScheme.errorContainer
-                      .withValues(alpha: 0.4),
+                  color:
+                      theme.colorScheme.errorContainer.withValues(alpha: 0.4),
                 ),
                 child: Text(_error!),
               ),
             _field(s, _label, s.labelFieldHint, req: true),
             _field(s, _recipient, s.recipientName, req: true),
-            _field(s, _phone, s.phone, req: true,
-                keyboard: TextInputType.phone,),
+            _field(
+              s,
+              _phone,
+              s.phone,
+              req: true,
+              keyboard: TextInputType.phone,
+            ),
             _field(s, _line1, s.addressLine, req: true),
             _field(s, _line2, s.apartmentOptional),
             // Locked — Banan chỉ giao trong TP.HCM.
@@ -338,7 +354,7 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
                   helperText: s.deliveryOnlyHcm,
                 ),
                 child: Text(
-                  'Thành phố Hồ Chí Minh',
+                  s.cityHcmName,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
@@ -394,8 +410,7 @@ class _AddressEditorSheetState extends ConsumerState<_AddressEditorSheet> {
         keyboardType: keyboard,
         decoration: InputDecoration(labelText: label),
         validator: req
-            ? (v) =>
-                (v == null || v.trim().isEmpty) ? s.required : null
+            ? (v) => (v == null || v.trim().isEmpty) ? s.required : null
             : null,
       ),
     );

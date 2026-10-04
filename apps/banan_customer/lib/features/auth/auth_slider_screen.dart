@@ -236,8 +236,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           autofillHints: const [AutofillHints.username],
-          validator: (v) =>
-              (v == null || v.trim().isEmpty) ? s.required : null,
+          validator: (v) => (v == null || v.trim().isEmpty) ? s.required : null,
         ),
         const SizedBox(height: BananSpacing.md),
         _SoftField(
@@ -248,8 +247,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
           textInputAction: TextInputAction.done,
           autofillHints: const [AutofillHints.password],
           onSubmitted: (_) => _submitLogin(),
-          onToggleObscure: () =>
-              setState(() => _loginObscure = !_loginObscure),
+          onToggleObscure: () => setState(() => _loginObscure = !_loginObscure),
           validator: (v) => (v == null || v.isEmpty) ? s.required : null,
         ),
         Align(
@@ -285,8 +283,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
           label: s.fullName,
           icon: Icons.person_outline,
           textInputAction: TextInputAction.next,
-          validator: (v) =>
-              (v == null || v.trim().isEmpty) ? s.required : null,
+          validator: (v) => (v == null || v.trim().isEmpty) ? s.required : null,
         ),
         const SizedBox(height: BananSpacing.md),
         _SoftField(
@@ -342,7 +339,8 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
         decoration: BoxDecoration(
           borderRadius: BananRadii.rmd,
           color: theme.colorScheme.errorContainer.withValues(alpha: 0.4),
-          border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.4)),
+          border:
+              Border.all(color: theme.colorScheme.error.withValues(alpha: 0.4)),
         ),
         child: Row(
           children: [
@@ -350,7 +348,7 @@ class _AuthSliderScreenState extends ConsumerState<AuthSliderScreen> {
             const SizedBox(width: BananSpacing.sm),
             Expanded(
               child: Text(
-                authFailureMessage(failure),
+                authFailureMessage(failure, ref.watch(stringsProvider)),
                 style: theme.textTheme.bodyMedium,
               ),
             ),
@@ -487,7 +485,8 @@ class _OverlayPane extends ConsumerWidget {
                       body,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onPrimary.withValues(alpha: 0.9),
+                        color:
+                            theme.colorScheme.onPrimary.withValues(alpha: 0.9),
                         height: 1.4,
                       ),
                     ),

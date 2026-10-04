@@ -21,13 +21,11 @@ sealed class AppFailure {
 }
 
 final class NetworkFailure extends AppFailure {
-  const NetworkFailure({super.message, super.cause})
-      : super(code: 'NETWORK');
+  const NetworkFailure({super.message, super.cause}) : super(code: 'NETWORK');
 }
 
 final class TimeoutFailure extends AppFailure {
-  const TimeoutFailure({super.message, super.cause})
-      : super(code: 'TIMEOUT');
+  const TimeoutFailure({super.message, super.cause}) : super(code: 'TIMEOUT');
 }
 
 final class AuthFailure extends AppFailure {
@@ -37,13 +35,20 @@ final class AuthFailure extends AppFailure {
       const AuthFailure(code: 'AUTH_INVALID_CREDENTIALS');
   factory AuthFailure.tokenExpired() =>
       const AuthFailure(code: 'AUTH_TOKEN_EXPIRED');
-  factory AuthFailure.forbidden() =>
-      const AuthFailure(code: 'AUTH_FORBIDDEN');
+  factory AuthFailure.forbidden() => const AuthFailure(code: 'AUTH_FORBIDDEN');
 }
 
 final class ValidationFailure extends AppFailure {
-  const ValidationFailure({super.message, super.cause, this.fields = const {}})
-      : super(code: 'VALIDATION');
+  const ValidationFailure({
+    super.message,
+    super.cause,
+    this.fields = const {},
+    this.serverCode,
+  }) : super(code: 'VALIDATION');
+
+  /// The API's own error code (e.g. `STORE_CLOSED`) when it sent one — lets
+  /// the UI show a translated message for it.
+  final String? serverCode;
 
   /// Field name → error message map from the server.
   final Map<String, String> fields;
@@ -107,6 +112,5 @@ final class ServerFailure extends AppFailure {
 
 /// Last-resort wrapper for truly unexpected exceptions.
 final class UnknownFailure extends AppFailure {
-  const UnknownFailure({super.message, super.cause})
-      : super(code: 'UNKNOWN');
+  const UnknownFailure({super.message, super.cause}) : super(code: 'UNKNOWN');
 }

@@ -3,26 +3,50 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Supported UI languages. Vietnamese is the default — the brand is a
-/// Saigon patisserie — with English as an opt-in for the customer site.
+/// Saigon patisserie — with English and Japanese as opt-ins for the
+/// customer site.
 enum AppLocale {
   vi,
-  en;
+  en,
+  ja;
 
-  Locale get locale => switch (this) {
-        AppLocale.vi => const Locale('vi'),
-        AppLocale.en => const Locale('en'),
+  Locale get locale => Locale(name);
+
+  /// `Intl` locale for dates/numbers in this language.
+  String get intlLocale => switch (this) {
+        AppLocale.vi => 'vi_VN',
+        AppLocale.en => 'en',
+        AppLocale.ja => 'ja',
       };
 
   String get label => switch (this) {
         AppLocale.vi => 'Tiếng Việt',
         AppLocale.en => 'English',
+        AppLocale.ja => '日本語',
       };
 
-  String get shortLabel => switch (this) {
-        AppLocale.vi => 'VI',
-        AppLocale.en => 'EN',
-      };
+  String get shortLabel => name.toUpperCase();
+
+  /// Parses a saved / browser language code; null when unsupported.
+  static AppLocale? tryParse(String? code) {
+    final c = (code ?? '').toLowerCase();
+    for (final l in AppLocale.values) {
+      if (c == l.name ||
+          c.startsWith('${l.name}-') ||
+          c.startsWith('${l.name}_')) {
+        return l;
+      }
+    }
+    return null;
+  }
 }
+
+/// Which language a string table speaks — for helpers handed only `s`.
+AppLocale localeOf(AppStrings s) => switch (s) {
+      _Ja() => AppLocale.ja,
+      _En() => AppLocale.en,
+      _ => AppLocale.vi,
+    };
 
 /// Active UI language. In-memory (resets on a fresh page load, consistent
 /// with the app's kiosk-style preference model). Defaults to Vietnamese.
@@ -31,7 +55,11 @@ final localeProvider = StateProvider<AppLocale>((_) => AppLocale.vi);
 /// The string table for the active locale. Watch this in any ConsumerWidget:
 /// `final s = ref.watch(stringsProvider);`
 final stringsProvider = Provider<AppStrings>((ref) {
-  return ref.watch(localeProvider) == AppLocale.en ? const _En() : const _Vi();
+  return switch (ref.watch(localeProvider)) {
+    AppLocale.vi => const _Vi(),
+    AppLocale.en => const _En(),
+    AppLocale.ja => const _Ja(),
+  };
 });
 
 /// Vietnamese table as a const default for call sites without a ref
@@ -784,6 +812,17 @@ abstract class AppStrings {
   String get quotePending;
   String get quoteFailed;
   String get pickupStoreRequired;
+  String get cityHcmName;
+  String shopProductNamed(String name);
+  String get learnMore;
+  String get closePopup;
+  String get wrongAppTitle;
+  String wrongAppBody(String expected, String actual);
+  String get wrongAppCustomers;
+  String get wrongAppStaff;
+  String get surveyLoadFailed;
+  String get surveyNotReady;
+  String get taxCodeShort;
 }
 
 class _Vi extends AppStrings {
@@ -1602,7 +1641,7 @@ class _Vi extends AppStrings {
         3: 'T4',
         4: 'T5',
         5: 'T6',
-        6: 'T7'
+        6: 'T7',
       }[d] ??
       '?$d';
 
@@ -2291,7 +2330,7 @@ class _Vi extends AppStrings {
   String get checkMarkedFields => 'Vui lòng kiểm tra thông tin được đánh dấu';
   @override
   String get storeClosedPickTime =>
-      'Tiệm đang đóng cửa — vui lòng chọn "Đặt trước theo lịch" để hẹn giờ nhận.';
+      'Tiệm đang đóng cửa — vui lòng chọn "Hẹn giờ sau" để hẹn giờ nhận.';
   @override
   String get storeClosedAtTime =>
       'Tiệm đóng cửa vào giờ bạn chọn — vui lòng chọn giờ khác.';
@@ -2314,6 +2353,31 @@ class _Vi extends AppStrings {
   String get quoteFailed => 'Không tính được phí giao hàng. Vui lòng thử lại.';
   @override
   String get pickupStoreRequired => 'Vui lòng chọn chi nhánh nhận bánh';
+  @override
+  String get cityHcmName => 'Thành phố Hồ Chí Minh';
+  @override
+  String shopProductNamed(String name) => 'Mua $name';
+  @override
+  String get learnMore => 'Tìm hiểu thêm';
+  @override
+  String get closePopup => 'Đóng popup';
+  @override
+  String get wrongAppTitle => 'Nhầm trang đăng nhập';
+  @override
+  String wrongAppBody(String expected, String actual) =>
+      'Trang này dành cho $expected, còn tài khoản của bạn là $actual. Hãy đăng xuất rồi đăng nhập đúng trang.';
+  @override
+  String get wrongAppCustomers => 'khách hàng';
+  @override
+  String get wrongAppStaff => 'tài khoản nhân sự';
+  @override
+  String get surveyLoadFailed =>
+      'Chưa tải được khảo sát — kiểm tra kết nối mạng.';
+  @override
+  String get surveyNotReady =>
+      'Khảo sát đang được chuẩn bị — quay lại sau nhé!';
+  @override
+  String get taxCodeShort => 'MST';
 }
 
 class _En extends AppStrings {
@@ -3880,7 +3944,7 @@ class _En extends AppStrings {
   String get checkMarkedFields => 'Please check the highlighted fields';
   @override
   String get storeClosedPickTime =>
-      'The shop is closed right now — choose "Schedule" to pick a time.';
+      'The shop is closed right now — choose "Schedule for later" to pick a time.';
   @override
   String get storeClosedAtTime =>
       'The shop is closed at the time you picked — please choose another.';
@@ -3904,4 +3968,1565 @@ class _En extends AppStrings {
       'Could not calculate the delivery fee. Please try again.';
   @override
   String get pickupStoreRequired => 'Please choose a pickup branch';
+  @override
+  String get cityHcmName => 'Ho Chi Minh City';
+  @override
+  String shopProductNamed(String name) => 'Shop: $name';
+  @override
+  String get learnMore => 'Learn more';
+  @override
+  String get closePopup => 'Close';
+  @override
+  String get wrongAppTitle => 'Wrong sign-in page';
+  @override
+  String wrongAppBody(String expected, String actual) =>
+      'This page is for $expected, but your account is $actual. Please sign out and use the right page.';
+  @override
+  String get wrongAppCustomers => 'customers';
+  @override
+  String get wrongAppStaff => 'a staff account';
+  @override
+  String get surveyLoadFailed =>
+      'Couldn’t load the survey — check your connection.';
+  @override
+  String get surveyNotReady =>
+      'The survey is being prepared — please come back later!';
+  @override
+  String get taxCodeShort => 'Tax code';
+}
+
+class _Ja extends AppStrings {
+  const _Ja();
+
+  @override
+  String get appTagline => '本日の焼きたてスイーツをご注文ください。';
+  @override
+  String get signIn => 'ログイン';
+  @override
+  String get signUp => '新規登録';
+  @override
+  String get signOut => 'ログアウト';
+  @override
+  String get save => '保存';
+  @override
+  String get cancel => 'キャンセル';
+  @override
+  String get delete => '削除';
+  @override
+  String get confirm => '確定';
+  @override
+  String get retry => '再試行';
+  @override
+  String get edit => '編集';
+  @override
+  String get close => '閉じる';
+  @override
+  String get required => '必須';
+  @override
+  String get loading => '読み込み中…';
+  @override
+  String get language => '言語';
+
+  @override
+  String get searchHint => 'ケーキ・フレーバー・用途で検索';
+  @override
+  String get pickup => '店頭受け取り';
+  @override
+  String get pickupSub => '店舗で受け取る';
+  @override
+  String get delivery => '配達';
+  @override
+  String get deliverySub => 'ご指定先へお届け';
+  @override
+  String get all => 'すべて';
+  @override
+  String get allCakes => 'すべてのケーキ';
+  @override
+  String get fromTheBakery => 'お店からのお知らせ';
+  @override
+  String get noPostsYet => 'まだ投稿はありません。';
+  @override
+  String greetingMorning(String name) => 'おはようございます、$nameさん';
+  @override
+  String greetingAfternoon(String name) => 'こんにちは、$nameさん';
+  @override
+  String greetingEvening(String name) => 'こんばんは、$nameさん';
+  @override
+  String michoBalance(int n) => '$n Micho';
+  @override
+  String earnedMicho(int n) => '$n Michoを獲得しました';
+  @override
+  String get noCakesTitle => '該当するケーキがありません';
+  @override
+  String get noCakesMsg => '別のカテゴリをお試しいただくか、検索条件をクリアしてください。';
+  @override
+  String viewCart(int n) => 'カートを見る · $n点${n == 1 ? '' : ''}';
+  @override
+  String get installApp => 'アプリをインストール';
+  @override
+  String get locations => '店舗一覧';
+  @override
+  String get notifications => 'お知らせ';
+  @override
+  String get myProfile => 'プロフィール';
+  @override
+  String get membership => '会員特典';
+  @override
+  String get spendLookup => 'ご利用金額の確認';
+  @override
+  String get spendLookupIntro => '店頭でご利用の電話番号を入力すると、ご利用総額、'
+      '相当するMicho、会員特典をご確認いただけます。アカウントは不要です。';
+  @override
+  String get spendLookupPhone => '電話番号';
+  @override
+  String get spendLookupSubmit => '確認する';
+  @override
+  String get spendLookupNotFound => 'この番号での店頭ご購入履歴はまだありません。最近のご購入は反映まで'
+      '最大30分かかる場合があります。';
+  @override
+  String get spendLookupTotal => '店頭でのご利用総額';
+  @override
+  String get spendLookupVisits => 'レシート数';
+  @override
+  String get spendLookupLastVisit => '最終ご購入日';
+  @override
+  String get spendLookupMicho => '獲得Micho';
+  @override
+  String spendLookupDiscountOn(int percent) =>
+      'すべてのご注文が$percent%オフになります。ご注文手続きで「会員割引」にチェックを入れてください。';
+  @override
+  String spendLookupDiscountOff(String threshold, int percent) =>
+      'ご利用総額が$threshold以上になると、オンライン注文がすべて$percent%オフになります。';
+  @override
+  String get promoLine => 'キャンペーン';
+  @override
+  String get couponReplacesPromo => 'クーポンコードを使用すると自動適用のキャンペーンは適用されません（併用不可）。';
+  @override
+  String giftHintNow(String names) =>
+      'このご注文でプレゼントがもらえます：$namesをカートに追加すると、最も安い1点が無料になります。';
+  @override
+  String giftHintShort(String amount, String names) =>
+      'あと$amount（プレゼント分を除く）のご購入でプレゼント（$names）がもらえます。';
+  @override
+  String promoHintShort(String name, String amount) =>
+      '$name：あと$amountのご購入で対象になります。';
+  @override
+  String memberDiscountTitle(int percent) => '会員割引：$percent%オフ';
+  @override
+  String memberDiscountSub(String balance, int threshold) =>
+      '$balance Micho保有中（$threshold以上）— 商品合計から割引されます。';
+  @override
+  String get memberDiscountExclusive => 'クーポンコードとの併用はできません。';
+  @override
+  String get memberDiscountLine => '会員割引';
+  @override
+  String get spendLookupHasAccount =>
+      'この番号はすでにBananアカウントに登録されています。ログインしてMichoをご利用ください。';
+  @override
+  String get spendLookupCreateAccount => 'この番号でアカウントを作成すると、店頭でのご購入でもMichoが貯まり、'
+      'オンラインで特典をご利用いただけます。';
+  @override
+  String get myOrders => '注文履歴';
+  @override
+  String get myAddresses => 'お届け先住所';
+  @override
+  String get shopThisProduct => 'この商品を購入';
+  @override
+  String get orderNow => '今すぐ注文';
+  @override
+  String get navMenu => 'メニュー';
+  @override
+  String get trackOrders => '注文状況';
+  @override
+  String get markAllRead => 'すべて既読にする';
+  @override
+  String get noNotificationsTitle => 'お知らせはまだありません';
+  @override
+  String get noNotificationsMsg => 'ご注文の最新情報やお得な情報がここに届きます。';
+  @override
+  String get chooseSizeFlavor => 'サイズとフレーバーを選択';
+  @override
+  String readyInMin(int n) => '約$n分でご用意';
+  @override
+  String get addToCart => 'カートに追加';
+  @override
+  String addedToCart(String name) => '$nameをカートに追加しました';
+
+  @override
+  String get cart => 'カート';
+  @override
+  String get yourCart => 'カート';
+  @override
+  String get removeItem => '削除';
+  @override
+  String get noOrdersTitle => 'ご注文はまだありません';
+  @override
+  String get noOrdersMsg => 'ご注文いただいたケーキがここに表示されます。';
+  @override
+  String get checkout => 'ご注文手続き';
+  @override
+  String get emptyCartTitle => 'カートは空です';
+  @override
+  String get emptyCartMsg => 'ケーキをカートに追加してください。';
+  @override
+  String get subtotal => '小計';
+  @override
+  String get deliveryFee => '配達料';
+  @override
+  String get total => '合計';
+  @override
+  String get campaignDiscount => 'キャンペーン';
+  @override
+  String get bundleDiscount => 'セット割引';
+  @override
+  String get pointsDiscount => 'ポイント利用';
+  @override
+  String get placeOrder => '注文を確定する';
+  @override
+  String get deliveryAddress => 'お届け先住所';
+  @override
+  String get recipientName => '受取人氏名';
+  @override
+  String get phone => '電話番号';
+  @override
+  String get addressLine => '住所';
+  @override
+  String get city => '市';
+  @override
+  String get district => '区';
+  @override
+  String get notesOptional => '備考（任意）';
+  @override
+  String get haveAccount => 'アカウントをお持ちですか？';
+  @override
+  String get fulfillment => '受け取り方法';
+  @override
+  String get payment => 'お支払い';
+  @override
+  String get summary => 'ご注文内容';
+  @override
+  String get yourDetails => 'お客様情報';
+  @override
+  String get apply => '適用';
+  @override
+  String get couponCode => 'クーポンコード';
+  @override
+  String get scheduleNow => '今すぐ';
+  @override
+  String get scheduleLater => '日時を指定';
+  @override
+  String get emailOptional => 'メールアドレス（任意）';
+  @override
+  String get recipient => '受取人';
+  @override
+  String get pickupBranch => '受け取り店舗';
+  @override
+  String get whenDeliver => 'お届け希望日時';
+  @override
+  String get whenReady => '受け取り希望日時';
+  @override
+  String get savings => '割引額';
+  @override
+  String get freeDelivery => '配達無料';
+  @override
+  String get coupon => 'クーポン';
+  @override
+  String get couldNotLoadBranches => '店舗情報を読み込めませんでした';
+  @override
+  String get openNow => '営業中';
+  @override
+  String get closedNow => '営業時間外';
+  @override
+  String get phoneTooShort => '電話番号が短すぎます';
+  @override
+  String get invalidEmail => 'メールアドレスが正しくありません';
+  @override
+  String inMinutes(int n) => '$n分後';
+  @override
+  String inHours(int n) => '$n時間後';
+  @override
+  String get tomorrow => '明日';
+  @override
+  String inDays(int n) => '$n日後';
+  @override
+  String get weWillText => 'ご注文の最新情報をこの番号にSMSでお知らせします。';
+  @override
+  String orderStatusLabel(OrderStatus status) => switch (status) {
+        OrderStatus.pending => '確認待ち',
+        OrderStatus.accepted => '受付済み',
+        OrderStatus.inPreparation => '準備中',
+        OrderStatus.sentToKitchen => '厨房へ送信済み',
+        OrderStatus.readyForPickup => '受け取り準備完了',
+        OrderStatus.delivering => '配達中',
+        OrderStatus.completed => '完了',
+        OrderStatus.cancelled => 'キャンセル済み',
+        OrderStatus.refunded => '返金済み',
+      };
+  @override
+  String get orderTitle => 'ご注文';
+  @override
+  String get backToMenu => 'メニューに戻る';
+  @override
+  String get items => '商品';
+  @override
+  String get timeline => '進行状況';
+  @override
+  String get cancelOrder => '注文をキャンセル';
+  @override
+  String get cancelOrderQ => 'このご注文をキャンセルしますか？';
+  @override
+  String get keep => 'キャンセルしない';
+  @override
+  String get orderMoreCakes => 'さらにケーキを注文';
+  @override
+  String get deliveryOnWay => 'ご注文の商品は配達中です！';
+  @override
+  String get readyPickupBang => 'お受け取りの準備ができました！';
+  @override
+  String get courierNote => '配達員がケーキを持って出発しました。お届けが完了次第、'
+      '配達完了といたします。';
+  @override
+  String get pickupNote => 'いつでもご来店ください。ご注文の商品はカウンターでご用意しております。';
+
+  @override
+  String get loginTitle => 'Banan Fukuoka Saigon';
+  @override
+  String get loginSubtitle => 'ログインして本日のスイーツをご注文ください。';
+  @override
+  String get email => 'メールアドレス';
+  @override
+  String get emailOrPhone => 'メールアドレスまたは電話番号';
+  @override
+  String get password => 'パスワード';
+  @override
+  String get fullName => '氏名';
+  @override
+  String get birthday => '誕生日';
+  @override
+  String get createAccount => 'アカウント作成';
+  @override
+  String get backToLogin => 'ログイン画面に戻る';
+  @override
+  String get noAccount => 'アカウントをお持ちでない方はこちらから作成';
+  @override
+  String get registerTitle => 'Bananアカウントを作成';
+  @override
+  String get registerSubtitle => 'ご注文ごとにポイントが貯まります。登録無料。';
+
+  @override
+  String get profileTitle => 'プロフィール';
+  @override
+  String get emailSignIn => 'メールアドレス（ログイン用）';
+  @override
+  String get avatarUrlOptional => 'プロフィール画像URL（任意）';
+  @override
+  String get saveChanges => '変更を保存';
+  @override
+  String get savedAddresses => '登録済みの住所';
+  @override
+  String get savedAddressesSub => 'お届け先住所を管理して、ご注文手続きをスムーズに';
+  @override
+  String get addAddress => '住所を追加';
+  @override
+  String get newAddress => '新しい住所';
+  @override
+  String get editAddress => '住所を編集';
+  @override
+  String get label => 'ラベル';
+  @override
+  String get setDefault => 'デフォルトに設定';
+  @override
+  String get defaultBadge => 'デフォルト';
+  @override
+  String get noAddressesTitle => '登録済みの住所はありません';
+  @override
+  String get noAddressesMsg => '住所を登録すると、次回からご注文手続きがスムーズになります。';
+  @override
+  String get deleteAddressQ => '住所を削除しますか？';
+  @override
+  String get cannotUndo => 'この操作は取り消せません。';
+  @override
+  String get labelFieldHint => 'ラベル（自宅、勤務先…）';
+  @override
+  String get apartmentOptional => '建物名・部屋番号（任意）';
+  @override
+  String get districtOptional => '区（任意）';
+  @override
+  String get postalOptional => '郵便番号（任意）';
+
+  @override
+  String get setAsDefaultAddress => 'デフォルトの住所に設定';
+  @override
+  String get profileUpdated => 'プロフィールを更新しました';
+  @override
+  String get notSet => '未設定';
+  @override
+  String get pleaseEnterName => 'お名前を入力してください';
+
+  @override
+  String get membershipTitle => 'メンバーシップ';
+  @override
+  String get howItWorks => 'ご利用方法';
+  @override
+  String get history => '履歴';
+  @override
+  String get noLoyaltyActivity => 'まだ履歴がありません。ご注文いただくとポイントが貯まり始めます。';
+  @override
+  String michoUntilNextTier(int n) => '次のランクまであと $n Micho';
+  @override
+  String get topTier => '最上位ランクです。いつもありがとうございます！';
+  @override
+  String loyaltyHowText(String earn, String value) =>
+      'ご利用金額 $earn ごとに 1 Micho が貯まります（店頭でのご購入も対象）。'
+      'ご利用累計が $value に達すると、ご注文手続きで「会員割引」にチェックを入れることで'
+      '商品合計が5%オフになります（クーポンコードとの併用はできません）。';
+
+  @override
+  String get orders => '注文';
+  @override
+  String get dashboard => 'ダッシュボード';
+  @override
+  String get refunds => '返金';
+  @override
+  String get menuMgmt => 'メニュー';
+  @override
+  String get customers => '顧客';
+  @override
+  String get promoCodes => 'プロモコード';
+  @override
+  String get collections => 'コレクション';
+  @override
+  String get threads => 'スレッド';
+  @override
+  String get refresh => '更新';
+  @override
+  String get kitchenQueue => 'キッチン待ち行列';
+  @override
+  String get kitchenBrand => 'Banan · キッチン';
+  @override
+  String get productionBoard => '製造ボード';
+  @override
+  String get analytics => '分析';
+  @override
+  String get kanban => 'かんばん';
+  @override
+  String get kitchenAnalytics => 'キッチン分析';
+
+  static const _tagEn = <String, String>{
+    'Không gluten': 'グルテンフリー',
+    'Thuần chay': 'ヴィーガン',
+    'Không sữa': '乳製品不使用',
+    'Không trứng': '卵不使用',
+    'Không hạt': 'ナッツ不使用',
+    'Không đường': '砂糖不使用',
+    'Ít ngọt': '甘さ控えめ',
+    'Halal': 'ハラール',
+    'Hữu cơ': 'オーガニック',
+    'Bán chạy': '人気商品',
+    'Mới': '新商品',
+    'Đầu bếp gợi ý': 'シェフのおすすめ',
+    'Giới hạn': '限定',
+  };
+
+  @override
+  String localizeTag(String tag) => _tagEn[tag] ?? tag;
+
+  @override
+  String get fromLabel => '〜';
+  @override
+  String get soldOutBadge => '売り切れ';
+  @override
+  String get pausedBadge => '販売休止中';
+  @override
+  String get seasonalBadge => '季節限定';
+  @override
+  String stockLeft(int n) => '残り$n点';
+
+  @override
+  String get menuOverline => 'メニュー';
+  @override
+  String get menuSub => 'すべてBanan各店で毎日焼きたてをご用意しています。';
+  @override
+  String get storyOverline => '私たちのストーリー';
+  @override
+  String get categoriesOverline => 'カテゴリー';
+  @override
+  String get quickOverline => 'クイック';
+  @override
+  String get reorderTitle => '🔁 再注文';
+  @override
+  String get reorderSub => '最近のご注文から商品をすばやく追加できます。';
+  @override
+  String get reorderBtn => '再注文';
+  @override
+  String orderCode(String code) => 'ご注文 $code';
+  @override
+  String plusOtherItems(int n) => '他$n点';
+  @override
+  String get chooseVariant => '種類をお選びください';
+  @override
+  String get quantity => '数量';
+  @override
+  String get viewProductDetail => '商品の詳細を見る';
+  @override
+  String get offlineMenuFresh => 'オフラインです。最後に読み込んだメニューを表示しています。';
+  @override
+  String offlineMenuAged(String age) => 'オフラインです。メニューは$age前のものです。';
+  @override
+  String get justNow => 'たった今';
+  @override
+  String minutesAgo(int n) => '$n分前';
+  @override
+  String hoursAgo(int n) => '$n時間前';
+  @override
+  String daysAgo(int n) => '$n日前';
+  @override
+  String get pausedAll => '現在、すべてのご注文受付を一時停止しています';
+  @override
+  String get pausedSome => '一部の店舗でご注文受付を一時停止しています';
+  @override
+  String get pausedOrdersAll => 'ご注文受付停止中';
+  @override
+  String get pausePickup => '店頭受け取り';
+  @override
+  String get pauseDelivery => '配達';
+  @override
+  String pausedKinds(String parts) => '$partsを一時停止中';
+  @override
+  String get bannerPrev => '前のバナー';
+  @override
+  String get bannerNext => '次のバナー';
+  @override
+  String get wholesaleTitle => '卸売';
+  @override
+  String get genericError => 'エラーが発生しました。もう一度お試しください。';
+
+  @override
+  String get newsletterTitle => 'Bananのお得な情報を受け取る';
+  @override
+  String get newsletterSub => '新作ケーキや季節のキャンペーン情報をお届けします。'
+      '配信は月2回まで、迷惑メールは送りません。';
+  @override
+  String get newsletterAlready => 'すでにご登録いただいています。ありがとうございます！';
+  @override
+  String get newsletterSent => '確認メールを送信しました。受信トレイをご確認ください。';
+  @override
+  String get subscribe => '登録する';
+  @override
+  String get emailPlaceholder => 'you@email.com';
+
+  @override
+  String get footAbout => 'Bananについて';
+  @override
+  String get footLocations => '店舗一覧';
+  @override
+  String get footFaq => 'よくあるご質問';
+  @override
+  String get footContact => 'お問い合わせ';
+  @override
+  String get footPrivacy => 'プライバシーポリシー';
+  @override
+  String get footTerms => '利用規約';
+  @override
+  String get footShipping => '配送・お届けについて';
+  @override
+  String get footPayment => 'お支払い方法';
+  @override
+  String get footRefund => '返品・返金について';
+  @override
+  String get footReferral => 'お友達紹介';
+  @override
+  String get footGiftCards => 'ギフトカード';
+  @override
+  String get footSubscription => '定期便';
+  @override
+  String get footCatering => 'ケータリング';
+  @override
+  String get footRewards => '特典';
+  @override
+  String bizReg(String no) => '事業者登録番号：$no';
+  @override
+  String bizAddress(String a) => '住所：$a';
+
+  @override
+  String get cookieText => '当サイトでは、運営に必要なCookieを使用しています。'
+      '分析用Cookieの使用に同意いただくこともできます。詳しくは';
+  @override
+  String get privacyPolicy => 'プライバシーポリシー';
+  @override
+  String get cookieEssential => '必須のみ';
+  @override
+  String get cookieAcceptAll => 'すべて許可';
+
+  @override
+  String get viewMenu => 'メニューを見る';
+  @override
+  String itemsCount(int n) => '$n点';
+  @override
+  String get feesAtCheckout => '配達料金と割引はご注文手続き時に計算されます';
+  @override
+  String get continueLabel => '次へ';
+  @override
+  String get addressAtCheckout => '住所はご注文手続き時にご入力いただきます。';
+  @override
+  String get itemsInCart => 'カート内の商品';
+  @override
+  String get addToOrderTitle => 'ご注文に追加 🧁';
+  @override
+  String get youMayLike => 'こちらもおすすめ';
+  @override
+  String get add => '追加';
+  @override
+  String leadTimeChipH(int h) => '$h時間前までに要予約';
+  @override
+  String onlyOnDays(String days) => '$daysのみ';
+  @override
+  String get notPersonalized => 'カスタマイズなし';
+  @override
+  String get personalize => 'カスタマイズ';
+  @override
+  String addedToOrder(String name) => '$nameをご注文に追加しました。';
+
+  @override
+  String get giftInvalid => 'コードが無効、期限切れ、または残高不足です。';
+  @override
+  String get fillMissing => '上記の未入力項目をご入力ください。';
+  @override
+  String get orderSuccess => 'ご注文を承りました！確認のため、こちらからご連絡いたします。';
+  @override
+  String get unpaidBadge => '未払い';
+  @override
+  String unpaidNotice(String until) =>
+      'このご注文はまだお支払いが完了していないため、店舗ではまだ受け付けられていません。$untilまでにお支払いがない場合、自動的にキャンセルされます。';
+  @override
+  String get payNow => '今すぐ支払う';
+  @override
+  String get mixedDaysError => 'カート内の商品は同じ日に販売されていません。一部の商品を削除するか、'
+      'ご注文を分けてください。';
+  @override
+  String get addressHelperEx => '例：15B8 Le Thanh Ton';
+  @override
+  String get cityHelper => 'Bananの配達は現在ホーチミン市内のみです';
+  @override
+  String get giftCardCode => 'ギフトカードコード';
+  @override
+  String giftApplied(String code, String balance, String deduct) =>
+      'カード $code · 残高 $balance · このご注文に $deduct を適用しました。';
+  @override
+  String get vatTitle => 'VATインボイス（赤インボイス）';
+  @override
+  String get vatOnSub => 'ご注文完了後、インボイスをメールでお送りします。';
+  @override
+  String get vatOffSub => '法人宛てのインボイスが必要な場合はオンにしてください。';
+  @override
+  String get companyName => '会社名';
+  @override
+  String get taxCode => '税コード';
+  @override
+  String get taxCodeHelper => '8〜13桁。';
+  @override
+  String get companyAddress => '会社住所';
+  @override
+  String get invoiceEmail => 'インボイス送付先メール';
+  @override
+  String get giftTitle => '🎁 ギフトとして贈る';
+  @override
+  String get giftOnSub => 'メッセージカード、お届け先、ギフト包装（任意）を追加できます。';
+  @override
+  String get giftOffSub => 'このご注文をギフトとして贈る場合はオンにしてください。';
+  @override
+  String get giftMessage => 'メッセージカード';
+  @override
+  String get giftMessageHint => 'カードに添えるメッセージ…';
+  @override
+  String get giftRecipientName => 'お受取人のお名前';
+  @override
+  String get giftRecipientHelper => 'ギフトを受け取る方（任意）。';
+  @override
+  String get giftRecipientPhone => 'お受取人の電話番号';
+  @override
+  String get giftPhoneHelper => '配達員がお受取人に連絡できるようにするため（任意）。';
+  @override
+  String get giftWrap => 'ギフト包装 / ギフトボックス';
+  @override
+  String get hidePrices => '納品書に価格を表示しない';
+  @override
+  String get hidePricesSub => 'お受取人には価格が表示されません。';
+  @override
+  String get useMicho => 'Micho pointsを使う';
+  @override
+  String michoBalanceApprox(String balance, String value) =>
+      '$balance ポイントをお持ちです（≈ $value）';
+  @override
+  String get orderTooSmallPoints => 'ご注文金額が少ないため、ポイントをご利用いただけません。';
+  @override
+  String pointsChip(int v) => '$v pt';
+  @override
+  String redeemPoints(int v, int max) => '$v/$max ポイントを利用';
+  @override
+  String get clearSelection => 'クリア';
+  @override
+  String get ninepayLabel => 'QR / カード / 銀行振込（9Pay）';
+  @override
+  String get decrease => '減らす';
+  @override
+  String get increase => '増やす';
+  @override
+  String get wardLabel => '地区（ホーチミン市）';
+  @override
+  String get wardLoadError => '地区一覧を読み込めませんでした';
+  @override
+  String get wardHelper => '配達料金を計算するため地区をお選びください';
+  @override
+  String get chooseWard => '地区を選択…';
+  @override
+  String get chooseWardTitle => '地区を選択（ホーチミン市）';
+  @override
+  String get wardSearchHint => '地区名または旧区名で検索';
+  @override
+  String get noWardMatch => '該当する地区がありません。';
+  @override
+  String oldAreaLabel(String a) => '旧区：$a';
+  @override
+  String feeError(String e) => '料金を計算できませんでした：$e';
+  @override
+  String get birthdayTier => 'バースデーケーキ';
+  @override
+  String get regularTier => '通常商品';
+  @override
+  String get otherWard => '別の地区';
+  @override
+  String get sameWard => '同じ地区';
+  @override
+  String deliverFrom(String store) => '発送店舗：$store';
+  @override
+  String get noStoreForWard => '現在、この地区へ配達できる店舗はありません。';
+  @override
+  String get estimatedFee => '配達料金の目安';
+  @override
+  String feeBreakTier(String tier, String band) => '• 種類：$tier · $band';
+  @override
+  String get feeBirthdaySchedule => '• バースデーケーキを含むため、別の料金表が適用されます';
+  @override
+  String feeDistanceKm(String km) => '• 店舗から地区までの距離：$km';
+  @override
+  String get feePickWard => '• 正確な料金は上で地区をお選びください';
+  @override
+  String needLeadHours(int h) => '$h時間前までのご予約が必要です';
+  @override
+  String cutoffPassed(int h) => '当日注文の受付は$h:00で終了しました。明日以降をお選びください';
+  @override
+  String cutoffNote(int h) => '当日注文は$h:00まで承ります。それ以降のご注文は翌日以降のお渡しとなります。';
+  @override
+  String onlySoldOnDays(String days) => '$daysのみ販売';
+  @override
+  String get itemsDontFit => '一部の商品はお選びの時間に対応していません';
+
+  @override
+  String get pickEarliest => '最短の受け取り可能時間を選ぶ';
+  @override
+  String get removeThese => 'これらの商品を削除';
+
+  @override
+  String get onBreak => 'ただいま休憩中です';
+  @override
+  String get branchCannotServe => 'カート内の商品をご用意できません';
+  @override
+  String branchCannotServeItems(String items) => '取り扱いなし：$items';
+  @override
+  String get useSavedAddress => '保存済みの住所を使う';
+  @override
+  String get someCakes => '一部のケーキ';
+  @override
+  String andOthers(String list, int n) => '$list ほか$n点';
+  @override
+  String onlySoldDaysNote(String who, String days) =>
+      '$whoは$daysのみの販売です。スケジュールには該当日のみ表示しています。';
+  @override
+  String leadDaysSpan(int n) => '$n日';
+  @override
+  String leadHoursSpan(int n) => '$n時間';
+  @override
+  String leadNote(String who, String span) =>
+      '$whoのご用意には$span前までのご注文が必要です。最短の時間帯を選択しました。'
+      'より遅い時間帯に変更することもできます。';
+  @override
+  String readyAt(String t) => '$tにご用意できる予定です';
+  @override
+  String get choosePickupTime => '時間を選択';
+  @override
+  String earliestAt(String t) => '最短：$t';
+  @override
+  String get pickupTimeLabel => '時間';
+  @override
+  String get noSlotsToday => 'この日は空きのある時間帯がありません。別の日をお選びください。';
+  @override
+  String confirmTime(String t) => '$tで確定';
+  @override
+  String get today => '今日';
+  @override
+  String get change => '変更';
+
+  @override
+  String variantStock(String label, int n) => '$label · 残り$n個';
+  @override
+  String variantSoldOut(String label) => '$label · 売り切れ';
+  @override
+  String almostGone(int n) => '残りわずか：あと$n個';
+  @override
+  String chooseNFlavors(int n) => 'フレーバーを$n種類お選びください';
+  @override
+  String get reviewsTitle => 'レビュー';
+  @override
+  String reviewsLoadError(String e) => 'レビューを読み込めませんでした：$e';
+  @override
+  String get noReviewsYet => 'まだレビューはありません。ご注文の商品が届いたら、'
+      'ぜひ最初のレビューを投稿してください。';
+  @override
+  String reviewsCount(int n) => '· レビュー$n件';
+  @override
+  String get anonymousCustomer => 'お客様';
+  @override
+  String get alsoBought => 'この商品を買った人はこんな商品も買っています';
+  @override
+  String get personalizedCake => 'カスタマイズ済みのケーキ';
+  @override
+  String get personalizeCake => 'このケーキをカスタマイズ';
+  @override
+  String get personalizeSub => 'ケーキへのメッセージ、キャンドル、参考写真、ご要望など…';
+
+  @override
+  String weekdayShort(int d) =>
+      const {0: '日', 1: '月', 2: '火', 3: '水', 4: '木', 5: '金', 6: '土'}[d] ??
+      '?$d';
+
+  @override
+  String get wishlistTitle => 'お気に入り';
+  @override
+  String get wishlistLoginTitle => 'ログインしてお気に入りを保存';
+  @override
+  String get wishlistLoginMsg => 'ログインすると、お気に入りのケーキをすべての端末で同期できます。';
+  @override
+  String get wishlistEmptyTitle => 'お気に入りはまだありません';
+  @override
+  String get wishlistEmptyMsg => '気になるケーキのハートをタップすると、ここに保存されます。';
+
+  // Auth screens
+  @override
+  String get backToShop => 'ショップに戻る';
+  @override
+  String get forgotPasswordQ => 'パスワードをお忘れですか？';
+  @override
+  String get optionalSuffix => '任意';
+  @override
+  String get pwMin8 => 'パスワードは8文字以上で入力してください';
+  @override
+  String get welcomeBack => 'おかえりなさい！';
+  @override
+  String get helloThere => 'こんにちは！';
+  @override
+  String get overlayHaveAccount => 'アカウントをお持ちですか？ログインしてご注文を続けましょう。';
+  @override
+  String get overlayNoAccount => 'はじめての方は会員登録で、ポイントが貯まりご注文もスムーズになります。';
+  @override
+  String get birthdayHelp => 'お誕生日';
+  @override
+  String get birthdayOptional => 'お誕生日（任意）';
+  @override
+  String get birthdayPerk => 'お誕生日には特典をプレゼントします。';
+  @override
+  String get tapToPick => 'タップして選択…';
+  @override
+  String get forgotTitle => 'パスワードの再設定';
+  @override
+  String get forgotIntro => 'メールアドレスを入力してください。パスワード再設定用のリンクをお送りします。';
+  @override
+  String get forgotSent => 'ご入力のメールアドレスが登録されている場合、パスワード再設定用の'
+      'リンクをお送りしました。受信トレイをご確認ください。';
+  @override
+  String get pleaseEnterEmail => 'メールアドレスを入力してください';
+  @override
+  String get sendResetLink => '再設定リンクを送信';
+  @override
+  String get resetTitle => 'パスワードの再設定';
+  @override
+  String get resetLinkInvalid => 'このリンクは無効か、有効期限が切れています。パスワード再設定用の'
+      'リンクをもう一度ご請求ください。';
+  @override
+  String get requestNewLink => '新しいリンクを請求';
+  @override
+  String get resetDone => 'パスワードを再設定しました。新しいパスワードでログインできます。';
+  @override
+  String get resetIntro => 'アカウントの新しいパスワードを入力してください。';
+  @override
+  String get newPassword => '新しいパスワード';
+  @override
+  String get confirmNewPassword => '新しいパスワード（確認）';
+  @override
+  String get pwMismatch => 'パスワードが一致しません';
+  @override
+  String get changePasswordTitle => 'パスワードの変更';
+  @override
+  String get passwordChanged => 'パスワードを変更しました';
+  @override
+  String get currentPassword => '現在のパスワード';
+  @override
+  String get pleaseEnterCurrentPw => '現在のパスワードを入力してください';
+  @override
+  String get changeEmailTitle => 'メールアドレスの変更';
+  @override
+  String get linkInvalidExpired => 'このリンクは無効か、有効期限が切れています。';
+  @override
+  String get confirmingEmailChange => 'メールアドレスの変更を確認しています…';
+  @override
+  String get emailChanged => 'メールアドレスを変更しました。もう一度ログインしてください。';
+
+  // Auth failure messages
+  @override
+  String get authErrInvalidCredentials => 'メールアドレスまたはパスワードが正しくありません。';
+  @override
+  String get authErrForbidden => 'お使いのアカウントではこの操作を行えません。';
+  @override
+  String get authErrSessionExpired => 'セッションの有効期限が切れました。もう一度ログインしてください。';
+  @override
+  String get authErrCheckInfo => '入力内容をご確認のうえ、もう一度お試しください。';
+  @override
+  String get authErrNetwork => 'サーバーに接続できませんでした。通信環境をご確認ください。';
+  @override
+  String get authErrEmailTaken => 'このメールアドレスまたは電話番号のアカウントはすでに存在します。';
+  @override
+  String get authErrGeneric => 'エラーが発生しました。もう一度お試しください。';
+
+  // Orders list
+  @override
+  String get filterProcessing => '処理中';
+  @override
+  String get filterCompleted => '完了';
+  @override
+  String get filterCancelled => 'キャンセル済み';
+  @override
+  String get noOrdersInFilterTitle => '注文はありません';
+  @override
+  String noOrdersInFilter(String f) => '「$f」の注文はありません。';
+  @override
+  String get reorderShort => '再注文';
+
+  // Order detail
+  @override
+  String kitchenBadge(String label) => 'キッチン · $label';
+  @override
+  String kitchenStatusLabel(KitchenStatus s) => switch (s) {
+        KitchenStatus.pendingAck => '調理開始待ち',
+        KitchenStatus.preparing => '調理中',
+        KitchenStatus.readyDispatch => '発送準備完了',
+        KitchenStatus.unknown => 'その他',
+      };
+  @override
+  String paymentStatusLabel(PaymentStatus s) => switch (s) {
+        PaymentStatus.initiated => 'お支払い待ち',
+        PaymentStatus.authorized => '受け取り時払い',
+        PaymentStatus.captured => 'お支払い済み',
+        PaymentStatus.failed => 'お支払い失敗',
+        PaymentStatus.voided => 'お支払い取り消し',
+        PaymentStatus.refunded => '返金済み',
+        PaymentStatus.unknown => 'その他',
+      };
+  @override
+  String refundStatusLabel(RefundStatus s) => switch (s) {
+        RefundStatus.requested => '申請済み',
+        RefundStatus.approved => '承認済み',
+        RefundStatus.processing => '処理中',
+        RefundStatus.completed => '返金済み',
+        RefundStatus.rejected => '却下',
+        RefundStatus.unknown => 'その他',
+      };
+  @override
+  String paymentMethodLabel(PaymentMethod m) => switch (m) {
+        PaymentMethod.cash => '代金引換（現金）',
+        PaymentMethod.stripe => '海外発行カード · Stripe',
+        PaymentMethod.payos => 'PayOS · QR / 銀行振込',
+        PaymentMethod.momo => 'MoMo',
+        PaymentMethod.ninepay => '9Pay · QR / カード / 銀行振込',
+        PaymentMethod.unknown => 'オンライン決済',
+      };
+  @override
+  String get reorderThisOrder => 'この注文を再注文';
+  @override
+  String get scheduledFor => 'お届け・受け取り予定';
+  @override
+  String get scheduleWas => '予定でした';
+  @override
+  String get prepKitchenHeadline => 'キッチンでご用意しています';
+  @override
+  String get prepCounterHeadline => 'カウンターでご用意しています';
+  @override
+  String get prepCounterDetail => 'スタッフがご用意しています。準備ができ次第お知らせします。';
+  @override
+  String get kitchenDetailPending => 'キッチンスタッフの調理開始をお待ちください。';
+  @override
+  String get kitchenDetailPreparing => 'パティシエがただいまご注文の品を作っています。';
+  @override
+  String get kitchenDetailReady => '完成し、店舗へ向かっています。';
+  @override
+  String get kitchenDetailUnknown => 'キッチンでの進捗は随時お知らせします。';
+  @override
+  String get stepPlaced => '注文済み';
+  @override
+  String get stepAccepted => '受付済み';
+  @override
+  String get stepKitchen => 'キッチン';
+  @override
+  String get stepCounter => 'カウンター';
+  @override
+  String get stepOnTheWay => '配達中';
+  @override
+  String get stepReady => '準備完了';
+  @override
+  String get stepCompleted => '完了';
+  @override
+  String get refundLabel => '返金';
+  @override
+  String get reviewProduct => '商品をレビュー';
+  @override
+  String editReview(int rating) => 'レビューを編集（$rating★）';
+  @override
+  String reviewTitleFor(String name) => 'レビュー：$name';
+  @override
+  String get reviewShareOptional => 'ご感想をお聞かせください（任意）';
+  @override
+  String get reviewHelper => '味、鮮度、パッケージなど…';
+  @override
+  String get submitReview => 'レビューを投稿';
+  @override
+  String get update => '更新';
+  @override
+  String get vatInvoiceInfo => 'VATインボイス情報';
+  @override
+  String taxIdShort(String x) => '税番号：$x';
+  @override
+  String get giftOrder => 'ギフト注文';
+  @override
+  String get giftWrapBadge => 'ギフト包装';
+  @override
+  String get giftRecipientLabel => 'お届け先';
+  @override
+  String get hidePriceNote => '納品書には金額が表示されません。';
+  @override
+  String get personalization => 'カスタマイズ';
+  @override
+  String textOnCakeLine(String text) => 'ケーキへのメッセージ：「$text」';
+  @override
+  String candleLine(String c) => 'キャンドル：$c';
+  @override
+  String flavorLine(String f) => 'フレーバー：$f';
+  @override
+  String noteLine(String n) => 'ご要望：$n';
+
+  // Reorder helper
+  @override
+  String get reorderUnavailable => 'この注文の商品は現在お取り扱いがありません';
+  @override
+  String reorderAdded(int n) => '$n点${n == 1 ? '' : ''}をカートに追加しました';
+  @override
+  String reorderAddedSkipped(int n, int k) =>
+      '$n点${n == 1 ? '' : ''}を追加しました · $k点は販売終了です';
+
+  // Profile
+  @override
+  String get changeAvatar => 'プロフィール写真を変更';
+  @override
+  String get uploadingPhoto => 'アップロード中…';
+  @override
+  String avatarTooBig(int mb) => '画像が$mb MBを超えています。より小さい画像を選んでください。';
+  @override
+  String avatarBigWarn(int mb) => '画像サイズが大きいため（$mb MB超）、アップロードに時間がかかる場合があります。';
+  @override
+  String get avatarUpdated => 'プロフィール写真を更新しました';
+  @override
+  String get uploadFailed => 'アップロードに失敗しました。もう一度お試しください';
+  @override
+  String get emailChangeLinkSent => '新しいメールアドレスに確認リンクを送信しました。受信トレイをご確認ください。';
+  @override
+  String get genderLabel => '性別';
+  @override
+  String genderName(Gender g) => switch (g) {
+        Gender.male => '男性',
+        Gender.female => '女性',
+        Gender.other => 'その他',
+      };
+  @override
+  String get wishlistSub => '保存したケーキや商品';
+  @override
+  String get voucherWallet => 'クーポン';
+  @override
+  String get voucherWalletSub => '利用可能・使用済み・期限切れのクーポン';
+  @override
+  String get changePasswordSub => 'ログイン用のパスワードを変更します。';
+  @override
+  String get changeEmailSub => '新しいメールアドレスに確認リンクをお送りします。';
+  @override
+  String get marketingOptIn => 'キャンペーン・お知らせ';
+  @override
+  String get marketingOptInSub => 'お得な情報、新商品、Bananのニュースレター';
+  @override
+  String get orderUpdatesOptIn => '注文状況のお知らせ';
+  @override
+  String get orderUpdatesOptInSub => 'ご注文の処理・配達状況をお知らせします。';
+  @override
+  String get deleteAccount => 'アカウントを削除';
+  @override
+  String get changeEmailIntro => '新しいメールアドレスに確認リンクをお送りします。'
+      '確認が完了するまでメールアドレスは変更されません。';
+  @override
+  String get newEmail => '新しいメールアドレス';
+  @override
+  String get pleaseEnterNewEmail => '新しいメールアドレスを入力してください';
+  @override
+  String get emailTaken => 'このメールアドレスはすでに使用されています。';
+  @override
+  String get wrongPassword => 'パスワードが正しくありません。';
+  @override
+  String get emailInvalidOrSame => 'メールアドレスが無効か、現在のメールアドレスと同じです。';
+  @override
+  String get sendConfirmLink => '確認リンクを送信';
+  @override
+  String get deleteAccountWarn => 'この操作は取り消せません。過去の注文は匿名化されます。';
+  @override
+  String get pleaseEnterPwConfirm => '確認のためパスワードを入力してください。';
+  @override
+  String get deleteForever => '完全に削除';
+
+  // Addresses
+  @override
+  String get deliveryOnlyHcm => 'Bananの配達は現在ホーチミン市内のみです';
+  @override
+  String get wardReformHelper => '2025年7月の行政区画改編により、区ではなく地区を選択してください';
+
+  // Voucher wallet
+  @override
+  String get tabAvailable => '利用可能';
+  @override
+  String get tabUsed => '使用済み';
+  @override
+  String get tabExpired => '期限切れ';
+  @override
+  String get noVoucherTitle => 'クーポンはありません';
+  @override
+  String get noVoucherAvailable => '利用可能なクーポンはありません。';
+  @override
+  String get noVoucherUsed => 'まだクーポンを使用していません。';
+
+  @override
+  String get noVoucherExpired => '期限切れのクーポンはありません。';
+  @override
+  String discountPercent(String p) => '$p%オフ';
+  @override
+  String discountAmount(String a) => '$aオフ';
+  @override
+  String codeCopied(String code) => 'コード $code をコピーしました';
+  @override
+  String get copyCode => 'コードをコピー';
+  @override
+  String minOrder(String a) => '最低注文金額 $a';
+  @override
+  String usedOn(String d) => '$d に使用済み';
+  @override
+  String expiresOn(String d) => '有効期限 $d';
+
+  // Membership
+  @override
+  String tierName(MembershipTier t) => switch (t) {
+        MembershipTier.bronze => 'ブロンズ',
+        MembershipTier.silver => 'シルバー',
+        MembershipTier.gold => 'ゴールド',
+        MembershipTier.platinum => 'プラチナ',
+      };
+  @override
+  String tierHeading(String name) => '$nameランク';
+  @override
+  String get memberTiers => '会員ランク';
+  @override
+  String get currentBadge => '現在';
+  @override
+  String fromPoints(String n) => '$nポイント以上';
+  @override
+  String pointsToTier(int n, String tier) => '$tierまであと$nポイント';
+  @override
+  String loyaltyTypeLabel(LoyaltyEventType t) => switch (t) {
+        LoyaltyEventType.earn => '獲得',
+        LoyaltyEventType.redeem => '利用',
+        LoyaltyEventType.expire => '失効',
+        LoyaltyEventType.birthday => 'お誕生日ギフト',
+        LoyaltyEventType.adjustment => '調整',
+      };
+
+  // Wholesale
+  @override
+  String get whTitle => '卸注文';
+  @override
+  String get whTabOrder => '注文';
+  @override
+  String get whTabMyOrders => '注文履歴';
+  @override
+  String get whTabDebts => '売掛金';
+  @override
+  String get whPickAtLeastOne => '商品を1つ以上お選びください。';
+  @override
+  String get whNeedDeliveryDate => 'この契約では配達日の指定が必要です。';
+  @override
+  String whOrderPlaced(String code) => '$code を注文しました。管理者の確認をお待ちください。';
+  @override
+  String get whNotAllowed => 'お客様のアカウントでは卸注文が有効になっていません。';
+  @override
+  String get whNoContractsTitle => '有効な契約はありません';
+  @override
+  String get whNoContractsMsg => '契約条件と商品カタログについてはBananまでお問い合わせください。';
+  @override
+  String whMinOrderValue(String a) => '最低注文金額 $a';
+  @override
+  String whContractPrice(String a) => '契約価格 $a';
+  @override
+  String whMinQty(int n) => '最低$n個';
+  @override
+  String whMultipleQty(int n) => '$n個単位';
+  @override
+  String whOnlyDeliverOn(String days) => '配達は$daysのみ';
+  @override
+  String whLeadDays(int n) => '$n日前までにご注文';
+  @override
+  String whLeadHours(int n) => '$n時間前までにご注文';
+  @override
+  String get whPickDateRequired => '配達日を選択（必須）';
+  @override
+  String get whPickDate => '配達日時を選択';
+  @override
+  String whDeliverAt(String t) => '配達 $t';
+  @override
+  String whCutoffNote(String hhmm) => '$hhmmまでのご注文で翌日配達となります。';
+  @override
+  String whNoDeliveryOn(String days) => '$daysは配達がありません。';
+  @override
+  String get whPoLabel => '発注書（PO）番号（任意）';
+  @override
+  String get whPoHelper => '貴社内のPO番号です。照合用に注文書に'
+      '印字されます。';
+  @override
+  String get whOrderNotes => '注文メモ';
+  @override
+  String whShipFee(String a) => '配達料：$a';
+  @override
+  String whSubmit(String a) => '掛け払いで注文 · $a';
+  @override
+  String get whNoOrders => '注文はまだありません';
+  @override
+  String get whNoOrdersMsg => 'ご注文いただいた卸注文がここに表示されます。';
+  @override
+  String whStatusLabel(String status) => switch (status) {
+        'PENDING' => '注文済み',
+        'DELIVERING' => '配達中',
+        'CANCELLED' => 'キャンセル済み',
+        _ => '確認済み',
+      };
+  @override
+  String get whNoDebtsTitle => '売掛金はありません';
+  @override
+  String get whNoDebtsMsg => '契約に基づく売掛金がここに表示されます。';
+  @override
+  String get whOrderFallback => '注文';
+  @override
+  String get whDebtStartsAfterConfirm => '支払期限は注文確認後に開始します';
+  @override
+  String whDueDate(String d) => '支払期限 $d';
+  @override
+  String whDebtStatusLabel(String status, {required bool overdue}) {
+    if (overdue) return '期限超過';
+    return switch (status) {
+      'PENDING' => '確認待ち',
+      'PAID' => '支払済み',
+      'CANCELLED' => 'キャンセル済み',
+      _ => '未払い',
+    };
+  }
+
+  // Cake wizard
+  @override
+  String candleRegular(int n) => 'ろうそく$n本${n == 1 ? '' : ''}';
+  @override
+  String candleSpiral(int n) => 'らせんろうそく$n本${n == 1 ? '' : ''}';
+  @override
+  String candleNumber(int n) => '数字ろうそく $n';
+  @override
+  String get noteWord => 'メモ';
+  @override
+  String wizTitle(String name) => 'カスタマイズ：$name';
+  @override
+  String get wizIntro => 'すべて任意です。不要な項目は空欄のままで結構です。'
+      'その場合は当店の標準仕様でお作りします。';
+  @override
+  String get wizTextOnCake => 'ケーキに入れる文字';
+  @override
+  String get wizTextHint => '例：Happy birthday An!';
+  @override
+  String get wizCandles => 'ろうそく';
+  @override
+  String get wizCandleType => 'ろうそくの種類';
+  @override
+  String get wizNoCandles => 'ろうそくなし';
+  @override
+  String get wizRegularCandles => '通常';
+  @override
+  String get wizNumberCandles => '数字';
+  @override
+  String get wizSpiralCandles => 'らせん';
+  @override
+  String get wizSpiralCount => 'らせんろうそくの本数';
+  @override
+  String get wizCandleCount => 'ろうそくの本数';
+  @override
+  String get wizAge => '年齢';
+  @override
+  String get wizAgeHelper => '年齢を表す数字ろうそく（例：25）';
+  @override
+  String get wizNote => 'パティシエへの追加メモ';
+  @override
+  String get wizNoteHint => '例：金色のリボン、トッピングなし、クリーム甘さ控えめ…';
+  @override
+  String get wizClear => 'カスタマイズをクリア';
+
+  // Flavor composer
+  @override
+  String get flavorPickTitle => 'マカロンのフレーバーを選ぶ';
+  @override
+  String get optionsTitle => 'オプション';
+  @override
+  String flavorPicked(int n, int total) => '$n/$total 選択済み';
+  @override
+  String get flavorComplete => '選択完了！カートに追加できます。';
+  @override
+  String flavorRemaining(int n) => 'あと$n個お選びください（重複可）。';
+
+  // Bundles
+  @override
+  String get viewCartShort => 'カートを見る';
+  @override
+  String get comboTitle => 'セット';
+  @override
+  String get bundleIncludes => 'セット内容';
+  @override
+  String get addComboToCart => 'セットをカートに追加';
+  @override
+  String addedCombo(String name) => 'セット「$name」をカートに追加しました。';
+  @override
+  String get productFallback => '商品';
+  @override
+  String bundleQty(int n) => '$n個${n == 1 ? '' : ''}';
+  @override
+  String saveAmount(String a) => '$aお得';
+  @override
+  String get bundlesOverline => 'お得なセット';
+  @override
+  String get bundlesTitle => 'おすすめセット';
+  @override
+  String get bundlesSub => '個別購入より10〜20%お得なセットです。';
+  @override
+  String get allBundlesTitle => 'すべてのセット';
+  @override
+  String get allBundlesSub => '販売中のセットをすべて掲載しています。お好きなものをお選びください。';
+
+  // Contact FAB
+  @override
+  String get contactTitle => 'お問い合わせ';
+  @override
+  String get needHelp => 'お困りですか？';
+  @override
+  String get contactSub => 'ご希望の連絡方法をお選びください。営業時間内はZaloでの'
+      'お問い合わせが最も早くご返信できます。';
+  @override
+  String get zaloSub => 'ZaloでBananチームとチャット';
+  @override
+  String get messengerSub => 'BananのページからMessengerでメッセージ';
+  @override
+  String get callDirect => 'お電話でのお問い合わせ';
+  @override
+  String get sendEmail => 'メールを送る';
+
+  // Promo popup
+  @override
+  String get promoClose => '閉じる';
+  @override
+  String promoAutoClose(int sec) => '$sec秒後に自動で閉じます';
+
+  // Payment return
+  @override
+  String get paymentReceived => 'お支払いのリクエストを受け付けました。ご注文の確認は'
+      'メールまたはお電話でご連絡いたします。';
+  @override
+  String get paymentProcessing => 'お支払いを処理中です…';
+
+  // Contact page
+  @override
+  String get contactHeading => 'Bananへのお問い合わせ';
+  @override
+  String get contactIntro => 'ご注文、オーダーケーキ、提携についてのご質問はありますか？'
+      'メッセージをお送りいただくか、お急ぎの場合はホットラインにお電話ください。';
+  @override
+  String get sendMessageTitle => 'メッセージを送る';
+  @override
+  String get nameReq => 'お名前 *';
+  @override
+  String get enterName => 'お名前を入力してください';
+  @override
+  String get emailReq => 'メールアドレス *';
+  @override
+  String get subjectLabel => '件名';
+  @override
+  String get messageReq => 'メッセージ *';
+  @override
+  String get enterMessage => 'メッセージを入力してください';
+  @override
+  String get sending => '送信中…';
+  @override
+  String get sendMessageBtn => 'メッセージを送信';
+  @override
+  String get sendFailed => '送信に失敗しました。もう一度お試しください。';
+  @override
+  String get sentTitle => 'メッセージを送信しました！';
+  @override
+  String get sentThanks => 'お問い合わせありがとうございます。できるだけ早くメールでご返信いたします。';
+  @override
+  String get sendAnother => '別のメッセージを送る';
+
+  // FAQ / About
+  @override
+  String get faqTitle => 'よくあるご質問';
+  @override
+  String get faqNotFound => 'お探しの答えが見つかりませんか？お問い合わせください';
+  @override
+  String get aboutTitle => 'Bananについて';
+  @override
+  String get viewLocations => '店舗一覧を見る';
+
+  // Marketing pages
+  @override
+  String get programNotOpen => 'プログラムはまだ開始していません';
+  @override
+  String get programNotOpenMsg => 'この機能はまだご利用いただけません。';
+  @override
+  String get loadFailed => '読み込めませんでした。';
+  @override
+  String get referralTitle => 'お友達紹介';
+  @override
+  String get referralLoginPrompt => 'ログインして紹介コードを取得してください。';
+  @override
+  String referralBonus(int referrer, int referee) =>
+      'お友達の初回注文で、あなたに$referrerポイント・お友達に$refereeポイント'
+      'を進呈します。';
+  @override
+  String get referralCodeLabel => '紹介コード';
+  @override
+  String get shareLinkLabel => '共有リンク';
+  @override
+  String get copyLabel => 'コピー';
+  @override
+  String get copied => 'コピーしました';
+  @override
+  String get giftCardTitle => 'ギフトカード';
+  @override
+  String get giftCardHeading => 'Bananギフトカード';
+  @override
+  String giftCardExpiry(int months) => '有効期間$monthsか月';
+  @override
+  String get contactToBuyGiftCard => 'ギフトカードのご購入はお問い合わせください';
+  @override
+  String get subscriptionTitle => '定期便';
+  @override
+  String get subscriptionHeading => 'ケーキの定期お届け';
+  @override
+  String perPeriod(String p) => '$pごと';
+  @override
+  String get contactToSubscribe => '定期便のお申し込みはお問い合わせください';
+  @override
+  String get cateringTitle => 'ケータリング／イベント';
+  @override
+  String get cateringHeading => 'ケータリング＆イベント';
+  @override
+  String get cateringSentTitle => 'リクエストを送信しました！';
+  @override
+  String get cateringSentMsg => 'ありがとうございます。店舗より追ってご連絡いたします。';
+  @override
+  String cateringMinLead(int minGuests, int leadDays) =>
+      '最少$minGuests名様から・$leadDays日前までにご注文ください';
+  @override
+  String get fillNamePhoneContent => 'お名前、電話番号、メッセージをご入力ください。';
+  @override
+  String get phoneReq => '電話番号 *';
+  @override
+  String get emailOptionalLabel => 'メールアドレス（任意）';
+  @override
+  String get contentHintCatering => '人数、日付、ご希望のケーキ／サービスなど…';
+  @override
+  String get sendRequest => 'リクエストを送信';
+  @override
+  String get rewardsTitle => 'ポイント交換';
+  @override
+  String yourPoints(int n) => '保有ポイント：$n';
+  @override
+  String get noRewards => '交換できる特典はまだありません。';
+  @override
+  String rewardPoints(int n) => '$nポイント';
+  @override
+  String get redeemWord => '交換';
+  @override
+  String get notEnough => 'ポイント不足';
+  @override
+  String get rewardsNote => 'ポイント交換をご希望の場合は、お問い合わせいただくか店頭カウンターへお越しください。'
+      'スタッフが確認のうえポイントを差し引きます。';
+
+  // Checkout validation
+  @override
+  String get checkMarkedFields => '強調表示された項目をご確認ください';
+  @override
+  String get storeClosedPickTime => '現在営業時間外です。「日時を指定」を選んで時間をお選びください。';
+  @override
+  String get storeClosedAtTime => '選択された時間は営業時間外です。別の時間をお選びください。';
+  @override
+  String get sessionExpiredGuest =>
+      'セッションの有効期限が切れました。このままご注文いただけます。下にお名前と電話番号を入力し、「注文を確定する」を押してください。';
+  @override
+  String get taxCodeTooShort => '税番号は8文字以上で入力してください';
+  @override
+  String get wardRequired => '地区を選択してください';
+  @override
+  String get wardNotServiceable => 'このエリアへの配達はまだ行っておりません';
+  @override
+  String get wardReselectRequired => 'この地区は2025年の行政区画再編で分割されました。新しい地区をお選びください';
+  @override
+  String get quotePending => '配達料を計算中です。少し待ってからもう一度お試しください';
+  @override
+  String get quoteFailed => '配達料を計算できませんでした。もう一度お試しください。';
+  @override
+  String get pickupStoreRequired => '受け取り店舗を選択してください';
+  @override
+  String get cityHcmName => 'ホーチミン市';
+  @override
+  String shopProductNamed(String name) => '$nameを見る';
+  @override
+  String get learnMore => '詳しく見る';
+  @override
+  String get closePopup => '閉じる';
+  @override
+  String get wrongAppTitle => 'ログインページが違います';
+  @override
+  String wrongAppBody(String expected, String actual) =>
+      'このページは$expected向けですが、お客様のアカウントは$actualです。ログアウトして正しいページからログインしてください。';
+  @override
+  String get wrongAppCustomers => 'お客様';
+  @override
+  String get wrongAppStaff => 'スタッフアカウント';
+  @override
+  String get surveyLoadFailed => 'アンケートを読み込めませんでした。通信環境をご確認ください。';
+  @override
+  String get surveyNotReady => 'アンケートは準備中です。後ほどお越しください。';
+  @override
+  String get taxCodeShort => '税番号';
 }

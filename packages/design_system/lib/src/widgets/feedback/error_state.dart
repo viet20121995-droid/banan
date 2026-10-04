@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../tokens/spacing.dart';
 
+/// UI language for the design system's own built-in labels (`vi`/`en`/`ja`).
+/// The customer app keeps it in step with its language switcher; staff apps
+/// leave it Vietnamese.
+String bananUiLang = 'vi';
+
 class ErrorState extends StatelessWidget {
   const ErrorState({
     required this.message,
-    this.title = 'Có lỗi xảy ra',
+    this.title,
     this.onRetry,
     super.key,
   });
 
-  final String title;
+  /// Defaults to "something went wrong" in [bananUiLang].
+  final String? title;
   final String message;
   final VoidCallback? onRetry;
 
@@ -42,7 +48,12 @@ class ErrorState extends StatelessWidget {
               ),
               const SizedBox(height: BananSpacing.lg),
               Text(
-                title,
+                title ??
+                    switch (bananUiLang) {
+                      'en' => 'Something went wrong',
+                      'ja' => 'エラーが発生しました',
+                      _ => 'Có lỗi xảy ra',
+                    },
                 style: theme.textTheme.headlineSmall,
                 textAlign: TextAlign.center,
               ),
@@ -57,7 +68,13 @@ class ErrorState extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onRetry,
                   icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: const Text('Thử lại'),
+                  label: Text(
+                    switch (bananUiLang) {
+                      'en' => 'Retry',
+                      'ja' => '再試行',
+                      _ => 'Thử lại',
+                    },
+                  ),
                 ),
               ],
             ],
