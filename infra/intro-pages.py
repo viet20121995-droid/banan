@@ -28,7 +28,9 @@ WEB = Path(__file__).resolve().parent.parent / 'web-intro'
 TODAY = datetime.date.today().strftime('%d/%m/%Y')
 
 # Ratings and coordinates read off each Google Maps listing on 03/10/2026; cid is
-# the listing's stable id. Hours mirror GET /stores (identical for all four).
+# the listing's stable id. Hours mirror GET /stores (identical for every shop).
+# Đường 39 (opened 10/2026) has no Google listing yet: cid None, no rating, and
+# its coordinates are next door's (1B Đường 39) — fill them in once it is listed.
 STORES = [
     dict(slug='le-thanh-ton', id='aa237695', name='Lê Thánh Tôn', area='Quận 1', street='15B8 Lê Thánh Tôn',
          ward='Sài Gòn', phone='+84867540939', cid='2223993201013558070', lat=10.780411, lng=106.70474,
@@ -42,6 +44,9 @@ STORES = [
     dict(slug='truong-sa', id='9a2138f2', name='Trường Sa', area='Phú Nhuận', street='360 Trường Sa',
          ward='Cầu Kiệu', phone='+84379555934', cid='6797065644553342146', lat=10.7961216, lng=106.6897079,
          rating='4,9', reviews=495),
+    dict(slug='duong-39', id='02ea4117', name='Đường 39', area='Thảo Điền', street='1A Đường 39',
+         ward='An Khánh', phone='+84868897131', cid=None, lat=10.8028, lng=106.7339,
+         rating=None, reviews=0),
 ]
 HOURS_TEXT = 'Mở cửa 10:00–21:30 thứ Hai đến thứ Năm, 10:00–22:00 thứ Sáu đến Chủ nhật.'
 HOURS_LD = [
@@ -51,6 +56,8 @@ HOURS_LD = [
      'opens': '10:00', 'closes': '22:00'},
 ]
 TOTAL_REVIEWS = sum(s['reviews'] for s in STORES)
+RATED = sum(1 for s in STORES if s['rating'])
+N_STORES = len(STORES)
 
 # /menu sections in reading order: API category name -> (anchor, heading, landing page).
 MENU = [
@@ -269,7 +276,7 @@ def layout(slug, title, desc, crumb, body, extra_ld=(), og_image='/img/strawberr
 
 def rating_line():
     return (f'    <p class="rating"><b>4,9</b><span class="stars" aria-hidden="true">★★★★★</span>'
-            f'<span>hơn {dots(TOTAL_REVIEWS // 100 * 100)} đánh giá Google cho 4 cửa hàng</span></p>')
+            f'<span>hơn {dots(TOTAL_REVIEWS // 100 * 100)} đánh giá Google cho {RATED} cửa hàng</span></p>')
 
 
 def facts(p):
@@ -315,9 +322,15 @@ def section(title, inner, anchor=None):
 def stores_block():
     lis = '\n'.join(
         f'        <li class="store"><b><a href="/{s["slug"]}">Banan – {e(s["name"])}</a></b>{e(s["street"])}, P. {e(s["ward"])} ({e(s["area"])})<br>'
-        f'<a href="tel:{s["phone"]}">{phone(s)}</a> · <a href="https://www.google.com/maps?cid={s["cid"]}" target="_blank" rel="noopener">Chỉ đường</a></li>'
+        f'<a href="tel:{s["phone"]}">{phone(s)}</a> · <a href="{maps_url(s)}" target="_blank" rel="noopener">Chỉ đường</a></li>'
         for s in STORES)
     return section('Mua ở đâu', f'      <ul class="stores">\n{lis}\n      </ul>\n      <p class="hours">{HOURS_TEXT}</p>')
+
+
+def maps_url(s):
+    if s['cid']:
+        return f'https://www.google.com/maps?cid={s["cid"]}'
+    return f'https://www.google.com/maps/search/?api=1&query={s["lat"]},{s["lng"]}'
 
 
 def phone(s):
@@ -332,13 +345,13 @@ def faq(qas):
 
 def bakery(s):
     url = f'{SITE}/{s["slug"]}'
-    maps = f'https://www.google.com/maps?cid={s["cid"]}'
+    maps = maps_url(s)
     return {'@type': 'Bakery', '@id': f'{url}#bakery', 'name': f'Banan – {s["name"]}', 'url': url,
             'image': f'{SITE}/img/strawberry-cake.jpg', 'telephone': s['phone'], 'servesCuisine': 'Japanese pâtisserie',
             'priceRange': '₫₫', 'address': {'@type': 'PostalAddress', 'streetAddress': f'{s["street"]}, Phường {s["ward"]}',
                                            'addressLocality': 'Thành phố Hồ Chí Minh', 'addressCountry': 'VN'},
             'geo': {'@type': 'GeoCoordinates', 'latitude': s['lat'], 'longitude': s['lng']},
-            'hasMap': maps, 'sameAs': [maps], 'hasMenu': f'{SITE}/menu', 'openingHoursSpecification': HOURS_LD,
+            'hasMap': maps, **({'sameAs': [maps]} if s['cid'] else {}), 'hasMenu': f'{SITE}/menu', 'openingHoursSpecification': HOURS_LD,
             'parentOrganization': {'@id': f'{SITE}/#brand'},
             'potentialAction': {'@type': 'OrderAction', 'target': f'{ORDER}/'}}
 
@@ -409,9 +422,9 @@ def pages(P, cats):
 
     yield 'banh-flan-pudding', landing(
         'banh-flan-pudding', 'Bánh flan & pudding kiểu Nhật ở Sài Gòn | Banan Fukuoka',
-        f'Creme Flan, Matcha Pudding matcha Ise, Chocolate Pudding, Mango Pudding và Raspberry Milk Cheezu. Từ {vnd(low(*dict(flan)))}, đặt online hoặc ghé 4 cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
+        f'Creme Flan, Matcha Pudding matcha Ise, Chocolate Pudding, Mango Pudding và Raspberry Milk Cheezu. Từ {vnd(low(*dict(flan)))}, đặt online hoặc ghé {N_STORES} cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
         'Flan & Pudding', 'Bánh flan & pudding kiểu Nhật',
-        f'{have(flan)} món flan và pudding của Banan Fukuoka Pâtisserie Saigon, giá từ {vnd(low(*dict(flan)))}. Đặt online để nhận tại cửa hàng hoặc giao tận nơi, hoặc ghé một trong 4 cửa hàng ở TP.HCM.',
+        f'{have(flan)} món flan và pudding của Banan Fukuoka Pâtisserie Saigon, giá từ {vnd(low(*dict(flan)))}. Đặt online để nhận tại cửa hàng hoặc giao tận nơi, hoặc ghé một trong {N_STORES} cửa hàng ở TP.HCM.',
         flan, P, qas=[
             ('Flan và pudding ở Banan giá bao nhiêu?', e('. '.join(f'{n} {price_text(P[n])}' for n, _ in flan if n in P) + '.')),
             ('Matcha Pudding dùng matcha gì?', 'Matcha nhập khẩu từ vùng Ise, Nhật Bản.'),
@@ -420,7 +433,7 @@ def pages(P, cats):
 
     yield 'matcha', landing(
         'matcha', 'Matcha đánh lạnh ở Sài Gòn: Mango, Ube, Dango Matcha | Banan',
-        f'Matcha latte, matcha đánh lạnh, Earl Grey matcha, Mango Matcha, Ube Matcha Latte, Dango Kinako và Dango Ube Matcha. Từ {vnd(low(*dict(matcha)))} tại 4 cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
+        f'Matcha latte, matcha đánh lạnh, Earl Grey matcha, Mango Matcha, Ube Matcha Latte, Dango Kinako và Dango Ube Matcha. Từ {vnd(low(*dict(matcha)))} tại {N_STORES} cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
         'Matcha', 'Matcha đánh lạnh & đồ uống matcha',
         f'{have(matcha)} ly matcha của Banan Fukuoka Pâtisserie Saigon, giá từ {vnd(low(*dict(matcha)))}. Khi đặt online, nhiều ly chọn được mức đường, đá và kem.',
         matcha, P, more='\n'.join([
@@ -429,12 +442,12 @@ def pages(P, cats):
         qas=[('Matcha đánh lạnh là gì?', 'Là matcha được đánh với nước lạnh thay vì nước nóng. Ở Banan có Cold whisked Matcha Latte và Cold whisked Earl Grey Matcha.'),
              *([('Có đổi sang sữa yến mạch không?', e(f'Có với {", ".join(oat)}: chọn sữa Oatside, thêm {vnd(oat_delta)}.'))] if oat else []),
              ('Chi nhánh nào cũng có đủ món?', e(' '.join(f'{n} không có ở chi nhánh {" và ".join(s)}.' for n, s in not_everywhere)
-                                                 + ' Các ly còn lại có ở cả 4 cửa hàng.') if not_everywhere else 'Có, cả 4 cửa hàng đều bán đủ các ly matcha.'),
+                                                 + f' Các ly còn lại có ở cả {N_STORES} cửa hàng.') if not_everywhere else f'Có, cả {N_STORES} cửa hàng đều bán đủ các ly matcha.'),
              deliver])
 
     yield 'daifuku', landing(
         'daifuku', 'Daifuku Nhật ở Sài Gòn: Ichigo, Matcha, Kiwi | Banan Fukuoka',
-        f'Ichigo Daifuku dâu tây, Matcha Daifuku và Daifuku Kiwi vàng: bánh mochi nhân kiểu Nhật, từ {vnd(low(*dict(daifuku)))}. Đặt online hoặc ghé 4 cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
+        f'Ichigo Daifuku dâu tây, Matcha Daifuku và Daifuku Kiwi vàng: bánh mochi nhân kiểu Nhật, từ {vnd(low(*dict(daifuku)))}. Đặt online hoặc ghé {N_STORES} cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
         'Daifuku', 'Daifuku – bánh mochi nhân kiểu Nhật',
         f'Daifuku (大福) là bánh mochi Nhật có nhân. Banan có {have(daifuku)} loại, giá từ {vnd(low(*dict(daifuku)))}.',
         daifuku, P, qas=[
@@ -444,7 +457,7 @@ def pages(P, cats):
 
     yield 'mochi-basque', landing(
         'mochi-basque', 'Mochi Basque: bánh phô mai nướng bọc mochi | Banan Fukuoka',
-        f'Mochi Basque vị Original, Ube, Matcha cỡ 8cm và 10cm, cùng Mochi Berry Princess. Từ {vnd(low(*dict(mochi)))}. Đặt online hoặc ghé 4 cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
+        f'Mochi Basque vị Original, Ube, Matcha cỡ 8cm và 10cm, cùng Mochi Berry Princess. Từ {vnd(low(*dict(mochi)))}. Đặt online hoặc ghé {N_STORES} cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
         'Mochi Basque', 'Mochi Basque',
         f'Bánh phô mai Basque nướng cháy của Banan với 3 vị Original, Ube, Matcha và 2 cỡ 8cm, 10cm. Giá từ {vnd(low(*dict(mochi)))}.',
         mochi, P, qas=[
@@ -479,25 +492,26 @@ def pages(P, cats):
     n_items = sum(len(v) for v in cats.values())
     body = '\n'.join([
         '    <h1>Menu Banan</h1>',
-        f'    <p class="lead">{n_items} món tại 4 cửa hàng Banan Fukuoka Pâtisserie Saigon, kèm giá. Chạm vào tên món để đặt online.</p>',
+        f'    <p class="lead">{n_items} món tại {N_STORES} cửa hàng Banan Fukuoka Pâtisserie Saigon, kèm giá. Chạm vào tên món để đặt online.</p>',
         rating_line(), chips, *secs,
         f'    <p class="note">Giá cập nhật {TODAY}. Giá cuối cùng hiển thị khi đặt tại {order}.</p>',
         stores_block()])
     yield 'menu', layout('menu', 'Menu Banan Fukuoka Patisserie: giá bánh & đồ uống',
-                         'Menu kèm giá của Banan Fukuoka Pâtisserie Saigon: daifuku, mochi basque, flan, pudding, bánh sinh nhật, macaron, matcha. Đặt online hoặc ghé 4 cửa hàng.',
+                         f'Menu kèm giá của Banan Fukuoka Pâtisserie Saigon: daifuku, mochi basque, flan, pudding, bánh sinh nhật, macaron, matcha. Đặt online hoặc ghé {N_STORES} cửa hàng.',
                          'Menu', body, og_image='/img/strawberry-cake.jpg')
 
     # One page per shop.
     links = [link(h, t) for h, t in NAV[1:]]
     for s in STORES:
         missing = [p['name'] for c in cats.values() for p in c if store_names(p.get('excludedStoreIds')).count(s['name'])]
-        maps = f'https://www.google.com/maps?cid={s["cid"]}'
+        maps = maps_url(s)
+        rating = (f'\n      <p class="rating" style="margin:0"><b>{s["rating"]}</b><span class="stars" aria-hidden="true">★★★★★</span>'
+                  f'<span>{dots(s["reviews"])} đánh giá trên Google Maps</span></p>') if s['rating'] else ''
         info = f"""    <div class="info">
       <p><b>{e(s['street'])}, P. {e(s['ward'])} ({e(s['area'])}), TP.HCM</b></p>
       {f"<p>{e(s['note'])}</p>" if s.get('note') else ''}
       <p>{HOURS_TEXT}</p>
-      <p>Điện thoại <a href="tel:{s['phone']}">{phone(s)}</a></p>
-      <p class="rating" style="margin:0"><b>{s['rating']}</b><span class="stars" aria-hidden="true">★★★★★</span><span>{dots(s['reviews'])} đánh giá trên Google Maps</span></p>
+      <p>Điện thoại <a href="tel:{s['phone']}">{phone(s)}</a></p>{rating}
       <div class="actions"><a class="pill" href="{maps}" target="_blank" rel="noopener">Chỉ đường</a><a class="pill ghost" href="tel:{s['phone']}">Gọi</a><a class="pill ghost" href="{ORDER}/">Đặt online</a></div>
     </div>"""
         has = section(f'Có gì ở Banan {s["name"]}', '      <ul class="chips">' + ''.join(f'<li>{x}</li>' for x in [link('/menu', 'Menu đầy đủ'), *links]) + '</ul>'
@@ -509,7 +523,7 @@ def pages(P, cats):
                           info, has, others])
         yield s['slug'], layout(
             s['slug'], f'Banan {s["name"]}, {s["area"]} – tiệm bánh Nhật | Banan Fukuoka',
-            f'{s["street"]}, P. {s["ward"]} ({s["area"]}). Mở từ 10:00 hằng ngày. Daifuku, mochi basque, flan, pudding, bánh sinh nhật, matcha. {s["rating"]}★ với {dots(s["reviews"])} đánh giá Google.',
+            f'{s["street"]}, P. {s["ward"]} ({s["area"]}). Mở từ 10:00 hằng ngày. Daifuku, mochi basque, flan, pudding, bánh sinh nhật, matcha.' + (f' {s["rating"]}★ với {dots(s["reviews"])} đánh giá Google.' if s['rating'] else ''),
             f'Banan {s["name"]}', body, extra_ld=[{'@context': 'https://schema.org', **bakery(s)}])
 
 
