@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<link rel="apple-touch-icon" href="/favicon.png">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta name="theme-color" content="#F7ECE1">
+<!-- In-store menu board for the counter iPad (12.9", landscape).
+     Pages come from the designer files "BANAN MENU 1–20" in Drive. -->
+<title>Banan Menu Board</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Banan Menu">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one-screen kiosk for a 12.9" iPad in landscape — a big
+   Drinks / Cakes switch on top, the printed menu pages swiped below. */
+:root {
+  --paper: #F7ECE1;      /* the menu's own cream */
+  --paper-2: #EFE0D0;    /* switch track */
+  --card: #FFF8F1;
+  --ink: #3B1513;        /* brand ink (from the brand red) */
+  --ink-soft: #7A5A52;
+  --matcha: #4F6B33;     /* Drinks */
+  --berry: #962924;      /* Cakes */
+  --line: #E2CDB8;
+  --display: "Bricolage Grotesque", "Be Vietnam Pro", system-ui, sans-serif;
+  --body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light; /* deliberately single-theme: it mirrors the printed menu */
+}
+*, *::before, *::after { box-sizing: border-box; }
+/* Full screen from the iPad home screen draws under the status bar: keep the
+   content inside the safe area. */
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+html, body { height: 100%; overflow: hidden; }
+body { margin: 0; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--body);
+  overscroll-behavior: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--berry); outline-offset: 3px; }
+.app { height: 100%; display: flex; flex-direction: column; }
+
+.bar {
+  flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
+  padding: clamp(10px, 1.6vh, 16px) clamp(12px, 2vw, 28px); background: var(--paper); border-bottom: 1px solid var(--line);
+}
+.brand { font: 700 clamp(18px, 2vw, 26px)/1 var(--display); letter-spacing: .16em; color: var(--matcha); }
+/* The switch is the chooser: big enough to hit from arm's length. */
+.seg { display: inline-flex; padding: 6px; border-radius: 999px; background: var(--paper-2); }
+.seg button {
+  min-height: clamp(52px, 7vh, 72px); padding: 0 clamp(24px, 4.4vw, 60px); border-radius: 999px;
+  font: 700 clamp(18px, 2.1vw, 26px)/1 var(--body); color: var(--ink-soft); white-space: nowrap;
+  transition: background .18s ease, color .18s ease;
+}
+.seg button[aria-pressed="true"] { background: var(--matcha); color: #FFF8F1; box-shadow: 0 8px 18px -12px rgba(59, 21, 19, .7); }
+.seg button.cakes[aria-pressed="true"] { background: var(--berry); }
+.side { justify-self: end; display: flex; align-items: center; gap: 14px; }
+.count { font-variant-numeric: tabular-nums; color: var(--ink-soft); font-weight: 600; font-size: clamp(14px, 1.4vw, 18px); }
+.fs { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--card); border: 1px solid var(--line); color: var(--ink); }
+
+.stage { position: relative; flex: 1; min-height: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.deck {
+  height: 100%; display: flex; overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x;
+}
+.deck::-webkit-scrollbar { display: none; }
+.page { flex: 0 0 100%; height: 100%; min-width: 0; scroll-snap-align: center; scroll-snap-stop: always; padding: clamp(8px, 1.6vh, 18px) clamp(8px, 1.2vw, 18px); }
+/* The image box fills the slide; contain letterboxes the 3:2 page inside it. */
+.page img { display: block; width: 100%; height: 100%; max-width: none; object-fit: contain; filter: drop-shadow(0 14px 24px rgba(59, 21, 19, .18)); }
+.nav {
+  position: absolute; top: 50%; translate: 0 -50%; width: 60px; height: 60px; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(255, 248, 241, .88); border: 1px solid var(--line);
+  box-shadow: 0 8px 20px -14px rgba(59, 21, 19, .6); transition: opacity .2s;
+}
+.nav.prev { left: clamp(8px, 1.4vw, 20px); }
+.nav.next { right: clamp(8px, 1.4vw, 20px); }
+.nav:disabled { opacity: 0; pointer-events: none; }
+
+/* Idle notice: back to the first drinks page after 30 s untouched. */
+.idle {
+  position: absolute; left: 50%; bottom: 20px; translate: -50% 0; z-index: 5;
+  width: min(520px, calc(100% - 32px)); padding: 14px 18px 12px; border-radius: 16px;
+  background: var(--ink); color: var(--paper); box-shadow: 0 16px 40px -20px rgba(0, 0, 0, .6);
+  text-align: center; font-weight: 500;
+}
+.idle .track { margin-top: 10px; height: 4px; border-radius: 4px; background: rgba(247, 236, 225, .25); overflow: hidden; }
+.idle .fill { height: 100%; width: 100%; background: var(--paper); transform-origin: left; }
+
+@media (max-width: 720px) {
+  .bar { grid-template-columns: 1fr; justify-items: center; }
+  .brand, .side { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .deck { scroll-behavior: auto; }
+  .seg button, .nav { transition: none; }
+}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <div class="brand">BANAN</div>
+    <div class="seg" role="group" aria-label="Chọn menu">
+      <button type="button" id="segDrinks" class="drinks" aria-pressed="true">Đồ uống · Drinks</button>
+      <button type="button" id="segCakes" class="cakes" aria-pressed="false">Bánh ngọt · Cakes</button>
+    </div>
+    <div class="side">
+      <div class="count" id="count" aria-live="polite">1 / 6</div>
+      <button class="fs" id="fs" type="button" aria-label="Toàn màn hình" hidden>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="deck" id="deck" tabindex="0" aria-roledescription="carousel"></div>
+    <button class="nav prev" id="prev" type="button" aria-label="Trang trước"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button class="nav next" id="next" type="button" aria-label="Trang sau"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+    <div class="idle" id="idle" hidden>
+      <div id="idleText">Quay về trang đầu sau 10 giây — chạm để xem tiếp</div>
+      <div class="track"><div class="fill" id="idleFill"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // Printed menu pages (designer files "BANAN MENU n") in one loop:
+  // drinks run into cakes, and the last cake page runs back into drinks.
+  const MENUS = {
+    drinks: [1, 2, 3, 4, 5, 6],
+    cakes: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+  };
+  const PAGES = [...MENUS.drinks, ...MENUS.cakes];
+  const N = PAGES.length;
+  const IDLE_MS = 30000;   // back to the first drinks page after 30 s untouched
+  const WARN_MS = 10000;   // countdown shown for the last 10 s
+
+  const $ = (id) => document.getElementById(id);
+  const deck = $('deck'), count = $('count'), prev = $('prev'), next = $('next'), fs = $('fs');
+  const idle = $('idle'), idleText = $('idleText'), idleFill = $('idleFill');
+  const src = (n) => `/img/menu-board/p${String(n).padStart(2, '0')}.webp`;
+  const kindOf = (real) => (real < MENUS.drinks.length ? 'drinks' : 'cakes');
+
+  // Slides: [clone of last, ...all pages, clone of first]. Landing on a clone
+  // jumps (without animation) to the real page it copies, so swiping past
+  // either end keeps going round.
+  const slides = [PAGES[N - 1], ...PAGES, PAGES[0]];
+  deck.innerHTML = slides.map((n, i) =>
+    `<div class="page"${i === 0 || i === N + 1 ? ' aria-hidden="true"' : ''}>` +
+    `<img src="${src(n)}" alt="${n <= MENUS.drinks.length ? 'Menu đồ uống' : 'Menu bánh'}" ` +
+    `width="2048" height="1365" draggable="false" decoding="async"></div>`).join('');
+
+  let slide = 1, lastTouch = Date.now(), settleTimer = 0;
+  const real = () => (slide - 1 + N) % N;           // 0..N-1, clones fold onto real pages
+  const width = () => Math.max(1, deck.clientWidth);
+
+  function jump(s) { slide = s; deck.scrollTo({ left: s * width(), behavior: 'auto' }); sync(); }
+  let guard = 0;
+  function slideTo(s) {
+    slide = s;
+    deck.scrollTo({ left: s * width(), behavior: 'smooth' });
+    sync();
+    // Where smooth scrolling doesn't run (reduced motion, a hidden tab), land
+    // instantly so the counter and the page shown never disagree.
+    clearTimeout(guard);
+    guard = setTimeout(() => {
+      if (Math.round(deck.scrollLeft / width()) !== slide) { jump(slide); settle(); }
+    }, 700);
+  }
+
+  function sync() {
+    const r = real(), k = kindOf(r);
+    const list = MENUS[k];
+    count.textContent = `${list.indexOf(PAGES[r]) + 1} / ${list.length}`;
+    $('segDrinks').setAttribute('aria-pressed', String(k === 'drinks'));
+    $('segCakes').setAttribute('aria-pressed', String(k === 'cakes'));
+  }
+
+  // After a swipe or animated move comes to rest, fold a clone onto its page.
+  function settle() {
+    slide = Math.round(deck.scrollLeft / width());
+    if (slide === 0) jump(N);
+    else if (slide === N + 1) jump(1);
+    else sync();
+  }
+  deck.addEventListener('scroll', () => {
+    const s = Math.round(deck.scrollLeft / width());
+    if (s !== slide) { slide = s; sync(); }
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(settle, 140);
+  }, { passive: true });
+  window.addEventListener('resize', () => jump(slide));
+
+  const openMenu = (k) => { if (kindOf(real()) !== k) jump(PAGES.indexOf(MENUS[k][0]) + 1); };
+  $('segDrinks').addEventListener('click', () => openMenu('drinks'));
+  $('segCakes').addEventListener('click', () => openMenu('cakes'));
+  prev.addEventListener('click', () => slideTo(slide - 1));
+  next.addEventListener('click', () => slideTo(slide + 1));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') slideTo(slide + 1);
+    if (e.key === 'ArrowLeft') slideTo(slide - 1);
+  });
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Full screen: offered where the browser allows it and the page isn't
+  // already running full screen (e.g. opened from the iPad home screen).
+  const root = document.documentElement;
+  const enterFs = root.requestFullscreen || root.webkitRequestFullscreen;
+  const isFs = () => document.fullscreenElement || document.webkitFullscreenElement ||
+    matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+  const syncFs = () => { fs.hidden = !enterFs || !!isFs(); };
+  fs.addEventListener('click', () => {
+    try { Promise.resolve(enterFs.call(root)).catch(() => {}); } catch (_) {}
+  });
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+  syncFs();
+
+  // Idle timer: any touch, swipe, wheel or key restarts it.
+  const atStart = () => real() === 0;
+  function touch() { lastTouch = Date.now(); idle.hidden = true; }
+  for (const ev of ['pointerdown', 'touchstart', 'wheel', 'keydown']) {
+    document.addEventListener(ev, touch, { passive: true, capture: true });
+  }
+  deck.addEventListener('scroll', touch, { passive: true });
+  setInterval(() => {
+    if (atStart()) { idle.hidden = true; return; }
+    const left = IDLE_MS - (Date.now() - lastTouch);
+    if (left <= 0) { idle.hidden = true; jump(1); return; }
+    if (left <= WARN_MS) {
+      idle.hidden = false;
+      idleText.textContent = `Quay về trang đầu sau ${Math.ceil(left / 1000)} giây — chạm để xem tiếp`;
+      idleFill.style.transform = `scaleX(${left / WARN_MS})`;
+    } else {
+      idle.hidden = true;
+    }
+  }, 250);
+
+  // Start on the first drinks page (the script runs after layout exists).
+  jump(1);
+  // Keep the iPad screen on (ignored where refused).
+  try { navigator.wakeLock?.request('screen').catch(() => {}); } catch (_) {}
+})();
+</script>
+</body>
+</html>
