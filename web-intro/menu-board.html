@@ -149,7 +149,7 @@ button:focus-visible { outline: 3px solid var(--berry); outline-offset: 3px; }
   const deck = $('deck'), count = $('count'), prev = $('prev'), next = $('next'), fs = $('fs');
   const idle = $('idle'), idleText = $('idleText'), idleFill = $('idleFill');
   // Images are cached for a week: bump a page's revision when its image changes.
-  const REV = { 9: 3 };
+  const REV = { 8: 2, 9: 3 };
   const src = (n) => `/img/menu-board/p${String(n).padStart(2, '0')}.webp${REV[n] ? `?v=${REV[n]}` : ''}`;
   const kindOf = (real) => (real < MENUS.drinks.length ? 'drinks' : 'cakes');
 
