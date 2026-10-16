@@ -51,6 +51,20 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   /// first choice so a customer who touches nothing still gets a valid order.
   final Map<String, String> _optionPicks = {};
 
+  /// The first size's cheapest available variant (the API sorts variants by
+  /// size then flavour name, so a gift set would otherwise open on a
+  /// surcharged matcha).
+  ProductVariant? _defaultVariant(Product product) {
+    if (product.variants.isEmpty) return null;
+    final first = product.variants.first.size;
+    final ofSize = [
+      for (final v in product.variants)
+        if (v.size == first && v.isAvailable) v,
+    ];
+    if (ofSize.isEmpty) return product.variants.first;
+    return ofSize.reduce((a, b) => b.priceDelta < a.priceDelta ? b : a);
+  }
+
   @override
   Widget build(BuildContext context) {
     final productAsync = ref.watch(productProvider(widget.productId));
@@ -83,8 +97,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           onRetry: () => ref.invalidate(productProvider(widget.productId)),
         ),
         data: (product) {
-          final selected = _selected ??
-              (product.variants.isNotEmpty ? product.variants.first : null);
+          final selected = _selected ?? _defaultVariant(product);
           final price =
               selected == null ? product.basePrice : product.priceFor(selected);
 
@@ -341,7 +354,7 @@ class _Details extends StatelessWidget {
   /// tagged with its surcharge over the size's cheapest.
   List<Widget> _variantPicker(BuildContext context) {
     final variants = product.variants;
-    final sizes = [for (final v in variants) v.size].toSet().toList();
+    final sizes = <String>{for (final v in variants) v.size}.toList();
     final grid = sizes.length > 1 &&
         sizes.any((sz) => variants.where((v) => v.size == sz).length > 1);
     if (!grid) {
@@ -357,7 +370,13 @@ class _Details extends StatelessWidget {
       ];
     }
     final size = selected?.size ?? variants.first.size;
+    // Cheapest first; ties keep the API's order.
     final ofSize = [for (final v in variants) if (v.size == size) v];
+    final rank = {for (var i = 0; i < ofSize.length; i++) ofSize[i].id: i};
+    ofSize.sort((a, b) {
+      final byPrice = a.priceDelta.compareTo(b.priceDelta);
+      return byPrice != 0 ? byPrice : rank[a.id]!.compareTo(rank[b.id]!);
+    });
     final cheapest = ofSize
         .map((v) => v.priceDelta)
         .reduce((a, b) => a < b ? a : b);
@@ -379,10 +398,12 @@ class _Details extends StatelessWidget {
                         for (final v in variants)
                           if (v.size == sz && _orderable(v)) v,
                       ];
-                      onSelect(open.firstWhere(
-                        (v) => v.flavor == selected?.flavor,
-                        orElse: () => open.first,
-                      ));
+                      onSelect(
+                        open.firstWhere(
+                          (v) => v.flavor == selected?.flavor,
+                          orElse: () => open.first,
+                        ),
+                      );
                     },
             ),
         ],
