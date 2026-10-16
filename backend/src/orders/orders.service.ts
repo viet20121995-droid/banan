@@ -188,16 +188,21 @@ type OrderTrackPayload = Prisma.OrderGetPayload<{ include: typeof TRACK_INCLUDE 
 /**
  * Option groups (sugar / ice / cream): every group needs a pick from its own
  * choices — the kitchen reads these off the ticket verbatim. Web and counter
- * orders alike.
+ * orders alike. A group with `sizes` applies only to variants of those sizes
+ * (a gift set's cake pick exists only for the sets that offer a choice).
  */
 function assertOptionPicks(
   product: { name: string; optionGroups: unknown },
+  variantSize: string,
   personalization?: Record<string, unknown> | null,
 ): void {
-  const groups = product.optionGroups as { label: string; choices: string[] }[] | null;
+  const groups = product.optionGroups as
+    | { label: string; choices: string[]; sizes?: string[] }[]
+    | null;
   if (!Array.isArray(groups) || groups.length === 0) return;
   const picks = (personalization?.options ?? {}) as Record<string, unknown>;
   for (const g of groups) {
+    if (g.sizes?.length && !g.sizes.includes(variantSize)) continue;
     const pick = picks[g.label];
     if (typeof pick !== 'string' || !g.choices.includes(pick)) {
       throw new BadRequestException({
@@ -628,7 +633,7 @@ export class OrdersService {
         }
       }
 
-      if (!input.fromBundle) assertOptionPicks(product, input.personalization);
+      if (!input.fromBundle) assertOptionPicks(product, variant.size, input.personalization);
 
       const unitPrice = new Prisma.Decimal(product.basePrice).plus(variant.priceDelta);
       const lineTotal = unitPrice.times(input.quantity);
@@ -2326,7 +2331,7 @@ export class OrdersService {
           });
         }
       }
-      assertOptionPicks(product, input.personalization);
+      assertOptionPicks(product, variant.size, input.personalization);
       const unitPrice = new Prisma.Decimal(product.basePrice).plus(variant.priceDelta);
       const lineTotal = unitPrice.times(input.quantity);
       subtotal = subtotal.plus(lineTotal);

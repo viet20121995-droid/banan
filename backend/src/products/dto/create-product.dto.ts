@@ -32,6 +32,14 @@ export class OptionGroupDto {
   @IsString({ each: true })
   @MaxLength(40, { each: true })
   choices!: string[];
+
+  /** Only for variants of these sizes (shown and required there only); omit = every variant. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  sizes?: string[];
 }
 
 export class CreateProductDto {

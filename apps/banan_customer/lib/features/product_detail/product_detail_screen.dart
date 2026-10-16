@@ -170,8 +170,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           ...?_personalization?.toMap(),
                           if (product.hasFlavorComposer)
                             'flavors': Map<String, int>.from(_flavorPicks),
-                          if (product.optionGroups.isNotEmpty)
-                            'options': Map<String, String>.from(_optionPicks),
+                          if (product.optionGroupsFor(selected).isNotEmpty)
+                            'options': {
+                              for (final g in product.optionGroupsFor(selected))
+                                if (_optionPicks[g.label] != null)
+                                  g.label: _optionPicks[g.label]!,
+                            },
                         };
                         ref.read(cartControllerProvider.notifier).add(
                               CartItem(
@@ -308,6 +312,99 @@ class _Details extends StatelessWidget {
   final void Function(String label, String choice) onOptionPicked;
   final bool composerComplete;
 
+  bool _soldOut(ProductVariant v) =>
+      showStock && v.stockMode == StockMode.limited && (v.stockQty ?? 0) <= 0;
+
+  bool _orderable(ProductVariant v) => v.isAvailable && !_soldOut(v);
+
+  /// Chip for [v] labelled [text]. Sold-out LIMITED variant → disabled chip
+  /// with a "Hết hàng" suffix so the customer knows before trying the cart;
+  /// gated on [showStock] — with the toggle off the chip is just the label.
+  Widget _variantChip(ProductVariant v, String text) {
+    final label = showStock &&
+            v.stockMode == StockMode.limited &&
+            (v.stockQty ?? 0) > 0 &&
+            (v.stockQty ?? 0) <= 5
+        ? s.variantStock(text, v.stockQty!)
+        : _soldOut(v)
+            ? s.variantSoldOut(text)
+            : text;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected?.id == v.id,
+      onSelected: _orderable(v) ? (_) => onSelect(v) : null,
+    );
+  }
+
+  /// One chip per variant — or, when variants vary in both size and flavour
+  /// (a gift set × its matcha), a size row then that size's flavours, each
+  /// tagged with its surcharge over the size's cheapest.
+  List<Widget> _variantPicker(BuildContext context) {
+    final variants = product.variants;
+    final sizes = [for (final v in variants) v.size].toSet().toList();
+    final grid = sizes.length > 1 &&
+        sizes.any((sz) => variants.where((v) => v.size == sz).length > 1);
+    if (!grid) {
+      return [
+        Wrap(
+          spacing: BananSpacing.sm,
+          runSpacing: BananSpacing.sm,
+          children: [
+            for (final v in variants)
+              _variantChip(v, catalogText(context, v.label)),
+          ],
+        ),
+      ];
+    }
+    final size = selected?.size ?? variants.first.size;
+    final ofSize = [for (final v in variants) if (v.size == size) v];
+    final cheapest = ofSize
+        .map((v) => v.priceDelta)
+        .reduce((a, b) => a < b ? a : b);
+    final money = NumberFormat.decimalPattern('vi_VN');
+    return [
+      Wrap(
+        spacing: BananSpacing.sm,
+        runSpacing: BananSpacing.sm,
+        children: [
+          for (final sz in sizes)
+            ChoiceChip(
+              label: Text(catalogText(context, sz)),
+              selected: sz == size,
+              onSelected: !variants.any((v) => v.size == sz && _orderable(v))
+                  ? null
+                  : (_) {
+                      // Keep the flavour when the new size has it.
+                      final open = [
+                        for (final v in variants)
+                          if (v.size == sz && _orderable(v)) v,
+                      ];
+                      onSelect(open.firstWhere(
+                        (v) => v.flavor == selected?.flavor,
+                        orElse: () => open.first,
+                      ));
+                    },
+            ),
+        ],
+      ),
+      const SizedBox(height: BananSpacing.md),
+      Wrap(
+        spacing: BananSpacing.sm,
+        runSpacing: BananSpacing.sm,
+        children: [
+          for (final v in ofSize)
+            _variantChip(
+              v,
+              v.priceDelta > cheapest
+                  ? '${catalogText(context, v.flavor)} '
+                      '+${money.format(v.priceDelta - cheapest)}₫'
+                  : catalogText(context, v.flavor),
+            ),
+        ],
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -336,38 +433,10 @@ class _Details extends StatelessWidget {
         if (product.variants.isNotEmpty) ...[
           Text(s.chooseSizeFlavor, style: theme.textTheme.titleSmall),
           const SizedBox(height: BananSpacing.sm),
-          Wrap(
-            spacing: BananSpacing.sm,
-            runSpacing: BananSpacing.sm,
-            children: product.variants.map((v) {
-              // Sold-out LIMITED variant → disabled chip with "Hết hàng"
-              // suffix so the customer knows the option isn't available
-              // without trying to add it to cart first. Gated on
-              // [showStock] — when the chain has the toggle off, the
-              // chip is just the variant label.
-              final isLimitedOut = showStock &&
-                  v.stockMode == StockMode.limited &&
-                  (v.stockQty ?? 0) <= 0;
-              final disabled = !v.isAvailable || isLimitedOut;
-              final vLabel = catalogText(context, v.label);
-              final label = showStock &&
-                      v.stockMode == StockMode.limited &&
-                      (v.stockQty ?? 0) > 0 &&
-                      (v.stockQty ?? 0) <= 5
-                  ? s.variantStock(vLabel, v.stockQty!)
-                  : isLimitedOut
-                      ? s.variantSoldOut(vLabel)
-                      : vLabel;
-              return ChoiceChip(
-                label: Text(label),
-                selected: selected?.id == v.id,
-                onSelected: disabled ? null : (_) => onSelect(v),
-              );
-            }).toList(),
-          ),
+          ..._variantPicker(context),
           const SizedBox(height: BananSpacing.xl),
         ],
-        for (final g in product.optionGroups)
+        for (final g in product.optionGroupsFor(selected))
           if (g.choices.isNotEmpty) ...[
             Text(
               catalogText(context, g.label),

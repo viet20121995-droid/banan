@@ -229,6 +229,31 @@ describe('createCounterOrder (STAFF_COUNTER)', () => {
     expect(line.personalization).toEqual({ options: { Đường: 'Ít đường' } });
   });
 
+  it('an option group limited to other sizes is not required for this variant', async () => {
+    const giftSet = {
+      ...productFixture(),
+      optionGroups: [
+        { label: 'Bánh Set 1', choices: ['2 Creme Flan', '2 Matcha Pudding'], sizes: ['Set 1'] },
+        { label: 'Đường', choices: ['Bình thường', 'Ít đường'], sizes: ['M'] },
+      ],
+    };
+    const orderCreate = jest.fn().mockResolvedValue(orderRowFixture());
+    const prisma = basePrisma(orderCreate, jest.fn());
+    prisma.product.findMany = jest.fn((args?: { where?: { excludedStoreIds?: unknown } }) =>
+      Promise.resolve(args?.where?.excludedStoreIds ? [] : [giftSet]),
+    );
+    const { svc } = makeService(prisma);
+
+    // Variant size is 'M': the 'Đường' pick is required, the Set 1 cake pick is not.
+    await svc.createCounterOrder(staff, {
+      ...counterDto,
+      items: [
+        { productId: 'p1', quantity: 1, personalization: { options: { Đường: 'Ít đường' } } },
+      ],
+    });
+    expect(orderCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('unpaid counter order records NO payment row', async () => {
     const orderCreate = jest.fn().mockResolvedValue(orderRowFixture());
     const paymentCreate = jest.fn();

@@ -22,7 +22,7 @@ final _money = NumberFormat.decimalPattern('vi_VN');
 class _CartLine {
   _CartLine(this.product, this.variant, this.qty)
       : options = {
-          for (final g in product.optionGroups)
+          for (final g in product.optionGroupsFor(variant))
             if (g.choices.isNotEmpty) g.label: g.choices.first,
         };
   final Product product;
@@ -269,7 +269,7 @@ class _CartSection extends StatelessWidget {
               ),
             ],
           ),
-          for (final g in line.product.optionGroups)
+          for (final g in line.product.optionGroupsFor(line.variant))
             if (g.choices.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: BananSpacing.xs),

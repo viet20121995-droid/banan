@@ -50,4 +50,30 @@ void main() {
       expect(OrderStatus.completed.customerCanCancel, isFalse);
     });
   });
+
+  group('ProductOptionGroup.sizes', () {
+    const cake = ProductOptionGroup(
+      label: 'Bánh',
+      choices: ['Mango Shortcake', 'Strawberry Shortcake'],
+      sizes: ['Set 3'],
+    );
+    const sugar = ProductOptionGroup(label: 'Đường', choices: ['Ít', 'Vừa']);
+
+    test('a sized group applies only to its sizes; an unsized one to all', () {
+      expect(cake.appliesTo('Set 3'), isTrue);
+      expect(cake.appliesTo('Set 1'), isFalse);
+      expect(cake.appliesTo(null), isFalse);
+      expect(sugar.appliesTo('Set 1'), isTrue);
+      expect(sugar.appliesTo(null), isTrue);
+    });
+
+    test('JSON round-trip keeps sizes and omits them when empty', () {
+      expect(ProductOptionGroup.fromJson(cake.toJson()), cake);
+      expect(sugar.toJson().containsKey('sizes'), isFalse);
+      expect(
+        ProductOptionGroup.fromJson(const {'label': 'Đá', 'choices': ['Ít', 'Vừa']}).sizes,
+        isEmpty,
+      );
+    });
+  });
 }

@@ -109,6 +109,13 @@ class Product extends Equatable {
   /// (`{ 'Đường': 'Ít đường' }`). First choice of each group = default.
   final List<ProductOptionGroup> optionGroups;
 
+  /// The option groups that apply to [variant] — a group limited to some
+  /// sizes is shown, and required, only for those.
+  List<ProductOptionGroup> optionGroupsFor(ProductVariant? variant) => [
+        for (final g in optionGroups)
+          if (g.appliesTo(variant?.size)) g,
+      ];
+
   /// Sum of remaining stock across every LIMITED variant. `null` when
   /// every variant is UNLIMITED — the UI then knows to hide the indicator
   /// instead of showing "Còn 0" by mistake.
@@ -214,20 +221,34 @@ class ProductPage extends Equatable {
 }
 
 /// One option group on a product: `label` ("Đường") + its `choices`.
+/// [sizes] limits it to variants of those sizes (a gift set's cake pick only
+/// for the sets that offer one); empty = every variant.
 class ProductOptionGroup extends Equatable {
-  const ProductOptionGroup({required this.label, required this.choices});
+  const ProductOptionGroup({
+    required this.label,
+    required this.choices,
+    this.sizes = const [],
+  });
 
   final String label;
   final List<String> choices;
+  final List<String> sizes;
 
   factory ProductOptionGroup.fromJson(Map<String, dynamic> j) =>
       ProductOptionGroup(
         label: (j['label'] as String?) ?? '',
         choices: ((j['choices'] as List?) ?? const []).cast<String>(),
+        sizes: ((j['sizes'] as List?) ?? const []).cast<String>(),
       );
 
-  Map<String, dynamic> toJson() => {'label': label, 'choices': choices};
+  Map<String, dynamic> toJson() => {
+        'label': label,
+        'choices': choices,
+        if (sizes.isNotEmpty) 'sizes': sizes,
+      };
+
+  bool appliesTo(String? size) => sizes.isEmpty || sizes.contains(size);
 
   @override
-  List<Object?> get props => [label, choices];
+  List<Object?> get props => [label, choices, sizes];
 }

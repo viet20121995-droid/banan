@@ -126,7 +126,9 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _flavorPick.text = p.flavorPickCount?.toString() ?? '';
     _flavorOptions = List.of(p.flavorOptions);
     _optionGroups.text = [
-      for (final g in p.optionGroups) '${g.label}: ${g.choices.join(', ')}',
+      for (final g in p.optionGroups)
+        '${g.label}${g.sizes.isEmpty ? '' : ' [${g.sizes.join('; ')}]'}: '
+            '${g.choices.join(', ')}',
     ].join('\n');
     _variants = p.variants
         .map(
@@ -695,7 +697,8 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
                         Text(
                           'Mỗi dòng một nhóm, dạng "Tên nhóm: lựa chọn 1, lựa '
                           'chọn 2". Lựa chọn đầu là mặc định. Khách bắt buộc '
-                          'chọn mỗi nhóm; bếp thấy lựa chọn trên phiếu.',
+                          'chọn mỗi nhóm; bếp thấy lựa chọn trên phiếu. Nhóm '
+                          'chỉ cho vài size: "Tên nhóm [Size A; Size B]: …".',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: BananSpacing.md),
@@ -1234,14 +1237,27 @@ class _DowChips extends StatelessWidget {
   }
 }
 
-/// "Đường: Bình thường, Ít đường" per line → option groups. Lines that don't
-/// parse (no colon, fewer than 2 choices) are dropped.
+/// "Đường: Bình thường, Ít đường" per line → option groups; "Bánh [Set 1;
+/// Set 3]: …" limits a group to those variant sizes. Lines that don't parse
+/// (no colon, fewer than 2 choices) are dropped.
 List<ProductOptionGroup> _parseOptionGroups(String text) {
   final out = <ProductOptionGroup>[];
   for (final line in text.split('\n')) {
-    final i = line.indexOf(':');
+    final close = line.indexOf(']');
+    final i = line.indexOf(':', close < 0 ? 0 : close);
     if (i <= 0) continue;
-    final label = line.substring(0, i).trim();
+    var label = line.substring(0, i).trim();
+    var sizes = const <String>[];
+    final m = RegExp(r'^(.*?)\s*\[(.*)\]$').firstMatch(label);
+    if (m != null) {
+      label = m.group(1)!.trim();
+      sizes = m
+          .group(2)!
+          .split(';')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
     final choices = line
         .substring(i + 1)
         .split(',')
@@ -1249,7 +1265,7 @@ List<ProductOptionGroup> _parseOptionGroups(String text) {
         .where((c) => c.isNotEmpty)
         .toList();
     if (label.isEmpty || choices.length < 2) continue;
-    out.add(ProductOptionGroup(label: label, choices: choices));
+    out.add(ProductOptionGroup(label: label, choices: choices, sizes: sizes));
   }
   return out;
 }
