@@ -126,9 +126,7 @@ class _ProductEditorScreenState extends ConsumerState<ProductEditorScreen> {
     _flavorPick.text = p.flavorPickCount?.toString() ?? '';
     _flavorOptions = List.of(p.flavorOptions);
     _optionGroups.text = [
-      for (final g in p.optionGroups)
-        '${g.label}${g.sizes.isEmpty ? '' : ' [${g.sizes.join('; ')}]'}: '
-            '${g.choices.join(', ')}',
+      for (final g in p.optionGroups) _optionGroupLine(g),
     ].join('\n');
     _variants = p.variants
         .map(
@@ -1237,14 +1235,19 @@ class _DowChips extends StatelessWidget {
   }
 }
 
+/// One group as an editor line — the inverse of [_parseOptionGroups].
+String _optionGroupLine(ProductOptionGroup g) {
+  final sizes = g.sizes.isEmpty ? '' : ' [${g.sizes.join('; ')}]';
+  return '${g.label}$sizes: ${g.choices.join(', ')}';
+}
+
 /// "Đường: Bình thường, Ít đường" per line → option groups; "Bánh [Set 1;
 /// Set 3]: …" limits a group to those variant sizes. Lines that don't parse
 /// (no colon, fewer than 2 choices) are dropped.
 List<ProductOptionGroup> _parseOptionGroups(String text) {
   final out = <ProductOptionGroup>[];
   for (final line in text.split('\n')) {
-    final close = line.indexOf(']');
-    final i = line.indexOf(':', close < 0 ? 0 : close);
+    final i = line.indexOf(':');
     if (i <= 0) continue;
     var label = line.substring(0, i).trim();
     var sizes = const <String>[];
