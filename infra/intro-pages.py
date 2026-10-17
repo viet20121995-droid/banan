@@ -29,8 +29,8 @@ TODAY = datetime.date.today().strftime('%d/%m/%Y')
 
 # Ratings and coordinates read off each Google Maps listing on 03/10/2026; cid is
 # the listing's stable id. Hours mirror GET /stores (identical for every shop).
-# Đường 39 (opened 10/2026) has no Google listing yet: cid None, no rating, and
-# its coordinates are next door's (1B Đường 39) — fill them in once it is listed.
+# Đường 39 (opened 10/2026, listed as "Banan Patisserie Thảo Điền") has no
+# reviews yet: rating None hides the stars until it has some.
 STORES = [
     dict(slug='le-thanh-ton', id='aa237695', name='Lê Thánh Tôn', area='Quận 1', street='15B8 Lê Thánh Tôn',
          ward='Sài Gòn', phone='+84867540939', cid='2223993201013558070', lat=10.780411, lng=106.70474,
@@ -45,7 +45,7 @@ STORES = [
          ward='Cầu Kiệu', phone='+84379555934', cid='6797065644553342146', lat=10.7961216, lng=106.6897079,
          rating='4,9', reviews=495),
     dict(slug='duong-39', id='02ea4117', name='Đường 39', area='Thảo Điền', street='1A Đường 39',
-         ward='An Khánh', phone='+84868897131', cid=None, lat=10.8028, lng=106.7339,
+         ward='An Khánh', phone='+84868897131', cid='170516426904609106', lat=10.8024924, lng=106.7340016,
          rating=None, reviews=0),
 ]
 HOURS_TEXT = 'Mở cửa 10:00–21:30 thứ Hai đến thứ Năm, 10:00–22:00 thứ Sáu đến Chủ nhật.'
@@ -61,6 +61,7 @@ N_STORES = len(STORES)
 
 # /menu sections in reading order: API category name -> (anchor, heading, landing page).
 MENU = [
+    ('Quà 20/10', 'qua-20-10', 'Quà 20/10', None),
     ('Birthday Cakes Collection', 'banh-sinh-nhat', 'Bánh sinh nhật', '/banh-sinh-nhat'),
     ('Mochi Collection', 'mochi', 'Mochi & Mochi Basque', '/mochi-basque'),
     ('Daifuku', 'daifuku', 'Daifuku', '/daifuku'),
@@ -100,7 +101,8 @@ def prices(p):
 
 def price_text(p):
     vs = sorted(variants(p), key=lambda v: num(v['priceDelta']))
-    if len({v['size'] for v in vs}) > 1:  # priced per size
+    sizes = [v['size'] for v in vs]
+    if len(set(sizes)) > 1 and len(set(sizes)) == len(sizes):  # one price per size
         return ' · '.join(f"{v['size']} {vnd(num(p['basePrice']) + num(v['priceDelta']))}" for v in vs)
     ps = prices(p)
     return vnd(ps[0]) if len(ps) == 1 else 'từ ' + vnd(ps[0])
@@ -122,8 +124,9 @@ def notes(p):
             out.append('Vị: ' + ', '.join(v['flavor'] for v in vs))
     if p.get('flavorPickCount') and p.get('flavorOptions'):
         out.append('Tự chọn vị: ' + ', '.join(p['flavorOptions']))
-    if p.get('optionGroups'):
-        out.append('Chọn ' + ', '.join(g['label'].lower() for g in p['optionGroups']))
+    groups = [g for g in p.get('optionGroups') or [] if not g.get('sizes')]  # set-only picks: see the order page
+    if groups:
+        out.append('Chọn ' + ', '.join(g['label'].lower() for g in groups))
     if (p.get('leadTimeHours') or 0) >= 24:
         out.append(f"Đặt trước {p['leadTimeHours'] // 24} ngày")
     missing = store_names(p.get('excludedStoreIds'))
@@ -546,6 +549,10 @@ def selftest():
                       {'size': '500ml', 'flavor': 'Sữa Oatside', 'priceDelta': '11000', 'isAvailable': True}]}
     assert price_text(p) == 'từ 113.000 ₫', price_text(p)
     assert notes(p) == ['Sữa Oatside +11.000 ₫', 'Chọn đường', 'Không có ở chi nhánh Trường Sa'], notes(p)
+    gift = {'basePrice': '305000', 'variants': [
+        {'size': s, 'flavor': f, 'priceDelta': str(d + x), 'isAvailable': True}
+        for s, d in (('Set 1', 30000), ('Set 3', 0)) for f, x in (('Latte', 0), ('Mango', 20000))]}
+    assert price_text(gift) == 'từ ' + vnd(305000), price_text(gift)  # sizes x flavours: no per-size list
     assert phone(STORES[0]) == '0867 540 939'
 
 
