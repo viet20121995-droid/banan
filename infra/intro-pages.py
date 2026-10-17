@@ -436,7 +436,7 @@ def pages(P, cats):
 
     yield 'matcha', landing(
         'matcha', 'Matcha đánh lạnh ở Sài Gòn: Mango, Ube, Dango Matcha | Banan',
-        f'Matcha latte, matcha đánh lạnh, Earl Grey matcha, Mango Matcha, Ube Matcha Latte, Dango Kinako và Dango Ube Matcha. Từ {vnd(low(*dict(matcha)))} tại {N_STORES} cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
+        f'Matcha latte, matcha đánh lạnh, Earl Grey matcha, Mango Matcha, Strawberry Matcha, Ube Matcha Latte, Dango Kinako và Dango Ube Matcha. Từ {vnd(low(*dict(matcha)))} tại {N_STORES} cửa hàng Banan ở TP.HCM.'.replace(' ', ' '),
         'Matcha', 'Matcha đánh lạnh & đồ uống matcha',
         f'{have(matcha)} ly matcha của Banan Fukuoka Pâtisserie Saigon, giá từ {vnd(low(*dict(matcha)))}. Khi đặt online, nhiều ly chọn được mức đường, đá và kem.',
         matcha, P, more='\n'.join([
