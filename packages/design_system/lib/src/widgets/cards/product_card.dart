@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../theme/banan_theme.dart';
 import '../../tokens/colors.dart';
 import '../../tokens/radii.dart';
 import '../../tokens/spacing.dart';
@@ -119,7 +120,7 @@ class ProductCard extends StatelessWidget {
                         left: BananSpacing.sm,
                         child: _Tag(
                           label: seasonalLabel,
-                          color: BananColors.gold,
+                          color: BananAccents.of(context).tag,
                         ),
                       ),
                     if (unavailable || soldOut)
@@ -150,7 +151,9 @@ class ProductCard extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: BananColors.accent.withValues(alpha: 0.95),
+                            color: BananAccents.of(context)
+                                .alert
+                                .withValues(alpha: 0.95),
                             borderRadius: BananRadii.rPill,
                           ),
                           child: Text(
@@ -333,7 +336,7 @@ class _MiniTag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         borderRadius: BananRadii.rPill,
-        color: BananColors.gold.withValues(alpha: 0.14),
+        color: BananAccents.of(context).tag.withValues(alpha: 0.14),
       ),
       child: Text(
         label,

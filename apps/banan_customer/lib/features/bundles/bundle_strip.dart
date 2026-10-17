@@ -177,7 +177,7 @@ class _BundleCard extends StatelessWidget {
                               horizontal: 8, vertical: 4,),
                           decoration: BoxDecoration(
                             borderRadius: BananRadii.rPill,
-                            color: BananColors.accent.withValues(alpha: 0.92),
+                            color: BananAccents.of(context).alert.withValues(alpha: 0.92),
                           ),
                           child: const Text(
                             'COMBO',

@@ -70,6 +70,7 @@ class BananTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
+      extensions: const [BananAccents.brand],
       // Transparent so the app-root washi/seigaiha background shows through
       // on every screen (the page colour is painted by the root background
       // widget in each app's MaterialApp builder).
@@ -159,4 +160,33 @@ class BananTheme {
       ),
     );
   }
+}
+
+/// Badge colours a seasonal theme may swap: [alert] for low-stock / sale
+/// badges, [tag] for product tags ("Mới", seasonal). Defaults to the brand's
+/// crimson and gold.
+@immutable
+class BananAccents extends ThemeExtension<BananAccents> {
+  const BananAccents({required this.alert, required this.tag});
+
+  final Color alert;
+  final Color tag;
+
+  static const brand =
+      BananAccents(alert: BananColors.accent, tag: BananColors.gold);
+
+  static BananAccents of(BuildContext context) =>
+      Theme.of(context).extension<BananAccents>() ?? brand;
+
+  @override
+  BananAccents copyWith({Color? alert, Color? tag}) =>
+      BananAccents(alert: alert ?? this.alert, tag: tag ?? this.tag);
+
+  @override
+  BananAccents lerp(BananAccents? other, double t) => other == null
+      ? this
+      : BananAccents(
+          alert: Color.lerp(alert, other.alert, t)!,
+          tag: Color.lerp(tag, other.tag, t)!,
+        );
 }

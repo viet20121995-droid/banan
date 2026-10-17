@@ -28,6 +28,7 @@ import 'menu_controller.dart';
 import 'promo_popup_dialog.dart';
 import 'pwa_install.dart';
 import 'section_header.dart';
+import 'women_day_2010.dart';
 
 final _wholesaleAccessProvider = FutureProvider.autoDispose<bool>((ref) async {
   final result = await ref.watch(wholesaleApiProvider).access();
@@ -110,12 +111,16 @@ class MenuScreen extends ConsumerWidget {
                 isGuest: isGuest,
                 unread: unread,
               ),
-        bottom: fullmoonAutumnCampaignEnabled
-            ? const PreferredSize(
-                preferredSize: Size.fromHeight(30),
-                child: _FullmoonAutumnAnnouncement(),
+        bottom: womenDay2010Enabled
+            ? WomenDay2010Garland(
+                height: MediaQuery.sizeOf(context).width < 700 ? 44 : 56,
               )
-            : null,
+            : fullmoonAutumnCampaignEnabled
+                ? const PreferredSize(
+                    preferredSize: Size.fromHeight(30),
+                    child: _FullmoonAutumnAnnouncement(),
+                  )
+                : null,
       ),
       // Floating "View cart" button — shows up the moment the cart isn't
       // empty, so the customer can jump straight to checkout without
@@ -855,11 +860,19 @@ class _CategoryChips extends ConsumerWidget {
         selected: selectedId == null,
         onTap: () => onSelect(null),
       ),
-      ...categories.map(
+      ...[
+        // While the 20/10 theme runs, the gift-set category comes first.
+        for (final c in categories)
+          if (womenDay2010Enabled && c.slug == womenDay2010CategorySlug) c,
+        for (final c in categories)
+          if (!(womenDay2010Enabled && c.slug == womenDay2010CategorySlug)) c,
+      ].map(
         (c) => _Chip(
           label: c.name,
           selected: selectedId == c.id,
           onTap: () => onSelect(c.id),
+          highlight:
+              womenDay2010Enabled && c.slug == womenDay2010CategorySlug,
         ),
       ),
     ];
@@ -902,11 +915,15 @@ class _Chip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.highlight = false,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Seasonal pick (the 20/10 gift sets): rose outline and label.
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -916,6 +933,18 @@ class _Chip extends StatelessWidget {
       onSelected: (_) => onTap(),
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      backgroundColor: highlight ? WomenDay2010Colors.roseSoft : null,
+      selectedColor: highlight ? WomenDay2010Colors.roseSoft : null,
+      checkmarkColor: highlight ? WomenDay2010Colors.rose : null,
+      side: highlight
+          ? const BorderSide(color: WomenDay2010Colors.rose)
+          : null,
+      labelStyle: highlight
+          ? const TextStyle(
+              color: WomenDay2010Colors.rose,
+              fontWeight: FontWeight.w700,
+            )
+          : null,
     );
   }
 }

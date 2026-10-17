@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 
 import '../features/content/cookie_consent.dart';
 import '../features/menu/fullmoon_autumn.dart';
+import '../features/menu/women_day_2010.dart';
 import '../features/push/push_registration.dart';
 import '../shared/realtime_sync.dart';
 import 'analytics.dart';
@@ -38,7 +39,9 @@ class BananCustomerApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Banan',
       debugShowCheckedModeBanner: false,
-      theme: BananTheme.light(),
+      theme: womenDay2010Enabled
+          ? womenDay2010Theme(BananTheme.light())
+          : BananTheme.light(),
       darkTheme: BananTheme.dark(),
       // Always render the brand's light theme — ignore the browser/OS dark-mode
       // preference. The storefront is designed light; dark auto-switching washed
@@ -121,6 +124,7 @@ class _CampaignPageBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (womenDay2010Enabled) return WomenDay2010Backdrop(child: child);
     if (!fullmoonAutumnCampaignEnabled) return child;
     return Stack(
       children: [

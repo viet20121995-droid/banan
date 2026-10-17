@@ -494,25 +494,25 @@ class _Details extends StatelessWidget {
               vertical: 6,
             ),
             decoration: BoxDecoration(
-              color: BananColors.accent.withValues(alpha: 0.12),
+              color: BananAccents.of(context).alert.withValues(alpha: 0.12),
               borderRadius: BananRadii.rPill,
               border: Border.all(
-                color: BananColors.accent.withValues(alpha: 0.5),
+                color: BananAccents.of(context).alert.withValues(alpha: 0.5),
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.local_fire_department_outlined,
                   size: 16,
-                  color: BananColors.accent,
+                  color: BananAccents.of(context).alert,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   s.almostGone(product.totalLimitedStock ?? 0),
-                  style: const TextStyle(
-                    color: BananColors.accent,
+                  style: TextStyle(
+                    color: BananAccents.of(context).alert,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),

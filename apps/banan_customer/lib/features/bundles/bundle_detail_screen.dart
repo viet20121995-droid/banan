@@ -144,15 +144,15 @@ class _BundleBody extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 borderRadius: BananRadii.rPill,
-                color: BananColors.accent.withValues(alpha: 0.15),
+                color: BananAccents.of(context).alert.withValues(alpha: 0.15),
                 border: Border.all(
-                  color: BananColors.accent.withValues(alpha: 0.5),
+                  color: BananAccents.of(context).alert.withValues(alpha: 0.5),
                 ),
               ),
-              child: const Text(
+              child: Text(
                 'COMBO',
                 style: TextStyle(
-                  color: BananColors.accent,
+                  color: BananAccents.of(context).alert,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.8,
                   fontSize: 11,
