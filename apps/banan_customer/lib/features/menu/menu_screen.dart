@@ -111,16 +111,12 @@ class MenuScreen extends ConsumerWidget {
                 isGuest: isGuest,
                 unread: unread,
               ),
-        bottom: womenDay2010Enabled
-            ? WomenDay2010Garland(
-                height: MediaQuery.sizeOf(context).width < 700 ? 44 : 56,
+        bottom: fullmoonAutumnCampaignEnabled
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(30),
+                child: _FullmoonAutumnAnnouncement(),
               )
-            : fullmoonAutumnCampaignEnabled
-                ? const PreferredSize(
-                    preferredSize: Size.fromHeight(30),
-                    child: _FullmoonAutumnAnnouncement(),
-                  )
-                : null,
+            : null,
       ),
       // Floating "View cart" button — shows up the moment the cart isn't
       // empty, so the customer can jump straight to checkout without
@@ -1227,10 +1223,14 @@ class _BodyState extends ConsumerState<_Body> {
             SliverToBoxAdapter(
               child: _HeroCarousel(onOrderTap: _scrollToMenu),
             ),
-            const SliverToBoxAdapter(
+            SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.symmetric(vertical: BananSpacing.sm),
-                child: WashiDivider(),
+                padding: const EdgeInsets.symmetric(vertical: BananSpacing.sm),
+                // 20/10: a slim sakura branch in place of the divider —
+                // scrolls with the page instead of pinning under the top bar.
+                child: womenDay2010Enabled
+                    ? const WomenDay2010Garland(height: 34)
+                    : const WashiDivider(),
               ),
             ),
           ],

@@ -218,8 +218,9 @@ class _PetalPainter extends CustomPainter {
   bool shouldRepaint(_PetalPainter old) => false;
 }
 
-/// A sakura branch across the width, under the home page's top bar — the
-/// home hero covers most of the page art, so the season shows here too.
+/// A sakura branch across the width, between the home hero and the order
+/// options — the hero covers most of the page art, so the season shows here
+/// too. Scrolls with the page.
 class WomenDay2010Garland extends StatelessWidget
     implements PreferredSizeWidget {
   const WomenDay2010Garland({required this.height, super.key});
