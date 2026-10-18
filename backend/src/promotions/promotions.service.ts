@@ -127,18 +127,22 @@ export class PromotionsService {
     const bday = new Set(
       products.filter((p) => p.category?.isBirthdayCakeCategory).map((p) => p.id),
     );
-    // `excludeBirthdayCakes` on a campaign: birthday-collection lines neither
-    // get the discount nor count toward the campaign's minimum.
-    const excludes = (c: Campaign, line: CartLine) =>
-      Boolean(((c.config ?? {}) as Record<string, unknown>).excludeBirthdayCakes) &&
-      bday.has(line.productId);
-    const bdayVnd = input.lines
-      .filter((l) => bday.has(l.productId))
-      .reduce((s, l) => s + l.lineTotalVnd, 0);
+    // `excludeBirthdayCakes` / `excludeProductIds` on a campaign: those lines
+    // neither get the discount nor count toward the campaign's minimum (e.g.
+    // the first-order 15% skips birthday cakes and the 20/10 gift set).
+    const excludes = (c: Campaign, line: CartLine) => {
+      const cfg = (c.config ?? {}) as Record<string, unknown>;
+      return (
+        (Boolean(cfg.excludeBirthdayCakes) && bday.has(line.productId)) ||
+        asStrArray(cfg.excludeProductIds).includes(line.productId)
+      );
+    };
     const baseFor = (c: Campaign) =>
-      ((c.config ?? {}) as Record<string, unknown>).excludeBirthdayCakes
-        ? Math.max(0, input.subtotalVnd - bdayVnd)
-        : input.subtotalVnd;
+      Math.max(
+        0,
+        input.subtotalVnd -
+          input.lines.filter((l) => excludes(c, l)).reduce((s, l) => s + l.lineTotalVnd, 0),
+      );
 
     const campaigns = await this.prisma.campaign.findMany({
       where: {

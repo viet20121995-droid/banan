@@ -682,6 +682,12 @@ class _CampaignEditorSheetState extends ConsumerState<_CampaignEditorSheet> {
         config['productIds'] = _productIds.toList();
     }
     if (_excludeBday) config['excludeBirthdayCakes'] = true;
+    // Products kept out of the campaign (no picker here yet — set by ops, e.g.
+    // the 20/10 gift set off the first-order 15%): carried over on save.
+    final excluded = widget.existing?.config['excludeProductIds'];
+    if (excluded is List && excluded.isNotEmpty) {
+      config['excludeProductIds'] = excluded;
+    }
     return config;
   }
 

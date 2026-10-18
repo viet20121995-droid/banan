@@ -244,6 +244,32 @@ describe('PromotionsService.evaluate — gift with purchase + birthday exclusion
     );
   });
 
+  it('first-order 15% skips excluded products (the 20/10 gift set) for discount and minimum', async () => {
+    const first = {
+      ...FIRST,
+      config: { ...FIRST.config, excludeProductIds: ['gift-set'] },
+    };
+    const r = await makeEvalService([first]).evaluate({
+      lines: [
+        { productId: 'gift-set', quantity: 1, lineTotalVnd: 435_000 },
+        { productId: 'mochi', quantity: 2, lineTotalVnd: 400_000 },
+      ],
+      subtotalVnd: 835_000,
+      customerId: 'u1',
+    });
+    // 15% of the 400k mochi only; the 435k gift set is not discounted.
+    expect(r.applied.map((a) => [a.id, a.discountVnd])).toEqual([['first', 60_000]]);
+
+    const only = await makeEvalService([first]).evaluate({
+      lines: [{ productId: 'gift-set', quantity: 1, lineTotalVnd: 435_000 }],
+      subtotalVnd: 435_000,
+      customerId: 'u1',
+    });
+    // The gift set alone does not reach the 300k minimum either.
+    expect(only.discountVnd).toBe(0);
+    expect(only.hints).toMatchObject([{ campaignId: 'first', shortVnd: 300_000 }]);
+  });
+
   it('first-order under the minimum yields a hint with the missing amount', async () => {
     const r = await makeEvalService([FIRST]).evaluate({
       lines: [{ productId: 'mochi', quantity: 1, lineTotalVnd: 200_000 }],
