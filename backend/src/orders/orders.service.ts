@@ -698,9 +698,12 @@ export class OrdersService {
       })),
       storeId,
       subtotalVnd: subtotalAfterBundleVnd,
-      // Skip customer-targeted campaigns (membership / birthday / first-order /
-      // re-activation) for a guest order bound to a pre-existing account.
+      // A guest order bound to a pre-existing account skips that account's
+      // customer-targeted campaigns (membership / birthday / re-activation);
+      // only first-order still applies, and only while the account has no
+      // website order.
       customerId: guestBoundToExisting ? undefined : customerId,
+      guestAccountId: guestBoundToExisting ? customerId : undefined,
     });
     // Promotions never stack: a coupon code is the customer's explicit pick,
     // so it replaces whatever the engine would have applied automatically
@@ -1081,11 +1084,15 @@ export class OrdersService {
         });
       }
       // Record campaign usage (enforces per-user / global caps atomically).
-      // Skipped for a guest order bound to a pre-existing account so it can't
-      // burn that account's campaign allowances.
-      if (!guestBoundToExisting && autoApplied.length > 0) {
+      // A guest order bound to a pre-existing account records only the
+      // first-order campaign it was allowed (so a cancel gives it back); it
+      // can't burn that account's other campaign allowances.
+      const usage = guestBoundToExisting
+        ? autoApplied.filter((c) => c.type === 'FIRST_ORDER')
+        : autoApplied;
+      if (usage.length > 0) {
         await this.promotions.recordUsage({
-          campaignIds: autoApplied.map((c) => c.id),
+          campaignIds: usage.map((c) => c.id),
           userId: customerId,
           orderId: order.id,
           tx,

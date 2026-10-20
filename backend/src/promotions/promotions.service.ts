@@ -108,6 +108,14 @@ export class PromotionsService {
      * Ignored when `customerId` is set.
      */
     newCustomer?: boolean;
+    /**
+     * Guest checkout (no login) whose phone resolved to an existing account:
+     * only first-order campaigns may apply, judged on that account's history
+     * and per-user limits — so a shopper whose only order was an unpaid one
+     * that expired still gets the first-order discount. Ignored when
+     * `customerId` is set.
+     */
+    guestAccountId?: string;
     now?: Date;
   }): Promise<PromoResult> {
     const now = input.now ?? new Date();
@@ -165,7 +173,9 @@ export class PromotionsService {
     // and — when the customer is known — ones the user already hit their
     // per-user limit on. recordUsage() re-checks atomically in the order tx;
     // this just stops exhausted campaigns from quoting a discount.
-    const eligible = await this.filterByUsage(live, input.customerId);
+    const accountId = input.customerId ?? input.guestAccountId;
+    const guestBound = !input.customerId && Boolean(input.guestAccountId);
+    const eligible = await this.filterByUsage(live, accountId);
     if (eligible.length === 0) return none;
     const hints: PromoHint[] = [];
 
@@ -254,10 +264,14 @@ export class PromotionsService {
     }
 
     // 3. Order-level customer-targeted (best single one).
-    const orderCampaigns = eligible.filter((c) => ORDER_TYPES.includes(c.type));
-    if (orderCampaigns.length > 0 && (input.customerId || input.newCustomer)) {
-      const ctx: CustomerContext = input.customerId
-        ? await this.customerContext(input.customerId)
+    // A phone-bound guest only gets the first-order kind (its birthday /
+    // membership / re-activation perks need the account owner logged in).
+    const orderCampaigns = eligible.filter(
+      (c) => ORDER_TYPES.includes(c.type) && (!guestBound || c.type === 'FIRST_ORDER'),
+    );
+    if (orderCampaigns.length > 0 && (accountId || input.newCustomer)) {
+      const ctx: CustomerContext = accountId
+        ? await this.customerContext(accountId)
         : { orderCount: 0, lastOrderAt: null, birthday: null, tier: null };
       let bestDiscount = 0;
       let best: Campaign | null = null;

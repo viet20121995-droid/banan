@@ -31,12 +31,16 @@ export class PromotionsPublicController {
     // Mirror the order path for guests: a known CUSTOMER phone is bound to
     // that account with no customer campaigns; anything else is a new customer.
     let newCustomer = false;
+    let guestAccountId: string | undefined;
     if (!user) {
       const phone = dto.guestPhone?.trim();
       const existing = phone
-        ? await this.prisma.user.findUnique({ where: { phone }, select: { role: true } })
+        ? await this.prisma.user.findUnique({ where: { phone }, select: { id: true, role: true } })
         : null;
       newCustomer = !existing || existing.role !== 'CUSTOMER';
+      // Known customer phone: the first-order discount still applies while
+      // that account has no website order (see evaluate's guestAccountId).
+      if (existing?.role === 'CUSTOMER') guestAccountId = existing.id;
     }
     return this.promotions.evaluate({
       lines: dto.lines.map((l) => ({
@@ -49,6 +53,7 @@ export class PromotionsPublicController {
       subtotalVnd: dto.subtotalVnd,
       customerId: user?.sub,
       newCustomer,
+      guestAccountId,
     });
   }
 }

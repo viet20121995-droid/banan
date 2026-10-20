@@ -270,6 +270,41 @@ describe('PromotionsService.evaluate — gift with purchase + birthday exclusion
     expect(only.hints).toMatchObject([{ campaignId: 'first', shortVnd: 300_000 }]);
   });
 
+  it('a phone-bound guest gets first-order on an account with no website order, nothing else', async () => {
+    const MEMBER = {
+      id: 'member',
+      name: 'Thành viên -20%',
+      type: 'MEMBERSHIP_BENEFIT',
+      isActive: true,
+      config: { kind: 'PERCENT', tierValues: { BRONZE: 20 } },
+      usageLimit: null,
+      usedCount: 0,
+      perUserLimit: null,
+    };
+    const cart = {
+      lines: [{ productId: 'flan', quantity: 6, lineTotalVnd: 330_000 }],
+      subtotalVnd: 330_000,
+    };
+    // Logged in: the 20% member benefit beats the 15% first order.
+    const own = await makeEvalService([FIRST, MEMBER]).evaluate({ ...cart, customerId: 'u1' });
+    expect(own.applied.map((a) => a.id)).toEqual(['member']);
+    // Same account reached by phone only: first order (15% of 330k) and no member perk.
+    const guest = await makeEvalService([FIRST, MEMBER]).evaluate({ ...cart, guestAccountId: 'u1' });
+    expect(guest.applied.map((a) => [a.id, a.discountVnd])).toEqual([['first', 49_500]]);
+  });
+
+  it('a phone-bound guest whose account already ordered on the website gets no first-order', async () => {
+    const svc = makeEvalService([FIRST]);
+    const prisma = (svc as unknown as { prisma: { order: { aggregate: jest.Mock } } }).prisma;
+    prisma.order.aggregate.mockResolvedValue({ _count: { _all: 1 }, _max: { createdAt: new Date() } });
+    const r = await svc.evaluate({
+      lines: [{ productId: 'flan', quantity: 6, lineTotalVnd: 330_000 }],
+      subtotalVnd: 330_000,
+      guestAccountId: 'u1',
+    });
+    expect(r.discountVnd).toBe(0);
+  });
+
   it('first-order under the minimum yields a hint with the missing amount', async () => {
     const r = await makeEvalService([FIRST]).evaluate({
       lines: [{ productId: 'mochi', quantity: 1, lineTotalVnd: 200_000 }],
